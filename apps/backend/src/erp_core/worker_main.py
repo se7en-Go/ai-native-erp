@@ -8,6 +8,18 @@ from taskiq import TaskiqScheduler
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import ListRedisScheduleSource, RedisStreamBroker
 
+import erp_core.ai_engine.models  # noqa: F401
+import erp_core.billing.models  # noqa: F401
+import erp_core.catalog.models  # noqa: F401
+import erp_core.channels.models  # noqa: F401
+import erp_core.crm.models  # noqa: F401
+import erp_core.finance.models  # noqa: F401
+import erp_core.identity.models  # noqa: F401
+import erp_core.orders.models  # noqa: F401
+
+# The worker writes order rows outside FastAPI, so its mapping needs every table the
+# ORM foreign keys reference, exactly like api_main registers them.
+import erp_core.tenancy.models  # noqa: F401
 from erp_core.channels.ingress_worker import (
     register_channel_worker_tasks,
     run_webhook_worker_loop,

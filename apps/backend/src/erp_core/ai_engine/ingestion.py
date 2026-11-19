@@ -83,7 +83,9 @@ class OpenAIEmbeddingProvider:
     """Async OpenAI text-embedding-3-small client with deterministic fallback if unconfigured."""
 
     def __init__(self, api_key: str | None = None, model: str = "text-embedding-3-small") -> None:
-        self.api_key = api_key if api_key is not None else get_settings().OPENAI_API_KEY
+        settings = get_settings()
+        self.api_key = api_key if api_key is not None else settings.OPENAI_API_KEY
+        self.base_url = settings.OPENAI_BASE_URL.rstrip("/")
         self.model = model
         self._fallback = DeterministicHashEmbeddingProvider()
 
@@ -95,7 +97,7 @@ class OpenAIEmbeddingProvider:
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             resp = await client.post(
-                "https://api.openai.com/v1/embeddings",
+                f"{self.base_url}/embeddings",
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 json={"model": self.model, "input": texts},
             )

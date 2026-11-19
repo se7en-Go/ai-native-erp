@@ -106,6 +106,8 @@ async def drain_deliveries(
     redis: Redis,
     channel: str,
     process: Callable[[str], Awaitable[int]],
+    *,
+    external_account_id: str | None = None,
 ) -> int:
     # Stream entries are hints, not the durability boundary. Re-read pending SQL
     # receipts to recover the window between SQL commit and XADD (or a Redis restart).
@@ -116,15 +118,25 @@ async def drain_deliveries(
         if isinstance(entry_id, str) and isinstance(raw_id, str):
             deliveries.setdefault(raw_id, []).append(entry_id)
     async with system_session(broker_factory) as session:
+        params = {"ch": channel}
+        scope = ""
+        if external_account_id is not None:
+            scope = "AND external_account_id = :account "
+            params["account"] = external_account_id
         rows = await session.scalars(
             text(
                 "SELECT id FROM raw_webhook_events WHERE channel_type = :ch "
-                "AND processing_status IN ('received', 'queued') ORDER BY received_at LIMIT 50"
+                "AND processing_status IN ('received', 'queued') "
+                f"{scope}ORDER BY received_at LIMIT 50"
             ),
-            {"ch": channel},
+            params,
         )
-        for row_id in rows:
-            deliveries.setdefault(str(row_id), [])
+        if external_account_id is not None:
+            # Redis keys are provider-wide. Only consume hints belonging to this worker's account.
+            deliveries = {str(row_id): deliveries.get(str(row_id), []) for row_id in rows}
+        else:
+            for row_id in rows:
+                deliveries.setdefault(str(row_id), [])
     count = 0
     for raw_id, entry_ids in deliveries.items():
         try:
