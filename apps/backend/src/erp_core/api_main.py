@@ -18,6 +18,7 @@ import erp_core.crm.models  # noqa: F401
 import erp_core.finance.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
+import erp_core.supply_chain.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
 from erp_core.ai_engine.kb_router import router as kb_router
 from erp_core.ai_engine.router import router as ai_router

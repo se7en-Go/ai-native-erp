@@ -51,6 +51,7 @@ class Lead(Base):
 
 class Opportunity(Base):
     __tablename__ = "opportunities"
+    __table_args__ = (sa.UniqueConstraint("tenant_id", "id", name="uq_opportunities_tenant_id"),)
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(
@@ -146,3 +147,48 @@ class QuoteItem(Base):
     unit_price_quote_ccy: Mapped[Decimal] = mapped_column(sa.Numeric(12, 4), nullable=False)
     unit_cost_base_snapshot: Mapped[Decimal] = mapped_column(sa.Numeric(12, 4), nullable=False)
     line_total_quote_ccy: Mapped[Decimal] = mapped_column(sa.Numeric(14, 2), nullable=False)
+
+
+class CustomerFollowup(Base):
+    __tablename__ = "customer_followups"
+    __table_args__ = (
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "customer_id"],
+            ["customers.tenant_id", "customers.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "opportunity_id"],
+            ["opportunities.tenant_id", "opportunities.id"],
+            ondelete="SET NULL (opportunity_id)",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(sa.ForeignKey("tenants.id", ondelete="CASCADE"))
+    customer_id: Mapped[UUID]
+    opportunity_id: Mapped[UUID | None]
+    author_user_id: Mapped[UUID] = mapped_column(sa.ForeignKey("users.id"))
+    followup_type: Mapped[str] = mapped_column(sa.Text)
+    summary: Mapped[str] = mapped_column(sa.Text)
+    next_action_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now()
+    )
+
+
+class TaskReminder(Base):
+    __tablename__ = "task_reminders"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(sa.ForeignKey("tenants.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(sa.Text)
+    due_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    priority: Mapped[str] = mapped_column(sa.Text, server_default="normal")
+    status: Mapped[str] = mapped_column(sa.Text, server_default="open")
+    linked_entity_type: Mapped[str | None] = mapped_column(sa.Text)
+    linked_entity_id: Mapped[UUID | None]
+    assignee_user_id: Mapped[UUID | None] = mapped_column(sa.ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now()
+    )
