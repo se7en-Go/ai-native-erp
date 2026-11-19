@@ -232,6 +232,44 @@
         "title": "Body_submit_receivable_payment_api_v1_finance_receivables__rp_id__payments_post",
         "type": "object"
       },
+      "Body_upload_kb_document_api_v1_ai_kb_documents_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "language": {
+            "default": "en",
+            "title": "Language",
+            "type": "string"
+          },
+          "source_type": {
+            "default": "markdown",
+            "enum": [
+              "markdown",
+              "pdf",
+              "csv",
+              "faq_json",
+              "policy_doc"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "title"
+        ],
+        "title": "Body_upload_kb_document_api_v1_ai_kb_documents_post",
+        "type": "object"
+      },
       "BuyerLocalTimeInfo": {
         "properties": {
           "formatted_time": {
@@ -1789,6 +1827,140 @@
         "title": "InviteMemberRequest",
         "type": "object"
       },
+      "KbDocumentRead": {
+        "properties": {
+          "chunk_count": {
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "flagged_price_chunks": {
+            "title": "Flagged Price Chunks",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "source_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Uri"
+          },
+          "status": {
+            "default": "indexed",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "source_type",
+          "language",
+          "is_active",
+          "chunk_count",
+          "flagged_price_chunks",
+          "created_at"
+        ],
+        "title": "KbDocumentRead",
+        "type": "object"
+      },
+      "KbIngestResponse": {
+        "properties": {
+          "chunks_created": {
+            "title": "Chunks Created",
+            "type": "integer"
+          },
+          "deduplicated": {
+            "title": "Deduplicated",
+            "type": "boolean"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "flagged_dynamic_price_chunks": {
+            "title": "Flagged Dynamic Price Chunks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document_id",
+          "chunks_created",
+          "flagged_dynamic_price_chunks",
+          "deduplicated"
+        ],
+        "title": "KbIngestResponse",
+        "type": "object"
+      },
+      "KbSearchRequest": {
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "query": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "strict_mode": {
+            "default": false,
+            "title": "Strict Mode",
+            "type": "boolean"
+          },
+          "top_k": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "KbSearchRequest",
+        "type": "object"
+      },
       "LeadCreate": {
         "properties": {
           "customer_id": {
@@ -3223,6 +3395,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[InventoryLedgerRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_KbDocumentRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KbDocumentRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[KbDocumentRead]",
         "type": "object"
       },
       "PaginatedResponse_LeadRead_": {
@@ -4680,6 +4888,123 @@
         ],
         "title": "QuoteStatus",
         "type": "string"
+      },
+      "RagHit": {
+        "properties": {
+          "bm25_score": {
+            "title": "Bm25 Score",
+            "type": "number"
+          },
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "chunk_index": {
+            "title": "Chunk Index",
+            "type": "integer"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "cosine_sim": {
+            "title": "Cosine Sim",
+            "type": "number"
+          },
+          "doc_id": {
+            "format": "uuid",
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "doc_title": {
+            "title": "Doc Title",
+            "type": "string"
+          },
+          "has_dynamic_price_disclaimer": {
+            "title": "Has Dynamic Price Disclaimer",
+            "type": "boolean"
+          },
+          "rerank_score": {
+            "title": "Rerank Score",
+            "type": "number"
+          },
+          "rrf_score": {
+            "title": "Rrf Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "doc_id",
+          "doc_title",
+          "chunk_index",
+          "content",
+          "has_dynamic_price_disclaimer",
+          "rrf_score",
+          "bm25_score",
+          "cosine_sim",
+          "rerank_score"
+        ],
+        "title": "RagHit",
+        "type": "object"
+      },
+      "RagSearchResult": {
+        "properties": {
+          "abstention_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstention Reason"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/RagHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "recommended_conversation_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Conversation Status"
+          },
+          "should_abstain": {
+            "default": true,
+            "title": "Should Abstain",
+            "type": "boolean"
+          },
+          "strict_mode": {
+            "title": "Strict Mode",
+            "type": "boolean"
+          },
+          "top_score": {
+            "default": 0.0,
+            "title": "Top Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "query",
+          "strict_mode"
+        ],
+        "title": "RagSearchResult",
+        "type": "object"
       },
       "ReceivableRead": {
         "properties": {
@@ -6619,6 +6944,246 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/ai/kb/documents": {
+      "get": {
+        "operationId": "list_kb_documents_api_v1_ai_kb_documents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_KbDocumentRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Kb Documents",
+        "tags": [
+          "ai-kb"
+        ]
+      },
+      "post": {
+        "operationId": "upload_kb_document_api_v1_ai_kb_documents_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_kb_document_api_v1_ai_kb_documents_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbIngestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Kb Document",
+        "tags": [
+          "ai-kb"
+        ]
+      }
+    },
+    "/api/v1/ai/kb/documents/{doc_id}": {
+      "delete": {
+        "operationId": "deactivate_kb_document_api_v1_ai_kb_documents__doc_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Doc Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deactivate Kb Document",
+        "tags": [
+          "ai-kb"
+        ]
+      }
+    },
+    "/api/v1/ai/kb/search": {
+      "post": {
+        "operationId": "search_kb_hybrid_api_v1_ai_kb_search_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KbSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RagSearchResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Kb Hybrid",
+        "tags": [
+          "ai-kb"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "login_api_v1_auth_login_post",

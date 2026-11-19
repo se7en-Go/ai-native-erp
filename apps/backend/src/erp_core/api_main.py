@@ -19,6 +19,7 @@ import erp_core.finance.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
+from erp_core.ai_engine.kb_router import router as kb_router
 from erp_core.catalog.router import router as catalog_router
 from erp_core.channels.adapters.whatsapp import whatsapp_router
 from erp_core.channels.ecommerce.connectors_router import router as connectors_router
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(b2b_router, prefix="/api/v1")
     app.include_router(orders_router, prefix="/api/v1")
     app.include_router(finance_router, prefix="/api/v1")
+    app.include_router(kb_router)
 
     @app.get("/healthz", tags=["health"])
     async def healthz() -> dict[str, str]:

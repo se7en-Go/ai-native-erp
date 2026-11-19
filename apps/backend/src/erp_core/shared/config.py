@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     )
 
     REDIS_URL: str = "redis://localhost:6379/0"
+    OPENAI_API_KEY: str = ""
 
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_BUCKET: str = "erp-assets"
