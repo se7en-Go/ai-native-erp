@@ -8,6 +8,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import erp_core.ai_engine.models  # noqa: F401
+import erp_core.billing.models  # noqa: F401
 import erp_core.catalog.models  # noqa: F401
 import erp_core.channels.models  # noqa: F401
 import erp_core.crm.models  # noqa: F401

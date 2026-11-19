@@ -36,6 +36,9 @@ class Tenant(Base):
     base_currency: Mapped[str] = mapped_column(Text, nullable=False, server_default="USD")
     timezone: Mapped[str] = mapped_column(Text, nullable=False, server_default="Asia/Shanghai")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    ai_policy_settings: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
     shredded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
