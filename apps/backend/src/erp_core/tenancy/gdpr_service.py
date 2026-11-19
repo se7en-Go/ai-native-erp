@@ -248,11 +248,24 @@ class GdprService:
         if await self._table_exists(session, "messages") and await self._table_exists(
             session, "conversations"
         ):
+            # Plan 02 named these `body_sanitized_html` / `attachments`; the Plan 01 probe
+            # schema used `body_html` / `attachments_json`. Scrub whichever exists.
+            html_column = (
+                "body_sanitized_html"
+                if await self._column_exists(session, "messages", "body_sanitized_html")
+                else "body_html"
+            )
+            attachments_column = (
+                "attachments"
+                if await self._column_exists(session, "messages", "attachments")
+                else "attachments_json"
+            )
             await session.execute(
                 text(
                     "UPDATE messages "
-                    "SET body_text = '[REDACTED]', body_html = NULL, "
-                    "    attachments_json = '[]'::jsonb "
+                    "SET body_text = '[REDACTED]', "
+                    f"    {html_column} = NULL, "
+                    f"    {attachments_column} = '[]'::jsonb "
                     "WHERE tenant_id = :tid "
                     "  AND conversation_id IN ("
                     "      SELECT id FROM conversations "
