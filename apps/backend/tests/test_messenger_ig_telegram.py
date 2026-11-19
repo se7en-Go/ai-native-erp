@@ -395,3 +395,153 @@ async def test_instagram_story_messages_connect_and_enforce_human_window(
             "ERR_RECIPIENT_SUPPRESSED"
         )
         assert len(calls) == 1
+
+
+def telegram_update(update_id: int, peer: int, *, business: str | None = None, **content) -> dict:
+    message = {
+        "message_id": update_id,
+        "date": int(datetime.now(UTC).timestamp()),
+        "from": {"id": peer, "is_bot": False, "first_name": "Telegram Buyer"},
+        "chat": {"id": peer, "type": "private"},
+        **content,
+    }
+    if business:
+        message["business_connection_id"] = business
+        return {"update_id": update_id, "business_message": message}
+    return {"update_id": update_id, "message": message}
+
+
+@pytest.mark.asyncio
+async def test_telegram_business_connection_binding_scoped_identity_and_stop(
+    tenant: UUID,
+    runtime_session_factory: RuntimeFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_adapter("telegram")
+    from erp_core.channels.adapters.telegram import (
+        TELEGRAM_ROUTING_HEADER,
+        TelegramAdapter,
+        telegram_router,
+    )
+
+    bot = int(str(uuid4().int)[:14])
+    peer = 8376472
+    token = f"{bot}:test-bot-token-xxxxxxxxxx"
+    calls = []
+
+    def telegram(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "api.telegram.org"
+        assert request.url.path.startswith(f"/bot{token}/")
+        method = request.url.path.rsplit("/", 1)[-1]
+        data = json.loads(request.content)
+        calls.append((method, data))
+        if method == "getMe":
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "result": {
+                        "id": bot,
+                        "is_bot": True,
+                        "first_name": "ERP Bot",
+                        "username": "ExampleBot",
+                    },
+                },
+            )
+        if method == "setWebhook":
+            assert data["url"] == f"https://erp.example.test/api/v1/webhooks/telegram/{bot}"
+            assert data["allowed_updates"] == ["message", "business_message"]
+            return httpx.Response(200, json={"ok": True, "result": True})
+        assert method == "sendMessage"
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 145}})
+
+    transport = httpx.MockTransport(telegram)
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.include_router(telegram_router)
+    override_principal(app, runtime_session_factory, tenant)
+    app.state.messaging_http_transport = transport
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_BASE_URL", "https://erp.example.test")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/channels/telegram/connect",
+            json={
+                "bot_token": token,
+                "display_name": "Telegram Business",
+            },
+        )
+        assert response.status_code == 200, response.text
+        aid = UUID(response.json()["channel_account_id"])
+        assert token not in response.text
+    assert [method for method, _ in calls] == ["getMe", "setWebhook"]
+    secret = calls[-1][1]["secret_token"]
+    adapter = TelegramAdapter(http_transport=transport)
+    assert adapter.verify_webhook_signature(
+        b"{}", {"X-Telegram-Bot-Api-Secret-Token": secret}, secret
+    )
+    assert not adapter.verify_webhook_signature(
+        b"{}", {"X-Telegram-Bot-Api-Secret-Token": "wrong"}, secret
+    )
+
+    async with tenant_session(runtime_session_factory, tenant) as session:
+        assert await resolve_routing_tenant(session, "telegram", str(bot)) == (tenant, aid)
+        credentials, _ = await CredentialVaultHelper().load_secret_json(
+            session, tenant, aid, "messaging_provider"
+        )
+        assert credentials == {"bot_token": token, "webhook_secret": secret}
+        headers = {TELEGRAM_ROUTING_HEADER: str(bot)}
+        direct = telegram_update(
+            1, peer, text="Hello", photo=[{"file_id": "small"}, {"file_id": "large"}]
+        )
+        [ordinary] = (
+            await adapter.parse_webhook(session, tenant, aid, direct, headers)
+        ).inbound_events
+        assert ordinary.body_text == "Hello"
+        assert ordinary.attachments[0].external_media_id == "large"
+        normal_cid, _ = await _persist_inbound_event(session, tenant, aid, "telegram", ordinary)
+        business = telegram_update(
+            2,
+            peer,
+            business="connection-123",
+            caption="Document",
+            document={"file_id": "doc", "file_name": "order.pdf", "mime_type": "application/pdf"},
+        )
+        [event] = (
+            await adapter.parse_webhook(session, tenant, aid, business, headers)
+        ).inbound_events
+        assert event.body_text == "Document"
+        assert event.attachments[0].filename == "order.pdf"
+        assert event.channel_metadata["business_connection_id"] == "connection-123"
+        assert event.sender_identity_value == str(peer) and event.sender_identity_type is None
+        business_cid, _ = await _persist_inbound_event(session, tenant, aid, "telegram", event)
+        assert business_cid != normal_cid
+        assert await session.scalar(text("SELECT count(*) FROM customer_identities")) == 0
+
+        for cid, business_id in ((normal_cid, None), (business_cid, "connection-123")):
+            req = await outbound_request(
+                session, tenant, aid, ChannelType.TELEGRAM, str(bot), "forged", cid
+            )
+            req.metadata["business_connection_id"] = "forged"
+            result = await adapter.send_message(session, tenant, credentials, req)
+            assert result.success and result.external_message_id
+            data = calls[-1][1]
+            assert data["chat_id"] == peer and data["text"] == "Agent reply"
+            assert data.get("business_connection_id") == business_id
+
+        echo = telegram_update(
+            3, peer, business="connection-123", text="Echo", sender_business_bot={"id": bot}
+        )
+        assert (
+            await adapter.parse_webhook(session, tenant, aid, echo, headers)
+        ).inbound_events == []
+        stop = telegram_update(4, peer, business="connection-123", text="STOP")
+        [event] = (await adapter.parse_webhook(session, tenant, aid, stop, headers)).inbound_events
+        same_cid, _ = await _persist_inbound_event(session, tenant, aid, "telegram", event)
+        assert same_cid == business_cid
+        assert (await adapter.send_message(session, tenant, credentials, req)).error_message == (
+            "ERR_RECIPIENT_SUPPRESSED"
+        )
+        assert len(calls) == 4

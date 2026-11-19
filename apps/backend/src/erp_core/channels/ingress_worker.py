@@ -178,6 +178,40 @@ async def _link_extra_identity(
     )
 
 
+async def _resolve_telegram_customer(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    account_id: uuid.UUID,
+    thread: str,
+    display_name: str,
+) -> uuid.UUID:
+    # The schema has no Telegram IdentityType. Serialize first contact per scoped
+    # thread and reuse that customer even after the previous ticket was resolved.
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"telegram:{tenant_id}:{account_id}:{thread}"},
+    )
+    existing = await session.scalar(
+        text(
+            "SELECT customer_id FROM conversations WHERE tenant_id = :tid "
+            "AND channel_account_id = :aid AND external_thread_id = :thread "
+            "ORDER BY updated_at DESC, id DESC LIMIT 1"
+        ),
+        {"tid": tenant_id, "aid": account_id, "thread": thread},
+    )
+    if existing is not None:
+        return cast(uuid.UUID, existing)
+    customer_id = uuid.uuid4()
+    await session.execute(
+        text(
+            "INSERT INTO customers (id, tenant_id, customer_type, display_name) "
+            "VALUES (:id, :tid, 'b2c_consumer', :name)"
+        ),
+        {"id": customer_id, "tid": tenant_id, "name": display_name},
+    )
+    return customer_id
+
+
 async def _persist_inbound_event(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -200,30 +234,42 @@ async def _persist_inbound_event(
                 f"Parent message {event.parent_external_id} not yet arrived"
             )
 
-    customer_id, _ = await _resolve_identity_customer(
-        session=session,
-        tenant_id=tenant_id,
-        identity_type=event.sender_identity_type,
-        raw_value=event.sender_identity_value,
-        display_name=event.sender_display_name,
-        country_hint=event.country_hint,
-    )
-    for extra_type, extra_val in event.extra_identities:
-        await _link_extra_identity(session, tenant_id, customer_id, extra_type, extra_val)
-
-    identity_id = (
-        await session.execute(
-            text(
-                "SELECT id FROM customer_identities "
-                "WHERE tenant_id = :tid AND customer_id = :cid AND identity_type = :itype LIMIT 1"
-            ),
-            {
-                "tid": tenant_id,
-                "cid": customer_id,
-                "itype": event.sender_identity_type.value,
-            },
+    identity_id = None
+    if event.sender_identity_type is None:
+        if base_channel_type != ChannelType.TELEGRAM or not event.external_thread_id:
+            raise ValueError("Channel inbound event has no supported customer identity")
+        customer_id = await _resolve_telegram_customer(
+            session,
+            tenant_id,
+            channel_account_id,
+            event.external_thread_id,
+            event.sender_display_name,
         )
-    ).scalar_one_or_none()
+    else:
+        customer_id, _ = await _resolve_identity_customer(
+            session=session,
+            tenant_id=tenant_id,
+            identity_type=event.sender_identity_type,
+            raw_value=event.sender_identity_value,
+            display_name=event.sender_display_name,
+            country_hint=event.country_hint,
+        )
+        for extra_type, extra_val in event.extra_identities:
+            await _link_extra_identity(session, tenant_id, customer_id, extra_type, extra_val)
+        identity_id = (
+            await session.execute(
+                text(
+                    "SELECT id FROM customer_identities "
+                    "WHERE tenant_id = :tid AND customer_id = :cid "
+                    "AND identity_type = :itype LIMIT 1"
+                ),
+                {
+                    "tid": tenant_id,
+                    "cid": customer_id,
+                    "itype": event.sender_identity_type.value,
+                },
+            )
+        ).scalar_one_or_none()
 
     effective_channel = (
         event.override_channel_type.value if event.override_channel_type else base_channel_type
@@ -265,7 +311,7 @@ async def _persist_inbound_event(
             )
         ).scalar_one_or_none()
 
-    if conv_id is None:
+    if conv_id is None and base_channel_type != ChannelType.TELEGRAM:
         conv_id = (
             await session.execute(
                 text(

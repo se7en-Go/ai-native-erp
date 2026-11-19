@@ -36,7 +36,7 @@ class NormalizedInboundEvent(BaseModel):
     external_message_id: str | None = None
     external_thread_id: str | None = None
     subject: str | None = None
-    sender_identity_type: IdentityType
+    sender_identity_type: IdentityType | None
     sender_identity_value: str
     sender_display_name: str
     country_hint: str | None = None
