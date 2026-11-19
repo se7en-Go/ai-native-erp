@@ -189,6 +189,73 @@ export type BuyerLocalTimeInfo = {
     recommended_send_at_utc?: string | null;
 };
 
+export type CampaignCreate = {
+    body_template: string;
+    channel_type: 'email' | 'whatsapp_cloud';
+    name: string;
+    subject?: string | null;
+    target_ids: Array<string>;
+};
+
+export type CampaignLaunchResult = {
+    campaign_id: string;
+    queued_remaining: number;
+    reasons: Array<SuppressionReason>;
+    sent: number;
+    status: 'draft' | 'scheduled' | 'running' | 'paused' | 'completed';
+    suppressed: number;
+};
+
+/**
+ * Authoritative compliance snapshot; the UI must never treat it as authorization.
+ */
+export type CampaignPreview = {
+    campaign_id: string;
+    channel_type: 'email' | 'whatsapp_cloud';
+    eligible_count: number;
+    list_unsubscribe_header?: string | null;
+    rate_limit_remaining?: number | null;
+    reasons: Array<SuppressionReason>;
+    suppressed_count: number;
+    total_targets: number;
+};
+
+export type CampaignRead = {
+    body_template: string;
+    channel_type: 'email' | 'whatsapp_cloud';
+    created_at: string;
+    created_by: string;
+    id: string;
+    name: string;
+    replied_count: number;
+    sent_count: number;
+    status: 'draft' | 'scheduled' | 'running' | 'paused' | 'completed';
+    subject: string | null;
+    suppressed_count: number;
+    tenant_id: string;
+    total_targets: number;
+    updated_at: string;
+};
+
+export type CampaignRecipientRead = {
+    address: string;
+    campaign_id: string;
+    customer_id: string | null;
+    error_reason: string | null;
+    id: string;
+    prospect_id: string | null;
+    sent_at: string | null;
+    status: 'queued' | 'sent' | 'suppressed' | 'failed' | 'replied';
+};
+
+export type CampaignUpdate = {
+    body_template?: string | null;
+    name?: string | null;
+    status?: ('draft' | 'scheduled' | 'running' | 'paused' | 'completed') | null;
+    subject?: string | null;
+    target_ids?: Array<string> | null;
+};
+
 export type CancelOrderRequest = {
     reason: string;
     warehouse_id: string;
@@ -260,6 +327,16 @@ export type ChannelType = 'whatsapp_cloud' | 'whatsapp_coexistence' | 'email' | 
 export type ChannelVolume = {
     channel: string;
     conversations: number;
+};
+
+/**
+ * KPI header for the collection page; always the real tenant-wide counts.
+ */
+export type CollectionSummary = {
+    cleaned: number;
+    collected: number;
+    jobs: number;
+    synced: number;
 };
 
 export type ConfidenceLevel = 'deterministic' | 'human_verified' | 'probabilistic';
@@ -715,6 +792,35 @@ export type KbSearchRequest = {
     top_k?: number;
 };
 
+export type LeadCollectionJobCreate = {
+    csv_content?: string | null;
+    keywords?: Array<string>;
+    max_results?: number;
+    min_rating?: number | string | null;
+    require_phone?: boolean;
+    source_provider: 'google_places' | 'overpass_osm' | 'overture_poi' | 'csv_import';
+    target_region?: string | null;
+};
+
+export type LeadCollectionJobRead = {
+    cleaned_count: number;
+    collected_count: number;
+    completed_at: string | null;
+    created_at: string;
+    created_by: string;
+    error_message: string | null;
+    id: string;
+    keywords: Array<string>;
+    max_results: number;
+    min_rating: string | null;
+    require_phone: boolean;
+    source_provider: 'google_places' | 'overpass_osm' | 'overture_poi' | 'csv_import';
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    synced_count: number;
+    target_region: string | null;
+    tenant_id: string;
+};
+
 export type LeadCreate = {
     customer_id: string;
     extracted_requirements?: {
@@ -1017,6 +1123,22 @@ export type PaginatedResponseAuditEventRead = {
     total: number;
 };
 
+export type PaginatedResponseCampaignRead = {
+    has_more: boolean;
+    items: Array<CampaignRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseCampaignRecipientRead = {
+    has_more: boolean;
+    items: Array<CampaignRecipientRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseChannelAccountRead = {
     has_more: boolean;
     items: Array<ChannelAccountRead>;
@@ -1105,6 +1227,14 @@ export type PaginatedResponseKbDocumentRead = {
     total: number;
 };
 
+export type PaginatedResponseLeadCollectionJobRead = {
+    has_more: boolean;
+    items: Array<LeadCollectionJobRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseLeadRead = {
     has_more: boolean;
     items: Array<LeadRead>;
@@ -1156,6 +1286,14 @@ export type PaginatedResponseOrderRead = {
 export type PaginatedResponseProductRead = {
     has_more: boolean;
     items: Array<ProductRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseProspectRead = {
+    has_more: boolean;
+    items: Array<ProspectRead>;
     limit: number;
     offset: number;
     total: number;
@@ -1370,6 +1508,46 @@ export type ProposalRejectRequest = {
 export type ProposalStatus = 'pending' | 'approved' | 'edited_and_approved' | 'rejected' | 'expired' | 'failed';
 
 export type ProposalType = 'reply_draft' | 'crm_entity_extract' | 'quote_draft' | 'follow_up_suggestion' | 'identity_merge' | 'refund_or_reship' | 'payment_match';
+
+/**
+ * Omit `prospect_ids` to clean every raw prospect of the workspace.
+ */
+export type ProspectCleanRequest = {
+    prospect_ids?: Array<string> | null;
+};
+
+export type ProspectCleanResult = {
+    cleaned: number;
+    discarded_duplicates: number;
+    graded: {
+        [key: string]: number;
+    };
+    items: Array<ProspectRead>;
+};
+
+export type ProspectRead = {
+    city: string | null;
+    company_name: string;
+    contact_name: string | null;
+    country: string | null;
+    created_at: string;
+    crm_lead_id: string | null;
+    email: string | null;
+    grade: 'A' | 'B' | 'C';
+    id: string;
+    job_id: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    phone_e164: string | null;
+    rating: string | null;
+    raw_metadata: {
+        [key: string]: unknown;
+    };
+    sync_status: 'raw' | 'cleaned' | 'synced_to_crm' | 'discarded';
+    tenant_id: string;
+    website: string | null;
+    whatsapp_reachable: boolean | null;
+};
 
 export type PurchaseOrderCreate = {
     currency?: string;
@@ -1800,6 +1978,28 @@ export type SupplierUpdate = {
     payment_terms?: string | null;
     rating?: number | string | null;
     status?: ('active' | 'inactive') | null;
+};
+
+export type SuppressionReason = {
+    count: number;
+    reason: string;
+};
+
+export type SyncToCrmRequest = {
+    prospect_ids: Array<string>;
+};
+
+export type SyncToCrmResult = {
+    leads: Array<SyncedLead>;
+    skipped: number;
+    synced: number;
+};
+
+export type SyncedLead = {
+    company_id: string | null;
+    crm_lead_id: string;
+    customer_id: string;
+    prospect_id: string;
 };
 
 export type TaskCreate = {
@@ -4968,6 +5168,424 @@ export type SubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPostRespon
 };
 
 export type SubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPostResponse = SubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPostResponses[keyof SubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPostResponses];
+
+export type ListCampaignsApiV1GrowthCampaignsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/growth/campaigns';
+};
+
+export type ListCampaignsApiV1GrowthCampaignsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCampaignsApiV1GrowthCampaignsGetError = ListCampaignsApiV1GrowthCampaignsGetErrors[keyof ListCampaignsApiV1GrowthCampaignsGetErrors];
+
+export type ListCampaignsApiV1GrowthCampaignsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseCampaignRead;
+};
+
+export type ListCampaignsApiV1GrowthCampaignsGetResponse = ListCampaignsApiV1GrowthCampaignsGetResponses[keyof ListCampaignsApiV1GrowthCampaignsGetResponses];
+
+export type CreateCampaignApiV1GrowthCampaignsPostData = {
+    body: CampaignCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/growth/campaigns';
+};
+
+export type CreateCampaignApiV1GrowthCampaignsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCampaignApiV1GrowthCampaignsPostError = CreateCampaignApiV1GrowthCampaignsPostErrors[keyof CreateCampaignApiV1GrowthCampaignsPostErrors];
+
+export type CreateCampaignApiV1GrowthCampaignsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CampaignRead;
+};
+
+export type CreateCampaignApiV1GrowthCampaignsPostResponse = CreateCampaignApiV1GrowthCampaignsPostResponses[keyof CreateCampaignApiV1GrowthCampaignsPostResponses];
+
+export type UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchData = {
+    body: CampaignUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        campaign_id: string;
+    };
+    query?: never;
+    url: '/api/v1/growth/campaigns/{campaign_id}';
+};
+
+export type UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchError = UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchErrors[keyof UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchErrors];
+
+export type UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: CampaignRead;
+};
+
+export type UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchResponse = UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchResponses[keyof UpdateCampaignApiV1GrowthCampaignsCampaignIdPatchResponses];
+
+export type LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        campaign_id: string;
+    };
+    query?: never;
+    url: '/api/v1/growth/campaigns/{campaign_id}/launch';
+};
+
+export type LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostError = LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostErrors[keyof LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostErrors];
+
+export type LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CampaignLaunchResult;
+};
+
+export type LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostResponse = LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostResponses[keyof LaunchCampaignApiV1GrowthCampaignsCampaignIdLaunchPostResponses];
+
+export type PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        campaign_id: string;
+    };
+    query?: never;
+    url: '/api/v1/growth/campaigns/{campaign_id}/preview';
+};
+
+export type PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostError = PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostErrors[keyof PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostErrors];
+
+export type PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CampaignPreview;
+};
+
+export type PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostResponse = PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostResponses[keyof PreviewCampaignApiV1GrowthCampaignsCampaignIdPreviewPostResponses];
+
+export type ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        campaign_id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/growth/campaigns/{campaign_id}/recipients';
+};
+
+export type ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetError = ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetErrors[keyof ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetErrors];
+
+export type ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseCampaignRecipientRead;
+};
+
+export type ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetResponse = ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetResponses[keyof ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetResponses];
+
+export type ListJobsApiV1GrowthJobsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/growth/jobs';
+};
+
+export type ListJobsApiV1GrowthJobsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListJobsApiV1GrowthJobsGetError = ListJobsApiV1GrowthJobsGetErrors[keyof ListJobsApiV1GrowthJobsGetErrors];
+
+export type ListJobsApiV1GrowthJobsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseLeadCollectionJobRead;
+};
+
+export type ListJobsApiV1GrowthJobsGetResponse = ListJobsApiV1GrowthJobsGetResponses[keyof ListJobsApiV1GrowthJobsGetResponses];
+
+export type CreateJobApiV1GrowthJobsPostData = {
+    body: LeadCollectionJobCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/growth/jobs';
+};
+
+export type CreateJobApiV1GrowthJobsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateJobApiV1GrowthJobsPostError = CreateJobApiV1GrowthJobsPostErrors[keyof CreateJobApiV1GrowthJobsPostErrors];
+
+export type CreateJobApiV1GrowthJobsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: LeadCollectionJobRead;
+};
+
+export type CreateJobApiV1GrowthJobsPostResponse = CreateJobApiV1GrowthJobsPostResponses[keyof CreateJobApiV1GrowthJobsPostResponses];
+
+export type RunJobApiV1GrowthJobsJobIdRunPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/growth/jobs/{job_id}/run';
+};
+
+export type RunJobApiV1GrowthJobsJobIdRunPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunJobApiV1GrowthJobsJobIdRunPostError = RunJobApiV1GrowthJobsJobIdRunPostErrors[keyof RunJobApiV1GrowthJobsJobIdRunPostErrors];
+
+export type RunJobApiV1GrowthJobsJobIdRunPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeadCollectionJobRead;
+};
+
+export type RunJobApiV1GrowthJobsJobIdRunPostResponse = RunJobApiV1GrowthJobsJobIdRunPostResponses[keyof RunJobApiV1GrowthJobsJobIdRunPostResponses];
+
+export type ListProspectsApiV1GrowthProspectsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        grade?: string | null;
+        sync_status?: string | null;
+        job_id?: string | null;
+        q?: string | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/growth/prospects';
+};
+
+export type ListProspectsApiV1GrowthProspectsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProspectsApiV1GrowthProspectsGetError = ListProspectsApiV1GrowthProspectsGetErrors[keyof ListProspectsApiV1GrowthProspectsGetErrors];
+
+export type ListProspectsApiV1GrowthProspectsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseProspectRead;
+};
+
+export type ListProspectsApiV1GrowthProspectsGetResponse = ListProspectsApiV1GrowthProspectsGetResponses[keyof ListProspectsApiV1GrowthProspectsGetResponses];
+
+export type CleanProspectsApiV1GrowthProspectsCleanPostData = {
+    body: ProspectCleanRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/growth/prospects/clean';
+};
+
+export type CleanProspectsApiV1GrowthProspectsCleanPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CleanProspectsApiV1GrowthProspectsCleanPostError = CleanProspectsApiV1GrowthProspectsCleanPostErrors[keyof CleanProspectsApiV1GrowthProspectsCleanPostErrors];
+
+export type CleanProspectsApiV1GrowthProspectsCleanPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProspectCleanResult;
+};
+
+export type CleanProspectsApiV1GrowthProspectsCleanPostResponse = CleanProspectsApiV1GrowthProspectsCleanPostResponses[keyof CleanProspectsApiV1GrowthProspectsCleanPostResponses];
+
+export type ExportProspectsApiV1GrowthProspectsExportCsvGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        ids?: Array<string> | null;
+    };
+    url: '/api/v1/growth/prospects/export.csv';
+};
+
+export type ExportProspectsApiV1GrowthProspectsExportCsvGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportProspectsApiV1GrowthProspectsExportCsvGetError = ExportProspectsApiV1GrowthProspectsExportCsvGetErrors[keyof ExportProspectsApiV1GrowthProspectsExportCsvGetErrors];
+
+export type ExportProspectsApiV1GrowthProspectsExportCsvGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SyncToCrmApiV1GrowthProspectsSyncCrmPostData = {
+    body: SyncToCrmRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/growth/prospects/sync-crm';
+};
+
+export type SyncToCrmApiV1GrowthProspectsSyncCrmPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SyncToCrmApiV1GrowthProspectsSyncCrmPostError = SyncToCrmApiV1GrowthProspectsSyncCrmPostErrors[keyof SyncToCrmApiV1GrowthProspectsSyncCrmPostErrors];
+
+export type SyncToCrmApiV1GrowthProspectsSyncCrmPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SyncToCrmResult;
+};
+
+export type SyncToCrmApiV1GrowthProspectsSyncCrmPostResponse = SyncToCrmApiV1GrowthProspectsSyncCrmPostResponses[keyof SyncToCrmApiV1GrowthProspectsSyncCrmPostResponses];
+
+export type CollectionSummaryApiV1GrowthSummaryGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/growth/summary';
+};
+
+export type CollectionSummaryApiV1GrowthSummaryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CollectionSummaryApiV1GrowthSummaryGetError = CollectionSummaryApiV1GrowthSummaryGetErrors[keyof CollectionSummaryApiV1GrowthSummaryGetErrors];
+
+export type CollectionSummaryApiV1GrowthSummaryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CollectionSummary;
+};
+
+export type CollectionSummaryApiV1GrowthSummaryGetResponse = CollectionSummaryApiV1GrowthSummaryGetResponses[keyof CollectionSummaryApiV1GrowthSummaryGetResponses];
 
 export type ListInboxConversationsApiV1InboxConversationsGetData = {
     body?: never;
