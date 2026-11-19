@@ -6,10 +6,18 @@ from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from erp_schema_bootstrap import ensure_erp_schema, register_plan02_metadata_stand_ins
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Register the domain model modules so SQLAlchemy can resolve the cross-module
+# string foreign keys (mirrors the api_main composition root).
+import erp_core.catalog.models  # noqa: F401
+import erp_core.channels.models  # noqa: F401
+import erp_core.crm.models  # noqa: F401
+import erp_core.finance.models  # noqa: F401
+import erp_core.identity.models  # noqa: F401
+import erp_core.orders.models  # noqa: F401
+import erp_core.tenancy.models  # noqa: F401
 from erp_core.catalog.schemas import MoqTierInput, ProductCreate, VariantCreate
 from erp_core.catalog.service import CatalogService
 from erp_core.crm.pdf_renderer import InMemoryPdfStorage, ProformaInvoicePdfRenderer
@@ -251,8 +259,6 @@ class _PostgresConversionBridge:
 
 @pytest.mark.asyncio
 async def test_quanzhou_led_500pc_fob_quote_pdf_expired_fx_and_convert() -> None:
-    await ensure_erp_schema(_migrator_url())
-    register_plan02_metadata_stand_ins()
     mig_engine = create_async_engine(_migrator_url(), echo=False)
     rt_engine = create_async_engine(_runtime_url(), echo=False)
     rt_factory = async_sessionmaker(rt_engine, class_=AsyncSession, expire_on_commit=False)
@@ -555,8 +561,6 @@ async def test_b2b_30_70_milestones_settlement_and_cvp_margin_recompute() -> Non
     `QuoteService` reaches `PaymentService` / `OrderProfitService` through its runtime
     adapter, so those Decimal-only paths are verified here rather than left unexercised.
     """
-    await ensure_erp_schema(_migrator_url())
-    register_plan02_metadata_stand_ins()
     mig_engine = create_async_engine(_migrator_url(), echo=False)
     rt_engine = create_async_engine(_runtime_url(), echo=False)
     rt_factory = async_sessionmaker(rt_engine, class_=AsyncSession, expire_on_commit=False)

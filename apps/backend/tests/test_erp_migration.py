@@ -5,7 +5,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from erp_schema_bootstrap import ensure_erp_schema
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -48,7 +47,6 @@ ERP_TABLES = [
 
 @pytest.mark.asyncio
 async def test_rls_enabled_and_forced_on_all_15_erp_tables() -> None:
-    await ensure_erp_schema(_migrator_url())
     engine = create_async_engine(_migrator_url(), echo=False)
     try:
         async with engine.connect() as conn:
@@ -91,7 +89,6 @@ async def test_rls_enabled_and_forced_on_all_15_erp_tables() -> None:
 
 @pytest.mark.asyncio
 async def test_cvp_generated_column_inventory_check_and_rls_isolation() -> None:
-    await ensure_erp_schema(_migrator_url())
     mig_engine = create_async_engine(_migrator_url(), echo=False)
     rt_engine = create_async_engine(_runtime_url(), echo=False)
     rt_factory = async_sessionmaker(rt_engine, class_=AsyncSession, expire_on_commit=False)
