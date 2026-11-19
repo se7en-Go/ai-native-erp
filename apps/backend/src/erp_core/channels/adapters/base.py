@@ -69,6 +69,9 @@ class NormalizedStatusEvent(BaseModel):
     error_message: str | None = None
     pricing_metadata: dict[str, Any] = Field(default_factory=dict)
     require_existing_message: bool = False
+    source_external_event_id: str | None = None
+    receipt_recipient_id: str | None = None
+    read_through_recipient_id: str | None = None
 
 
 class NormalizedWebhookBatch(BaseModel):

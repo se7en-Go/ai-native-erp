@@ -282,6 +282,11 @@ async def _persist_inbound_event(
     opens_window = event.direction == MessageDirection.INBOUND and event.opens_csw
     csw_until = now_ts + timedelta(hours=24) if opens_window else None
     fep_until = now_ts + timedelta(days=7) if event.ctwa_clid else None
+    human_until = (
+        now_ts + timedelta(days=7)
+        if opens_window and effective_channel in (ChannelType.MESSENGER, ChannelType.INSTAGRAM_DM)
+        else None
+    )
 
     if conv_id is None:
         conv_id = uuid.uuid4()
@@ -290,10 +295,11 @@ async def _persist_inbound_event(
                 "INSERT INTO conversations ("
                 "id, tenant_id, customer_id, channel_account_id, channel_type, external_thread_id, "
                 "subject, conversation_mode, status, csw_expires_at, fep_expires_at, ctwa_clid, "
+                "human_agent_window_expires_at, "
                 "last_inbound_at, last_message_preview, unread_count, updated_at"
                 ") VALUES ("
                 ":id, :tid, :cid, :aid, :ctype, :thread, :subj, :mode, :status, "
-                ":csw, :fep, :ctwa, :last_in, :preview, :unread, now()"
+                ":csw, :fep, :ctwa, :human, :last_in, :preview, :unread, now()"
                 ")"
             ),
             {
@@ -309,6 +315,7 @@ async def _persist_inbound_event(
                 "csw": csw_until,
                 "fep": fep_until,
                 "ctwa": event.ctwa_clid,
+                "human": human_until,
                 "last_in": now_ts if event.direction == MessageDirection.INBOUND else None,
                 "preview": (event.body_text or "")[:180],
                 "unread": 1 if event.direction == MessageDirection.INBOUND else 0,
@@ -318,7 +325,8 @@ async def _persist_inbound_event(
         await session.execute(
             text(
                 "UPDATE conversations SET "
-                "csw_expires_at = COALESCE(:csw, csw_expires_at), "
+                "csw_expires_at = GREATEST(:csw, csw_expires_at), "
+                "human_agent_window_expires_at = GREATEST(:human, human_agent_window_expires_at), "
                 "fep_expires_at = COALESCE(:fep, fep_expires_at), "
                 "ctwa_clid = COALESCE(:ctwa, ctwa_clid), "
                 "last_inbound_at = CASE WHEN :is_in THEN "
@@ -337,6 +345,7 @@ async def _persist_inbound_event(
                 "csw": csw_until,
                 "fep": fep_until,
                 "ctwa": event.ctwa_clid,
+                "human": human_until,
                 "is_in": event.direction == MessageDirection.INBOUND,
                 "is_out": event.direction == MessageDirection.OUTBOUND,
                 "ts": now_ts,
