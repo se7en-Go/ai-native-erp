@@ -32,6 +32,14 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      minio:
+        image: rustfs/rustfs:latest
+        env:
+          RUSTFS_ACCESS_KEY: minioadmin
+          RUSTFS_SECRET_KEY: minioadmin
+          RUSTFS_VOLUMES: /data
+        ports:
+          - 9000:9000
 
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +71,15 @@ jobs:
             edoburu/pgbouncer:latest
           for i in $(seq 1 15); do nc -z 127.0.0.1 6432 && break; sleep 1; done
 
+      - name: Wait for S3-compatible object storage
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9000/health && exit 0
+            sleep 1
+          done
+          echo "S3 endpoint did not become ready" >&2
+          exit 1
+
       - name: Install Python dependencies
         run: uv sync
 
@@ -86,3 +103,8 @@ jobs:
         run: |
           uv run --directory apps/backend alembic upgrade head
           uv run pytest -v
+
+      - name: Verify zero OpenAPI contract drift
+        run: |
+          uv run python apps/backend/scripts/export_openapi.py
+          git diff --exit-code contracts/openapi.json

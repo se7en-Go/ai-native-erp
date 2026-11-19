@@ -96,24 +96,30 @@ class _DekLruCache:
     def __init__(self, maxsize: int = 1024, ttl_seconds: int = 300) -> None:
         self._maxsize = maxsize
         self._ttl_seconds = ttl_seconds
-        self._store: OrderedDict[tuple[UUID, int], tuple[bytes, float]] = OrderedDict()
+        self._store: OrderedDict[tuple[UUID, int], tuple[bytes, bytes, float]] = OrderedDict()
 
-    def get(self, tenant_id: UUID, key_version: int) -> bytes | None:
+    def get(self, tenant_id: UUID, key_version: int, wrapped_dek: bytes) -> bytes | None:
         key = (tenant_id, key_version)
         entry = self._store.get(key)
         if entry is None:
             return None
-        dek, expires_at = entry
-        if time.monotonic() >= expires_at:
+        dek, stored_wrapped, expires_at = entry
+        if stored_wrapped != wrapped_dek or time.monotonic() >= expires_at:
             self._store.pop(key, None)
             return None
         self._store.move_to_end(key)
         return dek
 
-    def put(self, tenant_id: UUID, key_version: int, dek: bytes) -> None:
+    def put(
+        self,
+        tenant_id: UUID,
+        key_version: int,
+        dek: bytes,
+        wrapped_dek: bytes,
+    ) -> None:
         key = (tenant_id, key_version)
         expires_at = time.monotonic() + self._ttl_seconds
-        self._store[key] = (dek, expires_at)
+        self._store[key] = (dek, wrapped_dek, expires_at)
         self._store.move_to_end(key)
         while len(self._store) > self._maxsize:
             self._store.popitem(last=False)
@@ -178,7 +184,7 @@ class EnvelopeCryptoService:
         )
         ver = int(saved_ver or 1)
         if ver == 1:
-            self._cache.put(tenant_id, ver, plaintext_dek)
+            self._cache.put(tenant_id, ver, plaintext_dek, wrapped_dek)
         return ver
 
     async def _resolve_tenant_dek(
@@ -187,11 +193,13 @@ class EnvelopeCryptoService:
         tenant_id: UUID,
         key_version: int | None = None,
     ) -> tuple[bytes, int]:
-        if key_version is not None:
-            cached = self._cache.get(tenant_id, key_version)
-            if cached is not None:
-                return cached, key_version
+        """Resolve a DEK only when tenant_keys still holds that wrapped key.
 
+        The in-process cache skips KEK unwrap. It is not an authorization cache:
+        every caller, including another process object, re-reads the committed
+        key row before a cached DEK may be used. There is no separate Redis
+        invalidation key in the crypto contract.
+        """
         if key_version is None:
             row = (
                 await session.execute(
@@ -213,6 +221,7 @@ class EnvelopeCryptoService:
             ).first()
 
         if row is None:
+            self._cache.evict_tenant(tenant_id)
             raise AppError(
                 slug="tenant-key-revoked",
                 title="Tenant Encryption Key Missing or Revoked",
@@ -221,13 +230,14 @@ class EnvelopeCryptoService:
                 code="ERR_TENANT_KEY_REVOKED",
             )
 
+        wrapped = bytes(row.encrypted_dek)
         resolved_ver = int(row.key_version)
-        cached_hit = self._cache.get(tenant_id, resolved_ver)
+        cached_hit = self._cache.get(tenant_id, resolved_ver, wrapped)
         if cached_hit is not None:
             return cached_hit, resolved_ver
 
-        dek = await self._kek_provider.unwrap_dek(tenant_id, bytes(row.encrypted_dek))
-        self._cache.put(tenant_id, resolved_ver, dek)
+        dek = await self._kek_provider.unwrap_dek(tenant_id, wrapped)
+        self._cache.put(tenant_id, resolved_ver, dek, wrapped)
         return dek, resolved_ver
 
     async def encrypt_secret(

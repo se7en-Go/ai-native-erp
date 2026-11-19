@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -104,3 +105,43 @@ class CostVisibilitySampleResponse(BaseModel):
     net_profit_base: Decimal | None = None
     net_margin_pct: Decimal | None = None
     cost_masked: bool = False
+
+
+class AuditEventRead(BaseModel):
+    id: int
+    tenant_id: UUID
+    created_at: datetime
+    actor_type: str
+    actor_id: str
+    action: str
+    resource_type: str
+    resource_id: UUID
+    proposal_id: UUID | None = None
+    before_state: dict[str, Any] | None = None
+    after_state: dict[str, Any] | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+
+
+class GdprExportResult(BaseModel):
+    export_id: UUID
+    tenant_id: UUID
+    customer_id: UUID
+    object_key: str
+    download_url: str
+    expires_in_seconds: int
+    tables_included: list[str]
+
+
+class GdprAnonymizeResult(BaseModel):
+    tenant_id: UUID
+    customer_id: UUID
+    redacted_identifier: str
+    identities_deleted: int
+    financial_ledger_preserved: bool
+
+
+class GdprTenantRedactResult(BaseModel):
+    tenant_id: UUID
+    shredded: bool
+    deleted_s3_objects: int
