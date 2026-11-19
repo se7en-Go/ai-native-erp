@@ -83,12 +83,10 @@ async def _resolve_identity_customer(
 ) -> tuple[uuid.UUID, bool]:
     """Delegate to IdentityResolverService, else a deterministic fallback."""
     try:
-        from erp_core.identity.service import (  # type: ignore[import-untyped]
-            IdentityResolverService,
-        )
+        from erp_core.identity.service import IdentityResolverService
 
         service = IdentityResolverService()
-        resolved = await service.resolve_or_create_customer(
+        return await service.resolve_or_create_customer(
             session=session,
             tenant_id=tenant_id,
             identity_type=identity_type,
@@ -96,7 +94,6 @@ async def _resolve_identity_customer(
             display_name=display_name,
             country_hint=country_hint,
         )
-        return cast(tuple[uuid.UUID, bool], resolved)
     except ImportError:
         if identity_type == IdentityType.EMAIL:
             normalized = raw_value.strip().lower()
