@@ -132,6 +132,15 @@
         "title": "AuditEventRead",
         "type": "object"
       },
+      "AutonomyLevel": {
+        "enum": [
+          "L0_copilot",
+          "L1_proposal",
+          "L2_auto"
+        ],
+        "title": "AutonomyLevel",
+        "type": "string"
+      },
       "BuyerLocalTimeInfo": {
         "properties": {
           "formatted_time": {
@@ -220,6 +229,33 @@
         "title": "CancelOrderRequest",
         "type": "object"
       },
+      "ChannelType": {
+        "enum": [
+          "whatsapp_cloud",
+          "whatsapp_coexistence",
+          "email",
+          "web_livechat",
+          "shopify",
+          "woocommerce",
+          "shopline",
+          "shoplazza",
+          "tiktok_shop",
+          "made_in_china_email",
+          "alibaba_email",
+          "messenger",
+          "instagram_dm",
+          "telegram",
+          "amazon_sp",
+          "ebay",
+          "mercado_libre",
+          "temu",
+          "walmart",
+          "shopee",
+          "lazada"
+        ],
+        "title": "ChannelType",
+        "type": "string"
+      },
       "ConfidenceLevel": {
         "enum": [
           "deterministic",
@@ -227,6 +263,286 @@
           "probabilistic"
         ],
         "title": "ConfidenceLevel",
+        "type": "string"
+      },
+      "ConsentOptInRequest": {
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "disclosed_business_name": {
+            "title": "Disclosed Business Name",
+            "type": "string"
+          },
+          "normalized_phone": {
+            "title": "Normalized Phone",
+            "type": "string"
+          },
+          "proof_source": {
+            "default": "manual_verified_form",
+            "title": "Proof Source",
+            "type": "string"
+          },
+          "scope": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scope",
+            "type": "array"
+          }
+        },
+        "required": [
+          "customer_id",
+          "normalized_phone",
+          "disclosed_business_name"
+        ],
+        "title": "ConsentOptInRequest",
+        "type": "object"
+      },
+      "ConversationMode": {
+        "enum": [
+          "b2c_support",
+          "b2b_inquiry",
+          "mixed"
+        ],
+        "title": "ConversationMode",
+        "type": "string"
+      },
+      "ConversationRead": {
+        "properties": {
+          "ai_autonomy_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AutonomyLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assigned_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Id"
+          },
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "channel_type": {
+            "$ref": "#/components/schemas/ChannelType"
+          },
+          "conversation_mode": {
+            "$ref": "#/components/schemas/ConversationMode"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "csw_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csw Expires At"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerSummaryRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "external_thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Thread Id"
+          },
+          "fep_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fep Expires At"
+          },
+          "human_agent_window_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Agent Window Expires At"
+          },
+          "iana_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iana Timezone"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_inbound_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Inbound At"
+          },
+          "last_message_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message Preview"
+          },
+          "last_outbound_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Outbound At"
+          },
+          "sla_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Due At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConversationStatus"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "unread_count": {
+            "title": "Unread Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "customer_id",
+          "channel_account_id",
+          "channel_type",
+          "conversation_mode",
+          "status",
+          "unread_count",
+          "updated_at"
+        ],
+        "title": "ConversationRead",
+        "type": "object"
+      },
+      "ConversationStatus": {
+        "enum": [
+          "open",
+          "pending_human",
+          "snoozed",
+          "resolved"
+        ],
+        "title": "ConversationStatus",
         "type": "string"
       },
       "ConvertQuoteRequest": {
@@ -638,6 +954,71 @@
         "title": "CustomerRead",
         "type": "object"
       },
+      "CustomerSummaryRead": {
+        "properties": {
+          "buyer_local_time": {
+            "$ref": "#/components/schemas/BuyerLocalTimeInfo"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "customer_type": {
+            "$ref": "#/components/schemas/CustomerType"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "preferred_language": {
+            "default": "en",
+            "title": "Preferred Language",
+            "type": "string"
+          },
+          "primary_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Email"
+          },
+          "primary_phone_e164": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Phone E164"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "customer_type",
+          "buyer_local_time"
+        ],
+        "title": "CustomerSummaryRead",
+        "type": "object"
+      },
       "CustomerType": {
         "enum": [
           "b2c_consumer",
@@ -728,6 +1109,76 @@
           }
         },
         "title": "CustomerUpdateRequest",
+        "type": "object"
+      },
+      "DeliveryStatus": {
+        "enum": [
+          "queued",
+          "sent",
+          "delivered",
+          "read",
+          "failed"
+        ],
+        "title": "DeliveryStatus",
+        "type": "string"
+      },
+      "EmbeddedSignupRequest": {
+        "properties": {
+          "code": {
+            "minLength": 4,
+            "title": "Code",
+            "type": "string"
+          },
+          "display_name": {
+            "default": "WhatsApp Business",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "is_coexistence": {
+            "default": false,
+            "title": "Is Coexistence",
+            "type": "boolean"
+          },
+          "phone_number_id": {
+            "minLength": 3,
+            "title": "Phone Number Id",
+            "type": "string"
+          },
+          "waba_id": {
+            "minLength": 3,
+            "title": "Waba Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "waba_id",
+          "phone_number_id"
+        ],
+        "title": "EmbeddedSignupRequest",
+        "type": "object"
+      },
+      "EmbeddedSignupResponse": {
+        "properties": {
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "channel_type": {
+            "$ref": "#/components/schemas/ChannelType"
+          },
+          "mps_cap": {
+            "title": "Mps Cap",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_account_id",
+          "channel_type",
+          "mps_cap"
+        ],
+        "title": "EmbeddedSignupResponse",
         "type": "object"
       },
       "FulfillmentStatus": {
@@ -1380,6 +1831,151 @@
         ],
         "title": "MergeProposalCandidate",
         "type": "object"
+      },
+      "MessageContentType": {
+        "enum": [
+          "text",
+          "rich_html",
+          "template",
+          "media",
+          "quote_card",
+          "order_card"
+        ],
+        "title": "MessageContentType",
+        "type": "string"
+      },
+      "MessageDirection": {
+        "enum": [
+          "inbound",
+          "outbound",
+          "internal_note"
+        ],
+        "title": "MessageDirection",
+        "type": "string"
+      },
+      "MessageRead": {
+        "properties": {
+          "attachments": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "body_sanitized_html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Sanitized Html"
+          },
+          "body_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Text"
+          },
+          "channel_metadata": {
+            "additionalProperties": true,
+            "title": "Channel Metadata",
+            "type": "object"
+          },
+          "channel_msg_cost": {
+            "default": "0.000000",
+            "title": "Channel Msg Cost",
+            "type": "string"
+          },
+          "channel_type": {
+            "$ref": "#/components/schemas/ChannelType"
+          },
+          "content_type": {
+            "$ref": "#/components/schemas/MessageContentType"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivery_status": {
+            "$ref": "#/components/schemas/DeliveryStatus"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/MessageDirection"
+          },
+          "external_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Message Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "sender_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Id"
+          },
+          "sender_type": {
+            "$ref": "#/components/schemas/MessageSenderType"
+          },
+          "source_timestamp": {
+            "format": "date-time",
+            "title": "Source Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "channel_type",
+          "direction",
+          "sender_type",
+          "content_type",
+          "delivery_status",
+          "source_timestamp",
+          "created_at"
+        ],
+        "title": "MessageRead",
+        "type": "object"
+      },
+      "MessageSenderType": {
+        "enum": [
+          "customer",
+          "human_agent",
+          "ai_agent",
+          "system"
+        ],
+        "title": "MessageSenderType",
+        "type": "string"
       },
       "MoqTierInput-Input": {
         "properties": {
@@ -2087,6 +2683,42 @@
         "title": "PaginatedResponse[AuditEventRead]",
         "type": "object"
       },
+      "PaginatedResponse_ConversationRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[ConversationRead]",
+        "type": "object"
+      },
       "PaginatedResponse_CustomerRead_": {
         "properties": {
           "has_more": {
@@ -2265,6 +2897,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[MembershipItem]",
+        "type": "object"
+      },
+      "PaginatedResponse_MessageRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[MessageRead]",
         "type": "object"
       },
       "PaginatedResponse_OpportunityRead_": {
@@ -2493,6 +3161,50 @@
         ],
         "title": "PaymentStatus",
         "type": "string"
+      },
+      "PreChatOptInPayload": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "marketing_opt_in": {
+            "default": false,
+            "title": "Marketing Opt In",
+            "type": "boolean"
+          },
+          "whatsapp_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp Phone"
+          }
+        },
+        "title": "PreChatOptInPayload",
+        "type": "object"
       },
       "PrincipalResponse": {
         "properties": {
@@ -3338,6 +4050,142 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "SendInboxMessageRequest": {
+        "properties": {
+          "body_html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Html"
+          },
+          "body_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Text"
+          },
+          "content_type": {
+            "$ref": "#/components/schemas/MessageContentType",
+            "default": "text"
+          },
+          "direction": {
+            "default": "outbound",
+            "enum": [
+              "outbound",
+              "internal_note"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "target_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Language"
+          },
+          "template_components": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Template Components",
+            "type": "array"
+          },
+          "template_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Language"
+          },
+          "template_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Name"
+          },
+          "translate_before_send": {
+            "default": false,
+            "title": "Translate Before Send",
+            "type": "boolean"
+          },
+          "translate_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translate To"
+          },
+          "use_human_agent_tag": {
+            "default": false,
+            "title": "Use Human Agent Tag",
+            "type": "boolean"
+          }
+        },
+        "title": "SendInboxMessageRequest",
+        "type": "object"
+      },
+      "SendInboxMessageResponse": {
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/MessageRead"
+          },
+          "queued_for_delivery": {
+            "title": "Queued For Delivery",
+            "type": "boolean"
+          },
+          "translated_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translated Preview"
+          }
+        },
+        "required": [
+          "message",
+          "queued_for_delivery"
+        ],
+        "title": "SendInboxMessageResponse",
+        "type": "object"
+      },
       "ShipOrderRequest": {
         "properties": {
           "actual_shipping_cost_base": {
@@ -3843,6 +4691,65 @@
         "title": "TrackingProvider",
         "type": "string"
       },
+      "UpdateConversationRequest": {
+        "properties": {
+          "ai_autonomy_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AutonomyLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assigned_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Id"
+          },
+          "conversation_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mark_read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mark Read"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "UpdateConversationRequest",
+        "type": "object"
+      },
       "UpdateMemberRoleRequest": {
         "properties": {
           "is_active": {
@@ -4340,6 +5247,265 @@
           }
         },
         "title": "VariantUpdate",
+        "type": "object"
+      },
+      "WidgetIdentifyRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "external_customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Customer Id"
+          },
+          "hmac_signature": {
+            "title": "Hmac Signature",
+            "type": "string"
+          },
+          "phone_e164": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone E164"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timestamp",
+          "hmac_signature"
+        ],
+        "title": "WidgetIdentifyRequest",
+        "type": "object"
+      },
+      "WidgetMessageItem": {
+        "properties": {
+          "body_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Text"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "sender_type": {
+            "title": "Sender Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "direction",
+          "sender_type",
+          "body_text",
+          "created_at"
+        ],
+        "title": "WidgetMessageItem",
+        "type": "object"
+      },
+      "WidgetSendMessageRequest": {
+        "properties": {
+          "body_text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body Text",
+            "type": "string"
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Url"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          }
+        },
+        "required": [
+          "body_text"
+        ],
+        "title": "WidgetSendMessageRequest",
+        "type": "object"
+      },
+      "WidgetSessionRequest": {
+        "properties": {
+          "cart_value_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cart Value Usd"
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Url"
+          },
+          "prechat_opt_in": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreChatOptInPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "site_key": {
+            "minLength": 3,
+            "title": "Site Key",
+            "type": "string"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "utm_params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Utm Params",
+            "type": "object"
+          },
+          "visitor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visitor Id"
+          }
+        },
+        "required": [
+          "site_key"
+        ],
+        "title": "WidgetSessionRequest",
+        "type": "object"
+      },
+      "WidgetSessionResponse": {
+        "properties": {
+          "business_name": {
+            "title": "Business Name",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/WidgetMessageItem"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "session_token": {
+            "title": "Session Token",
+            "type": "string"
+          },
+          "visitor_id": {
+            "title": "Visitor Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_token",
+          "visitor_id",
+          "customer_id",
+          "conversation_id",
+          "business_name",
+          "messages"
+        ],
+        "title": "WidgetSessionResponse",
         "type": "object"
       }
     }
@@ -6185,6 +7351,128 @@
         ]
       }
     },
+    "/api/v1/channels/whatsapp/consent/opt-in": {
+      "post": {
+        "operationId": "record_whatsapp_opt_in_api_v1_channels_whatsapp_consent_opt_in_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentOptInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Record Whatsapp Opt In Api V1 Channels Whatsapp Consent Opt In Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Whatsapp Opt In",
+        "tags": [
+          "whatsapp"
+        ]
+      }
+    },
+    "/api/v1/channels/whatsapp/embedded-signup": {
+      "post": {
+        "operationId": "complete_whatsapp_embedded_signup_api_v1_channels_whatsapp_embedded_signup_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddedSignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddedSignupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Whatsapp Embedded Signup",
+        "tags": [
+          "whatsapp"
+        ]
+      }
+    },
     "/api/v1/customers": {
       "get": {
         "operationId": "list_customers_api_v1_customers_get",
@@ -6540,6 +7828,480 @@
         "summary": "Update Customer",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/api/v1/inbox/conversations": {
+      "get": {
+        "operationId": "list_inbox_conversations_api_v1_inbox_conversations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tab",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "all",
+                    "unread",
+                    "pending_human",
+                    "sla_urgent"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tab"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "all",
+                    "unread",
+                    "pending_human",
+                    "sla_urgent"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ChannelType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ChannelType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assigned_user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assigned User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ConversationRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Inbox Conversations",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
+    "/api/v1/inbox/conversations/{conversation_id}": {
+      "patch": {
+        "operationId": "patch_conversation_api_v1_inbox_conversations__conversation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConversationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Conversation",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
+    "/api/v1/inbox/conversations/{conversation_id}/messages": {
+      "get": {
+        "operationId": "list_conversation_messages_api_v1_inbox_conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mark_read",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Mark Read",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_MessageRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Conversation Messages",
+        "tags": [
+          "inbox"
+        ]
+      },
+      "post": {
+        "operationId": "post_conversation_message_api_v1_inbox_conversations__conversation_id__messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendInboxMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendInboxMessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Conversation Message",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
+    "/api/v1/inbox/stream": {
+      "get": {
+        "description": "Stream tenant-isolated real-time inbox events via Redis Pub/Sub SSE.",
+        "operationId": "stream_inbox_events_api_v1_inbox_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "max_events",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Events"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Inbox Events",
+        "tags": [
+          "inbox"
         ]
       }
     },
@@ -7997,6 +9759,243 @@
         "summary": "Receive Webhook",
         "tags": [
           "webhooks"
+        ]
+      }
+    },
+    "/api/v1/widget/identify": {
+      "post": {
+        "operationId": "identify_widget_visitor_api_v1_widget_identify_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WidgetIdentifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Identify Widget Visitor Api V1 Widget Identify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Identify Widget Visitor",
+        "tags": [
+          "widget"
+        ]
+      }
+    },
+    "/api/v1/widget/messages": {
+      "get": {
+        "operationId": "list_widget_messages_api_v1_widget_messages_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response List Widget Messages Api V1 Widget Messages Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Widget Messages",
+        "tags": [
+          "widget"
+        ]
+      },
+      "post": {
+        "operationId": "send_widget_message_api_v1_widget_messages_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WidgetSendMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Send Widget Message Api V1 Widget Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Widget Message",
+        "tags": [
+          "widget"
+        ]
+      }
+    },
+    "/api/v1/widget/session": {
+      "post": {
+        "operationId": "create_or_resume_widget_session_api_v1_widget_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WidgetSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Or Resume Widget Session",
+        "tags": [
+          "widget"
+        ]
+      }
+    },
+    "/api/v1/widget/{path}": {
+      "options": {
+        "operationId": "widget_cors_preflight_api_v1_widget__path__options",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Widget Cors Preflight",
+        "tags": [
+          "widget"
         ]
       }
     },
