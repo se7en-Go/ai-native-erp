@@ -57,6 +57,7 @@ import type {
   QuoteItemRead,
   QuotePdfResponse,
   QuoteRead,
+  SandboxResult,
   ShipmentRead,
   VariantMappingWithLabelRead,
   VariantRead,
@@ -74,6 +75,12 @@ import {
   listWarehousesApiV1OrdersWarehousesGet,
   rejectProposalApiV1AiProposalsProposalIdRejectPost,
   translateTextApiV1AiTranslatePost,
+  listChannelAccountsApiV1ChannelsAccountsGet,
+  listChannelConsentsApiV1ChannelsConsentsGet,
+  listChannelDlqApiV1ChannelsDlqGet,
+  listChannelSuppressionsApiV1ChannelsSuppressionsGet,
+  runSandboxTestApiV1OnboardingSandboxTestPost,
+  verifyEmailDnsApiV1OnboardingEmailVerifyDnsPost,
   updateCapabilitiesApiV1AiCapabilitiesPatch,
   uploadKbDocumentApiV1AiKbDocumentsPost,
   advanceOnboardingStageApiV1OnboardingAdvancePost,
@@ -1430,5 +1437,64 @@ export async function assistantChat(body: AssistantChatRequest): Promise<Assista
 export async function translateText(text: string, targetLang: string) {
   return unwrap(await translateTextApiV1AiTranslatePost({
     client: getBffClient(), body: { text, target_lang: targetLang },
+  }));
+}
+
+// Onboarding readiness probes and channel settings reads (generated SDK).
+export async function verifyEmailDns(domain: string) {
+  return unwrap(await verifyEmailDnsApiV1OnboardingEmailVerifyDnsPost({
+    client: getBffClient(), body: { domain },
+  }));
+}
+
+export type SandboxScenarioId = "b2c_wismo" | "strict_rag_warranty" | "b2b_moq_quote";
+
+export async function runSandboxTest(
+  scenarioId: SandboxScenarioId,
+  message: string,
+): Promise<SandboxResult> {
+  return unwrap(await runSandboxTestApiV1OnboardingSandboxTestPost({
+    client: getBffClient(), body: { scenario_id: scenarioId, message },
+  }));
+}
+
+export async function fetchChannelAccounts(): Promise<PaginatedResponse<ChannelAccountApiItem>> {
+  const page = unwrap(await listChannelAccountsApiV1ChannelsAccountsGet({
+    client: getBffClient(), query: { limit: 20, offset: 0 },
+  }));
+  return {
+    ...page,
+    items: page.items.map(({ rate_limit_profile, ...account }) => ({
+      ...account,
+      rate_limit_profile: {
+        mps: rate_limit_profile.mps ?? undefined,
+        coexistence: rate_limit_profile.coexistence ?? undefined,
+      },
+    })),
+  };
+}
+
+export async function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
+  const page = unwrap(await listChannelDlqApiV1ChannelsDlqGet({
+    client: getBffClient(), query: { limit: 20, offset: 0 },
+  }));
+  return {
+    ...page,
+    items: page.items.map((row) => ({
+      ...row,
+      external_event_id: row.external_event_id ?? "",
+    })),
+  };
+}
+
+export async function fetchChannelConsents(): Promise<PaginatedResponse<ConsentLogApiItem>> {
+  return unwrap(await listChannelConsentsApiV1ChannelsConsentsGet({
+    client: getBffClient(), query: { limit: 20, offset: 0 },
+  }));
+}
+
+export async function fetchChannelSuppressions(): Promise<PaginatedResponse<SuppressionLogApiItem>> {
+  return unwrap(await listChannelSuppressionsApiV1ChannelsSuppressionsGet({
+    client: getBffClient(), query: { limit: 20, offset: 0 },
   }));
 }

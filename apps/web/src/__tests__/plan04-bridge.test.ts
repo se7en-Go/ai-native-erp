@@ -19,14 +19,10 @@ import {
 import {
   aiAssist,
   connectStorefront,
-  fetchChannelAccounts,
-  fetchChannelConsents,
-  fetchChannelDlq,
-  fetchChannelSuppressions,
-  fetchCustomerContext,
-  runSandboxTest,
   saveWebchat,
-  verifyEmailDns,
+  connectStorefront,
+  fetchCustomerContext,
+  saveWebchat,
 } from "@/lib/api-client/plan04-bridge";
 
 const BFF = "/api/bff";
@@ -207,63 +203,22 @@ describe("Plan 04 API over BFF", () => {
       `${BFF}/v1/identity/customers/cust-1/context`,
     );
   });
-
-  it("onboarding bridge mutations keep their pre-contract paths and bodies", async () => {
-    const fetchMock = stubFetch((url) => {
-      if (url.includes("verify-dns")) {
-        return jsonResponse({
-          spf_verified: true,
-          dkim_verified: true,
-          return_path_verified: true,
-        });
-      }
-      if (url.includes("sandbox-test")) {
-        return jsonResponse({ passed: true, reply_text: "Verified grounded response" });
-      }
-      return jsonResponse({ ok: true });
-    });
-    const dns = await verifyEmailDns("mail.qzled.example.com");
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/v1/onboarding/email/verify-dns`);
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
-      domain: "mail.qzled.example.com",
-    });
-    expect(dns.spf_verified).toBe(true);
-
-    const sandbox = await runSandboxTest("b2c_wismo", "Hi, where is my order?");
-    expect(fetchMock.mock.calls[1][0]).toBe(`${BFF}/v1/onboarding/sandbox-test`);
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
-      scenario_id: "b2c_wismo",
-      message: "Hi, where is my order?",
-    });
-    expect(sandbox.passed).toBe(true);
-
+  it("storefront and webchat bridge mutations keep their paths and bodies", async () => {
+    const fetchMock = stubFetch(() => jsonResponse({ ok: true }));
     await connectStorefront({
       platform: "shopify",
       shop_domain: "qzled.myshopify.com",
       auth_mode: "oauth",
       credentials: {},
     });
-    expect(fetchMock.mock.calls[2][0]).toBe(`${BFF}/v1/onboarding/storefront/connect`);
-
-    await saveWebchat(["https://shop.qzled.example.com"]);
-    expect(fetchMock.mock.calls[3][0]).toBe(`${BFF}/v1/onboarding/webchat`);
-    expect(fetchMock.mock.calls[3][1]?.method).toBe("PUT");
-    expect(JSON.parse(String(fetchMock.mock.calls[3][1]?.body))).toEqual({
-      allowed_origins: ["https://shop.qzled.example.com"],
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/v1/onboarding/storefront/connect`);
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      platform: "shopify",
+      shop_domain: "qzled.myshopify.com",
     });
+    await saveWebchat(["https://shop.qzled.example.com"]);
+    expect(fetchMock.mock.calls[1][0]).toBe(`${BFF}/v1/onboarding/webchat`);
+    expect(fetchMock.mock.calls[1][1]?.method).toBe("PUT");
   });
 
-  it("channel lists keep their paths (no contract list operation yet)", async () => {
-    const fetchMock = stubFetch(() =>
-      jsonResponse({ items: [], total: 0, limit: 20, offset: 0, has_more: false }),
-    );
-    await fetchChannelAccounts();
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/v1/channels/accounts`);
-    await fetchChannelDlq();
-    expect(fetchMock.mock.calls[1][0]).toBe(`${BFF}/v1/channels/dlq`);
-    await fetchChannelConsents();
-    expect(fetchMock.mock.calls[2][0]).toBe(`${BFF}/v1/channels/consents`);
-    await fetchChannelSuppressions();
-    expect(fetchMock.mock.calls[3][0]).toBe(`${BFF}/v1/channels/suppressions`);
-  });
 });

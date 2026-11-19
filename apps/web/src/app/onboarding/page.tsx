@@ -10,17 +10,14 @@ import {
   updateOnboardingPreset,
   updateTenantSettings,
 } from "@/lib/api-client/live-client";
-import {
-  connectStorefront,
-  runSandboxTest,
-  saveWebchat,
-  verifyEmailDns,
-} from "@/lib/api-client/plan04-bridge";
+import type { SandboxScenarioId } from "@/lib/api-client/live-client";
+import { connectStorefront, saveWebchat } from "@/lib/api-client/plan04-bridge";
+import { runSandboxTest, verifyEmailDns } from "@/lib/api-client/live-client";
 import { fetchOnboardingState, fetchPendingProposalsCount } from "@/lib/data-source";
 
 type StorefrontTab = "Shopify" | "WooCommerce" | "SHOPLINE" | "Shoplazza" | "TikTok Shop";
 
-const SANDBOX_SCENARIOS = [
+const SANDBOX_SCENARIOS: Array<{ id: SandboxScenarioId; label: string; message: string }> = [
   {
     id: "b2c_wismo",
     label: "1. B2C WISMO Order & 17TRACK Lookup",
@@ -149,11 +146,11 @@ export default function OnboardingPage() {
   });
 
   const sandboxTestMutation = useMutation({
-    mutationFn: ({ scenarioId, message }: { scenarioId: string; message: string }) =>
+    mutationFn: ({ scenarioId, message }: { scenarioId: SandboxScenarioId; message: string }) =>
       runSandboxTest(scenarioId, message),
     onSuccess: (res, vars) => {
       if (res.passed) {
-        setSandboxPassed((prev) => ({ ...prev, [vars.scenarioId]: res.reply_text }));
+        setSandboxPassed((prev) => ({ ...prev, [vars.scenarioId]: res.reply_text ?? "" }));
       }
     },
   });

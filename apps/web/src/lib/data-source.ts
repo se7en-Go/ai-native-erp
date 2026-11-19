@@ -29,6 +29,10 @@ import {
 import {
   fetchCapabilities as liveFetchCapabilities,
   fetchKbDocuments as liveFetchKbDocuments,
+  fetchChannelAccounts as liveFetchChannelAccounts,
+  fetchChannelConsents as liveFetchChannelConsents,
+  fetchChannelDlq as liveFetchChannelDlq,
+  fetchChannelSuppressions as liveFetchChannelSuppressions,
   fetchPendingProposalsCount as liveFetchPendingProposalsCount,
   fetchWallet as liveFetchWallet,
   listProposals,
@@ -36,12 +40,7 @@ import {
   type CapabilityConfigItem,
   type KbDocumentItem,
 } from "@/lib/api-client/live-client";
-import {
-  fetchChannelAccounts as bridgeFetchChannelAccounts,
-  fetchChannelConsents as bridgeFetchChannelConsents,
-  fetchChannelDlq as bridgeFetchChannelDlq,
-  fetchChannelSuppressions as bridgeFetchChannelSuppressions,
-} from "@/lib/api-client/plan04-bridge";
+
 import type {
   AiCapability,
   AutonomyLevel,
@@ -274,7 +273,7 @@ export function fetchChannelAccounts(): Promise<
       mockChannelAccounts as unknown as PaginatedResponse<ChannelAccountApiItem>,
     );
   }
-  return bridgeFetchChannelAccounts();
+  return liveFetchChannelAccounts();
 }
 
 export function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
@@ -283,7 +282,7 @@ export function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
       mockChannelDlq as unknown as PaginatedResponse<DlqEventApiItem>,
     );
   }
-  return bridgeFetchChannelDlq();
+  return liveFetchChannelDlq();
 }
 
 export function fetchChannelConsents(): Promise<
@@ -294,7 +293,7 @@ export function fetchChannelConsents(): Promise<
       mockChannelConsents as unknown as PaginatedResponse<ConsentLogApiItem>,
     );
   }
-  return bridgeFetchChannelConsents();
+  return liveFetchChannelConsents();
 }
 
 export function fetchChannelSuppressions(): Promise<
@@ -305,7 +304,7 @@ export function fetchChannelSuppressions(): Promise<
       mockChannelSuppressions as unknown as PaginatedResponse<SuppressionLogApiItem>,
     );
   }
-  return bridgeFetchChannelSuppressions();
+  return liveFetchChannelSuppressions();
 }
 
 export function fetchPendingProposalsCount(): Promise<{ total: number }> {

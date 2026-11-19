@@ -1,12 +1,6 @@
 // Compatibility for UI routes not yet in the backend contract.
 import { bffFetch } from "@/lib/api";
-import type { PaginatedResponse } from "@/lib/contracts";
-import type {
-  ChannelAccountApiItem,
-  ConsentLogApiItem,
-  DlqEventApiItem,
-  SuppressionLogApiItem,
-} from "./live-client";
+
 import type {
   ConfidenceLevel,
   CustomerType,
@@ -102,29 +96,6 @@ export function fetchCustomerContext(
 // Section C — onboarding mutations with no contract endpoint yet
 // ---------------------------------------------------------------------------
 
-export function verifyEmailDns(
-  domain: string,
-): Promise<{ spf_verified: boolean; dkim_verified: boolean; return_path_verified: boolean }> {
-  return bffFetch<{
-    spf_verified: boolean;
-    dkim_verified: boolean;
-    return_path_verified: boolean;
-  }>("/v1/onboarding/email/verify-dns", {
-    method: "POST",
-    body: JSON.stringify({ domain }),
-  });
-}
-
-export function runSandboxTest(
-  scenarioId: string,
-  message: string,
-): Promise<{ passed: boolean; reply_text: string }> {
-  return bffFetch<{ passed: boolean; reply_text: string }>(
-    "/v1/onboarding/sandbox-test",
-    { method: "POST", body: JSON.stringify({ scenario_id: scenarioId, message }) },
-  );
-}
-
 export function connectStorefront(body: {
   platform: string;
   shop_domain: string;
@@ -142,37 +113,4 @@ export function saveWebchat(allowedOrigins: string[]): Promise<unknown> {
     method: "PUT",
     body: JSON.stringify({ allowed_origins: allowedOrigins }),
   });
-}
-
-// ---------------------------------------------------------------------------
-// Section D — channel lists with no contract operation yet
-// (GET /api/v1/channels/dlq, /accounts, /consents, /suppressions are absent;
-// only POST /api/v1/channels/dlq/{event_id}/replay exists, and it lives in
-// the generated SDK — see live-client.replayDlqEvent.)
-// ---------------------------------------------------------------------------
-
-export function fetchChannelAccounts(): Promise<
-  PaginatedResponse<ChannelAccountApiItem>
-> {
-  return bffFetch<PaginatedResponse<ChannelAccountApiItem>>(
-    "/v1/channels/accounts",
-  );
-}
-
-export function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
-  return bffFetch<PaginatedResponse<DlqEventApiItem>>("/v1/channels/dlq");
-}
-
-export function fetchChannelConsents(): Promise<
-  PaginatedResponse<ConsentLogApiItem>
-> {
-  return bffFetch<PaginatedResponse<ConsentLogApiItem>>("/v1/channels/consents");
-}
-
-export function fetchChannelSuppressions(): Promise<
-  PaginatedResponse<SuppressionLogApiItem>
-> {
-  return bffFetch<PaginatedResponse<SuppressionLogApiItem>>(
-    "/v1/channels/suppressions",
-  );
 }
