@@ -53,7 +53,7 @@ def build_default_adapter_registry() -> AdapterRegistry:
     ):
         registry.register(key, gateway)
     try:
-        from erp_core.channels.adapters.whatsapp import (  # type: ignore[import-untyped]
+        from erp_core.channels.adapters.whatsapp import (
             WhatsAppAdapter,
         )
 
@@ -65,7 +65,7 @@ def build_default_adapter_registry() -> AdapterRegistry:
         logger.debug("WhatsAppAdapter not yet installed; skipping registration")
 
     try:
-        from erp_core.channels.adapters.email import (  # type: ignore[import-untyped]
+        from erp_core.channels.adapters.email import (
             EmailAdapter,
         )
 

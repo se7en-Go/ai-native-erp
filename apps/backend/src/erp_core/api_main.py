@@ -18,10 +18,13 @@ import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
 from erp_core.catalog.router import router as catalog_router
+from erp_core.channels.adapters.whatsapp import whatsapp_router
 from erp_core.channels.ecommerce.connectors_router import router as connectors_router
 from erp_core.channels.ecommerce.shopify_router import router as shopify_router
+from erp_core.channels.inbox_router import inbox_router
 from erp_core.channels.ingress_worker import dlq_router
 from erp_core.channels.webhook_router import webhook_router
+from erp_core.channels.widget_router import widget_router
 from erp_core.crm.router import router as b2b_router
 from erp_core.finance.router import router as finance_router
 from erp_core.identity.router import customer_router
@@ -95,6 +98,9 @@ def create_app() -> FastAPI:
     app.include_router(connectors_router, prefix="/api/v1")
     app.include_router(webhook_router)
     app.include_router(dlq_router)
+    app.include_router(whatsapp_router)
+    app.include_router(widget_router)
+    app.include_router(inbox_router)
     app.include_router(customer_router)
     app.include_router(catalog_router, prefix="/api/v1")
     app.include_router(b2b_router, prefix="/api/v1")
