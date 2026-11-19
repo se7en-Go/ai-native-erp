@@ -194,6 +194,11 @@ export type ChannelSuppressionRead = {
 
 export type ChannelType = 'whatsapp_cloud' | 'whatsapp_coexistence' | 'email' | 'web_livechat' | 'shopify' | 'woocommerce' | 'shopline' | 'shoplazza' | 'tiktok_shop' | 'made_in_china_email' | 'alibaba_email' | 'messenger' | 'instagram_dm' | 'telegram' | 'amazon_sp' | 'ebay' | 'mercado_libre' | 'temu' | 'walmart' | 'shopee' | 'lazada';
 
+export type ChannelVolume = {
+    channel: string;
+    conversations: number;
+};
+
 export type ConfidenceLevel = 'deterministic' | 'human_verified' | 'probabilistic';
 
 export type ConnectMessagingResponse = {
@@ -287,6 +292,15 @@ export type CostVisibilitySampleResponse = {
     unit_sale_price: string;
 };
 
+export type CreateStocktake = {
+    movement_type: 'stocktake_adjust';
+    notes?: string | null;
+    qty_delta: number;
+    request_id: string;
+    variant_id: string;
+    warehouse_id: string;
+};
+
 export type CreditWalletRead = {
     auto_downgrade_to_l0: boolean;
     billing_cycle_end: string;
@@ -299,6 +313,11 @@ export type CreditWalletRead = {
     topup_credits_balance: number;
     total_credits_available: number;
     updated_at: string;
+};
+
+export type CurrencyValue = {
+    amount: string;
+    currency: string;
 };
 
 export type CustomerIdentityRead = {
@@ -353,6 +372,19 @@ export type CustomerUpdateRequest = {
     lifecycle_stage?: string | null;
     postal_code?: string | null;
     preferred_language?: string | null;
+};
+
+export type DashboardRead = {
+    b2c_orders: number;
+    channels: Array<ChannelVolume>;
+    financials?: Array<FinancialKpis> | null;
+    funnel: Array<FunnelStage>;
+    low_stock_alerts: number;
+    open_inquiries: number;
+    open_tasks: number;
+    pending_proposals: number;
+    pipeline_value: Array<CurrencyValue>;
+    upcoming_tasks: Array<TaskRead>;
 };
 
 export type DeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
@@ -420,7 +452,43 @@ export type FinanceOverviewSummaryRead = {
     total_net_margin_base: string;
 };
 
+export type FinancialKpis = {
+    cost: string;
+    currency: string;
+    net_contribution_margin: string;
+};
+
+export type FollowupCreate = {
+    customer_id: string;
+    followup_type: 'email' | 'call' | 'meeting' | 'note';
+    next_action_at?: string | null;
+    opportunity_id?: string | null;
+    summary: string;
+};
+
+export type FollowupRead = {
+    author_user_id: string;
+    created_at: string;
+    customer_id: string;
+    followup_type: 'email' | 'call' | 'meeting' | 'note';
+    id: string;
+    next_action_at: string | null;
+    opportunity_id: string | null;
+    summary: string;
+};
+
+export type FollowupUpdate = {
+    followup_type?: ('email' | 'call' | 'meeting' | 'note') | null;
+    next_action_at?: string | null;
+    summary?: string | null;
+};
+
 export type FulfillmentStatus = 'pending_payment' | 'confirmed_reserved' | 'in_production' | 'partially_shipped' | 'shipped' | 'delivered' | 'exception' | 'cancelled' | 'refunded';
+
+export type FunnelStage = {
+    count: number;
+    stage: OpportunityStage;
+};
 
 export type GdprAnonymizeResult = {
     customer_id: string;
@@ -543,6 +611,11 @@ export type LeadRead = {
 
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'disqualified' | 'converted';
 
+export type LeadUpdate = {
+    qualification_score?: number | null;
+    status?: LeadStatus | null;
+};
+
 export type LiveSkuCheckRead = {
     available_qty: number;
     incoterm: string;
@@ -634,6 +707,20 @@ export type MoqTierInputInput = {
 export type MoqTierInputOutput = {
     min_qty: number;
     unit_price_usd: string;
+};
+
+export type MovementRead = {
+    created_at: string;
+    id: string;
+    movement_no: string;
+    movement_type: 'inbound_po' | 'outbound_order' | 'transfer' | 'stocktake_adjust';
+    notes: string | null;
+    operator_user_id: string | null;
+    qty_delta: number;
+    reference_id: string | null;
+    reference_type: string | null;
+    variant_id: string;
+    warehouse_id: string;
 };
 
 export type OnboardingStage = 'WorkspaceCreated' | 'ChannelConnecting' | 'ChannelVerified' | 'CatalogSyncing' | 'AISandboxReady' | 'LiveProduction';
@@ -760,6 +847,13 @@ export type OrderRead = {
     updated_at: string;
 };
 
+export type OverviewRead = {
+    channels: Array<ChannelVolume>;
+    funnel: Array<FunnelStage>;
+    sku_margins?: Array<SkuMargin> | null;
+    won_conversion_pct: string;
+};
+
 export type PaginatedResponseAiProposalRead = {
     has_more: boolean;
     items: Array<AiProposalRead>;
@@ -824,6 +918,14 @@ export type PaginatedResponseCustomerRead = {
     total: number;
 };
 
+export type PaginatedResponseFollowupRead = {
+    has_more: boolean;
+    items: Array<FollowupRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseInventoryBalanceItemRead = {
     has_more: boolean;
     items: Array<InventoryBalanceItemRead>;
@@ -872,6 +974,14 @@ export type PaginatedResponseMessageRead = {
     total: number;
 };
 
+export type PaginatedResponseMovementRead = {
+    has_more: boolean;
+    items: Array<MovementRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseOpportunityRead = {
     has_more: boolean;
     items: Array<OpportunityRead>;
@@ -896,6 +1006,14 @@ export type PaginatedResponseProductRead = {
     total: number;
 };
 
+export type PaginatedResponsePurchaseOrderRead = {
+    has_more: boolean;
+    items: Array<PurchaseOrderRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseQuoteRead = {
     has_more: boolean;
     items: Array<QuoteRead>;
@@ -915,6 +1033,30 @@ export type PaginatedResponseReceivableRead = {
 export type PaginatedResponseSkuMappingRead = {
     has_more: boolean;
     items: Array<SkuMappingRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseStockRead = {
+    has_more: boolean;
+    items: Array<StockRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseSupplierRead = {
+    has_more: boolean;
+    items: Array<SupplierRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseTaskRead = {
+    has_more: boolean;
+    items: Array<TaskRead>;
     limit: number;
     offset: number;
     total: number;
@@ -1059,6 +1201,58 @@ export type ProposalStatus = 'pending' | 'approved' | 'edited_and_approved' | 'r
 
 export type ProposalType = 'reply_draft' | 'crm_entity_extract' | 'quote_draft' | 'follow_up_suggestion' | 'identity_merge' | 'refund_or_reship' | 'payment_match';
 
+export type PurchaseOrderCreate = {
+    currency?: string;
+    expected_arrival_date?: string | null;
+    items: Array<PurchaseOrderItemInput>;
+    notes?: string | null;
+    po_no?: string | null;
+    status?: 'draft' | 'ordered';
+    supplier_id: string;
+    warehouse_id: string;
+};
+
+export type PurchaseOrderItemInput = {
+    qty_ordered: number;
+    unit_cost: number | string;
+    variant_id: string;
+};
+
+export type PurchaseOrderItemRead = {
+    id: string;
+    qty_ordered: number;
+    qty_received: number;
+    sku: string;
+    unit_cost: string;
+    variant_id: string;
+};
+
+export type PurchaseOrderRead = {
+    created_at: string;
+    created_by: string;
+    currency: string;
+    expected_arrival_date: string | null;
+    id: string;
+    items: Array<PurchaseOrderItemRead>;
+    notes: string | null;
+    po_no: string;
+    status: 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
+    supplier_id: string;
+    total_amount: string;
+    updated_at: string;
+    warehouse_id: string;
+};
+
+export type PurchaseOrderUpdate = {
+    currency?: string | null;
+    expected_arrival_date?: string | null;
+    items?: Array<PurchaseOrderItemInput> | null;
+    notes?: string | null;
+    status?: ('ordered' | 'cancelled') | null;
+    supplier_id?: string | null;
+    warehouse_id?: string | null;
+};
+
 export type QuoteCreate = {
     base_currency?: string;
     customs_duty_estimate?: number | string;
@@ -1168,6 +1362,11 @@ export type RagSearchResult = {
     top_score?: number;
 };
 
+export type ReceiptLine = {
+    item_id: string;
+    qty: number;
+};
+
 export type ReceivableRead = {
     created_at: string;
     currency: string;
@@ -1180,6 +1379,14 @@ export type ReceivableRead = {
     paid_amount: string;
     status: string;
     tenant_id: string;
+};
+
+export type ReceivePurchaseOrder = {
+    /**
+     * Empty means receive all outstanding quantities.
+     */
+    items?: Array<ReceiptLine>;
+    receipt_id: string;
 };
 
 export type RefreshRequest = {
@@ -1210,6 +1417,16 @@ export type SandboxResult = {
     passed: boolean;
     reply_text?: string;
     source_tool_call_id?: string | null;
+};
+
+export type SearchHit = {
+    id: string;
+    kind: 'customer' | 'order' | 'quote' | 'sku';
+    label: string;
+};
+
+export type SearchRead = {
+    items: Array<SearchHit>;
 };
 
 export type SendInboxMessageRequest = {
@@ -1325,6 +1542,16 @@ export type SkuMappingUpdate = {
     sync_inventory_enabled?: boolean | null;
 };
 
+export type SkuMargin = {
+    cost: string;
+    currency: string;
+    gross_margin: string;
+    revenue: string;
+    sku: string;
+    units: number;
+    variant_id: string;
+};
+
 export type SplitCustomerRequest = {
     merge_event_id: string;
     reason: string;
@@ -1333,6 +1560,86 @@ export type SplitCustomerRequest = {
 export type SplitCustomerResponse = {
     merge_event_id: string;
     split_event_id: string;
+};
+
+export type StockRead = {
+    available_qty: number;
+    on_hand_qty: number;
+    reserved_qty: number;
+    sku: string;
+    variant_id: string;
+    warehouse_id: string;
+};
+
+export type SupplierCreate = {
+    code: string;
+    contact_email?: string | null;
+    contact_name?: string | null;
+    contact_phone?: string | null;
+    country?: string | null;
+    lead_time_days?: number;
+    name: string;
+    payment_terms?: string | null;
+    rating?: number | string | null;
+    status?: 'active' | 'inactive';
+};
+
+export type SupplierRead = {
+    code: string;
+    contact_email?: string | null;
+    contact_name?: string | null;
+    contact_phone?: string | null;
+    country?: string | null;
+    created_at: string;
+    id: string;
+    lead_time_days?: number;
+    name: string;
+    payment_terms?: string | null;
+    rating?: string | null;
+    status?: 'active' | 'inactive';
+    updated_at: string;
+};
+
+export type SupplierUpdate = {
+    code?: string | null;
+    contact_email?: string | null;
+    contact_name?: string | null;
+    contact_phone?: string | null;
+    country?: string | null;
+    lead_time_days?: number | null;
+    name?: string | null;
+    payment_terms?: string | null;
+    rating?: number | string | null;
+    status?: ('active' | 'inactive') | null;
+};
+
+export type TaskCreate = {
+    assignee_user_id?: string | null;
+    due_at?: string | null;
+    linked_entity_id?: string | null;
+    linked_entity_type?: ('customer' | 'lead' | 'opportunity' | 'quote') | null;
+    priority?: 'low' | 'normal' | 'high';
+    title: string;
+};
+
+export type TaskRead = {
+    assignee_user_id: string | null;
+    created_at: string;
+    due_at: string | null;
+    id: string;
+    linked_entity_id: string | null;
+    linked_entity_type: ('customer' | 'lead' | 'opportunity' | 'quote') | null;
+    priority: 'low' | 'normal' | 'high';
+    status: 'open' | 'done' | 'cancelled';
+    title: string;
+};
+
+export type TaskUpdate = {
+    assignee_user_id?: string | null;
+    due_at?: string | null;
+    priority?: ('low' | 'normal' | 'high') | null;
+    status?: ('open' | 'done' | 'cancelled') | null;
+    title?: string | null;
 };
 
 export type TelegramConnectRequest = {
@@ -1997,6 +2304,62 @@ export type TranslateTextApiV1AiTranslatePostResponses = {
 
 export type TranslateTextApiV1AiTranslatePostResponse = TranslateTextApiV1AiTranslatePostResponses[keyof TranslateTextApiV1AiTranslatePostResponses];
 
+export type DashboardApiV1AnalyticsDashboardGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/analytics/dashboard';
+};
+
+export type DashboardApiV1AnalyticsDashboardGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DashboardApiV1AnalyticsDashboardGetError = DashboardApiV1AnalyticsDashboardGetErrors[keyof DashboardApiV1AnalyticsDashboardGetErrors];
+
+export type DashboardApiV1AnalyticsDashboardGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DashboardRead;
+};
+
+export type DashboardApiV1AnalyticsDashboardGetResponse = DashboardApiV1AnalyticsDashboardGetResponses[keyof DashboardApiV1AnalyticsDashboardGetResponses];
+
+export type OverviewApiV1AnalyticsOverviewGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/analytics/overview';
+};
+
+export type OverviewApiV1AnalyticsOverviewGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OverviewApiV1AnalyticsOverviewGetError = OverviewApiV1AnalyticsOverviewGetErrors[keyof OverviewApiV1AnalyticsOverviewGetErrors];
+
+export type OverviewApiV1AnalyticsOverviewGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: OverviewRead;
+};
+
+export type OverviewApiV1AnalyticsOverviewGetResponse = OverviewApiV1AnalyticsOverviewGetResponses[keyof OverviewApiV1AnalyticsOverviewGetResponses];
+
 export type LoginApiV1AuthLoginPostData = {
     body: LoginRequest;
     path?: never;
@@ -2128,6 +2491,96 @@ export type RegisterApiV1AuthRegisterPostResponses = {
 
 export type RegisterApiV1AuthRegisterPostResponse = RegisterApiV1AuthRegisterPostResponses[keyof RegisterApiV1AuthRegisterPostResponses];
 
+export type ListFollowupsApiV1B2bFollowupsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        customer_id?: string | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/b2b/followups';
+};
+
+export type ListFollowupsApiV1B2bFollowupsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFollowupsApiV1B2bFollowupsGetError = ListFollowupsApiV1B2bFollowupsGetErrors[keyof ListFollowupsApiV1B2bFollowupsGetErrors];
+
+export type ListFollowupsApiV1B2bFollowupsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseFollowupRead;
+};
+
+export type ListFollowupsApiV1B2bFollowupsGetResponse = ListFollowupsApiV1B2bFollowupsGetResponses[keyof ListFollowupsApiV1B2bFollowupsGetResponses];
+
+export type CreateFollowupApiV1B2bFollowupsPostData = {
+    body: FollowupCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/b2b/followups';
+};
+
+export type CreateFollowupApiV1B2bFollowupsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateFollowupApiV1B2bFollowupsPostError = CreateFollowupApiV1B2bFollowupsPostErrors[keyof CreateFollowupApiV1B2bFollowupsPostErrors];
+
+export type CreateFollowupApiV1B2bFollowupsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: FollowupRead;
+};
+
+export type CreateFollowupApiV1B2bFollowupsPostResponse = CreateFollowupApiV1B2bFollowupsPostResponses[keyof CreateFollowupApiV1B2bFollowupsPostResponses];
+
+export type UpdateFollowupApiV1B2bFollowupsFollowupIdPatchData = {
+    body: FollowupUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        followup_id: string;
+    };
+    query?: never;
+    url: '/api/v1/b2b/followups/{followup_id}';
+};
+
+export type UpdateFollowupApiV1B2bFollowupsFollowupIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateFollowupApiV1B2bFollowupsFollowupIdPatchError = UpdateFollowupApiV1B2bFollowupsFollowupIdPatchErrors[keyof UpdateFollowupApiV1B2bFollowupsFollowupIdPatchErrors];
+
+export type UpdateFollowupApiV1B2bFollowupsFollowupIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: FollowupRead;
+};
+
+export type UpdateFollowupApiV1B2bFollowupsFollowupIdPatchResponse = UpdateFollowupApiV1B2bFollowupsFollowupIdPatchResponses[keyof UpdateFollowupApiV1B2bFollowupsFollowupIdPatchResponses];
+
 export type ListLeadsApiV1B2bLeadsGetData = {
     body?: never;
     headers?: {
@@ -2137,6 +2590,7 @@ export type ListLeadsApiV1B2bLeadsGetData = {
     query?: {
         limit?: number;
         offset?: number;
+        lead_status?: LeadStatus | null;
     };
     url: '/api/v1/b2b/leads';
 };
@@ -2186,6 +2640,36 @@ export type CreateLeadApiV1B2bLeadsPostResponses = {
 };
 
 export type CreateLeadApiV1B2bLeadsPostResponse = CreateLeadApiV1B2bLeadsPostResponses[keyof CreateLeadApiV1B2bLeadsPostResponses];
+
+export type PatchLeadApiV1B2bLeadsLeadIdPatchData = {
+    body: LeadUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        lead_id: string;
+    };
+    query?: never;
+    url: '/api/v1/b2b/leads/{lead_id}';
+};
+
+export type PatchLeadApiV1B2bLeadsLeadIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchLeadApiV1B2bLeadsLeadIdPatchError = PatchLeadApiV1B2bLeadsLeadIdPatchErrors[keyof PatchLeadApiV1B2bLeadsLeadIdPatchErrors];
+
+export type PatchLeadApiV1B2bLeadsLeadIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeadRead;
+};
+
+export type PatchLeadApiV1B2bLeadsLeadIdPatchResponse = PatchLeadApiV1B2bLeadsLeadIdPatchResponses[keyof PatchLeadApiV1B2bLeadsLeadIdPatchResponses];
 
 export type ListOpportunitiesApiV1B2bOpportunitiesGetData = {
     body?: never;
@@ -2487,6 +2971,96 @@ export type SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses = {
 };
 
 export type SendQuoteApiV1B2bQuotesQuoteIdSendPostResponse = SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses[keyof SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses];
+
+export type ListTasksApiV1B2bTasksGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        task_status?: ('open' | 'done' | 'cancelled') | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/b2b/tasks';
+};
+
+export type ListTasksApiV1B2bTasksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListTasksApiV1B2bTasksGetError = ListTasksApiV1B2bTasksGetErrors[keyof ListTasksApiV1B2bTasksGetErrors];
+
+export type ListTasksApiV1B2bTasksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseTaskRead;
+};
+
+export type ListTasksApiV1B2bTasksGetResponse = ListTasksApiV1B2bTasksGetResponses[keyof ListTasksApiV1B2bTasksGetResponses];
+
+export type CreateTaskApiV1B2bTasksPostData = {
+    body: TaskCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/b2b/tasks';
+};
+
+export type CreateTaskApiV1B2bTasksPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateTaskApiV1B2bTasksPostError = CreateTaskApiV1B2bTasksPostErrors[keyof CreateTaskApiV1B2bTasksPostErrors];
+
+export type CreateTaskApiV1B2bTasksPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TaskRead;
+};
+
+export type CreateTaskApiV1B2bTasksPostResponse = CreateTaskApiV1B2bTasksPostResponses[keyof CreateTaskApiV1B2bTasksPostResponses];
+
+export type UpdateTaskApiV1B2bTasksTaskIdPatchData = {
+    body: TaskUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        task_id: string;
+    };
+    query?: never;
+    url: '/api/v1/b2b/tasks/{task_id}';
+};
+
+export type UpdateTaskApiV1B2bTasksTaskIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateTaskApiV1B2bTasksTaskIdPatchError = UpdateTaskApiV1B2bTasksTaskIdPatchErrors[keyof UpdateTaskApiV1B2bTasksTaskIdPatchErrors];
+
+export type UpdateTaskApiV1B2bTasksTaskIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: TaskRead;
+};
+
+export type UpdateTaskApiV1B2bTasksTaskIdPatchResponse = UpdateTaskApiV1B2bTasksTaskIdPatchResponses[keyof UpdateTaskApiV1B2bTasksTaskIdPatchResponses];
 
 export type StripeBillingWebhookApiV1BillingStripeWebhookPostData = {
     body?: never;
@@ -4529,6 +5103,367 @@ export type RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTra
 
 export type RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponse = RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponses[keyof RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponses];
 
+export type GlobalSearchApiV1SearchGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query: {
+        q: string;
+        limit?: number;
+    };
+    url: '/api/v1/search';
+};
+
+export type GlobalSearchApiV1SearchGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GlobalSearchApiV1SearchGetError = GlobalSearchApiV1SearchGetErrors[keyof GlobalSearchApiV1SearchGetErrors];
+
+export type GlobalSearchApiV1SearchGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SearchRead;
+};
+
+export type GlobalSearchApiV1SearchGetResponse = GlobalSearchApiV1SearchGetResponses[keyof GlobalSearchApiV1SearchGetResponses];
+
+export type ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        order_status?: ('draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled') | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/supply-chain/purchase-orders';
+};
+
+export type ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetError = ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetErrors[keyof ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetErrors];
+
+export type ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponsePurchaseOrderRead;
+};
+
+export type ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetResponse = ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetResponses[keyof ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetResponses];
+
+export type CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostData = {
+    body: PurchaseOrderCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/supply-chain/purchase-orders';
+};
+
+export type CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostError = CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostErrors[keyof CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostErrors];
+
+export type CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: PurchaseOrderRead;
+};
+
+export type CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostResponse = CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostResponses[keyof CreatePurchaseOrderApiV1SupplyChainPurchaseOrdersPostResponses];
+
+export type DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        po_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/purchase-orders/{po_id}';
+};
+
+export type DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteError = DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteErrors[keyof DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteErrors];
+
+export type DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteResponse = DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteResponses[keyof DeletePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdDeleteResponses];
+
+export type ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        po_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/purchase-orders/{po_id}';
+};
+
+export type ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetError = ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetErrors[keyof ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetErrors];
+
+export type ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PurchaseOrderRead;
+};
+
+export type ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetResponse = ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetResponses[keyof ReadPurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdGetResponses];
+
+export type UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchData = {
+    body: PurchaseOrderUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        po_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/purchase-orders/{po_id}';
+};
+
+export type UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchError = UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchErrors[keyof UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchErrors];
+
+export type UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: PurchaseOrderRead;
+};
+
+export type UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchResponse = UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchResponses[keyof UpdatePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdPatchResponses];
+
+export type ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostData = {
+    body: ReceivePurchaseOrder;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        po_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/purchase-orders/{po_id}/receive';
+};
+
+export type ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostError = ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostErrors[keyof ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostErrors];
+
+export type ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PurchaseOrderRead;
+};
+
+export type ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostResponse = ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostResponses[keyof ReceivePurchaseOrderApiV1SupplyChainPurchaseOrdersPoIdReceivePostResponses];
+
+export type ListSuppliersApiV1SupplyChainSuppliersGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        supplier_status?: ('active' | 'inactive') | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/supply-chain/suppliers';
+};
+
+export type ListSuppliersApiV1SupplyChainSuppliersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSuppliersApiV1SupplyChainSuppliersGetError = ListSuppliersApiV1SupplyChainSuppliersGetErrors[keyof ListSuppliersApiV1SupplyChainSuppliersGetErrors];
+
+export type ListSuppliersApiV1SupplyChainSuppliersGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseSupplierRead;
+};
+
+export type ListSuppliersApiV1SupplyChainSuppliersGetResponse = ListSuppliersApiV1SupplyChainSuppliersGetResponses[keyof ListSuppliersApiV1SupplyChainSuppliersGetResponses];
+
+export type CreateSupplierApiV1SupplyChainSuppliersPostData = {
+    body: SupplierCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/supply-chain/suppliers';
+};
+
+export type CreateSupplierApiV1SupplyChainSuppliersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateSupplierApiV1SupplyChainSuppliersPostError = CreateSupplierApiV1SupplyChainSuppliersPostErrors[keyof CreateSupplierApiV1SupplyChainSuppliersPostErrors];
+
+export type CreateSupplierApiV1SupplyChainSuppliersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: SupplierRead;
+};
+
+export type CreateSupplierApiV1SupplyChainSuppliersPostResponse = CreateSupplierApiV1SupplyChainSuppliersPostResponses[keyof CreateSupplierApiV1SupplyChainSuppliersPostResponses];
+
+export type DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        supplier_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/suppliers/{supplier_id}';
+};
+
+export type DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteError = DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteErrors[keyof DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteErrors];
+
+export type DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteResponse = DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteResponses[keyof DeactivateSupplierApiV1SupplyChainSuppliersSupplierIdDeleteResponses];
+
+export type ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        supplier_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/suppliers/{supplier_id}';
+};
+
+export type ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetError = ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetErrors[keyof ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetErrors];
+
+export type ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SupplierRead;
+};
+
+export type ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetResponse = ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetResponses[keyof ReadSupplierApiV1SupplyChainSuppliersSupplierIdGetResponses];
+
+export type UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchData = {
+    body: SupplierUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        supplier_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/suppliers/{supplier_id}';
+};
+
+export type UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchError = UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchErrors[keyof UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchErrors];
+
+export type UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: SupplierRead;
+};
+
+export type UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchResponse = UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchResponses[keyof UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchResponses];
+
 export type GetAuditEventsApiV1TenancyAuditEventsGetData = {
     body?: never;
     headers?: {
@@ -5113,6 +6048,96 @@ export type WidgetCorsPreflightApiV1WidgetPathOptionsResponses = {
      */
     200: unknown;
 };
+
+export type ListMovementsApiV1WmsMovementsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/wms/movements';
+};
+
+export type ListMovementsApiV1WmsMovementsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMovementsApiV1WmsMovementsGetError = ListMovementsApiV1WmsMovementsGetErrors[keyof ListMovementsApiV1WmsMovementsGetErrors];
+
+export type ListMovementsApiV1WmsMovementsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseMovementRead;
+};
+
+export type ListMovementsApiV1WmsMovementsGetResponse = ListMovementsApiV1WmsMovementsGetResponses[keyof ListMovementsApiV1WmsMovementsGetResponses];
+
+export type CreateStocktakeApiV1WmsMovementsPostData = {
+    body: CreateStocktake;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/wms/movements';
+};
+
+export type CreateStocktakeApiV1WmsMovementsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateStocktakeApiV1WmsMovementsPostError = CreateStocktakeApiV1WmsMovementsPostErrors[keyof CreateStocktakeApiV1WmsMovementsPostErrors];
+
+export type CreateStocktakeApiV1WmsMovementsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MovementRead;
+};
+
+export type CreateStocktakeApiV1WmsMovementsPostResponse = CreateStocktakeApiV1WmsMovementsPostResponses[keyof CreateStocktakeApiV1WmsMovementsPostResponses];
+
+export type ListStockApiV1WmsStockGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/wms/stock';
+};
+
+export type ListStockApiV1WmsStockGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListStockApiV1WmsStockGetError = ListStockApiV1WmsStockGetErrors[keyof ListStockApiV1WmsStockGetErrors];
+
+export type ListStockApiV1WmsStockGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseStockRead;
+};
+
+export type ListStockApiV1WmsStockGetResponse = ListStockApiV1WmsStockGetResponses[keyof ListStockApiV1WmsStockGetResponses];
 
 export type HealthzHealthzGetData = {
     body?: never;
