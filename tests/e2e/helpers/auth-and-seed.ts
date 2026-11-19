@@ -1,13 +1,8 @@
 import crypto from "node:crypto";
 import type { Page, APIRequestContext } from "@playwright/test";
+import { isMockMode } from "./environment";
 
-export const E2E_API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
-
-/** "mock" runs the UI against NEXT_PUBLIC_USE_MOCK_API=true with no backend;
- * "live" runs the Plan 05 Task 5.8 full-stack contract (seeded backend). */
-export const E2E_MODE = process.env.E2E_MODE ?? "mock";
-export const isMockMode = E2E_MODE === "mock";
-export const isLiveMode = E2E_MODE === "live";
+const E2E_API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
 
 export function signHmacSha256Hex(rawBody: string, secret: string): string {
   return crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
@@ -76,7 +71,6 @@ export interface PageErrorCollector {
 // an application error, so it is allowlisted here by exact URL+status.
 // Everything else — any pageerror, any other console error, any other
 // failed response — fails the test.
-const BENIGN_FAILED_RESPONSE = /\/api\/bff\/v1\/auth\/me.* 401/;
 
 /**
  * Records every uncaught pageerror, console error, and failed HTTP
@@ -95,7 +89,7 @@ export function collectPageErrors(page: Page): PageErrorCollector {
   page.on("response", (res) => {
     if (res.status() >= 400) {
       const entry = `${res.url()} ${res.status()}`;
-      if (BENIGN_FAILED_RESPONSE.test(entry)) {
+      if (res.status() === 401 && new URL(res.url()).pathname === "/api/bff/v1/auth/me") {
         // The generic "Failed to load resource ... 401" console line
         // Chrome emits for this probe carries no URL; correlate it via
         // this flag so only this one probe is ever excused.

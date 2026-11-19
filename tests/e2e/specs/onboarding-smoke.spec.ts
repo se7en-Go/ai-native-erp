@@ -33,14 +33,22 @@ test.describe("Hybrid Factory Self-Serve Onboarding Wizard Smoke", () => {
     await page.getByTestId("run-sandbox-test-1").click();
     await page.getByTestId("run-sandbox-test-2").click();
     await page.getByTestId("run-sandbox-test-3").click();
-    await expect(page.getByTestId("activate-live-production-btn")).toBeEnabled();
-    await page.getByTestId("activate-live-production-btn").click();
-    // The advance mutation round-trips and the button settles back to
-    // enabled; the mock state still reports WorkspaceCreated, so the
-    // button settling (not a page reload) is the completion signal here.
-    await expect(page.getByTestId("activate-live-production-btn")).toBeEnabled({
-      timeout: 15_000,
+    const activate = page.getByTestId("activate-live-production-btn");
+    await expect(activate).toBeEnabled();
+    const [advance] = await Promise.all([
+      page.waitForResponse((res) =>
+        new URL(res.url()).pathname === "/api/bff/api/v1/onboarding/advance" &&
+        res.request().method() === "POST"
+      ),
+      activate.click(),
+    ]);
+    expect(advance.ok()).toBe(true);
+    expect(advance.request().postDataJSON()).toMatchObject({
+      target_stage: "LiveProduction",
+      step_metadata: { sandbox_passed: 3 },
     });
+    // The mock mutation acknowledges the transition but does not persist it.
+    expect(await advance.json()).toMatchObject({ stage: "LiveProduction" });
 
     errors.assertClean();
   });
