@@ -390,7 +390,7 @@ async def _persist_inbound_event(
 
     if inserted_msg_id is not None and event.is_stop_command:
         try:
-            from erp_core.channels.consent_service import (  # type: ignore[import-untyped]
+            from erp_core.channels.consent_service import (
                 ConsentAndSuppressionService,
             )
 

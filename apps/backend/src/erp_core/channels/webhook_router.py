@@ -53,7 +53,7 @@ def build_default_adapter_registry() -> AdapterRegistry:
     ):
         registry.register(key, gateway)
     try:
-        from erp_core.channels.adapters.whatsapp import (  # type: ignore[import-untyped]
+        from erp_core.channels.adapters.whatsapp import (
             WhatsAppAdapter,
         )
 
