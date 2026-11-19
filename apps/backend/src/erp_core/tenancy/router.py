@@ -11,6 +11,8 @@ from erp_core.shared.config import Settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.enums import UserRole
 from erp_core.shared.pagination import PaginatedResponse
+from erp_core.shared.storage import ObjectStorageService
+from erp_core.tenancy.audit import list_audit_events
 from erp_core.tenancy.cost_visibility import apply_cost_visibility
 from erp_core.tenancy.dependencies import (
     CurrentPrincipal,
@@ -18,8 +20,13 @@ from erp_core.tenancy.dependencies import (
     get_tenant_db,
     require_roles,
 )
+from erp_core.tenancy.gdpr_service import GdprService
 from erp_core.tenancy.schemas import (
+    AuditEventRead,
     CostVisibilitySampleResponse,
+    GdprAnonymizeResult,
+    GdprExportResult,
+    GdprTenantRedactResult,
     InviteMemberRequest,
     LoginRequest,
     MembershipItem,
@@ -170,3 +177,85 @@ async def get_cost_visibility_sample(
         cost_masked=False,
     )
     return apply_cost_visibility(sample, principal.role)
+
+
+@router.get("/tenancy/audit-events", response_model=PaginatedResponse[AuditEventRead])
+async def get_audit_events(
+    _principal: Annotated[
+        CurrentPrincipal,
+        Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.FINANCE)),
+    ],
+    session: Annotated[AsyncSession, Depends(get_tenant_db)],
+    action: str | None = None,
+    resource_type: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> PaginatedResponse[AuditEventRead]:
+    return await list_audit_events(
+        session,
+        action=action,
+        resource_type=resource_type,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/tenancy/gdpr/customers/{customer_id}/export", response_model=GdprExportResult)
+async def gdpr_export_customer(
+    customer_id: UUID,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))],
+    session: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> GdprExportResult:
+    storage: ObjectStorageService = request.app.state.storage
+    gdpr = GdprService()
+    return await gdpr.export_customer_data(
+        session,
+        storage,
+        principal.tenant_id,
+        customer_id,
+        str(principal.user_id),
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+
+
+@router.post(
+    "/tenancy/gdpr/customers/{customer_id}/anonymize",
+    response_model=GdprAnonymizeResult,
+)
+async def gdpr_anonymize_customer(
+    customer_id: UUID,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))],
+    session: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> GdprAnonymizeResult:
+    gdpr = GdprService()
+    return await gdpr.anonymize_customer_pii(
+        session,
+        principal.tenant_id,
+        customer_id,
+        str(principal.user_id),
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+
+
+@router.post("/tenancy/gdpr/tenant/redact", response_model=GdprTenantRedactResult)
+async def gdpr_redact_tenant(
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_roles(UserRole.OWNER))],
+    session: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> GdprTenantRedactResult:
+    storage: ObjectStorageService = request.app.state.storage
+    crypto_service: EnvelopeCryptoService = request.app.state.crypto_service
+    gdpr = GdprService()
+    return await gdpr.redact_tenant_crypto_shred(
+        session,
+        storage,
+        crypto_service,
+        principal.tenant_id,
+        str(principal.user_id),
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
