@@ -194,3 +194,122 @@ class AiEvalFeedback(Base):
         UniqueConstraint("tenant_id", "proposal_id", name="uq_ai_eval_feedback_proposal"),
         Index("idx_ai_eval_feedback_tenant_cap", "tenant_id", "capability", desc("created_at")),
     )
+
+
+class AiEmployee(Base):
+    """A configured digital employee: persona, capability scope and autonomy ceiling."""
+
+    __tablename__ = "ai_employees"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    role_title: Mapped[str] = mapped_column(Text, nullable=False)
+    department: Mapped[str] = mapped_column(Text, nullable=False)
+    avatar_emoji: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    capability_codes: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    autonomy_level: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'L1_proposal'")
+    )
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    tool_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    system_persona: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),
+        UniqueConstraint("tenant_id", "code"),
+        CheckConstraint(
+            "autonomy_level IN ('L0_copilot','L1_proposal','L2_auto')",
+            name="ck_ai_employees_autonomy_level",
+        ),
+        Index("ix_ai_employees_is_enabled", "tenant_id", "is_enabled", "autonomy_level"),
+    )
+
+
+class QuickReplyTemplate(Base):
+    """Reusable canned reply the inbox assistant inserts into a draft (never auto-sends)."""
+
+    __tablename__ = "quick_reply_templates"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str] = mapped_column(Text, nullable=False)
+    body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    shortcut_code: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),
+        UniqueConstraint("tenant_id", "shortcut_code"),
+        CheckConstraint("language IN ('zh','en')"),
+        Index("ix_quick_reply_templates_category", "tenant_id", "category", "language"),
+    )
+
+
+class AiCreativeAsset(Base):
+    """A generated or human-authored marketing asset kept for review and reuse."""
+
+    __tablename__ = "ai_creative_assets"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    asset_type: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str] = mapped_column(Text, nullable=False)
+    sku_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    created_by: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),
+        CheckConstraint(
+            "asset_type IN ('product_copy','listing','email_template','social_caption','ad_hook')",
+            name="ck_ai_creative_assets_asset_type",
+        ),
+        CheckConstraint(
+            "status IN ('draft','approved','archived')", name="ck_ai_creative_assets_status"
+        ),
+        Index(
+            "ix_ai_creative_assets_type",
+            "tenant_id",
+            "asset_type",
+            "status",
+            desc("created_at"),
+        ),
+    )
