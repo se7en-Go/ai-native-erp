@@ -1,0 +1,59 @@
+{% comment %}
+  Shopify Online Store 2.0 App Embed Block (target: body)
+  Replaces closed Shopify Inbox with self-hosted Shadow DOM LiveChat Widget.
+{% endcomment %}
+<script
+  src="{{ block.settings.widget_cdn_url | escape }}"
+  data-site-key="{{ block.settings.site_key | escape }}"
+  data-api-base="{{ block.settings.api_base | escape }}"
+  data-business-name="{{ shop.name | escape }}"
+  {% if product %}
+    data-sku="{{ product.selected_or_first_available_variant.sku | escape }}"
+  {% endif %}
+  defer
+></script>
+
+{% if customer and block.settings.customer_identify_hmac != blank %}
+<script>
+  window.addEventListener("load", function () {
+    if (window.ErpLiveChat) {
+      window.ErpLiveChat.identify({
+        email: {{ customer.email | json }},
+        external_customer_id: String({{ customer.id | json }}),
+        display_name: {{ customer.name | json }},
+        timestamp: {{ 'now' | date: '%s' | plus: 0 }},
+        hmac_signature: {{ block.settings.customer_identify_hmac | json }}
+      });
+    }
+  });
+</script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Omnichannel LiveChat",
+  "target": "body",
+  "settings": [
+    {
+      "type": "text",
+      "id": "site_key",
+      "label": "Workspace Site Key"
+    },
+    {
+      "type": "url",
+      "id": "api_base",
+      "label": "Backend API Base URL"
+    },
+    {
+      "type": "url",
+      "id": "widget_cdn_url",
+      "label": "Widget Bundle URL"
+    },
+    {
+      "type": "text",
+      "id": "customer_identify_hmac",
+      "label": "Optional Customer Identify HMAC"
+    }
+  ]
+}
+{% endschema %}
