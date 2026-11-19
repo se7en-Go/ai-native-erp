@@ -19,8 +19,6 @@ import {
 import {
   aiAssist,
   connectStorefront,
-  saveWebchat,
-  connectStorefront,
   fetchCustomerContext,
   saveWebchat,
 } from "@/lib/api-client/plan04-bridge";
