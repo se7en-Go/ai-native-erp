@@ -14,6 +14,7 @@ from erp_core.shared.db import create_runtime_engine, create_session_factory, sy
 from erp_core.shared.errors import register_exception_handlers
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
+from erp_core.tenancy.onboarding import onboarding_router
 from erp_core.tenancy.router import router as tenancy_router
 
 
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(tenancy_router)
+    app.include_router(onboarding_router)
 
     @app.get("/healthz", tags=["health"])
     async def healthz() -> dict[str, str]:
