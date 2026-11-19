@@ -1,6 +1,20 @@
-import { bffBaseUrl, client } from "@/lib/api-client/client.gen";
+import { client } from "@/lib/api-client/client.gen";
 import type { ProblemDetail } from "@/lib/contracts";
 import { BffApiError } from "@/lib/contracts";
+
+/**
+ * Absolute BFF base URL. @hey-api/client-fetch builds request URLs with
+ * `new URL(...)`, which cannot parse a relative base (bffFetch calls fetch()
+ * directly, so it never noticed). In the browser this is the app origin;
+ * outside it (tests/SSR) it falls back to the local dev origin.
+ */
+export function bffBaseUrl(): string {
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "http://localhost:3000";
+  return `${origin}/api/bff`;
+}
 
 let configured = false;
 
