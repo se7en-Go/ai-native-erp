@@ -292,3 +292,106 @@ async def test_messenger_persists_psid_windows_and_enforces_human_and_stop(
             await adapter.send_message(session, tenant, credentials, request)
         ).error_message == "ERR_RECIPIENT_SUPPRESSED"
         assert len(calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_instagram_story_messages_connect_and_enforce_human_window(
+    tenant: UUID,
+    runtime_session_factory: RuntimeFactory,
+) -> None:
+    require_adapter("instagram_dm")
+    from erp_core.channels.adapters.instagram_dm import InstagramDMAdapter, instagram_router
+
+    account = str(uuid4().int)[:18]
+    peer = "33445566"
+    now = datetime.now(UTC).replace(microsecond=0)
+    calls = []
+
+    def graph(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer test-ig-token"
+        if request.method == "GET":
+            assert request.url.path.endswith(f"/{account}")
+            return httpx.Response(200, json={"id": account})
+        assert request.url.path.endswith(f"/{account}/messages")
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={"message_id": "ig.out"})
+
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.include_router(instagram_router)
+    override_principal(app, runtime_session_factory, tenant)
+    app.state.messaging_http_transport = httpx.MockTransport(graph)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/channels/instagram/connect",
+            json={
+                "ig_account_id": account,
+                "access_token": "test-ig-token",
+                "display_name": "Instagram",
+            },
+        )
+        assert response.status_code == 200, response.text
+        aid = UUID(response.json()["channel_account_id"])
+
+    adapter = InstagramDMAdapter(
+        http_transport=httpx.MockTransport(graph), clock=lambda: now + timedelta(days=6)
+    )
+    payload = meta_payload(
+        account,
+        peer,
+        "ig.story",
+        now,
+        text="Price?",
+        attachments=[
+            {"type": "story_mention", "payload": {"url": "https://example.com/mention"}},
+            {"type": "image", "payload": {"url": "https://example.com/image"}},
+        ],
+        reply_to={"story": {"id": "story-1", "url": "https://example.com/story"}},
+    )
+    payload["object"] = "instagram"
+    raw = json.dumps(payload).encode()
+    assert adapter.verify_webhook_signature(
+        raw, {"x-hub-signature-256": sign(raw)}, "local-meta-signature-test"
+    )
+    async with tenant_session(runtime_session_factory, tenant) as session:
+        assert await resolve_routing_tenant(session, "instagram_dm", account) == (tenant, aid)
+        credentials, _ = await CredentialVaultHelper().load_secret_json(
+            session,
+            tenant,
+            aid,
+            "messaging_provider",
+        )
+        assert credentials == {"access_token": "test-ig-token"}
+        [event] = (await adapter.parse_webhook(session, tenant, aid, payload, {})).inbound_events
+        assert event.sender_identity_type == IdentityType.IG_PSID
+        assert event.sender_identity_value == peer
+        assert event.attachments[1].mime_type == "image/*"
+        assert event.channel_metadata["story_mention"] == {"url": "https://example.com/mention"}
+        assert event.channel_metadata["story_reply"]["id"] == "story-1"
+        cid, _ = await _persist_inbound_event(session, tenant, aid, "instagram_dm", event)
+        assert (
+            await session.scalar(
+                text("SELECT identity_value FROM customer_identities WHERE identity_type='ig_psid'")
+            )
+            == peer
+        )
+        req = await outbound_request(
+            session, tenant, aid, ChannelType.INSTAGRAM_DM, account, peer, cid
+        )
+        assert (await adapter.send_message(session, tenant, credentials, req)).success
+        assert calls[-1]["tag"] == "HUMAN_AGENT"
+        expired = InstagramDMAdapter(clock=lambda: now + timedelta(days=7, seconds=1))
+        assert (await expired.send_message(session, tenant, credentials, req)).error_message == (
+            "ERR_INSTAGRAM_WINDOW_EXPIRED"
+        )
+        payload = meta_payload(account, peer, "ig.stop", now, text="STOP")
+        payload["object"] = "instagram"
+        [event] = (await adapter.parse_webhook(session, tenant, aid, payload, {})).inbound_events
+        await _persist_inbound_event(session, tenant, aid, "instagram_dm", event)
+        assert (await adapter.send_message(session, tenant, credentials, req)).error_message == (
+            "ERR_RECIPIENT_SUPPRESSED"
+        )
+        assert len(calls) == 1
