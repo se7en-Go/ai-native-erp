@@ -4762,6 +4762,67 @@
         "title": "TenantSettingsResponse",
         "type": "object"
       },
+      "TikTokConnectRequest": {
+        "properties": {
+          "access_token": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "app_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "App Key",
+            "type": "string"
+          },
+          "app_mode": {
+            "default": "seller_byok",
+            "pattern": "^(seller_byok|public)$",
+            "title": "App Mode",
+            "type": "string"
+          },
+          "app_secret": {
+            "maxLength": 255,
+            "minLength": 8,
+            "title": "App Secret",
+            "type": "string"
+          },
+          "shop_cipher": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Shop Cipher",
+            "type": "string"
+          },
+          "shop_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Shop Id",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warehouse Id"
+          }
+        },
+        "required": [
+          "shop_id",
+          "shop_cipher",
+          "app_key",
+          "app_secret",
+          "access_token"
+        ],
+        "title": "TikTokConnectRequest",
+        "type": "object"
+      },
       "TokenResponse": {
         "properties": {
           "access_token": {
@@ -7665,6 +7726,65 @@
         ]
       }
     },
+    "/api/v1/connectors/tiktok/connect": {
+      "post": {
+        "operationId": "connect_tiktok_shop_api_v1_connectors_tiktok_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TikTokConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Tiktok Shop",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
     "/api/v1/connectors/woocommerce/auth-callback": {
       "post": {
         "operationId": "woocommerce_auth_callback_api_v1_connectors_woocommerce_auth_callback_post",
@@ -10522,6 +10642,41 @@
           }
         },
         "summary": "Receive Shopline Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/tiktok": {
+      "post": {
+        "operationId": "receive_tiktok_webhook_api_v1_webhooks_tiktok_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Tiktok Webhook Api V1 Webhooks Tiktok Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Tiktok Webhook",
         "tags": [
           "connectors"
         ]

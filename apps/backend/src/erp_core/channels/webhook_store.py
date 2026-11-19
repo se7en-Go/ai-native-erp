@@ -51,11 +51,15 @@ async def claim_raw_webhook_event(
     session: AsyncSession, raw_event_id: uuid.UUID
 ) -> dict[str, Any] | None:
     row = (
-        await session.execute(
-            text("SELECT * FROM claim_raw_webhook_event(CAST(:id AS uuid))"),
-            {"id": raw_event_id},
+        (
+            await session.execute(
+                text("SELECT * FROM claim_raw_webhook_event(CAST(:id AS uuid))"),
+                {"id": raw_event_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if row is None:
         return None
     return dict(row)

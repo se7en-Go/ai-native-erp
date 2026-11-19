@@ -13,6 +13,7 @@ from erp_core.channels.ingress_worker import (
     run_webhook_worker_loop,
 )
 from erp_core.channels.webhook_delivery import drain_deliveries
+from erp_core.orders.reconciliation_worker import reconcile_ecommerce_orders_cron
 from erp_core.orders.tracking_worker import monitor_stalled_shipments_cron, process_17track_webhook
 from erp_core.shared.config import get_settings
 from erp_core.shared.db import (
@@ -28,6 +29,7 @@ broker = RedisStreamBroker(url=_settings.REDIS_URL)
 schedule_source = ListRedisScheduleSource(url=_settings.REDIS_URL)
 scheduler = TaskiqScheduler(broker=broker, sources=[schedule_source, LabelScheduleSource(broker)])
 broker.task(schedule=[{"cron": "0 * * * *"}])(monitor_stalled_shipments_cron)
+broker.task(schedule=[{"cron": "*/15 * * * *"}])(reconcile_ecommerce_orders_cron)
 broker.task(process_17track_webhook)
 _runtime_engine = create_runtime_engine(_settings)
 _session_factory = create_session_factory(_runtime_engine)

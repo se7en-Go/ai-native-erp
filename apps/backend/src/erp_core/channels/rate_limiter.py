@@ -149,9 +149,7 @@ class DualTokenBucketLimiter:
         wait_ms = int(result[1])
         return allowed, wait_ms
 
-    def compute_backoff_seconds(
-        self, attempt: int, error_code: int | None = None
-    ) -> int:
+    def compute_backoff_seconds(self, attempt: int, error_code: int | None = None) -> int:
         """Compute retry delay seconds using Meta 4^X backoff on 131056/130429."""
         bounded_attempt = max(1, attempt)
         if error_code == _META_PER_USER_MARKETING_CAP_CODE:

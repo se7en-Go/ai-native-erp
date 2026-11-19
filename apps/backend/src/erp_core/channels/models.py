@@ -215,12 +215,8 @@ class Message(Base):
     content_type: Mapped[str] = mapped_column(Text, nullable=False)
     body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     body_sanitized_html: Mapped[str | None] = mapped_column(Text, nullable=True)
-    attachments: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, default=list
-    )
-    channel_metadata: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    attachments: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    channel_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     delivery_status: Mapped[str] = mapped_column(Text, nullable=False, default="queued")
     channel_msg_cost: Mapped[Decimal] = mapped_column(
         Numeric(12, 6), nullable=False, default=Decimal("0")

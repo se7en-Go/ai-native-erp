@@ -237,8 +237,7 @@ class GdprService:
         if await self._table_exists(session, "customer_identities"):
             result = await session.execute(
                 text(
-                    "DELETE FROM customer_identities "
-                    "WHERE tenant_id = :tid AND customer_id = :cid"
+                    "DELETE FROM customer_identities WHERE tenant_id = :tid AND customer_id = :cid"
                 ),
                 {"tid": str(tenant_id), "cid": str(customer_id)},
             )

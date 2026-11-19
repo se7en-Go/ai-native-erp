@@ -23,6 +23,10 @@ from erp_core.channels.ecommerce.shoplazza import (
     verify_shoplazza_webhook,
 )
 from erp_core.channels.ecommerce.shopline import verify_shopline_webhook
+from erp_core.channels.ecommerce.tiktok_shop import (
+    enforce_custom_app_shop_limit,
+    verify_tiktok_webhook_signature,
+)
 from erp_core.channels.ecommerce.woocommerce import (
     build_wc_authorize_url,
     verify_woocommerce_webhook,
@@ -378,6 +382,88 @@ async def connect_shoplazza(
             },
         )
     return ConnectResponse(channel_account_id=account_id, external_account_id=domain)
+
+
+class TikTokConnectRequest(BaseModel):
+    shop_id: str = Field(min_length=1, max_length=64)
+    shop_cipher: str = Field(min_length=1, max_length=255)
+    app_key: str = Field(min_length=1, max_length=128)
+    app_secret: str = Field(min_length=8, max_length=255)
+    access_token: str = Field(min_length=1, max_length=512)
+    app_mode: str = Field(default="seller_byok", pattern="^(seller_byok|public)$")
+    warehouse_id: UUID | None = None
+
+
+@router.post(
+    "/connectors/tiktok/connect",
+    response_model=ConnectResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_tiktok_shop(
+    request: Request,
+    payload: TikTokConnectRequest,
+    principal: CurrentPrincipal = _admin_roles,
+) -> ConnectResponse:
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        await enforce_custom_app_shop_limit(session, payload.app_mode, payload.app_key)
+        account_id = await _connect_storefront(
+            session,
+            principal.tenant_id,
+            "tiktok_shop",
+            payload.shop_id,
+            f"TikTok Shop {payload.shop_id}",
+            payload.warehouse_id,
+            {
+                "app_key": payload.app_key,
+                "app_secret": payload.app_secret,
+                "access_token": payload.access_token,
+                "shop_cipher": payload.shop_cipher,
+                "app_mode": payload.app_mode,
+                "webhook_secret": payload.app_secret,
+            },
+        )
+    return ConnectResponse(channel_account_id=account_id, external_account_id=payload.shop_id)
+
+
+@router.post("/webhooks/tiktok")
+async def receive_tiktok_webhook(request: Request) -> dict[str, int | str | bool]:
+    raw = await request.body()
+    headers = {key.lower(): value for key, value in request.headers.items()}
+    domain = _header(headers, DOMAIN_HEADERS["tiktok_shop"]).strip().lower()
+    secret = await _webhook_secret(request, "tiktok_shop", domain)
+    app_key = os.getenv("TIKTOK_SHOP_APP_KEY", "")
+    if not verify_tiktok_webhook_signature(
+        raw, {"Authorization": _header(headers, "Authorization")}, app_key, secret
+    ):
+        raise AppError(
+            slug="invalid-webhook-signature",
+            status_code=401,
+            code="ERR_INVALID_WEBHOOK_SIGNATURE",
+            title="Invalid TikTok Shop Signature",
+            detail="Webhook signature verification failed.",
+        )
+    try:
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("Payload is not an object")
+    except ValueError as exc:
+        raise AppError(
+            slug="invalid-storefront-delivery",
+            status_code=400,
+            code="ERR_INVALID_STOREFRONT_DELIVERY",
+            title="Invalid Storefront Delivery",
+            detail="Expected a JSON object.",
+        ) from exc
+    dedup_id = str(payload.get("tts_notification_id") or hashlib.sha256(raw).hexdigest())
+    inserted = await accept_delivery(
+        request,
+        channel="tiktok_shop",
+        external_event_id=dedup_id,
+        payload=payload,
+        external_account_id=str(payload.get("shop_id") or domain) or None,
+        headers={"topic": str(payload.get("type") or ""), "shop_domain": domain},
+    )
+    return {"code": 200, "status": "accepted", "deduplicated": not inserted}
 
 
 @router.post("/webhooks/shoplazza")

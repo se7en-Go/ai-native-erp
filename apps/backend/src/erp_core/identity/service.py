@@ -78,15 +78,9 @@ class IdentityResolverService:
             except phonenumbers.NumberParseException:
                 parsed = None
             if parsed is not None and phonenumbers.is_possible_number(parsed):
-                e164 = phonenumbers.format_number(
-                    parsed, phonenumbers.PhoneNumberFormat.E164
-                )
+                e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
                 tz_list = pn_timezone.time_zones_for_number(parsed)
-                iana_tz = (
-                    tz_list[0]
-                    if tz_list and tz_list[0] != "Etc/Unknown"
-                    else None
-                )
+                iana_tz = tz_list[0] if tz_list and tz_list[0] != "Etc/Unknown" else None
                 region = phonenumbers.region_code_for_number(parsed)
                 return (
                     e164,
@@ -330,19 +324,23 @@ class IdentityResolverService:
         # 5. Probabilistic pg_trgm similarity > 0.85 -> L1 merge proposal only
         if len(clean_name) >= 3:
             candidates = (
-                await session.execute(
-                    text(
-                        "SELECT id, display_name, similarity(display_name, :name) AS sim "
-                        "FROM customers "
-                        "WHERE tenant_id = :tid AND id != :cid "
-                        "AND merged_into_customer_id IS NULL "
-                        "AND display_name % :name "
-                        "AND similarity(display_name, :name) > 0.85 "
-                        "ORDER BY sim DESC LIMIT 3"
-                    ),
-                    {"tid": tenant_id, "cid": new_cid, "name": clean_name},
+                (
+                    await session.execute(
+                        text(
+                            "SELECT id, display_name, similarity(display_name, :name) AS sim "
+                            "FROM customers "
+                            "WHERE tenant_id = :tid AND id != :cid "
+                            "AND merged_into_customer_id IS NULL "
+                            "AND display_name % :name "
+                            "AND similarity(display_name, :name) > 0.85 "
+                            "ORDER BY sim DESC LIMIT 3"
+                        ),
+                        {"tid": tenant_id, "cid": new_cid, "name": clean_name},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             for cand in candidates:
                 await self._record_l1_merge_proposal(
                     session=session,
@@ -364,26 +362,34 @@ class IdentityResolverService:
         """Return recorded L1 pg_trgm merge suggestions for human review."""
         if customer_id is not None:
             rows = (
-                await session.execute(
-                    text(
-                        "SELECT after_state, created_at FROM audit_events "
-                        "WHERE tenant_id = :tid AND action = 'identity.merge_proposal_created' "
-                        "AND resource_id = :cid ORDER BY created_at DESC LIMIT 20"
-                    ),
-                    {"tid": tenant_id, "cid": customer_id},
+                (
+                    await session.execute(
+                        text(
+                            "SELECT after_state, created_at FROM audit_events "
+                            "WHERE tenant_id = :tid AND action = 'identity.merge_proposal_created' "
+                            "AND resource_id = :cid ORDER BY created_at DESC LIMIT 20"
+                        ),
+                        {"tid": tenant_id, "cid": customer_id},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         else:
             rows = (
-                await session.execute(
-                    text(
-                        "SELECT after_state, created_at FROM audit_events "
-                        "WHERE tenant_id = :tid AND action = 'identity.merge_proposal_created' "
-                        "ORDER BY created_at DESC LIMIT 50"
-                    ),
-                    {"tid": tenant_id},
+                (
+                    await session.execute(
+                        text(
+                            "SELECT after_state, created_at FROM audit_events "
+                            "WHERE tenant_id = :tid AND action = 'identity.merge_proposal_created' "
+                            "ORDER BY created_at DESC LIMIT 50"
+                        ),
+                        {"tid": tenant_id},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
 
         results: list[MergeProposalCandidate] = []
         for row in rows:
@@ -418,12 +424,16 @@ class IdentityResolverService:
 
         ordered_ids = sorted([source_customer_id, target_customer_id], key=str)
         locked_rows = (
-            await session.execute(
-                select(Customer)
-                .where(Customer.tenant_id == tenant_id, Customer.id.in_(ordered_ids))
-                .with_for_update()
+            (
+                await session.execute(
+                    select(Customer)
+                    .where(Customer.tenant_id == tenant_id, Customer.id.in_(ordered_ids))
+                    .with_for_update()
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         by_id = {c.id: c for c in locked_rows}
         source = by_id.get(source_customer_id)
         target = by_id.get(target_customer_id)
@@ -550,12 +560,16 @@ class IdentityResolverService:
             [merge_event.source_customer_id, merge_event.target_customer_id], key=str
         )
         locked_rows = (
-            await session.execute(
-                select(Customer)
-                .where(Customer.tenant_id == tenant_id, Customer.id.in_(ordered_ids))
-                .with_for_update()
+            (
+                await session.execute(
+                    select(Customer)
+                    .where(Customer.tenant_id == tenant_id, Customer.id.in_(ordered_ids))
+                    .with_for_update()
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         by_id = {c.id: c for c in locked_rows}
         source = by_id.get(merge_event.source_customer_id)
         if source is None:
@@ -685,13 +699,17 @@ class IdentityResolverService:
         if not customer_ids:
             return {}
         rows = (
-            await session.execute(
-                select(Customer).where(
-                    Customer.tenant_id == tenant_id,
-                    Customer.id.in_(customer_ids),
+            (
+                await session.execute(
+                    select(Customer).where(
+                        Customer.tenant_id == tenant_id,
+                        Customer.id.in_(customer_ids),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         now_utc = datetime.now(UTC)
         return {
             c.id: CustomerSummaryRead(
@@ -741,9 +759,7 @@ class IdentityResolverService:
 
         cust = (
             await session.execute(
-                select(Customer).where(
-                    Customer.tenant_id == tenant_id, Customer.id == customer_id
-                )
+                select(Customer).where(Customer.tenant_id == tenant_id, Customer.id == customer_id)
             )
         ).scalar_one_or_none()
         if cust is not None:
