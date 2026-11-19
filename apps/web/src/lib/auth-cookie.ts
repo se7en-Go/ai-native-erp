@@ -26,6 +26,7 @@ export const ROUTE_ROLE_ALLOWLIST: Array<{ prefix: string; roles: UserRole[] }> 
   { prefix: "/supply-chain", roles: ["owner", "admin", "manager", "finance"] },
   { prefix: "/crm", roles: ["owner", "admin", "manager", "agent"] },
   { prefix: "/growth", roles: ["owner", "admin", "manager", "agent"] },
+  { prefix: "/social", roles: ["owner", "admin", "manager", "agent"] },
   { prefix: "/tasks", roles: ["owner", "admin", "manager", "agent"] },
   { prefix: "/dashboard", roles: ["owner", "admin", "manager", "agent", "finance"] },
   { prefix: "/wms", roles: ["owner", "admin", "manager", "agent", "finance"] },

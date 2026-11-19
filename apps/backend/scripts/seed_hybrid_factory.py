@@ -6,6 +6,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
@@ -23,6 +24,7 @@ import erp_core.crm.models  # noqa: F401
 import erp_core.finance.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
+import erp_core.social.models  # noqa: F401
 import erp_core.supply_chain.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
 from erp_core.ai_engine.ingestion import DocumentIngestionService
@@ -311,6 +313,11 @@ async def seed_hybrid_factory(
             # email campaign draft. Reconciled on every demo seed run (no guard).
             await _seed_phase3c_growth(
                 session, tenant_id=TENANT_A_ID, owner_id=owner_uid
+            )
+            # Phase 3D social matrix: three authorized accounts (Instagram, TikTok and
+            # manual-export 小红书), three calendar posts and three listening mentions.
+            await _seed_phase3d_social(
+                session, crypto=crypto, tenant_id=TENANT_A_ID, owner_id=owner_uid
             )
 
     async with tenant_session(session_factory, TENANT_B_ID) as session:
@@ -867,6 +874,241 @@ async def _seed_phase3c_growth(
                 "campaign": campaign_id,
                 "customer": uuid5(tenant_id, key),
                 "address": address,
+            },
+        )
+
+
+# Phase 3D: the flagship workspace's social matrix. Two platforms expose a real
+# publishing API (token stored as an envelope), one is manual-export only, which is
+# exactly why the 小红书 post below is a draft and never a scheduled row.
+_PHASE3D_SOCIAL_ACCOUNTS = (
+    {
+        "key": "instagram",
+        "platform": "instagram",
+        "region": "overseas",
+        "handle": "@quanzhou_smart_led",
+        "display_name": "Quanzhou Smart LED",
+        "followers_count": 4820,
+        "access_token": "IGQVJ-demo-quanzhou-instagram-oauth-token",
+    },
+    {
+        "key": "tiktok",
+        "platform": "tiktok",
+        "region": "overseas",
+        "handle": "@qzledfactory",
+        "display_name": "QZ LED Factory",
+        "followers_count": 9130,
+        "access_token": "act.demo-quanzhou-tiktok-oauth-token",
+    },
+    {
+        "key": "xiaohongshu",
+        "platform": "xiaohongshu",
+        "region": "domestic",
+        "handle": "泉州智能照明",
+        "display_name": "泉州智能照明",
+        "followers_count": 1260,
+        "access_token": None,
+    },
+)
+
+_PHASE3D_SOCIAL_POSTS = (
+    {
+        "key": "published-instagram",
+        "account": "instagram",
+        "platform": "instagram",
+        "title": "IP65 workshop light, factory direct",
+        "caption": "Our IP65 workshop light survives dust and water on the production floor. "
+        "COB strip and driver are made in our Quanzhou factory.",
+        "hashtags": ["#worklight", "#ledlighting", "#factorydirect"],
+        "sku_ref": "LED-COB-24V-5M",
+        "status": "published",
+        "scheduled_days": -3,
+        "published_days": -3,
+    },
+    {
+        "key": "scheduled-tiktok",
+        "account": "tiktok",
+        "platform": "tiktok",
+        "title": "Factory tour: COB strip line",
+        "caption": "60 seconds inside the COB strip line: from reel to IP65 finished work light.",
+        "hashtags": ["#factorytour", "#ledstrip"],
+        "sku_ref": "LED-COB-24V-5M",
+        "status": "scheduled",
+        "scheduled_days": 2,
+        "published_days": None,
+    },
+    {
+        "key": "draft-xiaohongshu",
+        "account": "xiaohongshu",
+        "platform": "xiaohongshu",
+        "title": "工地照明怎么选",
+        "caption": "工地照明避坑三点：色温、防护等级、驱动寿命。笔记写好后到创作中心人工发布。",
+        "hashtags": ["#工地照明", "#灯具选购"],
+        "sku_ref": None,
+        "status": "draft",
+        "scheduled_days": None,
+        "published_days": None,
+    },
+)
+
+_PHASE3D_SOCIAL_MENTIONS = (
+    {
+        "key": "mention-lead-intent",
+        "account": "tiktok",
+        "platform": "tiktok",
+        "author_handle": "@dubai_build_supply",
+        "content_text": (
+            "Need 500 pcs of your IP65 work light for a Dubai site. What is the FOB price?"
+        ),
+        "sentiment": "lead_intent",
+        "occurred_days": -1,
+    },
+    {
+        "key": "mention-positive",
+        "account": "instagram",
+        "platform": "instagram",
+        "author_handle": "@lighting_home_lab",
+        "content_text": "Installed the COB strip in our showroom, the light is perfectly even.",
+        "sentiment": "positive",
+        "occurred_days": -2,
+    },
+    {
+        "key": "mention-negative",
+        "account": "tiktok",
+        "platform": "tiktok",
+        "author_handle": "@late_freight",
+        "content_text": "My last shipment arrived two weeks late, please check the tracking.",
+        "sentiment": "negative",
+        "occurred_days": -4,
+    },
+)
+
+
+async def _seed_phase3d_social(
+    session: AsyncSession,
+    *,
+    crypto: EnvelopeCryptoService,
+    tenant_id: UUID,
+    owner_id: UUID,
+) -> None:
+    """Idempotently seed the 14-platform matrix demo: 3 accounts, 3 posts, 3 mentions.
+
+    OAuth tokens go through `EnvelopeCryptoService` exactly like the API path, so the
+    demo data can never drift from the encryption contract (AAD
+    ``{tenant_id}:{account_id}:social_oauth``).
+    """
+    now = datetime.now(UTC)
+    account_ids: dict[str, UUID] = {}
+    for account in _PHASE3D_SOCIAL_ACCOUNTS:
+        account_id = uuid5(tenant_id, f"social-account:{account['key']}")
+        account_ids[account["key"]] = account_id
+        if account["access_token"] is not None:
+            ciphertext, nonce, auth_tag, key_version = await crypto.encrypt_secret(
+                session,
+                tenant_id,
+                account_id,
+                "social_oauth",
+                account["access_token"],
+            )
+        else:
+            ciphertext = nonce = auth_tag = key_version = None
+        await session.execute(
+            text("""
+                INSERT INTO social_accounts (id, tenant_id, platform, region, handle,
+                    display_name, status, followers_count, config, token_ciphertext,
+                    token_nonce, token_auth_tag, token_key_version, created_by)
+                VALUES (:id, :tid, :platform, :region, :handle, :display_name, 'connected',
+                    :followers, CAST(:config AS jsonb), :ciphertext, :nonce, :auth_tag,
+                    :key_version, :owner)
+                ON CONFLICT (tenant_id, id) DO UPDATE SET
+                    display_name = EXCLUDED.display_name,
+                    status = EXCLUDED.status,
+                    followers_count = EXCLUDED.followers_count,
+                    config = EXCLUDED.config,
+                    token_ciphertext = EXCLUDED.token_ciphertext,
+                    token_nonce = EXCLUDED.token_nonce,
+                    token_auth_tag = EXCLUDED.token_auth_tag,
+                    token_key_version = EXCLUDED.token_key_version,
+                    updated_at = now()
+            """),
+            {
+                "id": account_id,
+                "tid": tenant_id,
+                "platform": account["platform"],
+                "region": account["region"],
+                "handle": account["handle"],
+                "display_name": account["display_name"],
+                "followers": account["followers_count"],
+                "config": json.dumps({"demo": True}),
+                "ciphertext": ciphertext,
+                "nonce": nonce,
+                "auth_tag": auth_tag,
+                "key_version": key_version,
+                "owner": owner_id,
+            },
+        )
+    for post in _PHASE3D_SOCIAL_POSTS:
+        await session.execute(
+            text("""
+                INSERT INTO social_posts (id, tenant_id, social_account_id, platform, title,
+                    caption, hashtags, media_urls, sku_ref, status, scheduled_at,
+                    published_at, metrics, created_by)
+                VALUES (:id, :tid, :account, :platform, :title, :caption,
+                    CAST(:hashtags AS jsonb), '[]'::jsonb, :sku_ref, :status,
+                    :scheduled_at, :published_at, CAST(:metrics AS jsonb), :owner)
+                ON CONFLICT (tenant_id, id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    caption = EXCLUDED.caption,
+                    hashtags = EXCLUDED.hashtags,
+                    sku_ref = EXCLUDED.sku_ref,
+                    status = EXCLUDED.status,
+                    scheduled_at = EXCLUDED.scheduled_at,
+                    published_at = EXCLUDED.published_at,
+                    metrics = EXCLUDED.metrics,
+                    updated_at = now()
+            """),
+            {
+                "id": uuid5(tenant_id, f"social-post:{post['key']}"),
+                "tid": tenant_id,
+                "account": account_ids[post["account"]],
+                "platform": post["platform"],
+                "title": post["title"],
+                "caption": post["caption"],
+                "hashtags": json.dumps(post["hashtags"]),
+                "sku_ref": post["sku_ref"],
+                "status": post["status"],
+                "scheduled_at": now + timedelta(days=post["scheduled_days"])
+                if post["scheduled_days"] is not None
+                else None,
+                "published_at": now + timedelta(days=post["published_days"])
+                if post["published_days"] is not None
+                else None,
+                "metrics": json.dumps({"demo": True}),
+                "owner": owner_id,
+            },
+        )
+    for mention in _PHASE3D_SOCIAL_MENTIONS:
+        await session.execute(
+            text("""
+                INSERT INTO social_mentions (id, tenant_id, social_account_id, platform,
+                    author_handle, content_text, sentiment, occurred_at)
+                VALUES (:id, :tid, :account, :platform, :author, :content, :sentiment,
+                    :occurred_at)
+                ON CONFLICT (tenant_id, id) DO UPDATE SET
+                    author_handle = EXCLUDED.author_handle,
+                    content_text = EXCLUDED.content_text,
+                    sentiment = EXCLUDED.sentiment,
+                    occurred_at = EXCLUDED.occurred_at
+            """),
+            {
+                "id": uuid5(tenant_id, f"social-mention:{mention['key']}"),
+                "tid": tenant_id,
+                "account": account_ids[mention["account"]],
+                "platform": mention["platform"],
+                "author": mention["author_handle"],
+                "content": mention["content_text"],
+                "sentiment": mention["sentiment"],
+                "occurred_at": now + timedelta(days=mention["occurred_days"]),
             },
         )
 

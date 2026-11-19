@@ -1,6 +1,190 @@
 {
   "components": {
     "schemas": {
+      "AccountConnect": {
+        "properties": {
+          "access_token": {
+            "anyOf": [
+              {
+                "maxLength": 8192,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Token"
+          },
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "external_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Account Id"
+          },
+          "followers_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Followers Count",
+            "type": "integer"
+          },
+          "handle": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Handle",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "handle",
+          "display_name"
+        ],
+        "title": "AccountConnect",
+        "type": "object"
+      },
+      "AccountRead": {
+        "description": "Never carries the token: the response exposes only whether one is stored.",
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "external_account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Account Id"
+          },
+          "followers_count": {
+            "title": "Followers Count",
+            "type": "integer"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "has_stored_token": {
+            "title": "Has Stored Token",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "region": {
+            "enum": [
+              "overseas",
+              "domestic"
+            ],
+            "title": "Region",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "connected",
+              "disconnected",
+              "token_expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "platform",
+          "region",
+          "handle",
+          "display_name",
+          "external_account_id",
+          "status",
+          "followers_count",
+          "config",
+          "has_stored_token",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AccountRead",
+        "type": "object"
+      },
       "AdvanceOnboardingRequest": {
         "properties": {
           "skip_catalog_for_b2b": {
@@ -1605,6 +1789,148 @@
         "title": "CapabilityPolicyItem",
         "type": "object"
       },
+      "CaptionGenerate": {
+        "properties": {
+          "language": {
+            "default": "zh",
+            "enum": [
+              "zh",
+              "en"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "prompt": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "sku_ref": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Ref"
+          },
+          "tone": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone"
+          }
+        },
+        "required": [
+          "platform",
+          "prompt"
+        ],
+        "title": "CaptionGenerate",
+        "type": "object"
+      },
+      "CaptionRead": {
+        "properties": {
+          "credits_consumed": {
+            "title": "Credits Consumed",
+            "type": "string"
+          },
+          "grounded_tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounded Tool Call Id"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "model_used": {
+            "title": "Model Used",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "sku_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Ref"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "text",
+          "language",
+          "sku_ref",
+          "model_used",
+          "credits_consumed",
+          "grounded_tool_call_id"
+        ],
+        "title": "CaptionRead",
+        "type": "object"
+      },
       "ChannelAccountRead": {
         "properties": {
           "channel_type": {
@@ -2202,6 +2528,37 @@
         ],
         "title": "ConversationStatus",
         "type": "string"
+      },
+      "ConvertLeadResult": {
+        "properties": {
+          "already_converted": {
+            "title": "Already Converted",
+            "type": "boolean"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "lead_id": {
+            "format": "uuid",
+            "title": "Lead Id",
+            "type": "string"
+          },
+          "mention_id": {
+            "format": "uuid",
+            "title": "Mention Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mention_id",
+          "lead_id",
+          "customer_id",
+          "already_converted"
+        ],
+        "title": "ConvertLeadResult",
+        "type": "object"
       },
       "ConvertQuoteRequest": {
         "properties": {
@@ -4862,6 +5219,178 @@
         "title": "MembershipItem",
         "type": "object"
       },
+      "MentionCreate": {
+        "properties": {
+          "author_handle": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Author Handle",
+            "type": "string"
+          },
+          "content_text": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Content Text",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "sentiment": {
+            "default": "neutral",
+            "enum": [
+              "positive",
+              "neutral",
+              "negative",
+              "lead_intent"
+            ],
+            "title": "Sentiment",
+            "type": "string"
+          },
+          "social_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Social Account Id"
+          }
+        },
+        "required": [
+          "platform",
+          "author_handle",
+          "content_text"
+        ],
+        "title": "MentionCreate",
+        "type": "object"
+      },
+      "MentionRead": {
+        "properties": {
+          "author_handle": {
+            "title": "Author Handle",
+            "type": "string"
+          },
+          "content_text": {
+            "title": "Content Text",
+            "type": "string"
+          },
+          "converted_lead_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Converted Lead Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "sentiment": {
+            "enum": [
+              "positive",
+              "neutral",
+              "negative",
+              "lead_intent"
+            ],
+            "title": "Sentiment",
+            "type": "string"
+          },
+          "social_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Social Account Id"
+          }
+        },
+        "required": [
+          "id",
+          "social_account_id",
+          "platform",
+          "author_handle",
+          "content_text",
+          "sentiment",
+          "converted_lead_id",
+          "occurred_at",
+          "created_at"
+        ],
+        "title": "MentionRead",
+        "type": "object"
+      },
       "MergeCustomersRequest": {
         "properties": {
           "reason": {
@@ -6030,6 +6559,42 @@
         "title": "OverviewRead",
         "type": "object"
       },
+      "PaginatedResponse_AccountRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccountRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[AccountRead]",
+        "type": "object"
+      },
       "PaginatedResponse_AiEmployeeRead_": {
         "properties": {
           "has_more": {
@@ -6714,6 +7279,42 @@
         "title": "PaginatedResponse[MembershipItem]",
         "type": "object"
       },
+      "PaginatedResponse_MentionRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MentionRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[MentionRead]",
+        "type": "object"
+      },
       "PaginatedResponse_MessageRead_": {
         "properties": {
           "has_more": {
@@ -6856,6 +7457,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[OrderRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_PostRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PostRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[PostRead]",
         "type": "object"
       },
       "PaginatedResponse_ProductRead_": {
@@ -7548,6 +8185,504 @@
           "href"
         ],
         "title": "PendingProposalGroup",
+        "type": "object"
+      },
+      "PlatformRead": {
+        "description": "Playbook metadata plus the honest publishing capability for one platform.",
+        "properties": {
+          "acquisition_plays": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Acquisition Plays",
+            "type": "array"
+          },
+          "audience": {
+            "title": "Audience",
+            "type": "string"
+          },
+          "best_practices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Best Practices",
+            "type": "array"
+          },
+          "compliance_note": {
+            "title": "Compliance Note",
+            "type": "string"
+          },
+          "content_formats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Content Formats",
+            "type": "array"
+          },
+          "emoji": {
+            "title": "Emoji",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "publish_mode": {
+            "enum": [
+              "api",
+              "manual_export"
+            ],
+            "title": "Publish Mode",
+            "type": "string"
+          },
+          "region": {
+            "enum": [
+              "overseas",
+              "domestic"
+            ],
+            "title": "Region",
+            "type": "string"
+          },
+          "supports_scheduled_publish": {
+            "title": "Supports Scheduled Publish",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "platform",
+          "region",
+          "label",
+          "emoji",
+          "audience",
+          "acquisition_plays",
+          "best_practices",
+          "content_formats",
+          "publish_mode",
+          "supports_scheduled_publish",
+          "compliance_note"
+        ],
+        "title": "PlatformRead",
+        "type": "object"
+      },
+      "PostCreate": {
+        "properties": {
+          "caption": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Caption",
+            "type": "string"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Hashtags",
+            "type": "array"
+          },
+          "media_urls": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Media Urls",
+            "type": "array"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          },
+          "sku_ref": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Ref"
+          },
+          "social_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Social Account Id"
+          },
+          "status": {
+            "default": "draft",
+            "enum": [
+              "draft",
+              "scheduled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "platform",
+          "caption"
+        ],
+        "title": "PostCreate",
+        "type": "object"
+      },
+      "PostPublish": {
+        "description": "Manual platforms require an explicit human confirmation from the official console.",
+        "properties": {
+          "external_post_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Post Id"
+          },
+          "manual_confirmation": {
+            "default": false,
+            "title": "Manual Confirmation",
+            "type": "boolean"
+          }
+        },
+        "title": "PostPublish",
+        "type": "object"
+      },
+      "PostRead": {
+        "properties": {
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "external_post_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Post Id"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hashtags",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "media_urls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Media Urls",
+            "type": "array"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "title": "Metrics",
+            "type": "object"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          },
+          "sku_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Ref"
+          },
+          "social_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Social Account Id"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "scheduled",
+              "published",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "social_account_id",
+          "platform",
+          "title",
+          "caption",
+          "hashtags",
+          "media_urls",
+          "sku_ref",
+          "status",
+          "scheduled_at",
+          "published_at",
+          "external_post_id",
+          "metrics",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PostRead",
+        "type": "object"
+      },
+      "PostUpdate": {
+        "properties": {
+          "caption": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "hashtags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 30,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hashtags"
+          },
+          "media_urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Urls"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          },
+          "sku_ref": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Ref"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "draft",
+                  "scheduled",
+                  "published",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "PostUpdate",
         "type": "object"
       },
       "PreChatOptInPayload": {
@@ -10347,6 +11482,59 @@
           "gross_margin"
         ],
         "title": "SkuMargin",
+        "type": "object"
+      },
+      "SocialSummary": {
+        "properties": {
+          "connected_accounts": {
+            "title": "Connected Accounts",
+            "type": "integer"
+          },
+          "converted_leads": {
+            "title": "Converted Leads",
+            "type": "integer"
+          },
+          "draft_posts": {
+            "title": "Draft Posts",
+            "type": "integer"
+          },
+          "mentions_total": {
+            "title": "Mentions Total",
+            "type": "integer"
+          },
+          "published_posts": {
+            "title": "Published Posts",
+            "type": "integer"
+          },
+          "scheduled_posts": {
+            "title": "Scheduled Posts",
+            "type": "integer"
+          },
+          "social_leads": {
+            "title": "Social Leads",
+            "type": "integer"
+          },
+          "supported_platforms": {
+            "title": "Supported Platforms",
+            "type": "integer"
+          },
+          "total_posts": {
+            "title": "Total Posts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_posts",
+          "published_posts",
+          "scheduled_posts",
+          "draft_posts",
+          "social_leads",
+          "converted_leads",
+          "mentions_total",
+          "connected_accounts",
+          "supported_platforms"
+        ],
+        "title": "SocialSummary",
         "type": "object"
       },
       "SplitCustomerRequest": {
@@ -21746,6 +22934,914 @@
         "summary": "Global Search",
         "tags": [
           "analytics"
+        ]
+      }
+    },
+    "/api/v1/social/accounts": {
+      "get": {
+        "operationId": "list_accounts_api_v1_social_accounts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(connected|disconnected|token_expired)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_AccountRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Accounts",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/accounts/connect": {
+      "post": {
+        "description": "Authorize (or re-authorize) an account. The token is write-only and encrypted.",
+        "operationId": "connect_account_api_v1_social_accounts_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountConnect"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Account",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/accounts/{account_id}/disconnect": {
+      "post": {
+        "operationId": "disconnect_account_api_v1_social_accounts__account_id__disconnect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect Account",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/caption/generate": {
+      "post": {
+        "description": "AI copywriting; fails closed (503) when no LLM provider is configured.",
+        "operationId": "generate_caption_api_v1_social_caption_generate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptionGenerate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Caption",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/mentions": {
+      "get": {
+        "operationId": "list_mentions_api_v1_social_mentions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sentiment",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(positive|neutral|negative|lead_intent)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentiment"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_MentionRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mentions",
+        "tags": [
+          "social"
+        ]
+      },
+      "post": {
+        "operationId": "create_mention_api_v1_social_mentions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MentionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MentionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Mention",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/mentions/{mention_id}/convert-lead": {
+      "post": {
+        "operationId": "convert_mention_api_v1_social_mentions__mention_id__convert_lead_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mention_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mention Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertLeadResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Convert Mention",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/platforms": {
+      "get": {
+        "description": "The locked 14-platform matrix with honest publishing capability per platform.",
+        "operationId": "list_platforms_api_v1_social_platforms_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformRead"
+                  },
+                  "title": "Response List Platforms Api V1 Social Platforms Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Platforms",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/posts": {
+      "get": {
+        "operationId": "list_posts_api_v1_social_posts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(draft|scheduled|published|failed)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_PostRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Posts",
+        "tags": [
+          "social"
+        ]
+      },
+      "post": {
+        "operationId": "create_post_api_v1_social_posts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Post",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/posts/{post_id}": {
+      "patch": {
+        "operationId": "update_post_api_v1_social_posts__post_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Post",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/posts/{post_id}/publish": {
+      "post": {
+        "operationId": "publish_post_api_v1_social_posts__post_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostPublish"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Post",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/summary": {
+      "get": {
+        "operationId": "social_summary_api_v1_social_summary_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Social Summary",
+        "tags": [
+          "social"
         ]
       }
     },
