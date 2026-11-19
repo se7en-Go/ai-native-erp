@@ -4329,6 +4329,83 @@
         "title": "ShipmentRead",
         "type": "object"
       },
+      "ShopifyConnectResponse": {
+        "properties": {
+          "auth_mode": {
+            "title": "Auth Mode",
+            "type": "string"
+          },
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "shop_domain": {
+            "title": "Shop Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_account_id",
+          "shop_domain",
+          "auth_mode"
+        ],
+        "title": "ShopifyConnectResponse",
+        "type": "object"
+      },
+      "ShopifyCustomAppConnectRequest": {
+        "properties": {
+          "access_token": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Token"
+          },
+          "client_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Client Id",
+            "type": "string"
+          },
+          "client_secret": {
+            "maxLength": 255,
+            "minLength": 8,
+            "title": "Client Secret",
+            "type": "string"
+          },
+          "shop_domain": {
+            "maxLength": 255,
+            "minLength": 4,
+            "title": "Shop Domain",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warehouse Id"
+          }
+        },
+        "required": [
+          "shop_domain",
+          "client_id",
+          "client_secret"
+        ],
+        "title": "ShopifyCustomAppConnectRequest",
+        "type": "object"
+      },
       "SkuMappingCreate": {
         "properties": {
           "bundle_multiplier": {
@@ -6967,6 +7044,233 @@
         ]
       }
     },
+    "/api/v1/connectors/shopify/custom-app": {
+      "post": {
+        "operationId": "connect_shopify_custom_app_api_v1_connectors_shopify_custom_app_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopifyCustomAppConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopifyConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Shopify Custom App",
+        "tags": [
+          "shopify"
+        ]
+      }
+    },
+    "/api/v1/connectors/shopify/oauth/callback": {
+      "get": {
+        "operationId": "shopify_oauth_callback_api_v1_connectors_shopify_oauth_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "shop",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 4,
+              "title": "Shop",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hmac",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Hmac",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopifyConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shopify Oauth Callback",
+        "tags": [
+          "shopify"
+        ]
+      }
+    },
+    "/api/v1/connectors/shopify/oauth/install": {
+      "get": {
+        "operationId": "shopify_oauth_install_api_v1_connectors_shopify_oauth_install_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "shop",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 4,
+              "title": "Shop",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "redirect_uri",
+            "required": true,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 8,
+              "title": "Redirect Uri",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Shopify Oauth Install Api V1 Connectors Shopify Oauth Install Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shopify Oauth Install",
+        "tags": [
+          "shopify"
+        ]
+      }
+    },
     "/api/v1/customers": {
       "get": {
         "operationId": "list_customers_api_v1_customers_get",
@@ -9542,6 +9846,98 @@
         "summary": "Receive 17Track Webhook",
         "tags": [
           "logistics"
+        ]
+      }
+    },
+    "/api/v1/webhooks/shopify": {
+      "post": {
+        "operationId": "receive_shopify_webhook_api_v1_webhooks_shopify_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Shopify-Hmac-Sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Shopify-Hmac-Sha256"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Shopify-Topic",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Shopify-Topic"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Shopify-Shop-Domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Shopify-Shop-Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Shopify Webhook Api V1 Webhooks Shopify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receive Shopify Webhook",
+        "tags": [
+          "shopify"
         ]
       }
     },

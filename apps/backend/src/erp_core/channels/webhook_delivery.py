@@ -34,6 +34,7 @@ async def accept_delivery(
     payload: dict[str, Any],
     tenant_id: UUID | None = None,
     external_account_id: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> None:
     """Store only authenticated deliveries. Redis failure leaves a recoverable receipt."""
     broker_factory: SessionFactory = request.app.state.broker_session_factory
@@ -46,7 +47,7 @@ async def accept_delivery(
             channel_type=channel,
             external_event_id=external_event_id,
             external_account_id=external_account_id,
-            headers_json="{}",
+            headers_json=json.dumps(headers or {}, separators=(",", ":")),
             payload_json=json.dumps(payload, separators=(",", ":")),
         )
     if receipt_id is None:
