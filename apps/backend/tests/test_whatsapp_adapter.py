@@ -15,6 +15,7 @@ from erp_core.channels.adapters.base import AdapterRegistry, OutboundMessageRequ
 from erp_core.channels.adapters.whatsapp import WhatsAppAdapter
 from erp_core.channels.consent_service import ConsentAndSuppressionService
 from erp_core.channels.ingress_worker import process_raw_webhook_event
+from erp_core.channels.webhook_store import accept_raw_webhook_event
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import tenant_session
@@ -24,6 +25,7 @@ from erp_core.shared.enums import ChannelType, MessageContentType
 @pytest.mark.asyncio
 async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate(
     monkeypatch,
+    migrator_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     monkeypatch.setenv("WHATSAPP_APP_ID", "meta_app_123")
     monkeypatch.setenv("WHATSAPP_APP_SECRET", "meta_secret_123")
@@ -140,25 +142,25 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             ]
         }
         raw_ctwa_id = uuid.uuid4()
-        async with tenant_session(session_factory, tenant_id) as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO raw_webhook_events "
-                    "(id, tenant_id, channel_type, external_event_id, external_account_id, "
-                    "raw_payload) "
-                    "VALUES (:id, :tid, 'whatsapp_coexistence', :eid, :eaid, CAST(:payload AS "
-                    "jsonb))"
-                ),
-                {
-                    "id": raw_ctwa_id,
-                    "tid": tenant_id,
-                    "eid": ctwa_wamid,
-                    "eaid": phone_number_id,
-                    "payload": json.dumps(ctwa_payload),
-                },
+        async with migrator_session_factory() as conn, conn.begin():
+            await accept_raw_webhook_event(
+                conn,
+                event_id=raw_ctwa_id,
+                tenant_id=tenant_id,
+                channel_type="whatsapp_coexistence",
+                external_event_id=ctwa_wamid,
+                external_account_id=phone_number_id,
+                headers_json="{}",
+                payload_json=json.dumps(ctwa_payload),
             )
         assert (
-            await process_raw_webhook_event(session_factory, redis, raw_ctwa_id, registry)
+            await process_raw_webhook_event(
+                session_factory,
+                redis,
+                raw_ctwa_id,
+                registry,
+                broker_session_factory=migrator_session_factory,
+            )
             == "processed"
         )
 
@@ -235,25 +237,25 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             ]
         }
         raw_echo_id = uuid.uuid4()
-        async with tenant_session(session_factory, tenant_id) as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO raw_webhook_events "
-                    "(id, tenant_id, channel_type, external_event_id, external_account_id, "
-                    "raw_payload) "
-                    "VALUES (:id, :tid, 'whatsapp_coexistence', :eid, :eaid, CAST(:payload AS "
-                    "jsonb))"
-                ),
-                {
-                    "id": raw_echo_id,
-                    "tid": tenant_id,
-                    "eid": echo_wamid,
-                    "eaid": phone_number_id,
-                    "payload": json.dumps(echo_payload),
-                },
+        async with migrator_session_factory() as conn, conn.begin():
+            await accept_raw_webhook_event(
+                conn,
+                event_id=raw_echo_id,
+                tenant_id=tenant_id,
+                channel_type="whatsapp_coexistence",
+                external_event_id=echo_wamid,
+                external_account_id=phone_number_id,
+                headers_json="{}",
+                payload_json=json.dumps(echo_payload),
             )
         assert (
-            await process_raw_webhook_event(session_factory, redis, raw_echo_id, registry)
+            await process_raw_webhook_event(
+                session_factory,
+                redis,
+                raw_echo_id,
+                registry,
+                broker_session_factory=migrator_session_factory,
+            )
             == "processed"
         )
 
@@ -344,25 +346,25 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             ]
         }
         raw_stop_id = uuid.uuid4()
-        async with tenant_session(session_factory, tenant_id) as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO raw_webhook_events "
-                    "(id, tenant_id, channel_type, external_event_id, external_account_id, "
-                    "raw_payload) "
-                    "VALUES (:id, :tid, 'whatsapp_coexistence', :eid, :eaid, CAST(:payload AS "
-                    "jsonb))"
-                ),
-                {
-                    "id": raw_stop_id,
-                    "tid": tenant_id,
-                    "eid": stop_wamid,
-                    "eaid": phone_number_id,
-                    "payload": json.dumps(stop_payload),
-                },
+        async with migrator_session_factory() as conn, conn.begin():
+            await accept_raw_webhook_event(
+                conn,
+                event_id=raw_stop_id,
+                tenant_id=tenant_id,
+                channel_type="whatsapp_coexistence",
+                external_event_id=stop_wamid,
+                external_account_id=phone_number_id,
+                headers_json="{}",
+                payload_json=json.dumps(stop_payload),
             )
         assert (
-            await process_raw_webhook_event(session_factory, redis, raw_stop_id, registry)
+            await process_raw_webhook_event(
+                session_factory,
+                redis,
+                raw_stop_id,
+                registry,
+                broker_session_factory=migrator_session_factory,
+            )
             == "processed"
         )
 
@@ -405,24 +407,5 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             assert send_res.success is False
             assert "ERR_RECIPIENT_SUPPRESSED" in (send_res.error_message or "")
     finally:
-        async with tenant_session(session_factory, tenant_id) as conn:
-            for tbl in (
-                "audit_events",
-                "suppression_list",
-                "consent_records",
-                "messages",
-                "conversations",
-                "customer_identities",
-                "customers",
-                "channel_credentials",
-                "channel_routing_directory",
-                "channel_accounts",
-                "raw_webhook_events",
-                "tenant_keys",
-            ):
-                await conn.execute(
-                    text(f"DELETE FROM {tbl} WHERE tenant_id = :tid"), {"tid": tenant_id}
-                )
-            await conn.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
         await redis.aclose()
         await runtime_engine.dispose()

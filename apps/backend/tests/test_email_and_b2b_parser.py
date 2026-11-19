@@ -18,6 +18,7 @@ from erp_core.channels.adapters.base import AdapterRegistry, OutboundMessageRequ
 from erp_core.channels.adapters.email import EmailAdapter, S3AttachmentStore
 from erp_core.channels.ingress_worker import process_raw_webhook_event
 from erp_core.channels.parsers.b2b_inquiry_email import B2BInquiryEmailParser
+from erp_core.channels.webhook_store import accept_raw_webhook_event
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import ChannelType, MessageContentType
 
@@ -108,7 +109,9 @@ def test_email_nh3_xss_and_tracking_pixel_stripping() -> None:
 
 
 @pytest.mark.asyncio
-async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() -> None:
+async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest(
+    migrator_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     runtime_engine = create_async_engine(os.environ["DATABASE_RUNTIME_URL"], future=True)
     session_factory = async_sessionmaker(
         runtime_engine, class_=AsyncSession, expire_on_commit=False
@@ -152,9 +155,8 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
             )
             await conn.execute(
                 text(
-                    "INSERT INTO channel_routing_directory "
-                    "(channel_type, external_account_id, tenant_id, channel_account_id) "
-                    "VALUES ('email', :ext, :tid, :aid)"
+                    "SELECT register_channel_routing("
+                    "'email', :ext, CAST(:tid AS uuid), CAST(:aid AS uuid), true)"
                 ),
                 {"ext": inbound_addr, "tid": tenant_id, "aid": account_id},
             )
@@ -204,26 +206,25 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
         assert adapter.verify_webhook_signature(raw_bytes, headers, svix_secret) is True
 
         raw_id_1 = uuid.uuid4()
-        async with tenant_session(session_factory, tenant_id) as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO raw_webhook_events "
-                    "(id, tenant_id, channel_type, external_event_id, external_account_id, "
-                    "headers, raw_payload) "
-                    "VALUES (:id, :tid, 'email', :eid, :eaid, CAST(:hdr AS jsonb), CAST(:payload "
-                    "AS jsonb))"
-                ),
-                {
-                    "id": raw_id_1,
-                    "tid": tenant_id,
-                    "eid": svix_id,
-                    "eaid": inbound_addr,
-                    "hdr": json.dumps(headers),
-                    "payload": json.dumps(mic_payload),
-                },
+        async with migrator_session_factory() as conn, conn.begin():
+            await accept_raw_webhook_event(
+                conn,
+                event_id=raw_id_1,
+                tenant_id=tenant_id,
+                channel_type="email",
+                external_event_id=svix_id,
+                external_account_id=inbound_addr,
+                headers_json=json.dumps(headers),
+                payload_json=json.dumps(mic_payload),
             )
         assert (
-            await process_raw_webhook_event(session_factory, redis, raw_id_1, registry)
+            await process_raw_webhook_event(
+                session_factory,
+                redis,
+                raw_id_1,
+                registry,
+                broker_session_factory=migrator_session_factory,
+            )
             == "processed"
         )
 
@@ -287,24 +288,25 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
             },
         }
         raw_id_2 = uuid.uuid4()
-        async with tenant_session(session_factory, tenant_id) as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO raw_webhook_events "
-                    "(id, tenant_id, channel_type, external_event_id, external_account_id, "
-                    "raw_payload) "
-                    "VALUES (:id, :tid, 'email', :eid, :eaid, CAST(:payload AS jsonb))"
-                ),
-                {
-                    "id": raw_id_2,
-                    "tid": tenant_id,
-                    "eid": f"svix_{uuid.uuid4().hex[:8]}",
-                    "eaid": inbound_addr,
-                    "payload": json.dumps(reply_payload),
-                },
+        async with migrator_session_factory() as conn, conn.begin():
+            await accept_raw_webhook_event(
+                conn,
+                event_id=raw_id_2,
+                tenant_id=tenant_id,
+                channel_type="email",
+                external_event_id=f"svix_{uuid.uuid4().hex[:8]}",
+                external_account_id=inbound_addr,
+                headers_json="{}",
+                payload_json=json.dumps(reply_payload),
             )
         assert (
-            await process_raw_webhook_event(session_factory, redis, raw_id_2, registry)
+            await process_raw_webhook_event(
+                session_factory,
+                redis,
+                raw_id_2,
+                registry,
+                broker_session_factory=migrator_session_factory,
+            )
             == "processed"
         )
 
@@ -317,20 +319,5 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
             ).scalar_one()
             assert msg_count == 2
     finally:
-        async with tenant_session(session_factory, tenant_id) as conn:
-            for tbl in (
-                "messages",
-                "conversations",
-                "customer_identities",
-                "customers",
-                "b2b_companies",
-                "channel_routing_directory",
-                "channel_accounts",
-                "raw_webhook_events",
-            ):
-                await conn.execute(
-                    text(f"DELETE FROM {tbl} WHERE tenant_id = :tid"), {"tid": tenant_id}
-                )
-            await conn.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
         await redis.aclose()
         await runtime_engine.dispose()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
@@ -202,25 +203,38 @@ async def test_inbox_filters_sorting_notes_outbound_sse_and_tenant_404() -> None
             assert patch_resp.json()["status"] == "open"
             assert patch_resp.json()["assigned_user_id"] == str(user_a)
 
-            # 7. SSE stream receives tenant-scoped Redis Pub/Sub event after handshake
-            received_chunks: list[str] = []
-            published = False
-            async with client.stream("GET", "/api/v1/inbox/stream?max_events=1") as sse_resp:
-                assert sse_resp.status_code == 200
-                async for line in sse_resp.aiter_lines():
-                    if line:
-                        received_chunks.append(line)
-                        if not published and line == "event: connected":
-                            published = True
-                            await redis.publish(
-                                f"inbox:events:{tenant_a}",
-                                json.dumps(
-                                    {
-                                        "event": "conversation.updated",
-                                        "conversation_id": str(conv_wa),
-                                    }
-                                ),
-                            )
+            # 7. SSE stream receives tenant-scoped Redis Pub/Sub event after handshake.
+            # Publish concurrently once the SSE handler subscribes, since httpx.ASGITransport
+            # buffers the full ASGI response before returning from client.get/stream.
+            sse_channel = f"inbox:events:{tenant_a}"
+
+            async def _publish_once_subscribed() -> None:
+                for _ in range(250):
+                    counts = await redis.pubsub_numsub(sse_channel)
+                    if counts and counts[0][1] >= 1:
+                        break
+                    await asyncio.sleep(0.02)
+                await redis.publish(
+                    sse_channel,
+                    json.dumps(
+                        {
+                            "event": "conversation.updated",
+                            "conversation_id": str(conv_wa),
+                        }
+                    ),
+                )
+
+            pub_task = asyncio.create_task(_publish_once_subscribed())
+            try:
+                sse_resp = await asyncio.wait_for(
+                    client.get("/api/v1/inbox/stream?max_events=1"),
+                    timeout=10.0,
+                )
+            finally:
+                await pub_task
+            assert sse_resp.status_code == 200
+            received_chunks = [line for line in sse_resp.text.splitlines() if line]
+            assert "event: connected" in received_chunks
             assert any("conversation.updated" in line for line in received_chunks)
 
             # 8. Cross-tenant isolation: Tenant B receives 404 on Tenant A conversation
@@ -233,20 +247,5 @@ async def test_inbox_filters_sorting_notes_outbound_sse_and_tenant_404() -> None
             cross_resp = await client.get(f"/api/v1/inbox/conversations/{conv_wa}/messages")
             assert cross_resp.status_code == 404
     finally:
-        async with tenant_session(session_factory, tenant_a) as conn:
-            for tbl in (
-                "audit_events",
-                "messages",
-                "conversations",
-                "customers",
-                "channel_accounts",
-            ):
-                await conn.execute(
-                    text(f"DELETE FROM {tbl} WHERE tenant_id = :ta"),
-                    {"ta": tenant_a},
-                )
-            await conn.execute(text("DELETE FROM tenants WHERE id = :ta"), {"ta": tenant_a})
-        async with tenant_session(session_factory, tenant_b) as conn:
-            await conn.execute(text("DELETE FROM tenants WHERE id = :tb"), {"tb": tenant_b})
         await redis.aclose()
         await runtime_engine.dispose()

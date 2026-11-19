@@ -522,12 +522,8 @@ class WhatsAppAdapter(MessagingChannelAdapter):
 
         await session.execute(
             text(
-                "INSERT INTO channel_routing_directory "
-                "(channel_type, external_account_id, tenant_id, channel_account_id, is_active) "
-                "VALUES (:ctype, :ext, :tid, :aid, true) "
-                "ON CONFLICT (channel_type, external_account_id) DO UPDATE SET "
-                "tenant_id = EXCLUDED.tenant_id, channel_account_id = EXCLUDED.channel_account_id, "
-                "is_active = true"
+                "SELECT register_channel_routing("
+                ":ctype, :ext, CAST(:tid AS uuid), CAST(:aid AS uuid), true)"
             ),
             {
                 "ctype": channel_type.value,

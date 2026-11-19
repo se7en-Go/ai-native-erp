@@ -5,12 +5,16 @@ import logging
 import signal
 
 from taskiq import TaskiqScheduler
+from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import ListRedisScheduleSource, RedisStreamBroker
 
 from erp_core.channels.ingress_worker import (
     register_channel_worker_tasks,
     run_webhook_worker_loop,
 )
+from erp_core.channels.webhook_delivery import drain_deliveries
+from erp_core.orders.reconciliation_worker import reconcile_ecommerce_orders_cron
+from erp_core.orders.tracking_worker import monitor_stalled_shipments_cron, process_17track_webhook
 from erp_core.shared.config import get_settings
 from erp_core.shared.db import (
     create_migrator_engine,
@@ -23,13 +27,23 @@ logger = logging.getLogger(__name__)
 _settings = get_settings()
 broker = RedisStreamBroker(url=_settings.REDIS_URL)
 schedule_source = ListRedisScheduleSource(url=_settings.REDIS_URL)
-scheduler = TaskiqScheduler(broker=broker, sources=[schedule_source])
+scheduler = TaskiqScheduler(broker=broker, sources=[schedule_source, LabelScheduleSource(broker)])
+broker.task(schedule=[{"cron": "0 * * * *"}])(monitor_stalled_shipments_cron)
+broker.task(schedule=[{"cron": "*/15 * * * *"}])(reconcile_ecommerce_orders_cron)
+broker.task(process_17track_webhook)
 _runtime_engine = create_runtime_engine(_settings)
 _session_factory = create_session_factory(_runtime_engine)
 _broker_engine = create_migrator_engine(_settings)
 _broker_session_factory = create_session_factory(_broker_engine)
 _redis = create_redis_client(_settings)
 register_channel_worker_tasks(broker, _session_factory, _redis, _broker_session_factory)
+
+
+@broker.task(schedule=[{"cron": "* * * * *"}])
+async def drain_17track_webhooks() -> int:
+    return await drain_deliveries(
+        _broker_session_factory, _redis, "17track", process_17track_webhook
+    )
 
 
 @broker.task

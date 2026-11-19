@@ -75,9 +75,8 @@ async def test_web_livechat_cors_session_prechat_optin_and_hmac_identify(
             )
             await sess.execute(
                 text(
-                    "INSERT INTO channel_routing_directory "
-                    "(channel_type, external_account_id, tenant_id, channel_account_id) "
-                    "VALUES ('web_livechat', :skey, :tid, :aid)"
+                    "SELECT register_channel_routing("
+                    "'web_livechat', :skey, CAST(:tid AS uuid), CAST(:aid AS uuid), true)"
                 ),
                 {"skey": site_key, "tid": tenant_id, "aid": account_id},
             )
@@ -236,22 +235,12 @@ async def test_web_livechat_cors_session_prechat_optin_and_hmac_identify(
             assert ok_ident.json()["merged"] is True
     finally:
         async with tenant_session(session_factory, tenant_id) as conn:
-            for tbl in (
-                "audit_events",
-                "identity_merge_events",
-                "consent_records",
-                "messages",
-                "conversations",
-                "customer_identities",
-                "customers",
-                "channel_credentials",
-                "channel_routing_directory",
-                "channel_accounts",
-                "tenant_keys",
-            ):
-                await conn.execute(
-                    text(f"DELETE FROM {tbl} WHERE tenant_id = :tid"), {"tid": tenant_id}
-                )
-            await conn.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
+            await conn.execute(
+                text(
+                    "SELECT register_channel_routing("
+                    "'web_livechat', :skey, CAST(:tid AS uuid), CAST(:aid AS uuid), false)"
+                ),
+                {"skey": site_key, "tid": tenant_id, "aid": account_id},
+            )
         await redis.aclose()
         await runtime_engine.dispose()
