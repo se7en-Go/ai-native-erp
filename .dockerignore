@@ -25,7 +25,6 @@ __pycache__
 .mypy_cache
 .ruff_cache
 apps/backend/tests
-tests
 
 # Node / Next.js
 node_modules
