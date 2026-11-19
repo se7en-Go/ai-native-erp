@@ -318,7 +318,12 @@ def build_100_cases() -> dict[str, Any]:
 
 
 def main() -> None:
-    out_path = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "hybrid_factory_eval_100.json"
+    out_path = (
+        Path(__file__).resolve().parent.parent
+        / "tests"
+        / "fixtures"
+        / "hybrid_factory_eval_100.json"
+    )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = build_100_cases()
     out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
