@@ -63,6 +63,7 @@ _IDENTIFIERS = {
     "standardized_status",
     "payment_status",
     "tracking_provider",
+    "carrier_code",
     "sub_status",
     "last_event_at",
 }
