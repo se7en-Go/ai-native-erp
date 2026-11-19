@@ -108,3 +108,57 @@ jobs:
         run: |
           uv run python apps/backend/scripts/export_openapi.py
           git diff --exit-code contracts/openapi.json
+
+  frontend-and-widget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build Widget
+        run: pnpm --filter widget build
+      - name: Enforce Widget gzip size (< 35 KiB)
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact=apps/widget/dist/livechat-widget.iife.js
+          bytes=$(gzip -c "$artifact" | wc -c)
+          printf '%s: %d gzip bytes (must be < 35840)\n' "$artifact" "$bytes"
+          if (( bytes >= 35840 )); then
+            exit 1
+          fi
+      - name: Lint Web (including zero business SQL)
+        run: pnpm --filter web lint
+      - name: Typecheck Web
+        run: pnpm --filter web typecheck
+      - name: Run Web unit tests
+        run: pnpm --filter web test
+      - name: Build Web for production
+        run: pnpm --filter web build
+
+  e2e-mock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - name: Run mock E2E in Chromium
+        env:
+          E2E_MODE: mock
+        run: pnpm --filter e2e run test --fail-on-flaky-tests
