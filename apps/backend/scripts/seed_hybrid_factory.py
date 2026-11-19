@@ -11,6 +11,19 @@ from uuid import NAMESPACE_DNS, UUID, uuid5
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+# Import every ORM module so SQLAlchemy can resolve the cross-module foreign keys
+# (purchase_orders -> tenants/users, ai_creative_assets -> users) before the first flush.
+# The API composition root does the same at runtime; a standalone CLI script must not skip it.
+import erp_core.ai_engine.models  # noqa: F401
+import erp_core.billing.models  # noqa: F401
+import erp_core.catalog.models  # noqa: F401
+import erp_core.channels.models  # noqa: F401
+import erp_core.crm.models  # noqa: F401
+import erp_core.finance.models  # noqa: F401
+import erp_core.identity.models  # noqa: F401
+import erp_core.orders.models  # noqa: F401
+import erp_core.supply_chain.models  # noqa: F401
+import erp_core.tenancy.models  # noqa: F401
 from erp_core.ai_engine.ingestion import DocumentIngestionService
 from erp_core.ai_engine.tools import ErpToolRegistry
 from erp_core.channels.ecommerce.base import CredentialVaultHelper, register_channel_routing
@@ -286,6 +299,12 @@ async def seed_hybrid_factory(
                 order_no="DEMO-SHIPPED",
                 tracking_number="DHL-QUANZHOU-LED-FACTORY",
             )
+        if demo_data:
+            # The Phase 3B roster is reconciled on every demo seed run, so it does not
+            # depend on the catalogue guard above (which only seeds once).
+            await _seed_phase3b_workforce(
+                session, tenant_id=TENANT_A_ID, owner_id=owner_uid
+            )
 
     async with tenant_session(session_factory, TENANT_B_ID) as session:
         await _upsert_tenant(
@@ -345,6 +364,277 @@ async def seed_hybrid_factory(
         tenant_b_id=TENANT_B_ID,
         tenant_b_slug="shenzhen-audio-dtc",
     )
+
+
+# Phase 3B: the Quanzhou smart-LED factory's digital employee roster. Every row maps onto
+# real AiCapability values (and therefore onto ErpToolRegistry tools); the autonomy level
+# never exceeds the capability ceiling defined in erp_core.ai_engine.capabilities.
+_PHASE3B_EMPLOYEES = (
+    {
+        "code": "b2b-sales",
+        "display_name": "小光",
+        "role_title": "B2B 外贸业务员",
+        "department": "商务中心",
+        "avatar_emoji": "💡",
+        "description": "识别 B2B 询盘需求，整理 RFQ 明细并起草报价草案，价格一律取实时 ERP 数据。",
+        "capability_codes": ["sales_quoting", "cs_support"],
+        "autonomy_level": "L1_proposal",
+        "tool_count": 6,
+        "system_persona": "严谨的泉州 LED 工厂外贸业务员，只引用 ERP 实时价格与库存。",
+    },
+    {
+        "code": "b2b-order-desk",
+        "display_name": "小单",
+        "role_title": "B端跟单专员",
+        "department": "履约中心",
+        "avatar_emoji": "📋",
+        "description": "跟进 B 端订单进度、生产交期与样品确认，异常自动升级给人工。",
+        "capability_codes": ["sales_quoting", "order_logistics"],
+        "autonomy_level": "L1_proposal",
+        "tool_count": 5,
+        "system_persona": "对订单节点极其敏感的跟单专员，从不承诺未确认的交期。",
+    },
+    {
+        "code": "logistics-forwarder",
+        "display_name": "小海",
+        "role_title": "物流出船专员",
+        "department": "履约中心",
+        "avatar_emoji": "🚢",
+        "description": "查询 17TRACK 实时节点、整理出船文件，货件停滞 72 小时自动预警。",
+        "capability_codes": ["order_logistics"],
+        "autonomy_level": "L2_auto",
+        "tool_count": 4,
+        "system_persona": "只转述物流承运商真实节点的出船专员。",
+    },
+    {
+        "code": "growth-scout",
+        "display_name": "小拓",
+        "role_title": "获客专员",
+        "department": "增长中心",
+        "avatar_emoji": "🧭",
+        "description": "整理合规线索池、清洗重复买家并生成首触达话术，禁止越权抓取。",
+        "capability_codes": ["sales_quoting", "cs_support"],
+        "autonomy_level": "L1_proposal",
+        "tool_count": 4,
+        "system_persona": "严格遵守各平台 ToS 与退订合规的获客专员。",
+    },
+    {
+        "code": "b2c-cs",
+        "display_name": "小暖",
+        "role_title": "B2C 贴心客服",
+        "department": "客户成功",
+        "avatar_emoji": "🌷",
+        "description": "回答零售买家售前售后问题，引用知识库与订单事实，退款一律转人工。",
+        "capability_codes": ["cs_support"],
+        "autonomy_level": "L2_auto",
+        "tool_count": 5,
+        "system_persona": "耐心、简洁的 B2C 客服，绝不自行承诺退款或补发。",
+    },
+    {
+        "code": "finance-assistant",
+        "display_name": "小账",
+        "role_title": "财务助理",
+        "department": "财务中心",
+        "avatar_emoji": "📒",
+        "description": "按金额匹配应收与银行水单候选，核销动作永远由人工确认。",
+        "capability_codes": ["finance_recon"],
+        "autonomy_level": "L0_copilot",
+        "tool_count": 3,
+        "system_persona": "只做匹配建议的财务助理，不执行任何收付核销。",
+    },
+    {
+        "code": "supply-planner",
+        "display_name": "小供",
+        "role_title": "供应链专员",
+        "department": "供应链中心",
+        "avatar_emoji": "📦",
+        "description": "跟踪安全库存、采购在途与入库进度，输出补货建议。",
+        "capability_codes": ["biz_analytics", "order_logistics"],
+        "autonomy_level": "L1_proposal",
+        "tool_count": 4,
+        "system_persona": "只看只读报表的供应链专员，补货决策由人工批准。",
+    },
+    {
+        "code": "biz-analyst",
+        "display_name": "小析",
+        "role_title": "经营分析师",
+        "department": "经营分析",
+        "avatar_emoji": "📈",
+        "description": "基于只读 ERP 报表输出毛利、渠道结构与库存周转分析。",
+        "capability_codes": ["biz_analytics"],
+        "autonomy_level": "L2_auto",
+        "tool_count": 3,
+        "system_persona": "只用批准过的只读 SQL 报表做经营分析的分析师。",
+    },
+    {
+        "code": "content-studio",
+        "display_name": "小文",
+        "role_title": "文案与社媒专员",
+        "department": "品牌营销",
+        "avatar_emoji": "✍️",
+        "description": "为真实 Catalog SKU 生成多语言商品文案、Listing 与社媒配文草稿。",
+        "capability_codes": ["content_studio"],
+        "autonomy_level": "L1_proposal",
+        "tool_count": 3,
+        "system_persona": "不编造参数与认证的多语言文案专员。",
+    },
+)
+
+_PHASE3B_QUICK_REPLIES = (
+    {
+        "shortcut_code": "moq-zh",
+        "title": "MOQ 起订量回复",
+        "category": "报价",
+        "language": "zh",
+        "body_text": (
+            "您好，该型号起订量为 100 条起，500 条起可享阶梯价，具体单价以实时报价单为准。"
+        ),
+    },
+    {
+        "shortcut_code": "moq-en",
+        "title": "MOQ reply",
+        "category": "quoting",
+        "language": "en",
+        "body_text": (
+            "Thank you for your inquiry. Our MOQ starts at 100 units, with tiered "
+            "pricing from 500 units. The exact unit price follows the live quotation."
+        ),
+    },
+    {
+        "shortcut_code": "lead-time-zh",
+        "title": "交期回复",
+        "category": "履约",
+        "language": "zh",
+        "body_text": "常规交期为收到定金后 15-20 天，海运拼箱另计约 25-35 天，以实际排产确认为准。",
+    },
+    {
+        "shortcut_code": "lead-time-en",
+        "title": "Lead time reply",
+        "category": "fulfillment",
+        "language": "en",
+        "body_text": (
+            "Standard lead time is 15-20 days after deposit; LCL sea freight adds "
+            "roughly 25-35 days. Final scheduling is confirmed by our order desk."
+        ),
+    },
+    {
+        "shortcut_code": "factory-visit-zh",
+        "title": "验厂邀请",
+        "category": "信任",
+        "language": "zh",
+        "body_text": "欢迎到泉州工厂实地验厂，我们可安排产线参观、样品测试与第三方验货对接。",
+    },
+)
+
+_PHASE3B_ASSETS = (
+    (
+        "product_copy",
+        "LED-COB-24V-5M 德语商品文案",
+        "de",
+        "LED-COB-24V-5M",
+        "为德国经销商撰写 5 米 COB 灯带的商品文案，突出可裁剪分段与无光斑特性。",
+        (
+            "Flexibles COB-LED-Band, 24 V, 5 m Rolle. Gleichmäßiges Licht ohne sichtbare "
+            "Punkte, teilbar an den markierten Segmenten. Ab Lager Quanzhou lieferbar; "
+            "technische Daten entnehmen Sie bitte dem aktuellen Datenblatt."
+        ),
+        "draft",
+    ),
+    (
+        "listing",
+        "Amazon Listing bullets",
+        "en",
+        "LED-COB-24V-5M",
+        "Write five marketplace bullet points for the COB strip.",
+        (
+            "- Seamless COB light line: no visible dots, no dark spots\n"
+            "- 5 m roll, cuttable at marked segments for clean installation\n"
+            "- 24 V DC operation for stable brightness across the whole run\n"
+            "- Suitable for aluminum profiles, cove and cabinet lighting\n"
+            "- Factory-direct supply from Quanzhou with traceable batch codes"
+        ),
+        "approved",
+    ),
+)
+
+
+async def _seed_phase3b_workforce(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    owner_id: UUID,
+) -> None:
+    """Idempotently seed the Phase 3B roster, quick replies and studio assets."""
+    for employee in _PHASE3B_EMPLOYEES:
+        await session.execute(
+            text("""
+                INSERT INTO ai_employees (tenant_id, code, display_name, role_title, department,
+                    avatar_emoji, description, capability_codes, autonomy_level, is_enabled,
+                    tool_count, system_persona)
+                VALUES (:tid, :code, :display_name, :role_title, :department, :avatar_emoji,
+                    :description, CAST(:capability_codes AS jsonb), :autonomy_level, true,
+                    :tool_count, :system_persona)
+                ON CONFLICT (tenant_id, code) DO UPDATE SET
+                    display_name = EXCLUDED.display_name,
+                    role_title = EXCLUDED.role_title,
+                    department = EXCLUDED.department,
+                    avatar_emoji = EXCLUDED.avatar_emoji,
+                    description = EXCLUDED.description,
+                    capability_codes = EXCLUDED.capability_codes,
+                    autonomy_level = EXCLUDED.autonomy_level,
+                    tool_count = EXCLUDED.tool_count,
+                    system_persona = EXCLUDED.system_persona,
+                    updated_at = now()
+            """),
+            {
+                **{key: value for key, value in employee.items() if key != "capability_codes"},
+                "tid": tenant_id,
+                "capability_codes": json.dumps(employee["capability_codes"]),
+            },
+        )
+    for reply in _PHASE3B_QUICK_REPLIES:
+        await session.execute(
+            text("""
+                INSERT INTO quick_reply_templates (tenant_id, title, category, language,
+                    body_text, shortcut_code)
+                VALUES (:tid, :title, :category, :language, :body_text, :shortcut_code)
+                ON CONFLICT (tenant_id, shortcut_code) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    category = EXCLUDED.category,
+                    language = EXCLUDED.language,
+                    body_text = EXCLUDED.body_text
+            """),
+            {**reply, "tid": tenant_id},
+        )
+    for asset_type, title, language, sku_ref, prompt, content, status in _PHASE3B_ASSETS:
+        await session.execute(
+            text("""
+                INSERT INTO ai_creative_assets (id, tenant_id, asset_type, title, language,
+                    sku_ref, prompt, content_text, status, created_by)
+                VALUES (:id, :tid, :asset_type, :title, :language, :sku_ref, :prompt,
+                    :content_text, :status, :created_by)
+                ON CONFLICT (tenant_id, id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    language = EXCLUDED.language,
+                    sku_ref = EXCLUDED.sku_ref,
+                    prompt = EXCLUDED.prompt,
+                    content_text = EXCLUDED.content_text,
+                    status = EXCLUDED.status,
+                    updated_at = now()
+            """),
+            {
+                "id": uuid5(tenant_id, f"asset:{asset_type}:{sku_ref}"),
+                "tid": tenant_id,
+                "asset_type": asset_type,
+                "title": title,
+                "language": language,
+                "sku_ref": sku_ref,
+                "prompt": prompt,
+                "content_text": content,
+                "status": status,
+                "created_by": owner_id,
+            },
+        )
 
 
 async def _seed_phase3a_demo(

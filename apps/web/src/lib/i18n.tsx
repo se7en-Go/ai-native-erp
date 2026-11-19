@@ -21,6 +21,8 @@ const DICTIONARY = {
     navGroupTrade: "交易与供应链",
     navGroupFinance: "财务中心",
     navGroupAi: "AI 赋能",
+    navEmployees: "AI 数字员工",
+    navStudio: "AI 素材工作台",
     navGroupSystem: "系统工具",
     navDashboard: "经营总览",
     navTasks: "任务提醒",
@@ -53,6 +55,9 @@ const DICTIONARY = {
     showTranslation: "显示译文",
     hideTranslation: "收起译文",
     pendingApprovals: "待审核提案",
+    aiAssistFailed: "AI 服务暂不可用",
+    aiProviderUnavailable: "未配置大模型供应商密钥，AI 生成暂不可用（ERR_AI_PROVIDER_UNAVAILABLE）。",
+    evidence: "证据",
   },
   en: {
     brandTitle: "Hybrid Trade Workbench",
@@ -70,6 +75,8 @@ const DICTIONARY = {
     navGroupTrade: "Trade & Supply",
     navGroupFinance: "Finance",
     navGroupAi: "AI Enablement",
+    navEmployees: "AI Employees",
+    navStudio: "AI Studio",
     navGroupSystem: "System",
     navDashboard: "Dashboard",
     navTasks: "Tasks",
@@ -102,6 +109,10 @@ const DICTIONARY = {
     showTranslation: "Show translation",
     hideTranslation: "Hide translation",
     pendingApprovals: "Pending Approvals",
+    aiAssistFailed: "AI assistance is unavailable",
+    aiProviderUnavailable:
+      "No LLM provider key is configured, so AI generation is unavailable (ERR_AI_PROVIDER_UNAVAILABLE).",
+    evidence: "Evidence",
   },
 } as const;
 
