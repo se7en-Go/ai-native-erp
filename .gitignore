@@ -8,3 +8,8 @@ __pycache__/
 
 # pnpm hoisted workspace dependencies
 node_modules/
+
+# Production compose env (local secrets, never commit)
+.env.prod
+.env.prod.*
+!.env.prod.example

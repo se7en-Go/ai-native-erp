@@ -62,6 +62,20 @@ NEXT_PUBLIC_USE_MOCK_API=true pnpm --filter web dev
 
 Mock 数据与 BFF 响应用于前端开发，不验证真实鉴权、持久化或第三方通道。运行下方 mock E2E 前请停止这个开发服务，让 Playwright 自行启动并占用 `3000`。
 
+## 全容器化 Docker 一键部署
+
+除上面的「逐个进程启动」外，仓库还提供一套完全容器化的生产编排（独立于开发用的 `infra/docker-compose.yml`，不共享容器名与数据卷）：Postgres 17/pgvector、PgBouncer、Redis、S3 兼容存储、`migrate`/`seed` one-shot 作业，以及 `backend`、`worker`、`web`、`widget` 四个应用容器，全部非 root 运行、基础设施端口默认只绑 `127.0.0.1`。
+
+```bash
+cp .env.prod.example .env.prod   # 按文件内注释用 openssl rand 填入必需密钥
+docker compose -f infra/docker-compose.prod.yml --env-file .env.prod \
+  --profile demo-seed up -d --build
+```
+
+启动后打开 <http://localhost:3000/login>，演示空间 `quanzhou-led-factory`、账号 `owner@quanzhou-led.example.com`、密码 `FactoryPass2026!`（另有 admin/manager/agent/finance 同域账号）。
+
+完整的本机启动步骤、演示账号、AI Key 与 Cloudflare Tunnel 接入、云主机上线前安全检查清单与故障排查见[全容器化 Docker 部署手册](docs/deployment/docker-deployment.md)。
+
 ## 常用测试与质量门禁
 
 **后端**（集成 pytest 需要上述服务与迁移；使用可用于测试的数据库）：

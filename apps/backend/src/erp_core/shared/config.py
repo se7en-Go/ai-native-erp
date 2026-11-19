@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -51,7 +51,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14
 
-    CORS_ORIGINS: list[str] = Field(
+    # NoDecode keeps the raw env string so the validator below can accept both
+    # `a,b` (compose/.env style) and `["a","b"]`. Without it pydantic-settings
+    # JSON-decodes complex fields before validation and a comma list aborts
+    # startup with SettingsError.
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:3001"]
     )
     DEK_CACHE_TTL_SECONDS: int = 300

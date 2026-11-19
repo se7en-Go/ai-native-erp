@@ -1,0 +1,56 @@
+# Keep the Docker build context tiny and secret-free.
+# All three production images build from the repository root, so this file
+# applies to infra/docker/backend.Dockerfile, web.Dockerfile and
+# widget.Dockerfile.
+
+# Version control
+.git
+.gitignore
+.github
+
+# Never bake local secrets or operator state into an image
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+.venv
+**/.venv
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+apps/backend/tests
+
+# Node / Next.js
+node_modules
+**/node_modules
+.next
+**/.next
+**/dist
+**/coverage
+**/*.tsbuildinfo
+.pnpm-store
+**/.turbo
+
+# Local runtime data / logs
+*.log
+logs
+data
+tmp
+.DS_Store
+
+# Docs are irrelevant to the images except the compliance seed pack that the
+# backend image ships for reference. `docs/*` keeps the parent traversable so
+# the negation below can re-include the single file.
+docs/*
+!docs/compliance
+docs/compliance/*
+!docs/compliance/04-hybrid-factory-kb-seed-pack.md
+
+# Contracts and plans are not needed to build or run the stack
+contracts
