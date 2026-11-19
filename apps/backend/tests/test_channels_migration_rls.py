@@ -47,9 +47,9 @@ async def test_migration_0002_objects_exist() -> None:
     try:
         async with engine.connect() as conn:
             rev = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-            # `0002` is no longer the head once Plan 03 lands; this test owns the 0002
-            # objects, so accept `0002` or any descendant revision.
-            assert rev in {"0002_channels_identity_inbox", "0003"}
+            # `0002` is no longer the head once Plan 03/04 land; this test owns the 0002
+            # objects, so accept `0002` or any descendant revision (prefixed ordering).
+            assert rev >= "0002_channels_identity_inbox"
 
             tables = set(
                 (
