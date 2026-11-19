@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from erp_core.channels.ingress_worker import dlq_router
 from erp_core.channels.webhook_router import webhook_router
+from erp_core.identity.router import customer_router
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import (
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(webhook_router)
     app.include_router(dlq_router)
+    app.include_router(customer_router)
 
     @app.get("/healthz", tags=["health"])
     async def healthz() -> dict[str, str]:
