@@ -28,7 +28,6 @@ async def test_web_livechat_cors_session_prechat_optin_and_hmac_identify(
     monkeypatch.setenv("JWT_SECRET", "widget-test-jwt-secret-key-2026")
     monkeypatch.setenv("JWT_ALGORITHM", "HS256")
 
-    migrator_engine = create_async_engine(os.environ["DATABASE_MIGRATOR_URL"], future=True)
     runtime_engine = create_async_engine(os.environ["DATABASE_RUNTIME_URL"], future=True)
     session_factory = async_sessionmaker(
         runtime_engine, class_=AsyncSession, expire_on_commit=False
@@ -48,13 +47,11 @@ async def test_web_livechat_cors_session_prechat_optin_and_hmac_identify(
     app.include_router(widget_router)
 
     try:
-        async with migrator_engine.begin() as conn:
-            await conn.execute(
+        async with tenant_session(session_factory, tenant_id) as sess:
+            await sess.execute(
                 text("INSERT INTO tenants (id, slug, name) VALUES (:id, :slug, 'Widget Store')"),
                 {"id": tenant_id, "slug": f"wid-{tenant_id.hex[:8]}"},
             )
-
-        async with tenant_session(session_factory, tenant_id) as sess:
             await crypto.provision_tenant_dek(sess, tenant_id)
             await sess.execute(
                 text(
@@ -238,7 +235,7 @@ async def test_web_livechat_cors_session_prechat_optin_and_hmac_identify(
             assert uuid.UUID(ok_ident.json()["customer_id"]) == vip_customer_id
             assert ok_ident.json()["merged"] is True
     finally:
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             for tbl in (
                 "audit_events",
                 "identity_merge_events",
@@ -258,4 +255,3 @@ async def test_web_livechat_cors_session_prechat_optin_and_hmac_identify(
             await conn.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
         await redis.aclose()
         await runtime_engine.dispose()
-        await migrator_engine.dispose()

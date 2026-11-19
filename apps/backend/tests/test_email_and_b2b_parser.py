@@ -109,7 +109,6 @@ def test_email_nh3_xss_and_tracking_pixel_stripping() -> None:
 
 @pytest.mark.asyncio
 async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() -> None:
-    migrator_engine = create_async_engine(os.environ["DATABASE_MIGRATOR_URL"], future=True)
     runtime_engine = create_async_engine(os.environ["DATABASE_RUNTIME_URL"], future=True)
     session_factory = async_sessionmaker(
         runtime_engine, class_=AsyncSession, expire_on_commit=False
@@ -136,7 +135,7 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
     inbound_addr = f"factory-{tenant_id.hex[:6]}@inbound.mail.example.com"
 
     try:
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             await conn.execute(
                 text("INSERT INTO tenants (id, slug, name) VALUES (:id, :slug, 'LED Export Co')"),
                 {"id": tenant_id, "slug": f"email-{tenant_id.hex[:8]}"},
@@ -205,7 +204,7 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
         assert adapter.verify_webhook_signature(raw_bytes, headers, svix_secret) is True
 
         raw_id_1 = uuid.uuid4()
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             await conn.execute(
                 text(
                     "INSERT INTO raw_webhook_events "
@@ -288,7 +287,7 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
             },
         }
         raw_id_2 = uuid.uuid4()
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             await conn.execute(
                 text(
                     "INSERT INTO raw_webhook_events "
@@ -318,7 +317,7 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
             ).scalar_one()
             assert msg_count == 2
     finally:
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             for tbl in (
                 "messages",
                 "conversations",
@@ -335,4 +334,3 @@ async def test_email_svix_verify_rfc5233_threading_attachments_and_mic_ingest() 
             await conn.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
         await redis.aclose()
         await runtime_engine.dispose()
-        await migrator_engine.dispose()

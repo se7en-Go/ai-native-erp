@@ -303,7 +303,9 @@ class WhatsAppAdapter(MessagingChannelAdapter):
                                 error_code=err.get("code"),
                                 error_message=err.get("title") or err.get("message"),
                                 pricing_metadata=st.get("pricing") or {},
-                                require_existing_message=False,
+                                # Match the gateway adapter: an orphan status must raise
+                                # OutOfOrderParentError in the worker so it lands in the DLQ.
+                                require_existing_message=True,
                             )
                         )
 

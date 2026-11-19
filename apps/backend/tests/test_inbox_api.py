@@ -13,13 +13,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from erp_core.channels.inbox_router import _require_inbox_access, inbox_router
+from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import ChannelType, ConversationStatus, UserRole
 from erp_core.tenancy.dependencies import CurrentPrincipal
 
 
 @pytest.mark.asyncio
 async def test_inbox_filters_sorting_notes_outbound_sse_and_tenant_404() -> None:
-    migrator_engine = create_async_engine(os.environ["DATABASE_MIGRATOR_URL"], future=True)
     runtime_engine = create_async_engine(os.environ["DATABASE_RUNTIME_URL"], future=True)
     session_factory = async_sessionmaker(
         runtime_engine, class_=AsyncSession, expire_on_commit=False
@@ -56,18 +56,16 @@ async def test_inbox_filters_sorting_notes_outbound_sse_and_tenant_404() -> None
     app.dependency_overrides[_require_inbox_access] = lambda: active_principal
 
     try:
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_b) as conn:
             await conn.execute(
-                text(
-                    "INSERT INTO tenants (id, slug, name) VALUES "
-                    "(:ta, :sa, 'Inbox A'), (:tb, :sb, 'Inbox B')"
-                ),
-                {
-                    "ta": tenant_a,
-                    "sa": f"inb-a-{tenant_a.hex[:8]}",
-                    "tb": tenant_b,
-                    "sb": f"inb-b-{tenant_b.hex[:8]}",
-                },
+                text("INSERT INTO tenants (id, slug, name) VALUES (:tb, :sb, 'Inbox B')"),
+                {"tb": tenant_b, "sb": f"inb-b-{tenant_b.hex[:8]}"},
+            )
+
+        async with tenant_session(session_factory, tenant_a) as conn:
+            await conn.execute(
+                text("INSERT INTO tenants (id, slug, name) VALUES (:ta, :sa, 'Inbox A')"),
+                {"ta": tenant_a, "sa": f"inb-a-{tenant_a.hex[:8]}"},
             )
             await conn.execute(
                 text(
@@ -235,7 +233,7 @@ async def test_inbox_filters_sorting_notes_outbound_sse_and_tenant_404() -> None
             cross_resp = await client.get(f"/api/v1/inbox/conversations/{conv_wa}/messages")
             assert cross_resp.status_code == 404
     finally:
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_a) as conn:
             for tbl in (
                 "audit_events",
                 "messages",
@@ -244,13 +242,11 @@ async def test_inbox_filters_sorting_notes_outbound_sse_and_tenant_404() -> None
                 "channel_accounts",
             ):
                 await conn.execute(
-                    text(f"DELETE FROM {tbl} WHERE tenant_id IN (:ta, :tb)"),
-                    {"ta": tenant_a, "tb": tenant_b},
+                    text(f"DELETE FROM {tbl} WHERE tenant_id = :ta"),
+                    {"ta": tenant_a},
                 )
-            await conn.execute(
-                text("DELETE FROM tenants WHERE id IN (:ta, :tb)"),
-                {"ta": tenant_a, "tb": tenant_b},
-            )
+            await conn.execute(text("DELETE FROM tenants WHERE id = :ta"), {"ta": tenant_a})
+        async with tenant_session(session_factory, tenant_b) as conn:
+            await conn.execute(text("DELETE FROM tenants WHERE id = :tb"), {"tb": tenant_b})
         await redis.aclose()
         await runtime_engine.dispose()
-        await migrator_engine.dispose()

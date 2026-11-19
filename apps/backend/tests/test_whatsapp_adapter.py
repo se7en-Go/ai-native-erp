@@ -28,7 +28,6 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
     monkeypatch.setenv("WHATSAPP_APP_ID", "meta_app_123")
     monkeypatch.setenv("WHATSAPP_APP_SECRET", "meta_secret_123")
 
-    migrator_engine = create_async_engine(os.environ["DATABASE_MIGRATOR_URL"], future=True)
     runtime_engine = create_async_engine(os.environ["DATABASE_RUNTIME_URL"], future=True)
     session_factory = async_sessionmaker(
         runtime_engine, class_=AsyncSession, expire_on_commit=False
@@ -67,13 +66,11 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
     registry.register(ChannelType.WHATSAPP_COEXISTENCE.value, adapter)
 
     try:
-        async with migrator_engine.begin() as conn:
-            await conn.execute(
+        async with tenant_session(session_factory, tenant_id) as sess:
+            await sess.execute(
                 text("INSERT INTO tenants (id, slug, name) VALUES (:id, :slug, 'WA Factory')"),
                 {"id": tenant_id, "slug": f"wa-{tenant_id.hex[:8]}"},
             )
-
-        async with tenant_session(session_factory, tenant_id) as sess:
             await crypto.provision_tenant_dek(sess, tenant_id)
             channel_account_id = await adapter.complete_embedded_signup(
                 session=sess,
@@ -143,7 +140,7 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             ]
         }
         raw_ctwa_id = uuid.uuid4()
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             await conn.execute(
                 text(
                     "INSERT INTO raw_webhook_events "
@@ -238,7 +235,7 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             ]
         }
         raw_echo_id = uuid.uuid4()
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             await conn.execute(
                 text(
                     "INSERT INTO raw_webhook_events "
@@ -347,7 +344,7 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             ]
         }
         raw_stop_id = uuid.uuid4()
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             await conn.execute(
                 text(
                     "INSERT INTO raw_webhook_events "
@@ -408,7 +405,7 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             assert send_res.success is False
             assert "ERR_RECIPIENT_SUPPRESSED" in (send_res.error_message or "")
     finally:
-        async with migrator_engine.begin() as conn:
+        async with tenant_session(session_factory, tenant_id) as conn:
             for tbl in (
                 "audit_events",
                 "suppression_list",
@@ -429,4 +426,3 @@ async def test_whatsapp_embedded_signup_coexistence_bsuid_ctwa_stop_and_csw_gate
             await conn.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
         await redis.aclose()
         await runtime_engine.dispose()
-        await migrator_engine.dispose()
