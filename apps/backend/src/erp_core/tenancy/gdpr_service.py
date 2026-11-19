@@ -32,6 +32,24 @@ class GdprService:
         return reg is not None
 
     @staticmethod
+    async def _column_exists(session: AsyncSession, table_name: str, column_name: str) -> bool:
+        """Schema-agnostic column probe.
+
+        `customers.primary_phone` is the Plan 01 probe shape while the authoritative
+        Plan 02 schema names the same attribute `primary_phone_e164`. The anonymizer must
+        scrub whichever one the deployed schema actually has.
+        """
+        found = await session.scalar(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = :table "
+                "AND column_name = :column"
+            ),
+            {"table": table_name, "column": column_name},
+        )
+        return found is not None
+
+    @staticmethod
     def _serialize_row(row: Any) -> dict[str, Any]:
         return {key: value for key, value in dict(row._mapping).items()}
 
@@ -96,9 +114,19 @@ class GdprService:
             tables_payload["messages"] = [self._serialize_row(row) for row in rows]
 
         if await self._table_exists(session, "quotes"):
+            # `quotes` links to a customer directly in the Plan 01 probe shape, but the
+            # authoritative Plan 03 schema reaches the customer through `opportunities`.
+            if await self._column_exists(session, "quotes", "customer_id"):
+                quotes_sql = "SELECT * FROM quotes WHERE tenant_id = :tid AND customer_id = :cid"
+            else:
+                quotes_sql = (
+                    "SELECT q.* FROM quotes q "
+                    "JOIN opportunities o ON o.id = q.opportunity_id "
+                    "WHERE q.tenant_id = :tid AND o.customer_id = :cid"
+                )
             rows = (
                 await session.execute(
-                    text("SELECT * FROM quotes WHERE tenant_id = :tid AND customer_id = :cid"),
+                    text(quotes_sql),
                     {"tid": str(tenant_id), "cid": str(customer_id)},
                 )
             ).all()
@@ -184,12 +212,17 @@ class GdprService:
         identities_deleted = 0
 
         if await self._table_exists(session, "customers"):
+            phone_column = (
+                "primary_phone_e164"
+                if await self._column_exists(session, "customers", "primary_phone_e164")
+                else "primary_phone"
+            )
             await session.execute(
                 text(
                     "UPDATE customers "
                     "SET display_name = :redacted, "
                     "    primary_email = :redacted_email, "
-                    "    primary_phone = NULL, "
+                    f"    {phone_column} = NULL, "
                     "    updated_at = now() "
                     "WHERE tenant_id = :tid AND id = :cid"
                 ),

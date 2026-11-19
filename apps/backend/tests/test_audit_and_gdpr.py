@@ -232,46 +232,104 @@ async def test_gdpr_export_anonymize_preserving_ledger_and_tenant_shred(
     customer_id = uuid4()
     order_id = uuid4()
     created_temp_tables = False
+    # When the authoritative Plan 02/03 schema is present (customers has `customer_type`
+    # and orders has `order_mode`) the GDPR workflow must run against those real tables;
+    # otherwise fall back to the local probe DDL above.
+    authoritative_schema = False
     async with migrator_session_factory() as m_sess, m_sess.begin():
         customers_exists = await m_sess.scalar(text("SELECT to_regclass('public.customers')"))
         if customers_exists is None:
             created_temp_tables = True
             for statement in _TEMP_DDL:
                 await m_sess.execute(text(statement))
+        else:
+            authoritative_schema = bool(
+                await m_sess.scalar(
+                    text(
+                        "SELECT 1 FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'customers' "
+                        "AND column_name = 'customer_type'"
+                    )
+                )
+            )
 
     try:
         async with tenant_session(runtime_session_factory, tenant_id) as session:
-            await session.execute(
-                text(
-                    "INSERT INTO customers "
-                    "(id, tenant_id, display_name, primary_email, primary_phone) "
-                    "VALUES (:cid, :tid, 'Hans Mueller', "
-                    "'hans@berlin-lighting.de', '+491701234567')"
-                ),
-                {"cid": str(customer_id), "tid": str(tenant_id)},
-            )
-            await session.execute(
-                text(
-                    "INSERT INTO customer_identities "
-                    "(id, tenant_id, customer_id, identity_type, identity_value) "
-                    "VALUES (:id, :tid, :cid, 'email', 'hans@berlin-lighting.de')"
-                ),
-                {"id": str(uuid4()), "tid": str(tenant_id), "cid": str(customer_id)},
-            )
-            await session.execute(
-                text(
-                    "INSERT INTO orders (id, tenant_id, customer_id, order_no, total_amount) "
-                    "VALUES (:oid, :tid, :cid, 'ORD-2026-0001', 12450.00)"
-                ),
-                {"oid": str(order_id), "tid": str(tenant_id), "cid": str(customer_id)},
-            )
-            await session.execute(
-                text(
-                    "INSERT INTO order_profit_snapshots (order_id, tenant_id, net_profit_base) "
-                    "VALUES (:oid, :tid, 3890.50)"
-                ),
-                {"oid": str(order_id), "tid": str(tenant_id)},
-            )
+            if authoritative_schema:
+                await session.execute(
+                    text(
+                        "INSERT INTO customers "
+                        "(id, tenant_id, customer_type, display_name, primary_email, "
+                        " primary_phone_e164) "
+                        "VALUES (:cid, :tid, 'b2c_consumer', 'Hans Mueller', "
+                        "'hans@berlin-lighting.de', '+491701234567')"
+                    ),
+                    {"cid": str(customer_id), "tid": str(tenant_id)},
+                )
+            else:
+                await session.execute(
+                    text(
+                        "INSERT INTO customers "
+                        "(id, tenant_id, display_name, primary_email, primary_phone) "
+                        "VALUES (:cid, :tid, 'Hans Mueller', "
+                        "'hans@berlin-lighting.de', '+491701234567')"
+                    ),
+                    {"cid": str(customer_id), "tid": str(tenant_id)},
+                )
+            if authoritative_schema:
+                await session.execute(
+                    text(
+                        "INSERT INTO customer_identities "
+                        "(id, tenant_id, customer_id, identity_type, identity_value, "
+                        " confidence_level) "
+                        "VALUES (:id, :tid, :cid, 'email', 'hans@berlin-lighting.de', "
+                        "'deterministic')"
+                    ),
+                    {"id": str(uuid4()), "tid": str(tenant_id), "cid": str(customer_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO orders "
+                        "(id, tenant_id, customer_id, order_no, order_mode, currency, "
+                        " fx_rate_to_base, subtotal_amount, total_amount, fulfillment_status, "
+                        " payment_status) "
+                        "VALUES (:oid, :tid, :cid, 'ORD-2026-0001', 'b2c_retail', 'USD', "
+                        " 7.200000, 12450.00, 12450.00, 'confirmed_reserved', 'paid')"
+                    ),
+                    {"oid": str(order_id), "tid": str(tenant_id), "cid": str(customer_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO order_profit_snapshots "
+                        "(order_id, tenant_id, base_currency, gross_revenue_base, cogs_base, "
+                        " platform_commission_base) "
+                        "VALUES (:oid, :tid, 'CNY', 89640.00, 60000.00, 0.00)"
+                    ),
+                    {"oid": str(order_id), "tid": str(tenant_id)},
+                )
+            else:
+                await session.execute(
+                    text(
+                        "INSERT INTO customer_identities "
+                        "(id, tenant_id, customer_id, identity_type, identity_value) "
+                        "VALUES (:id, :tid, :cid, 'email', 'hans@berlin-lighting.de')"
+                    ),
+                    {"id": str(uuid4()), "tid": str(tenant_id), "cid": str(customer_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO orders (id, tenant_id, customer_id, order_no, total_amount) "
+                        "VALUES (:oid, :tid, :cid, 'ORD-2026-0001', 12450.00)"
+                    ),
+                    {"oid": str(order_id), "tid": str(tenant_id), "cid": str(customer_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO order_profit_snapshots (order_id, tenant_id, net_profit_base) "
+                        "VALUES (:oid, :tid, 3890.50)"
+                    ),
+                    {"oid": str(order_id), "tid": str(tenant_id)},
+                )
 
         export_resp = await async_client.post(
             f"/api/v1/tenancy/gdpr/customers/{customer_id}/export",
@@ -298,17 +356,21 @@ async def test_gdpr_export_anonymize_preserving_ledger_and_tenant_shred(
         assert anon_body["redacted_identifier"].startswith("REDACTED_")
 
         async with tenant_session(runtime_session_factory, tenant_id) as session:
+            phone_column = (
+                "primary_phone_e164" if authoritative_schema else "primary_phone"
+            )
             cust_row = (
                 await session.execute(
                     text(
-                        "SELECT display_name, primary_email, primary_phone "
+                        "SELECT display_name, primary_email, "
+                        f"{phone_column} AS phone "
                         "FROM customers WHERE id = :cid"
                     ),
                     {"cid": str(customer_id)},
                 )
             ).one()
             assert cust_row.display_name == anon_body["redacted_identifier"]
-            assert cust_row.primary_phone is None
+            assert cust_row.phone is None
 
             ident_count = await session.scalar(
                 text("SELECT count(*) FROM customer_identities WHERE customer_id = :cid"),
@@ -320,12 +382,16 @@ async def test_gdpr_export_anonymize_preserving_ledger_and_tenant_shred(
                 text("SELECT total_amount FROM orders WHERE id = :oid"),
                 {"oid": str(order_id)},
             )
+            profit_column = (
+                "net_contribution_margin_base" if authoritative_schema else "net_profit_base"
+            )
             profit_val = await session.scalar(
-                text("SELECT net_profit_base FROM order_profit_snapshots WHERE order_id = :oid"),
+                text(f"SELECT {profit_column} FROM order_profit_snapshots WHERE order_id = :oid"),
                 {"oid": str(order_id)},
             )
             assert str(order_total) == "12450.00"
-            assert str(profit_val) == "3890.50"
+            # The financial ledger row must survive PII anonymization untouched.
+            assert str(profit_val) == ("29640.00" if authoritative_schema else "3890.50")
 
         shred_resp = await async_client.post(
             "/api/v1/tenancy/gdpr/tenant/redact",
