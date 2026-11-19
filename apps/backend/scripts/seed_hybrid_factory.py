@@ -304,6 +304,16 @@ async def seed_hybrid_factory(
                 tracking_number="DHL-QUANZHOU-LED-FACTORY",
             )
         if demo_data:
+            # Reconcile Phase 3A demo procurement/CRM/WMS rows on upgraded workspaces too
+            # (the catalogue guard above only triggers on first-time demo seeding).
+            await _seed_phase3a_demo(
+                session,
+                tenant_id=TENANT_A_ID,
+                warehouse_id=uuid5(TENANT_A_ID, "warehouse"),
+                variant_id=uuid5(TENANT_A_ID, "sku"),
+                buyer_id=uuid5(TENANT_A_ID, "hans"),
+                owner_id=owner_uid,
+            )
             # The Phase 3B roster is reconciled on every demo seed run, so it does not
             # depend on the catalogue guard above (which only seeds once).
             await _seed_phase3b_workforce(

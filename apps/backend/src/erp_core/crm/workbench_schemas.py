@@ -11,7 +11,7 @@ from erp_core.shared.enums import LeadStatus
 FollowupType = Literal["email", "call", "meeting", "note"]
 TaskPriority = Literal["low", "normal", "high"]
 TaskStatus = Literal["open", "done", "cancelled"]
-LinkedEntity = Literal["customer", "lead", "opportunity", "quote"]
+LinkedEntity = Literal["customer", "lead", "opportunity", "quote", "order", "purchase_order"]
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Summary = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)]
 

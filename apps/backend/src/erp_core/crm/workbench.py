@@ -222,12 +222,14 @@ async def create_task(
     if payload.assignee_user_id is not None:
         await require_member(session, principal.tenant_id, payload.assignee_user_id)
     if payload.linked_entity_type is not None:
-        # customer lives in identity; the rest are CRM-owned aggregates.
+        # Table lookup stays SQL-only so crm never imports downstream domain ORMs.
         tables = {
             "customer": "customers",
             "lead": "leads",
             "opportunity": "opportunities",
             "quote": "quotes",
+            "order": "orders",
+            "purchase_order": "purchase_orders",
         }
         linked = await session.scalar(
             sa.text(

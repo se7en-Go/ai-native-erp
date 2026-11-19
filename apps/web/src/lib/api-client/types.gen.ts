@@ -2188,7 +2188,7 @@ export type TaskCreate = {
     assignee_user_id?: string | null;
     due_at?: string | null;
     linked_entity_id?: string | null;
-    linked_entity_type?: ('customer' | 'lead' | 'opportunity' | 'quote') | null;
+    linked_entity_type?: ('customer' | 'lead' | 'opportunity' | 'quote' | 'order' | 'purchase_order') | null;
     priority?: 'low' | 'normal' | 'high';
     title: string;
 };
@@ -2199,7 +2199,7 @@ export type TaskRead = {
     due_at: string | null;
     id: string;
     linked_entity_id: string | null;
-    linked_entity_type: ('customer' | 'lead' | 'opportunity' | 'quote') | null;
+    linked_entity_type: ('customer' | 'lead' | 'opportunity' | 'quote' | 'order' | 'purchase_order') | null;
     priority: 'low' | 'normal' | 'high';
     status: 'open' | 'done' | 'cancelled';
     title: string;
