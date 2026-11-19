@@ -531,15 +531,8 @@
             "title": "Amount Received"
           },
           "currency": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string"
-              }
-            ],
-            "title": "Currency"
+            "title": "Currency",
+            "type": "string"
           },
           "external_tx_ref": {
             "anyOf": [
@@ -565,15 +558,8 @@
             "title": "Gateway Fee"
           },
           "payment_method": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string"
-              }
-            ],
-            "title": "Payment Method"
+            "title": "Payment Method",
+            "type": "string"
           },
           "receipt_file": {
             "anyOf": [
