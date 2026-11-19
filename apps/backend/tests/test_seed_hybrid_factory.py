@@ -128,3 +128,61 @@ async def test_seed_hybrid_factory_is_idempotent_and_isolated(
     assert agent_login.status_code == 200
     assert agent_login.json()["principal"]["role"] == "agent"
     assert agent_login.json()["principal"]["can_view_cost"] is False
+
+
+async def test_phase3b_workforce_seed_is_idempotent(
+    runtime_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seed_mod = _load_seed_module()
+    from uuid import uuid4
+
+    tenant, owner = uuid4(), uuid4()
+    async with tenant_session(runtime_session_factory, tenant) as session:
+        await session.execute(
+            text("INSERT INTO tenants (id, slug, name) VALUES (:id, :slug, '3B Seed')"),
+            {"id": tenant, "slug": f"seed3b-{tenant.hex}"},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO users (id, email, full_name, password_hash) "
+                "VALUES (:uid, :email, 'Owner', 'x')"
+            ),
+            {"uid": owner, "email": f"{owner.hex}@example.com"},
+        )
+        for _ in range(2):
+            await seed_mod._seed_phase3b_workforce(session, tenant_id=tenant, owner_id=owner)
+
+    async with tenant_session(runtime_session_factory, tenant) as session:
+        employees = (
+            await session.execute(
+                text("SELECT code, autonomy_level, capability_codes FROM ai_employees")
+            )
+        ).all()
+        assert len(employees) == 9
+        assert {row.code for row in employees} == {
+            employee["code"] for employee in seed_mod._PHASE3B_EMPLOYEES
+        }
+        assert all(
+            row.autonomy_level in {"L0_copilot", "L1_proposal", "L2_auto"} for row in employees
+        )
+        replies = (await session.execute(text("SELECT language FROM quick_reply_templates"))).all()
+        assert len(replies) == 5
+        assert {row.language for row in replies} == {"zh", "en"}
+        assets = (
+            await session.execute(text("SELECT asset_type, status FROM ai_creative_assets"))
+        ).all()
+        assert len(assets) == 2
+        assert {row.asset_type for row in assets} == {"product_copy", "listing"}
+
+    from erp_core.ai_engine.capabilities import CAPABILITY_SPECS, min_autonomy
+    from erp_core.shared.enums import AiCapability, AutonomyLevel
+
+    for employee in seed_mod._PHASE3B_EMPLOYEES:
+        ceiling = min_autonomy(
+            *(CAPABILITY_SPECS[AiCapability(code)].max_allowed_autonomy
+              for code in employee["capability_codes"])
+        )
+        assert AutonomyLevel(employee["autonomy_level"]).value == employee["autonomy_level"]
+        assert employee["autonomy_level"] == min_autonomy(
+            AutonomyLevel(employee["autonomy_level"]), ceiling
+        ).value

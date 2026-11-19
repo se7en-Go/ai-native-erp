@@ -35,6 +35,342 @@
         "title": "AiCapability",
         "type": "string"
       },
+      "AiEmployeeCreate": {
+        "description": "Operator-supplied digital employee definition.",
+        "properties": {
+          "autonomy_level": {
+            "$ref": "#/components/schemas/AutonomyLevel",
+            "default": "L1_proposal"
+          },
+          "avatar_emoji": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Emoji"
+          },
+          "capability_codes": {
+            "items": {
+              "$ref": "#/components/schemas/AiCapability"
+            },
+            "maxItems": 6,
+            "title": "Capability Codes",
+            "type": "array"
+          },
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "department": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Department",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "role_title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Role Title",
+            "type": "string"
+          },
+          "system_persona": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Persona"
+          },
+          "tool_count": {
+            "default": 0,
+            "maximum": 200.0,
+            "minimum": 0.0,
+            "title": "Tool Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "display_name",
+          "role_title",
+          "department",
+          "description"
+        ],
+        "title": "AiEmployeeCreate",
+        "type": "object"
+      },
+      "AiEmployeeRead": {
+        "properties": {
+          "actions_7d": {
+            "default": 0,
+            "title": "Actions 7D",
+            "type": "integer"
+          },
+          "autonomy_level": {
+            "$ref": "#/components/schemas/AutonomyLevel"
+          },
+          "avatar_emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Emoji"
+          },
+          "capability_codes": {
+            "items": {
+              "$ref": "#/components/schemas/AiCapability"
+            },
+            "title": "Capability Codes",
+            "type": "array"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "department": {
+            "title": "Department",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "role_title": {
+            "title": "Role Title",
+            "type": "string"
+          },
+          "system_persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Persona"
+          },
+          "tasks_7d": {
+            "default": 0,
+            "title": "Tasks 7D",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "tool_count": {
+            "title": "Tool Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "code",
+          "display_name",
+          "role_title",
+          "department",
+          "avatar_emoji",
+          "description",
+          "capability_codes",
+          "autonomy_level",
+          "is_enabled",
+          "tool_count",
+          "system_persona",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AiEmployeeRead",
+        "type": "object"
+      },
+      "AiEmployeeUpdate": {
+        "properties": {
+          "autonomy_level": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AutonomyLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "avatar_emoji": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Emoji"
+          },
+          "capability_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AiCapability"
+                },
+                "maxItems": 6,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Codes"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "role_title": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Title"
+          },
+          "system_persona": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Persona"
+          },
+          "tool_count": {
+            "anyOf": [
+              {
+                "maximum": 200.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Count"
+          }
+        },
+        "title": "AiEmployeeUpdate",
+        "type": "object"
+      },
       "AiProposalRead": {
         "properties": {
           "capability": {
@@ -497,6 +833,33 @@
         "title": "AuditEventRead",
         "type": "object"
       },
+      "AutoExecutedCapability": {
+        "properties": {
+          "auto_executed_7d": {
+            "title": "Auto Executed 7D",
+            "type": "integer"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/AiCapability"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability",
+          "display_name",
+          "auto_executed_7d",
+          "href"
+        ],
+        "title": "AutoExecutedCapability",
+        "type": "object"
+      },
       "AutonomyLevel": {
         "enum": [
           "L0_copilot",
@@ -505,6 +868,29 @@
         ],
         "title": "AutonomyLevel",
         "type": "string"
+      },
+      "AutonomySummary": {
+        "properties": {
+          "l0_copilot": {
+            "title": "L0 Copilot",
+            "type": "integer"
+          },
+          "l1_proposal": {
+            "title": "L1 Proposal",
+            "type": "integer"
+          },
+          "l2_auto": {
+            "title": "L2 Auto",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "l2_auto",
+          "l1_proposal",
+          "l0_copilot"
+        ],
+        "title": "AutonomySummary",
+        "type": "object"
       },
       "Body_submit_receivable_payment_api_v1_finance_receivables__rp_id__payments_post": {
         "properties": {
@@ -1610,6 +1996,251 @@
           "qty_delta"
         ],
         "title": "CreateStocktake",
+        "type": "object"
+      },
+      "CreativeAssetCreate": {
+        "properties": {
+          "asset_type": {
+            "$ref": "#/components/schemas/CreativeAssetType"
+          },
+          "content_text": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Text"
+          },
+          "generate": {
+            "default": false,
+            "title": "Generate",
+            "type": "boolean"
+          },
+          "language": {
+            "default": "en",
+            "maxLength": 12,
+            "minLength": 2,
+            "title": "Language",
+            "type": "string"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "sku_ref": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Ref"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "asset_type"
+        ],
+        "title": "CreativeAssetCreate",
+        "type": "object"
+      },
+      "CreativeAssetRead": {
+        "properties": {
+          "asset_type": {
+            "$ref": "#/components/schemas/CreativeAssetType"
+          },
+          "content_text": {
+            "title": "Content Text",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "numeric_guard_passed": {
+            "default": true,
+            "title": "Numeric Guard Passed",
+            "type": "boolean"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "sku_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Ref"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CreativeAssetStatus"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tool_calls": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tool Calls",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "asset_type",
+          "title",
+          "language",
+          "sku_ref",
+          "prompt",
+          "content_text",
+          "status",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CreativeAssetRead",
+        "type": "object"
+      },
+      "CreativeAssetStatus": {
+        "enum": [
+          "draft",
+          "approved",
+          "archived"
+        ],
+        "title": "CreativeAssetStatus",
+        "type": "string"
+      },
+      "CreativeAssetType": {
+        "enum": [
+          "product_copy",
+          "listing",
+          "email_template",
+          "social_caption",
+          "ad_hook"
+        ],
+        "title": "CreativeAssetType",
+        "type": "string"
+      },
+      "CreativeAssetUpdate": {
+        "properties": {
+          "content_text": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Text"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "maxLength": 12,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreativeAssetStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "CreativeAssetUpdate",
         "type": "object"
       },
       "CreditWalletRead": {
@@ -2798,6 +3429,133 @@
         "title": "IdentityType",
         "type": "string"
       },
+      "InboxAssistAction": {
+        "enum": [
+          "polish",
+          "summarize",
+          "suggest_reply",
+          "daily_brief"
+        ],
+        "title": "InboxAssistAction",
+        "type": "string"
+      },
+      "InboxAssistRequest": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/InboxAssistAction"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "language": {
+            "default": "zh",
+            "pattern": "^(zh|en)$",
+            "title": "Language",
+            "type": "string"
+          },
+          "strict_rag": {
+            "default": false,
+            "title": "Strict Rag",
+            "type": "boolean"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "InboxAssistRequest",
+        "type": "object"
+      },
+      "InboxAssistResponse": {
+        "properties": {
+          "abstained": {
+            "default": false,
+            "title": "Abstained",
+            "type": "boolean"
+          },
+          "action": {
+            "$ref": "#/components/schemas/InboxAssistAction"
+          },
+          "citations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "credits_consumed": {
+            "default": "0",
+            "title": "Credits Consumed",
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "model_used": {
+            "default": "",
+            "title": "Model Used",
+            "type": "string"
+          },
+          "numeric_guard_passed": {
+            "default": true,
+            "title": "Numeric Guard Passed",
+            "type": "boolean"
+          },
+          "requires_human_review": {
+            "default": false,
+            "title": "Requires Human Review",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tool_calls": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tool Calls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "text"
+        ],
+        "title": "InboxAssistResponse",
+        "type": "object"
+      },
       "Incoterm": {
         "enum": [
           "EXW",
@@ -3304,6 +4062,34 @@
           "source_tool_call_id"
         ],
         "title": "LiveSkuCheckRead",
+        "type": "object"
+      },
+      "LockedGuardrail": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "title",
+          "description",
+          "href"
+        ],
+        "title": "LockedGuardrail",
         "type": "object"
       },
       "LoginRequest": {
@@ -4558,6 +5344,42 @@
         "title": "OverviewRead",
         "type": "object"
       },
+      "PaginatedResponse_AiEmployeeRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AiEmployeeRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[AiEmployeeRead]",
+        "type": "object"
+      },
       "PaginatedResponse_AiProposalRead_": {
         "properties": {
           "has_more": {
@@ -4808,6 +5630,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[ConversationRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_CreativeAssetRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CreativeAssetRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[CreativeAssetRead]",
         "type": "object"
       },
       "PaginatedResponse_CustomerRead_": {
@@ -5276,6 +6134,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[PurchaseOrderRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_QuickReplyRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuickReplyRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[QuickReplyRead]",
         "type": "object"
       },
       "PaginatedResponse_QuoteRead_": {
@@ -5797,6 +6691,33 @@
           "order_fulfillment_status"
         ],
         "title": "PaymentVerifyResponse",
+        "type": "object"
+      },
+      "PendingProposalGroup": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "proposal_type": {
+            "$ref": "#/components/schemas/ProposalType"
+          }
+        },
+        "required": [
+          "proposal_type",
+          "label",
+          "count",
+          "href"
+        ],
+        "title": "PendingProposalGroup",
         "type": "object"
       },
       "PreChatOptInPayload": {
@@ -6552,6 +7473,99 @@
           }
         },
         "title": "PurchaseOrderUpdate",
+        "type": "object"
+      },
+      "QuickReplyCreate": {
+        "properties": {
+          "body_text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body Text",
+            "type": "string"
+          },
+          "category": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "language": {
+            "default": "en",
+            "pattern": "^(zh|en)$",
+            "title": "Language",
+            "type": "string"
+          },
+          "shortcut_code": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Shortcut Code",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "category",
+          "body_text",
+          "shortcut_code"
+        ],
+        "title": "QuickReplyCreate",
+        "type": "object"
+      },
+      "QuickReplyRead": {
+        "properties": {
+          "body_text": {
+            "title": "Body Text",
+            "type": "string"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "shortcut_code": {
+            "title": "Shortcut Code",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "title",
+          "category",
+          "language",
+          "body_text",
+          "shortcut_code",
+          "created_at"
+        ],
+        "title": "QuickReplyRead",
         "type": "object"
       },
       "QuoteCreate": {
@@ -10289,6 +11303,74 @@
         ],
         "title": "WooAuthUrlRequest",
         "type": "object"
+      },
+      "WorkforceKpis": {
+        "properties": {
+          "actions_7d": {
+            "title": "Actions 7D",
+            "type": "integer"
+          },
+          "active_employees": {
+            "title": "Active Employees",
+            "type": "integer"
+          },
+          "autonomy_summary": {
+            "$ref": "#/components/schemas/AutonomySummary"
+          },
+          "today_llm_cost_usd": {
+            "title": "Today Llm Cost Usd",
+            "type": "string"
+          },
+          "total_employees": {
+            "title": "Total Employees",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_employees",
+          "active_employees",
+          "actions_7d",
+          "today_llm_cost_usd",
+          "autonomy_summary"
+        ],
+        "title": "WorkforceKpis",
+        "type": "object"
+      },
+      "WorkforceMatrixResponse": {
+        "properties": {
+          "kpis": {
+            "$ref": "#/components/schemas/WorkforceKpis"
+          },
+          "l0_locked": {
+            "items": {
+              "$ref": "#/components/schemas/LockedGuardrail"
+            },
+            "title": "L0 Locked",
+            "type": "array"
+          },
+          "l1_pending": {
+            "items": {
+              "$ref": "#/components/schemas/PendingProposalGroup"
+            },
+            "title": "L1 Pending",
+            "type": "array"
+          },
+          "l2_auto": {
+            "items": {
+              "$ref": "#/components/schemas/AutoExecutedCapability"
+            },
+            "title": "L2 Auto",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kpis",
+          "l2_auto",
+          "l1_pending",
+          "l0_locked"
+        ],
+        "title": "WorkforceMatrixResponse",
+        "type": "object"
       }
     }
   },
@@ -10463,6 +11545,285 @@
         ]
       }
     },
+    "/api/v1/ai/employees": {
+      "get": {
+        "operationId": "list_employees_api_v1_ai_employees_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "department",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_enabled",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Enabled"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_AiEmployeeRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Employees",
+        "tags": [
+          "ai-workforce"
+        ]
+      },
+      "post": {
+        "operationId": "create_employee_api_v1_ai_employees_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiEmployeeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiEmployeeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Employee",
+        "tags": [
+          "ai-workforce"
+        ]
+      }
+    },
+    "/api/v1/ai/employees/matrix": {
+      "get": {
+        "operationId": "workforce_matrix_api_v1_ai_employees_matrix_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceMatrixResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workforce Matrix",
+        "tags": [
+          "ai-workforce"
+        ]
+      }
+    },
+    "/api/v1/ai/employees/{employee_id}": {
+      "patch": {
+        "operationId": "update_employee_api_v1_ai_employees__employee_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "employee_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Employee Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiEmployeeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiEmployeeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Employee",
+        "tags": [
+          "ai-workforce"
+        ]
+      }
+    },
     "/api/v1/ai/feedback": {
       "post": {
         "operationId": "feedback_api_v1_ai_feedback_post",
@@ -10519,6 +11880,65 @@
         "summary": "Feedback",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/inbox/assist": {
+      "post": {
+        "operationId": "inbox_assist_api_v1_ai_inbox_assist_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxAssistRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxAssistResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inbox Assist",
+        "tags": [
+          "ai-workforce"
         ]
       }
     },
@@ -11119,6 +12539,451 @@
         "summary": "Reject Proposal",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/quick-replies": {
+      "get": {
+        "operationId": "list_quick_replies_api_v1_ai_quick_replies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(zh|en)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_QuickReplyRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Quick Replies",
+        "tags": [
+          "ai-workforce"
+        ]
+      },
+      "post": {
+        "operationId": "create_quick_reply_api_v1_ai_quick_replies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickReplyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuickReplyRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Quick Reply",
+        "tags": [
+          "ai-workforce"
+        ]
+      }
+    },
+    "/api/v1/ai/quick-replies/{template_id}": {
+      "delete": {
+        "operationId": "delete_quick_reply_api_v1_ai_quick_replies__template_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Quick Reply",
+        "tags": [
+          "ai-workforce"
+        ]
+      }
+    },
+    "/api/v1/ai/studio/assets": {
+      "get": {
+        "operationId": "list_assets_api_v1_ai_studio_assets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "asset_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CreativeAssetType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(draft|approved|archived)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_CreativeAssetRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Assets",
+        "tags": [
+          "ai-workforce"
+        ]
+      },
+      "post": {
+        "operationId": "create_asset_api_v1_ai_studio_assets_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeAssetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeAssetRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Asset",
+        "tags": [
+          "ai-workforce"
+        ]
+      }
+    },
+    "/api/v1/ai/studio/assets/{asset_id}": {
+      "patch": {
+        "operationId": "update_asset_api_v1_ai_studio_assets__asset_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeAssetUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeAssetRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Asset",
+        "tags": [
+          "ai-workforce"
         ]
       }
     },
