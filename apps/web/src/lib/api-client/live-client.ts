@@ -488,6 +488,15 @@ export function mapConversation(c: ConversationRead): ConversationSummary {
 }
 
 export function mapInboxMessage(m: MessageRead): InboxMessage {
+  // Message-level translations are stored on the message's channel_metadata (the
+  // contract has no dedicated translation fields), so surface them for the thread.
+  const meta = (m.channel_metadata ?? {}) as Record<string, unknown>;
+  const translations =
+    meta.translations && typeof meta.translations === "object"
+      ? (meta.translations as Record<string, unknown>)
+      : {};
+  const translation = (lang: string): string | undefined =>
+    typeof translations[lang] === "string" ? (translations[lang] as string) : undefined;
   return {
     id: m.id,
     conversation_id: m.conversation_id,
@@ -499,6 +508,10 @@ export function mapInboxMessage(m: MessageRead): InboxMessage {
     body_sanitized_html: m.body_sanitized_html,
     delivery_status: m.delivery_status,
     source_timestamp: m.source_timestamp,
+    detected_language:
+      typeof meta.detected_language === "string" ? meta.detected_language : undefined,
+    translated_text_en: translation("en"),
+    translated_text_zh: translation("zh"),
   };
 }
 
@@ -1307,6 +1320,39 @@ export async function splitCustomers(mergeEventId: string, reason: string) {
       body: { merge_event_id: mergeEventId, reason },
     }),
   );
+}
+
+// Compose the drawer from tenant-scoped SDK reads instead of the legacy mock route.
+export async function getInboxCustomerContext(customerId: string) {
+  const [customer, orders, opportunities] = await Promise.all([
+    getCustomer(customerId),
+    listOrdersApiV1OrdersGet({ client: getBffClient(), query: { customer_id: customerId, limit: 5 } })
+      .then(unwrap),
+    listOpportunitiesApiV1B2bOpportunitiesGet({ client: getBffClient(), query: { limit: 50 } })
+      .then(unwrap),
+  ]);
+  const quotePages = await Promise.all(opportunities.items
+    .filter((opportunity) => opportunity.customer_id === customerId)
+    .slice(0, 5).map((opportunity) => getB2bQuotes(opportunity.id, 5)));
+  return {
+    customer,
+    identities: customer.identities ?? [],
+    probable_duplicates: (customer.merge_proposals ?? [])
+      .filter((proposal) => proposal.source_customer_id === customerId)
+      .map((proposal) => ({
+        candidate_customer_id: proposal.target_customer_id,
+        display_name: proposal.target_display_name,
+        matched_signal: proposal.reason,
+        similarity_score: proposal.similarity_score,
+      })),
+    merge_events: [], // The customer contract does not expose merge history.
+    recent_orders: orders.items.map((order) => {
+      const shipment = order.shipments?.[0];
+      return { ...order, tracking_number: shipment?.tracking_number,
+        standardized_status: shipment?.standardized_status, sub_status: shipment?.sub_status };
+    }),
+    recent_quotes: quotePages.flatMap((page) => page.items).slice(0, 5),
+  };
 }
 
 export async function getCustomer(customerId: string): Promise<CustomerRead> {

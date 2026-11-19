@@ -1,45 +1,27 @@
 import { test, expect } from "@playwright/test";
 import {
+  appJson,
   collectPageErrors,
+  enqueueInquiry,
   loginViaUi,
   postSignedWebhook,
-  signHmacSha256Hex,
+  sign17Track,
+  trackingNumber,
+  waitForInquiry,
 } from "../helpers/auth-and-seed";
 import { isMockMode } from "../helpers/environment";
 
 test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click Order -> 30%/70% T/T -> 17TRACK -> CVP", () => {
   test("executes complete B2B quote-to-CVP margin lifecycle", async ({ page, request }) => {
     const errors = collectPageErrors(page);
-    const emailSecret = process.env.RESEND_WEBHOOK_SECRET ?? "dev-resend-secret";
     const track17Secret = process.env.TRACK17_WEBHOOK_SECRET ?? "dev-17track-secret";
 
     if (!isMockMode) {
-      // Live mode only: seed the inquiry through the real email webhook.
-      // Mock mode already ships Hans Weber / Berlin Lighting in mock-fixtures.
-      const inquiryBody = {
-        event_id: `mic-e2e-${Date.now()}`,
-        from_email: "en_notification@made-in-china.com",
-        reply_to_email: "hans.weber@berlin-lighting.de",
-        buyer_name: "Hans Weber",
-        company_name: "Berlin Lighting GmbH",
-        country_code: "DE",
-        iana_timezone: "Europe/Berlin",
-        to_address: "quanzhou-led-factory@inbound.mail.example.com",
-        subject: "RFQ: 500 pcs LED-COB-24V-5M FOB Shenzhen",
-        text_body:
-          "Hello, we need FOB Shenzhen quotation for 500 pcs LED-COB-24V-5M. Payment 30% T/T deposit and 70% before shipment.",
-      };
-      const rawInquiry = JSON.stringify(inquiryBody);
-      await postSignedWebhook(
-        request,
-        "/api/v1/webhooks/email/inbound",
-        inquiryBody,
-        "X-Webhook-Signature",
-        signHmacSha256Hex(rawInquiry, emailSecret)
-      );
+      expect(await enqueueInquiry(request)).toMatchObject({ status: "accepted" });
     }
 
     await loginViaUi(page, "owner@quanzhou-led.example.com", "FactoryPass2026!");
+    if (!isMockMode) await waitForInquiry(page);
     await page.goto("/inbox");
 
     const inquiry = page.getByTestId("inbox-conversation-list")
@@ -50,6 +32,9 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
     const thread = page.getByTestId("inbox-message-thread");
     await expect(thread.getByRole("heading", { name: "Hans Weber", exact: true })).toBeVisible();
     await expect(thread.getByTestId("buyer-local-time-badge")).toBeVisible();
+    if (!isMockMode) {
+      await expect(page.getByTestId("inbox-context-drawer").getByText("hans.weber@berlin-lighting.de")).toBeVisible();
+    }
 
     // Approve the L1 quote draft, not whichever proposal happens to appear first.
     await page.goto("/ai/proposals");
@@ -66,13 +51,29 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
       approveBtn.click(),
     ]);
     expect(approval.ok()).toBe(true);
+    const approvedQuoteId = isMockMode ? null : (await approval.json()).execution_result?.quote_id;
+    if (!isMockMode) {
+      expect(approvedQuoteId).toBeTruthy();
+      const sent = await page.request.post(`/api/bff/api/v1/b2b/quotes/${approvedQuoteId}/send`);
+      expect(sent.ok(), await sent.text()).toBe(true);
+      expect(await sent.json()).toMatchObject({ status: "sent" });
+    }
 
-    // Verify B2B Quote PI and 1-Click Convert to Order
+    // Convert the PI created by the approved proposal, after recording buyer acceptance.
     await page.goto("/b2b/quotes");
-    const convertBtn = page.locator('[data-testid^="convert-quote-btn-"]').first();
+    const convertBtn = approvedQuoteId
+      ? page.getByTestId(`convert-quote-btn-${approvedQuoteId}`)
+      : page.locator('[data-testid^="convert-quote-btn-"]').first();
     await expect(convertBtn).toBeVisible({ timeout: 15_000 });
-    await convertBtn.click();
+    if (!isMockMode) await page.getByRole("button", { name: "Mark Accepted" }).click();
+    const [converted] = await Promise.all([
+      page.waitForResponse((res) => res.request().method() === "POST" &&
+        res.url().endsWith("/convert-to-order")),
+      convertBtn.click(),
+    ]);
+    expect(converted.ok()).toBe(true);
     await expect(page.getByText(/Converted 1-Click to Order/)).toBeVisible();
+    const { order } = await converted.json();
 
     // Verify 70% balance unpaid blocks dispatch on /orders
     await page.goto("/orders");
@@ -80,6 +81,21 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
 
     // Verify the pending 30% deposit; the 70% balance is still unpaid.
     await loginViaUi(page, "finance@quanzhou-led.example.com", "FactoryPass2026!");
+    if (!isMockMode) {
+      const { items } = await appJson(page, `/finance/receivables?order_id=${order.id}`);
+      const milestone = items.find((r: { milestone_label: string }) =>
+        r.milestone_label === "b2b_30_deposit");
+      expect(milestone).toBeTruthy();
+      const receipt = await page.request.post(`/api/bff/api/v1/finance/receivables/${milestone.id}/payments`, {
+        multipart: {
+          payment_method: "wire_transfer", external_tx_ref: `DEMO-${order.id}`,
+          amount_received: milestone.due_amount, currency: milestone.currency, actual_fx_rate: "1",
+          receipt_file: { name: "deposit.txt", mimeType: "text/plain", buffer: Buffer.from("Demo T/T receipt") },
+        },
+      });
+      expect(receipt.status(), await receipt.text()).toBe(201);
+      expect(await receipt.json()).toMatchObject({ verified_by_user_id: null });
+    }
     await page.goto("/finance");
     const deposit = page.getByRole("row").filter({
       has: page.getByText("b2b_30_deposit", { exact: true }),
@@ -98,11 +114,15 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
     expect(verification.ok()).toBe(true);
 
     if (!isMockMode) {
-      // Live mode only: trigger 17TRACK Delivered webhook.
+      // Exercise provider delivery on a separately seeded, already shipped order.
+      // The new quote's order must stay blocked while its balance is unpaid.
+      const { items } = await appJson(page, "/orders");
+      const shipped = items.find((row: { order_no: string }) => row.order_no === "DEMO-SHIPPED");
+      expect(shipped).toBeTruthy();
       const trackPayload = {
         event: "TRACKING_UPDATED",
         data: {
-          number: "DHL99887766",
+          number: trackingNumber(),
           track_info: {
             latest_status: { status: "Delivered", sub_status: "Delivered_Other" },
             latest_event: {
@@ -117,9 +137,12 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
         request,
         "/api/v1/webhooks/17track",
         trackPayload,
-        "sign",
-        signHmacSha256Hex(JSON.stringify(trackPayload), track17Secret)
+        { sign: sign17Track(JSON.stringify(trackPayload), track17Secret) }
       );
+      await expect.poll(() => appJson(page, `/orders/${shipped.id}/shipments`),
+        { timeout: 15_000 }).toEqual(expect.arrayContaining([
+          expect.objectContaining({ tracking_number: trackingNumber(), standardized_status: "delivered" }),
+        ]));
     }
 
     // Assert CVP net margin waterfall renders cleanly with zero [object Object].
@@ -129,7 +152,8 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
     // 30 s test timeout. The cvpCard expectation below is the real gate
     // and auto-waits for the refetched data.
     await page.reload({ waitUntil: "domcontentloaded" });
-    const cvpCard = page.locator('[data-testid^="cvp-waterfall-"]').first();
+    const cvpCard = isMockMode ? page.locator('[data-testid^="cvp-waterfall-"]').first()
+      : page.getByTestId(`cvp-waterfall-${order.id}`);
     await expect(cvpCard).toBeVisible({ timeout: 15_000 });
     const text = await cvpCard.textContent();
     expect(text).toContain("Net Margin:");

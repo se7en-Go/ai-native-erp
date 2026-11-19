@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useState } from "react";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { bffFetch } from "@/lib/api";
 import { PrincipalSchema, type Principal } from "@/lib/contracts";
 import { I18nProvider } from "@/lib/i18n";
@@ -21,8 +22,10 @@ export const AuthSessionContext = createContext<AuthSessionState>({
 });
 
 function AuthSessionBridge({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["auth", "me"],
+    enabled: pathname !== "/login", // Sign-in triggers an explicit refresh once cookies exist.
     queryFn: async () => {
       try {
         const raw = await bffFetch<unknown>("/v1/auth/me");

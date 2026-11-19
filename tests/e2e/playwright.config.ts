@@ -1,23 +1,23 @@
+import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 
 import { isMockMode } from "./helpers/environment";
 
-// Mock owns localhost:3000 and serves fixture data and mock BFF mutations.
-// Live starts nothing. Run Web with NEXT_PUBLIC_USE_MOCK_API=false and point
-// its BFF at the seeded backend. E2E_BASE_URL can override the live Web URL;
-// E2E_API_URL targets the backend directly for signed live webhook calls.
-// Remaining live prerequisites include scenario data (inbox threads with
-// buyer timezones, quote/payment/CVP data), the onboarding, AI/billing and
-// inbound email API surfaces used by the specs, and a warehouse UUID via
-// NEXT_PUBLIC_DEFAULT_WAREHOUSE_ID for quote conversion and shipment.
 const localWebURL = "http://localhost:3000";
+const managedLive = !isMockMode && !process.env.E2E_BASE_URL && !process.env.E2E_API_URL;
 const baseURL = isMockMode ? localWebURL : (process.env.E2E_BASE_URL ?? localWebURL);
+if (managedLive && !process.env.E2E_RUN_SLUG) {
+  // Worker processes inherit the same run namespace from the Playwright runner.
+  const suffix = randomBytes(6).toString("hex");
+  process.env.E2E_RUN_SLUG = `quanzhou-led-e2e-${suffix}`;
+  process.env.E2E_SHOPIFY_ORDER_ID = BigInt(`0x${suffix}`).toString();
+}
 
 export default defineConfig({
   testDir: "./specs",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: isMockMode && process.env.CI ? 1 : 0,
   workers: 1,
   timeout: 60_000, // Includes cold Next.js route compilation in mock mode.
   reporter: [["list"], ["html", { open: "never" }]],
@@ -37,7 +37,19 @@ export default defineConfig({
           timeout: 180_000,
         },
       }
-    : {}),
+    : managedLive
+      ? {
+          webServer: {
+            cwd: "../..",
+            command: "exec uv run --no-sync python tests/e2e/fixtures/live_stack.py",
+            url: `${localWebURL}/login`,
+            reuseExistingServer: false,
+            timeout: 180_000,
+            gracefulShutdown: { signal: "SIGTERM", timeout: 15_000 },
+            stdout: "pipe",
+          },
+        }
+      : {}),
   projects: [
     {
       name: "chromium",

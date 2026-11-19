@@ -41,8 +41,14 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
   });
 
   it("pre-selects Hybrid Factory preset, enforces Coexistence 20 mps ack, and passes 3-message AI sandbox", async () => {
+    const stages: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const { url, method } = normalizeFetchInput(input, init);
+      if (url.includes("/onboarding/advance") && method === "POST") {
+        const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
+        stages.push(body.target_stage);
+        return new Response(JSON.stringify({ current_stage: body.target_stage }), { status: 200 });
+      }
       if (url.includes("/ai/proposals")) {
         return new Response(JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }), {
           status: 200,
@@ -139,6 +145,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
     fireEvent.click(screen.getByTestId("onboarding-next-btn"));
 
     // Step 3: Storefronts (Shopify, WooCommerce, SHOPLINE, Shoplazza, TikTok Shop)
+    await screen.findByRole("button", { name: "Shopify" });
     for (const tab of ["Shopify", "WooCommerce", "SHOPLINE", "Shoplazza", "TikTok Shop"]) {
       const tabBtn = screen.getByRole("button", { name: tab });
       fireEvent.click(tabBtn);
@@ -148,7 +155,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
     fireEvent.click(screen.getByTestId("onboarding-next-btn"));
 
     // Step 4: WebChat <script> snippet copy
-    fireEvent.click(screen.getByTestId("copy-webchat-snippet-btn"));
+    fireEvent.click(await screen.findByTestId("copy-webchat-snippet-btn"));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("wc_site_qz_001")
     );
@@ -156,7 +163,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
     fireEvent.click(screen.getByTestId("onboarding-next-btn"));
 
     // Step 5: Run 3-message AI Sandbox verifier
-    const goLiveBtn = screen.getByTestId("activate-live-production-btn");
+    const goLiveBtn = await screen.findByTestId("activate-live-production-btn");
     expect(goLiveBtn).toBeDisabled();
 
     fireEvent.click(screen.getByTestId("run-sandbox-test-1"));
@@ -166,6 +173,10 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
     await waitFor(() => {
       expect(goLiveBtn).not.toBeDisabled();
     });
+    fireEvent.click(goLiveBtn);
+    await waitFor(() => expect(stages).toEqual([
+      "ChannelConnecting", "ChannelVerified", "CatalogSyncing", "AISandboxReady", "LiveProduction",
+    ]));
   });
 
   it("renders DLQ replay button and consent/suppression viewer in /settings/channels", async () => {

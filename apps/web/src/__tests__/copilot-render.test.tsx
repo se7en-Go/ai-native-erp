@@ -80,7 +80,7 @@ const MOCK_CUSTOMER_CONTEXT: CustomerContextPayload = {
   ],
 };
 
-function renderWrap(ui: React.ReactNode) {
+function renderWrap(ui: React.ReactNode, role: "owner" | "agent" = "owner") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
@@ -89,8 +89,8 @@ function renderWrap(ui: React.ReactNode) {
           principal: {
             user_id: "u1",
             tenant_id: "t1",
-            role: "owner",
-            email: "owner@qzled.example.com",
+            role,
+            email: `${role}@qzled.example.com`,
           },
           isLoading: false,
           logout: async () => {},
@@ -106,6 +106,29 @@ function renderWrap(ui: React.ReactNode) {
 describe("Task 5.3 ContextDrawer & FloatingCopilot", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("does not request the finance-only credit wallet for an agent", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const { url } = normalizeFetchInput(input);
+      if (url.includes("/ai/proposals")) {
+        return new Response(JSON.stringify({ items: [], total: 0 }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/ai/capabilities")) {
+        return new Response(JSON.stringify({ capabilities: [], l0_fallback: false }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWrap(<FloatingCopilot conversationId="conv-1" />, "agent");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const urls = fetchMock.mock.calls.map((call) => fetchCallUrl(call));
+    expect(urls.some((url) => url.includes("/billing/wallet"))).toBe(false);
   });
 
   it("sanitizes malformed objects and raw dotted internal keys so [object Object] never renders", async () => {
@@ -272,6 +295,15 @@ describe("Task 5.3 ContextDrawer & FloatingCopilot", () => {
   });
 
   it("renders BSUID badge, switches ContextDrawer tabs, and executes probable duplicate merge", async () => {
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK_API", "true");
+    try {
+      await exerciseContextDrawer();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  async function exerciseContextDrawer() {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/identity/customers/cust-target/context")) {
@@ -339,5 +371,5 @@ describe("Task 5.3 ContextDrawer & FloatingCopilot", () => {
         target_customer_id: "cust-target",
       });
     });
-  });
+  }
 });

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { Page, APIRequestContext } from "@playwright/test";
+import { expect, type Page, type APIRequestContext } from "@playwright/test";
 import { isMockMode } from "./environment";
 
 const E2E_API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
@@ -8,22 +8,27 @@ export function signHmacSha256Hex(rawBody: string, secret: string): string {
   return crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
 }
 
-export function signHmacSha256Base64(rawBody: string, secret: string): string {
+export function signHmacSha256Base64(rawBody: string, secret: string | Buffer): string {
   return crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
+}
+
+/** 17TRACK v2.2 `sign` header: sha256(body + "/" + webhook_secret), lowercase hex. */
+export function sign17Track(rawBody: string, secret: string): string {
+  return crypto.createHash("sha256").update(rawBody + "/" + secret, "utf8").digest("hex");
 }
 
 export async function loginViaUi(
   page: Page,
   email: string,
   password = "FactoryPass2026!",
-  tenantSlug = "quanzhou-led-factory"
+  tenantSlug = isMockMode ? "quanzhou-led-factory" : demoSlug()
 ) {
   await page.goto("/login");
   await page.fill("#tenant-slug", tenantSlug);
   await page.fill("#email", email);
   await page.fill("#password", password);
   await page.click('button[type="submit"]');
-  await page.waitForURL(/\/(inbox|onboarding)/);
+  await page.waitForURL(email.startsWith("finance@") ? /\/finance$/ : /\/(inbox|onboarding)$/);
 }
 
 /**
@@ -35,8 +40,7 @@ export async function postSignedWebhook(
   request: APIRequestContext,
   path: string,
   payload: Record<string, unknown>,
-  headerName: string,
-  signature: string
+  headers: Record<string, string>
 ) {
   if (isMockMode) {
     throw new Error(
@@ -48,13 +52,57 @@ export async function postSignedWebhook(
     data: rawBody,
     headers: {
       "Content-Type": "application/json",
-      [headerName]: signature,
+      ...headers,
     },
   });
   if (!res.ok()) {
     throw new Error(`Webhook ${path} failed with ${res.status()}: ${await res.text()}`);
   }
   return res.json();
+}
+
+export function demoSlug() {
+  return process.env.E2E_RUN_SLUG ?? "quanzhou-led-factory";
+}
+
+export const shopifyDomain = () => `${demoSlug()}.myshopify.com`;
+export const trackingNumber = () => `DHL-${demoSlug().toUpperCase()}`;
+
+export async function enqueueInquiry(request: APIRequestContext) {
+  const id = `inquiry-${demoSlug()}`;
+  const payload = {
+    type: "email.received",
+    data: {
+      message_id: `<${id}@mail.example.com>`,
+      from: "Made-in-China <en_notification@made-in-china.com>",
+      reply_to: ["hans.weber@berlin-lighting.de"],
+      to: [`${demoSlug()}@inbound.mail.example.com`],
+      subject: "RFQ: 500 pcs LED-COB-24V-5M FOB Shenzhen",
+      text: "Buyer Name: Hans Weber\nCompany Name: Berlin Lighting GmbH\nCountry/Region: Germany\n" +
+        "Email: hans.weber@berlin-lighting.de\n" +
+        "We need FOB Shenzhen quotation for 500 pcs LED-COB-24V-5M. Payment 30% T/T deposit.",
+    },
+  };
+  const secret = process.env.RESEND_WEBHOOK_SECRET ?? "dev-resend-secret";
+  const key = secret.startsWith("whsec_") ? Buffer.from(secret.slice(6), "base64") : secret;
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = signHmacSha256Base64(`${id}.${timestamp}.${JSON.stringify(payload)}`, key);
+  return postSignedWebhook(request, "/api/v1/webhooks/email", payload, {
+    "svix-id": id, "svix-timestamp": timestamp, "svix-signature": `v1,${signature}`,
+  });
+}
+
+export async function appJson(page: Page, path: string) {
+  const response = await page.request.get(`/api/bff/api/v1${path}`);
+  expect(response.ok(), `GET ${path}: ${response.status()}`).toBe(true);
+  return response.json();
+}
+
+export async function waitForInquiry(page: Page) {
+  await expect.poll(async () => (await appJson(page, "/inbox/conversations")).items,
+    { timeout: 15_000 }).toEqual(expect.arrayContaining([
+      expect.objectContaining({ subject: "RFQ: 500 pcs LED-COB-24V-5M FOB Shenzhen" }),
+    ]));
 }
 
 export interface PageErrorCollector {
@@ -89,7 +137,7 @@ export function collectPageErrors(page: Page): PageErrorCollector {
   page.on("response", (res) => {
     if (res.status() >= 400) {
       const entry = `${res.url()} ${res.status()}`;
-      if (res.status() === 401 && new URL(res.url()).pathname === "/api/bff/v1/auth/me") {
+      if (isMockMode && res.status() === 401 && new URL(res.url()).pathname === "/api/bff/v1/auth/me") {
         // The generic "Failed to load resource ... 401" console line
         // Chrome emits for this probe carries no URL; correlate it via
         // this flag so only this one probe is ever excused.
