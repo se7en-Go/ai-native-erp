@@ -5,13 +5,11 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from erp_schema_bootstrap import ensure_erp_schema, register_plan02_metadata_stand_ins  # noqa: I001
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from erp_core.api_main import app
-from erp_core.catalog.router import router as catalog_router
 from erp_core.catalog.schemas import (
     MoqTierInput,
     ProductCreate,
@@ -51,8 +49,6 @@ def _make_jwt(user_id, tenant_id, role: UserRole, email: str) -> str:
 
 @pytest.mark.asyncio
 async def test_catalog_moq_tiers_bundle_multiplier_and_agent_cost_masking() -> None:
-    await ensure_erp_schema(_migrator_url())
-    register_plan02_metadata_stand_ins()
     mig_engine = create_async_engine(_migrator_url(), echo=False)
     rt_engine = create_async_engine(_runtime_url(), echo=False)
     rt_factory = async_sessionmaker(rt_engine, class_=AsyncSession, expire_on_commit=False)
@@ -207,12 +203,8 @@ async def test_catalog_moq_tiers_bundle_multiplier_and_agent_cost_masking() -> N
             assert resolved.deduct_qty == 6
 
         # HTTP RBAC check: agent MUST NOT receive cost_price_base or min_margin_floor_pct.
-        # The catalog router is mounted here because `erp_core.api_main` is owned by the
-        # shared wiring and must stay untouched until Plan 02 lands (see the PR's mount-point
-        # note); the endpoint, DI, RBAC dependency and RLS path under test are all real.
-        if not getattr(app.state, "_plan03_catalog_mounted", False):
-            app.include_router(catalog_router, prefix="/api/v1")
-            app.state._plan03_catalog_mounted = True
+        # `/api/v1/catalog/variants` is mounted by `erp_core.api_main.create_app`, so the
+        # endpoint, DI, RBAC dependency and RLS path exercised here are the production ones.
         app.state.session_factory = rt_factory
         app.state.settings = get_settings()
         agent_token = _make_jwt(

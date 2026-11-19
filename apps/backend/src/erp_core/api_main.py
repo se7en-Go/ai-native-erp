@@ -8,9 +8,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+# Composition root: import every domain model module so SQLAlchemy resolves the
+# cross-module string foreign keys when it configures the mappers.
+import erp_core.catalog.models  # noqa: F401
+import erp_core.channels.models  # noqa: F401
+import erp_core.crm.models  # noqa: F401
+import erp_core.finance.models  # noqa: F401
+import erp_core.identity.models  # noqa: F401
+import erp_core.orders.models  # noqa: F401
+import erp_core.tenancy.models  # noqa: F401
+from erp_core.catalog.router import router as catalog_router
 from erp_core.channels.ingress_worker import dlq_router
 from erp_core.channels.webhook_router import webhook_router
+from erp_core.crm.router import router as b2b_router
 from erp_core.identity.router import customer_router
+from erp_core.orders.router import router as orders_router
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import (
@@ -77,6 +89,9 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(dlq_router)
     app.include_router(customer_router)
+    app.include_router(catalog_router, prefix="/api/v1")
+    app.include_router(b2b_router, prefix="/api/v1")
+    app.include_router(orders_router, prefix="/api/v1")
 
     @app.get("/healthz", tags=["health"])
     async def healthz() -> dict[str, str]:
