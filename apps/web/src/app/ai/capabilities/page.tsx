@@ -9,7 +9,7 @@ import {
   deleteKbDocument,
   updateCapability,
   uploadKbDocument,
-} from "@/lib/api-client/plan04-bridge";
+} from "@/lib/api-client/live-client";
 import {
   fetchCapabilities,
   fetchKbDocuments,

@@ -61,7 +61,7 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
     const [approval] = await Promise.all([
       page.waitForResponse((res) =>
         res.request().method() === "POST" &&
-        /^\/api\/bff\/v1\/ai\/proposals\/[^/]+\/approve$/.test(new URL(res.url()).pathname)
+        /^\/api\/bff\/api\/v1\/ai\/proposals\/[^/]+\/approve$/.test(new URL(res.url()).pathname)
       ),
       approveBtn.click(),
     ]);

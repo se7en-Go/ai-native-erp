@@ -8,6 +8,76 @@ export type AdvanceOnboardingRequest = {
     target_stage: OnboardingStage;
 };
 
+export type AiCapability = 'cs_support' | 'sales_quoting' | 'order_logistics' | 'content_studio' | 'biz_analytics' | 'finance_recon';
+
+export type AiProposalRead = {
+    capability: AiCapability;
+    citations: Array<{
+        [key: string]: unknown;
+    }>;
+    confidence_score: string;
+    conversation_id: string | null;
+    created_at: string;
+    edited_payload: {
+        [key: string]: unknown;
+    } | null;
+    estimated_margin_pct: string | null;
+    execution_result: {
+        [key: string]: unknown;
+    } | null;
+    expires_at: string | null;
+    id: string;
+    proposal_type: ProposalType;
+    proposed_payload: {
+        [key: string]: unknown;
+    };
+    rejection_reason: string | null;
+    reviewed_at: string | null;
+    reviewed_by_user_id: string | null;
+    status: ProposalStatus;
+    target_entity_id: string | null;
+    target_entity_type: string | null;
+};
+
+export type AssistantChatRequest = {
+    capability?: AiCapability;
+    channel_type?: ChannelType;
+    context?: {
+        [key: string]: unknown;
+    };
+    conversation_id?: string | null;
+    message: string;
+    strict_rag?: boolean;
+};
+
+/**
+ * Result of a single authenticated assistant turn.
+ */
+export type AssistantChatResponse = {
+    auto_executed?: boolean;
+    autonomy_applied: AutonomyLevel;
+    capability: AiCapability;
+    citations?: Array<{
+        [key: string]: unknown;
+    }>;
+    compliance_blocked?: boolean;
+    compliance_violations?: Array<string>;
+    credits_consumed?: string;
+    degraded_to_l0?: boolean;
+    estimated_margin_pct?: string | null;
+    l0_locked?: boolean;
+    model_used?: string;
+    numeric_guard_passed?: boolean;
+    proposal_id?: string | null;
+    proposal_type?: ProposalType | null;
+    reason?: string | null;
+    reply_text?: string;
+    should_abstain?: boolean;
+    tool_calls?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
 export type AuditEventRead = {
     action: string;
     actor_id: string;
@@ -40,6 +110,13 @@ export type BodySubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPost =
     receipt_file?: string | null;
 };
 
+export type BodyUploadKbDocumentApiV1AiKbDocumentsPost = {
+    file: string;
+    language?: string;
+    source_type?: 'markdown' | 'pdf' | 'csv' | 'faq_json' | 'policy_doc';
+    title: string;
+};
+
 export type BuyerLocalTimeInfo = {
     formatted_time?: string | null;
     iana_timezone?: string | null;
@@ -52,6 +129,67 @@ export type BuyerLocalTimeInfo = {
 export type CancelOrderRequest = {
     reason: string;
     warehouse_id: string;
+};
+
+export type CapabilitiesOverviewResponse = {
+    capabilities: Array<CapabilityPolicyItem>;
+};
+
+export type CapabilitiesUpdateRequest = {
+    settings: {
+        [key: string]: AutonomyLevel;
+    };
+};
+
+export type CapabilityPolicyItem = {
+    capability: AiCapability;
+    configured_autonomy: AutonomyLevel;
+    display_name: string;
+    executed_actions_7d: number;
+    max_allowed_autonomy: AutonomyLevel;
+    pending_proposals_7d: number;
+};
+
+export type ChannelAccountRead = {
+    channel_type: ChannelType;
+    display_name: string;
+    external_account_id: string;
+    id: string;
+    rate_limit_profile: ChannelRateLimitRead;
+    status: ChannelStatus;
+};
+
+export type ChannelConsentRead = {
+    channel_type: ChannelType;
+    consent_status: 'opted_in' | 'opted_out';
+    customer_name: string;
+    id: string;
+    proof_source: string;
+    recorded_at: string;
+};
+
+export type ChannelDlqRead = {
+    channel_type: ChannelType;
+    created_at: string;
+    error_message: string;
+    external_event_id: string | null;
+    id: string;
+    retry_count: number;
+};
+
+export type ChannelRateLimitRead = {
+    coexistence?: boolean | null;
+    mps?: number | null;
+};
+
+export type ChannelStatus = 'active' | 'token_expired' | 'rate_limited' | 'disconnected';
+
+export type ChannelSuppressionRead = {
+    channel_type: ChannelType;
+    created_at: string;
+    id: string;
+    normalized_address: string;
+    reason: string;
 };
 
 export type ChannelType = 'whatsapp_cloud' | 'whatsapp_coexistence' | 'email' | 'web_livechat' | 'shopify' | 'woocommerce' | 'shopline' | 'shoplazza' | 'tiktok_shop' | 'made_in_china_email' | 'alibaba_email' | 'messenger' | 'instagram_dm' | 'telegram' | 'amazon_sp' | 'ebay' | 'mercado_libre' | 'temu' | 'walmart' | 'shopee' | 'lazada';
@@ -144,6 +282,20 @@ export type CostVisibilitySampleResponse = {
     unit_sale_price: string;
 };
 
+export type CreditWalletRead = {
+    auto_downgrade_to_l0: boolean;
+    billing_cycle_end: string;
+    fractional_credit_carry: string;
+    included_credits_remaining: number;
+    overage_spend_cap_cents: number;
+    overage_spent_cents: number;
+    plan_tier: string;
+    tenant_id: string;
+    topup_credits_balance: number;
+    total_credits_available: number;
+    updated_at: string;
+};
+
 export type CustomerIdentityRead = {
     confidence_level: ConfidenceLevel;
     created_at: string;
@@ -199,6 +351,12 @@ export type CustomerUpdateRequest = {
 };
 
 export type DeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export type EmailDnsRead = {
+    dkim_verified: boolean;
+    return_path_verified: boolean;
+    spf_verified: boolean;
+};
 
 export type EmbeddedSignupRequest = {
     code: string;
@@ -317,6 +475,33 @@ export type InviteMemberRequest = {
     full_name: string;
     password: string;
     role: UserRole;
+};
+
+export type KbDocumentRead = {
+    chunk_count: number;
+    created_at: string;
+    flagged_price_chunks: number;
+    id: string;
+    is_active: boolean;
+    language: string;
+    source_type: string;
+    source_uri?: string | null;
+    status?: string;
+    title: string;
+};
+
+export type KbIngestResponse = {
+    chunks_created: number;
+    deduplicated: boolean;
+    document_id: string;
+    flagged_dynamic_price_chunks: number;
+};
+
+export type KbSearchRequest = {
+    conversation_id?: string | null;
+    query: string;
+    strict_mode?: boolean;
+    top_k?: number;
 };
 
 export type LeadCreate = {
@@ -558,9 +743,49 @@ export type OrderRead = {
     updated_at: string;
 };
 
+export type PaginatedResponseAiProposalRead = {
+    has_more: boolean;
+    items: Array<AiProposalRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseAuditEventRead = {
     has_more: boolean;
     items: Array<AuditEventRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseChannelAccountRead = {
+    has_more: boolean;
+    items: Array<ChannelAccountRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseChannelConsentRead = {
+    has_more: boolean;
+    items: Array<ChannelConsentRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseChannelDlqRead = {
+    has_more: boolean;
+    items: Array<ChannelDlqRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseChannelSuppressionRead = {
+    has_more: boolean;
+    items: Array<ChannelSuppressionRead>;
     limit: number;
     offset: number;
     total: number;
@@ -593,6 +818,14 @@ export type PaginatedResponseInventoryBalanceItemRead = {
 export type PaginatedResponseInventoryLedgerRead = {
     has_more: boolean;
     items: Array<InventoryLedgerRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseKbDocumentRead = {
+    has_more: boolean;
+    items: Array<KbDocumentRead>;
     limit: number;
     offset: number;
     total: number;
@@ -665,6 +898,14 @@ export type PaginatedResponseReceivableRead = {
 export type PaginatedResponseSkuMappingRead = {
     has_more: boolean;
     items: Array<SkuMappingRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseUsageLedgerRead = {
+    has_more: boolean;
+    items: Array<UsageLedgerRead>;
     limit: number;
     offset: number;
     total: number;
@@ -776,6 +1017,29 @@ export type ProfitSummaryRead = {
     total_variable_expenses_base: string;
 };
 
+export type ProposalEditApproveRequest = {
+    edited_payload: {
+        [key: string]: unknown;
+    };
+    feedback_note?: string | null;
+};
+
+export type ProposalFeedbackRequest = {
+    feedback_note: string;
+    proposal_id: string;
+};
+
+export type ProposalFeedbackResponse = {
+    feedback_id: string;
+    proposal_id: string;
+};
+
+export type ProposalRejectRequest = {
+    reason: string;
+};
+
+export type ProposalStatus = 'pending' | 'approved' | 'edited_and_approved' | 'rejected' | 'expired' | 'failed';
+
 export type ProposalType = 'reply_draft' | 'crm_entity_extract' | 'quote_draft' | 'follow_up_suggestion' | 'identity_merge' | 'refund_or_reship' | 'payment_match';
 
 export type QuoteCreate = {
@@ -864,6 +1128,29 @@ export type QuoteRepriceRequest = {
 
 export type QuoteStatus = 'draft' | 'pending_approval' | 'sent' | 'accepted' | 'expired' | 'converted';
 
+export type RagHit = {
+    bm25_score: number;
+    chunk_id: string;
+    chunk_index: number;
+    content: string;
+    cosine_sim: number;
+    doc_id: string;
+    doc_title: string;
+    has_dynamic_price_disclaimer: boolean;
+    rerank_score: number;
+    rrf_score: number;
+};
+
+export type RagSearchResult = {
+    abstention_reason?: string | null;
+    hits?: Array<RagHit>;
+    query: string;
+    recommended_conversation_status?: string | null;
+    should_abstain?: boolean;
+    strict_mode: boolean;
+    top_score?: number;
+};
+
 export type ReceivableRead = {
     created_at: string;
     currency: string;
@@ -895,6 +1182,17 @@ export type RegisterRequest = {
     tenant_name: string;
     tenant_slug?: string | null;
     timezone?: string;
+};
+
+export type SandboxRequest = {
+    message: string;
+    scenario_id: 'b2c_wismo' | 'strict_rag_warranty' | 'b2b_moq_quote';
+};
+
+export type SandboxResult = {
+    passed: boolean;
+    reply_text?: string;
+    source_tool_call_id?: string | null;
 };
 
 export type SendInboxMessageRequest = {
@@ -1055,7 +1353,31 @@ export type TokenResponse = {
     token_type?: string;
 };
 
+export type TopupCreditsRequest = {
+    credits: number;
+    reference: string;
+};
+
+export type TopupPaymentRead = {
+    amount_cents: number;
+    client_secret: string;
+    currency?: string;
+    payment_intent_id: string;
+};
+
 export type TrackingProvider = '17track' | 'aftership' | 'manual';
+
+export type TranslateRequest = {
+    target_lang: string;
+    text: string;
+};
+
+export type TranslateResponse = {
+    credits_consumed: string;
+    model_used: string;
+    target_lang: string;
+    translated_text: string;
+};
 
 export type UpdateConversationRequest = {
     ai_autonomy_override?: AutonomyLevel | null;
@@ -1079,6 +1401,20 @@ export type UpdateTenantSettingsRequest = {
     name?: string | null;
     timezone?: string | null;
 };
+
+export type UsageLedgerRead = {
+    created_at: string;
+    id: number;
+    idempotency_key: string;
+    metric_type: UsageMetricType;
+    model_or_provider: string;
+    raw_provider_cost_usd: string;
+    stripe_meter_event_id: string | null;
+    stripe_meter_synced: boolean;
+    units_consumed: string;
+};
+
+export type UsageMetricType = 'ai_credit' | 'whatsapp_template' | 'whatsapp_service' | 'tracking_quota';
 
 export type UserRole = 'owner' | 'admin' | 'manager' | 'agent' | 'finance';
 
@@ -1156,6 +1492,21 @@ export type VariantUpdate = {
     retail_price_usd?: number | string | null;
 };
 
+export type VerifyEmailDnsRequest = {
+    dkim_selector?: string;
+    domain: string;
+};
+
+export type WarehouseListRead = {
+    default_warehouse_id: string | null;
+    items: Array<WarehouseRead>;
+};
+
+export type WarehouseRead = {
+    id: string;
+    is_default: boolean;
+};
+
 export type WidgetIdentifyRequest = {
     display_name?: string | null;
     email?: string | null;
@@ -1213,6 +1564,416 @@ export type WooAuthUrlRequest = {
     return_url: string;
     store_url: string;
 };
+
+export type AssistantChatApiV1AiAssistantChatPostData = {
+    body: AssistantChatRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/assistant/chat';
+};
+
+export type AssistantChatApiV1AiAssistantChatPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssistantChatApiV1AiAssistantChatPostError = AssistantChatApiV1AiAssistantChatPostErrors[keyof AssistantChatApiV1AiAssistantChatPostErrors];
+
+export type AssistantChatApiV1AiAssistantChatPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssistantChatResponse;
+};
+
+export type AssistantChatApiV1AiAssistantChatPostResponse = AssistantChatApiV1AiAssistantChatPostResponses[keyof AssistantChatApiV1AiAssistantChatPostResponses];
+
+export type GetCapabilitiesApiV1AiCapabilitiesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/capabilities';
+};
+
+export type GetCapabilitiesApiV1AiCapabilitiesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCapabilitiesApiV1AiCapabilitiesGetError = GetCapabilitiesApiV1AiCapabilitiesGetErrors[keyof GetCapabilitiesApiV1AiCapabilitiesGetErrors];
+
+export type GetCapabilitiesApiV1AiCapabilitiesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CapabilitiesOverviewResponse;
+};
+
+export type GetCapabilitiesApiV1AiCapabilitiesGetResponse = GetCapabilitiesApiV1AiCapabilitiesGetResponses[keyof GetCapabilitiesApiV1AiCapabilitiesGetResponses];
+
+export type UpdateCapabilitiesApiV1AiCapabilitiesPatchData = {
+    body: CapabilitiesUpdateRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/capabilities';
+};
+
+export type UpdateCapabilitiesApiV1AiCapabilitiesPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateCapabilitiesApiV1AiCapabilitiesPatchError = UpdateCapabilitiesApiV1AiCapabilitiesPatchErrors[keyof UpdateCapabilitiesApiV1AiCapabilitiesPatchErrors];
+
+export type UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: CapabilitiesOverviewResponse;
+};
+
+export type UpdateCapabilitiesApiV1AiCapabilitiesPatchResponse = UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses[keyof UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses];
+
+export type FeedbackApiV1AiFeedbackPostData = {
+    body: ProposalFeedbackRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/feedback';
+};
+
+export type FeedbackApiV1AiFeedbackPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FeedbackApiV1AiFeedbackPostError = FeedbackApiV1AiFeedbackPostErrors[keyof FeedbackApiV1AiFeedbackPostErrors];
+
+export type FeedbackApiV1AiFeedbackPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProposalFeedbackResponse;
+};
+
+export type FeedbackApiV1AiFeedbackPostResponse = FeedbackApiV1AiFeedbackPostResponses[keyof FeedbackApiV1AiFeedbackPostResponses];
+
+export type ListKbDocumentsApiV1AiKbDocumentsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/ai/kb/documents';
+};
+
+export type ListKbDocumentsApiV1AiKbDocumentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListKbDocumentsApiV1AiKbDocumentsGetError = ListKbDocumentsApiV1AiKbDocumentsGetErrors[keyof ListKbDocumentsApiV1AiKbDocumentsGetErrors];
+
+export type ListKbDocumentsApiV1AiKbDocumentsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseKbDocumentRead;
+};
+
+export type ListKbDocumentsApiV1AiKbDocumentsGetResponse = ListKbDocumentsApiV1AiKbDocumentsGetResponses[keyof ListKbDocumentsApiV1AiKbDocumentsGetResponses];
+
+export type UploadKbDocumentApiV1AiKbDocumentsPostData = {
+    body: BodyUploadKbDocumentApiV1AiKbDocumentsPost;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/kb/documents';
+};
+
+export type UploadKbDocumentApiV1AiKbDocumentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadKbDocumentApiV1AiKbDocumentsPostError = UploadKbDocumentApiV1AiKbDocumentsPostErrors[keyof UploadKbDocumentApiV1AiKbDocumentsPostErrors];
+
+export type UploadKbDocumentApiV1AiKbDocumentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: KbIngestResponse;
+};
+
+export type UploadKbDocumentApiV1AiKbDocumentsPostResponse = UploadKbDocumentApiV1AiKbDocumentsPostResponses[keyof UploadKbDocumentApiV1AiKbDocumentsPostResponses];
+
+export type DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        doc_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/kb/documents/{doc_id}';
+};
+
+export type DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteError = DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteErrors[keyof DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteErrors];
+
+export type DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteResponse = DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteResponses[keyof DeactivateKbDocumentApiV1AiKbDocumentsDocIdDeleteResponses];
+
+export type SearchKbHybridApiV1AiKbSearchPostData = {
+    body: KbSearchRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/kb/search';
+};
+
+export type SearchKbHybridApiV1AiKbSearchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SearchKbHybridApiV1AiKbSearchPostError = SearchKbHybridApiV1AiKbSearchPostErrors[keyof SearchKbHybridApiV1AiKbSearchPostErrors];
+
+export type SearchKbHybridApiV1AiKbSearchPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RagSearchResult;
+};
+
+export type SearchKbHybridApiV1AiKbSearchPostResponse = SearchKbHybridApiV1AiKbSearchPostResponses[keyof SearchKbHybridApiV1AiKbSearchPostResponses];
+
+export type ListProposalsApiV1AiProposalsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        status?: ProposalStatus | null;
+        proposal_type?: ProposalType | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/ai/proposals';
+};
+
+export type ListProposalsApiV1AiProposalsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProposalsApiV1AiProposalsGetError = ListProposalsApiV1AiProposalsGetErrors[keyof ListProposalsApiV1AiProposalsGetErrors];
+
+export type ListProposalsApiV1AiProposalsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseAiProposalRead;
+};
+
+export type ListProposalsApiV1AiProposalsGetResponse = ListProposalsApiV1AiProposalsGetResponses[keyof ListProposalsApiV1AiProposalsGetResponses];
+
+export type ProposalDetailApiV1AiProposalsProposalIdGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/proposals/{proposal_id}';
+};
+
+export type ProposalDetailApiV1AiProposalsProposalIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProposalDetailApiV1AiProposalsProposalIdGetError = ProposalDetailApiV1AiProposalsProposalIdGetErrors[keyof ProposalDetailApiV1AiProposalsProposalIdGetErrors];
+
+export type ProposalDetailApiV1AiProposalsProposalIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiProposalRead;
+};
+
+export type ProposalDetailApiV1AiProposalsProposalIdGetResponse = ProposalDetailApiV1AiProposalsProposalIdGetResponses[keyof ProposalDetailApiV1AiProposalsProposalIdGetResponses];
+
+export type ApproveProposalApiV1AiProposalsProposalIdApprovePostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/proposals/{proposal_id}/approve';
+};
+
+export type ApproveProposalApiV1AiProposalsProposalIdApprovePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApproveProposalApiV1AiProposalsProposalIdApprovePostError = ApproveProposalApiV1AiProposalsProposalIdApprovePostErrors[keyof ApproveProposalApiV1AiProposalsProposalIdApprovePostErrors];
+
+export type ApproveProposalApiV1AiProposalsProposalIdApprovePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiProposalRead;
+};
+
+export type ApproveProposalApiV1AiProposalsProposalIdApprovePostResponse = ApproveProposalApiV1AiProposalsProposalIdApprovePostResponses[keyof ApproveProposalApiV1AiProposalsProposalIdApprovePostResponses];
+
+export type EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostData = {
+    body: ProposalEditApproveRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/proposals/{proposal_id}/edit-approve';
+};
+
+export type EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostError = EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostErrors[keyof EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostErrors];
+
+export type EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiProposalRead;
+};
+
+export type EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostResponse = EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostResponses[keyof EditApproveProposalApiV1AiProposalsProposalIdEditApprovePostResponses];
+
+export type RejectProposalApiV1AiProposalsProposalIdRejectPostData = {
+    body: ProposalRejectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/proposals/{proposal_id}/reject';
+};
+
+export type RejectProposalApiV1AiProposalsProposalIdRejectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RejectProposalApiV1AiProposalsProposalIdRejectPostError = RejectProposalApiV1AiProposalsProposalIdRejectPostErrors[keyof RejectProposalApiV1AiProposalsProposalIdRejectPostErrors];
+
+export type RejectProposalApiV1AiProposalsProposalIdRejectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiProposalRead;
+};
+
+export type RejectProposalApiV1AiProposalsProposalIdRejectPostResponse = RejectProposalApiV1AiProposalsProposalIdRejectPostResponses[keyof RejectProposalApiV1AiProposalsProposalIdRejectPostResponses];
+
+export type TranslateTextApiV1AiTranslatePostData = {
+    body: TranslateRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/translate';
+};
+
+export type TranslateTextApiV1AiTranslatePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TranslateTextApiV1AiTranslatePostError = TranslateTextApiV1AiTranslatePostErrors[keyof TranslateTextApiV1AiTranslatePostErrors];
+
+export type TranslateTextApiV1AiTranslatePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranslateResponse;
+};
+
+export type TranslateTextApiV1AiTranslatePostResponse = TranslateTextApiV1AiTranslatePostResponses[keyof TranslateTextApiV1AiTranslatePostResponses];
 
 export type LoginApiV1AuthLoginPostData = {
     body: LoginRequest;
@@ -1705,6 +2466,123 @@ export type SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses = {
 
 export type SendQuoteApiV1B2bQuotesQuoteIdSendPostResponse = SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses[keyof SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses];
 
+export type StripeBillingWebhookApiV1BillingStripeWebhookPostData = {
+    body?: never;
+    headers?: {
+        'stripe-signature'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/billing/stripe/webhook';
+};
+
+export type StripeBillingWebhookApiV1BillingStripeWebhookPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StripeBillingWebhookApiV1BillingStripeWebhookPostError = StripeBillingWebhookApiV1BillingStripeWebhookPostErrors[keyof StripeBillingWebhookApiV1BillingStripeWebhookPostErrors];
+
+export type StripeBillingWebhookApiV1BillingStripeWebhookPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: string;
+    };
+};
+
+export type StripeBillingWebhookApiV1BillingStripeWebhookPostResponse = StripeBillingWebhookApiV1BillingStripeWebhookPostResponses[keyof StripeBillingWebhookApiV1BillingStripeWebhookPostResponses];
+
+export type TopupCreditsApiV1BillingTopupPostData = {
+    body: TopupCreditsRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/billing/topup';
+};
+
+export type TopupCreditsApiV1BillingTopupPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TopupCreditsApiV1BillingTopupPostError = TopupCreditsApiV1BillingTopupPostErrors[keyof TopupCreditsApiV1BillingTopupPostErrors];
+
+export type TopupCreditsApiV1BillingTopupPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TopupPaymentRead;
+};
+
+export type TopupCreditsApiV1BillingTopupPostResponse = TopupCreditsApiV1BillingTopupPostResponses[keyof TopupCreditsApiV1BillingTopupPostResponses];
+
+export type ListBillingUsageApiV1BillingUsageGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/billing/usage';
+};
+
+export type ListBillingUsageApiV1BillingUsageGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListBillingUsageApiV1BillingUsageGetError = ListBillingUsageApiV1BillingUsageGetErrors[keyof ListBillingUsageApiV1BillingUsageGetErrors];
+
+export type ListBillingUsageApiV1BillingUsageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseUsageLedgerRead;
+};
+
+export type ListBillingUsageApiV1BillingUsageGetResponse = ListBillingUsageApiV1BillingUsageGetResponses[keyof ListBillingUsageApiV1BillingUsageGetResponses];
+
+export type GetBillingWalletApiV1BillingWalletGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/billing/wallet';
+};
+
+export type GetBillingWalletApiV1BillingWalletGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBillingWalletApiV1BillingWalletGetError = GetBillingWalletApiV1BillingWalletGetErrors[keyof GetBillingWalletApiV1BillingWalletGetErrors];
+
+export type GetBillingWalletApiV1BillingWalletGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CreditWalletRead;
+};
+
+export type GetBillingWalletApiV1BillingWalletGetResponse = GetBillingWalletApiV1BillingWalletGetResponses[keyof GetBillingWalletApiV1BillingWalletGetResponses];
+
 export type LiveCheckSkuApiV1CatalogLiveCheckGetData = {
     body?: never;
     headers?: {
@@ -2009,6 +2887,99 @@ export type ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses
 
 export type ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponse = ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses[keyof ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses];
 
+export type ListChannelAccountsApiV1ChannelsAccountsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/channels/accounts';
+};
+
+export type ListChannelAccountsApiV1ChannelsAccountsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChannelAccountsApiV1ChannelsAccountsGetError = ListChannelAccountsApiV1ChannelsAccountsGetErrors[keyof ListChannelAccountsApiV1ChannelsAccountsGetErrors];
+
+export type ListChannelAccountsApiV1ChannelsAccountsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseChannelAccountRead;
+};
+
+export type ListChannelAccountsApiV1ChannelsAccountsGetResponse = ListChannelAccountsApiV1ChannelsAccountsGetResponses[keyof ListChannelAccountsApiV1ChannelsAccountsGetResponses];
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/channels/consents';
+};
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetError = ListChannelConsentsApiV1ChannelsConsentsGetErrors[keyof ListChannelConsentsApiV1ChannelsConsentsGetErrors];
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseChannelConsentRead;
+};
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetResponse = ListChannelConsentsApiV1ChannelsConsentsGetResponses[keyof ListChannelConsentsApiV1ChannelsConsentsGetResponses];
+
+export type ListChannelDlqApiV1ChannelsDlqGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/channels/dlq';
+};
+
+export type ListChannelDlqApiV1ChannelsDlqGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChannelDlqApiV1ChannelsDlqGetError = ListChannelDlqApiV1ChannelsDlqGetErrors[keyof ListChannelDlqApiV1ChannelsDlqGetErrors];
+
+export type ListChannelDlqApiV1ChannelsDlqGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseChannelDlqRead;
+};
+
+export type ListChannelDlqApiV1ChannelsDlqGetResponse = ListChannelDlqApiV1ChannelsDlqGetResponses[keyof ListChannelDlqApiV1ChannelsDlqGetResponses];
+
 export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostData = {
     body?: never;
     headers?: {
@@ -2040,6 +3011,37 @@ export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses = {
 };
 
 export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponse = ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses[keyof ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses];
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/channels/suppressions';
+};
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetError = ListChannelSuppressionsApiV1ChannelsSuppressionsGetErrors[keyof ListChannelSuppressionsApiV1ChannelsSuppressionsGetErrors];
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseChannelSuppressionRead;
+};
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponse = ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses[keyof ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses];
 
 export type RecordWhatsappOptInApiV1ChannelsWhatsappConsentOptInPostData = {
     body: ConsentOptInRequest;
@@ -2941,6 +3943,34 @@ export type AdvanceOnboardingStageApiV1OnboardingAdvancePostResponses = {
 
 export type AdvanceOnboardingStageApiV1OnboardingAdvancePostResponse = AdvanceOnboardingStageApiV1OnboardingAdvancePostResponses[keyof AdvanceOnboardingStageApiV1OnboardingAdvancePostResponses];
 
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostData = {
+    body: VerifyEmailDnsRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/onboarding/email/verify-dns';
+};
+
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostError = VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostErrors[keyof VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostErrors];
+
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailDnsRead;
+};
+
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostResponse = VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostResponses[keyof VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostResponses];
+
 export type UpdateOnboardingPresetApiV1OnboardingPresetPatchData = {
     body: UpdateOnboardingPresetRequest;
     headers?: {
@@ -2968,6 +3998,34 @@ export type UpdateOnboardingPresetApiV1OnboardingPresetPatchResponses = {
 };
 
 export type UpdateOnboardingPresetApiV1OnboardingPresetPatchResponse = UpdateOnboardingPresetApiV1OnboardingPresetPatchResponses[keyof UpdateOnboardingPresetApiV1OnboardingPresetPatchResponses];
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostData = {
+    body: SandboxRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/onboarding/sandbox-test';
+};
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostError = RunSandboxTestApiV1OnboardingSandboxTestPostErrors[keyof RunSandboxTestApiV1OnboardingSandboxTestPostErrors];
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SandboxResult;
+};
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostResponse = RunSandboxTestApiV1OnboardingSandboxTestPostResponses[keyof RunSandboxTestApiV1OnboardingSandboxTestPostResponses];
 
 export type GetOnboardingStateApiV1OnboardingStateGetData = {
     body?: never;
@@ -3124,6 +4182,34 @@ export type ListInventoryLedgerApiV1OrdersInventoryLedgerGetResponses = {
 };
 
 export type ListInventoryLedgerApiV1OrdersInventoryLedgerGetResponse = ListInventoryLedgerApiV1OrdersInventoryLedgerGetResponses[keyof ListInventoryLedgerApiV1OrdersInventoryLedgerGetResponses];
+
+export type ListWarehousesApiV1OrdersWarehousesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/orders/warehouses';
+};
+
+export type ListWarehousesApiV1OrdersWarehousesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListWarehousesApiV1OrdersWarehousesGetError = ListWarehousesApiV1OrdersWarehousesGetErrors[keyof ListWarehousesApiV1OrdersWarehousesGetErrors];
+
+export type ListWarehousesApiV1OrdersWarehousesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WarehouseListRead;
+};
+
+export type ListWarehousesApiV1OrdersWarehousesGetResponse = ListWarehousesApiV1OrdersWarehousesGetResponses[keyof ListWarehousesApiV1OrdersWarehousesGetResponses];
 
 export type GetOrderApiV1OrdersOrderIdGetData = {
     body?: never;

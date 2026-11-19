@@ -4,6 +4,7 @@ export default defineConfig({
   input: "../../contracts/openapi.json",
   output: {
     path: "src/lib/api-client",
+    clean: false, // The directory also contains handwritten adapters.
     format: "prettier",
   },
   plugins: [

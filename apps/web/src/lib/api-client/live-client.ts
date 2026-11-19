@@ -1,5 +1,5 @@
 // Live API adapter: typed wrappers over the @hey-api/openapi-ts generated
-// SDK (contracts/openapi.json, Plan 01-03). Every call goes through the
+// SDK (contracts/openapi.json). Every call goes through the
 // Next.js BFF proxy (/api/bff -> FastAPI /api/v1/*) via the shared generated
 // client configured in @/lib/api, so session cookies and the 401-refresh
 // flow keep working exactly as bffFetch does.
@@ -12,12 +12,15 @@
 // from `attributes`/`metadata_json` or defaulted, never invented.
 //
 // Mock mode never reaches this file: data-source.ts branches on
-// shouldUseMockApi() first. Plan 04 / not-yet-in-contract calls live in
-// ./plan04-bridge.ts instead.
+// shouldUseMockApi() first for fixture-backed reads.
 import { getBffClient, bffFetch } from "@/lib/api";
 import { BffApiError, type ProblemDetail } from "@/lib/contracts";
 import type {
+  AiCapability,
+  AutonomyLevel,
   ChannelStatus,
+  ProposalStatus,
+  ProposalType,
   ChannelType,
   ConversationStatus,
   FulfillmentStatus,
@@ -34,6 +37,11 @@ import type {
   QuoteStatus,
 } from "@/lib/contracts";
 import type {
+  AssistantChatRequest,
+  AssistantChatResponse,
+  CapabilityPolicyItem,
+  CreditWalletRead,
+  KbDocumentRead,
   ConversationRead,
   ConvertQuoteResponse,
   CustomerRead,
@@ -49,12 +57,32 @@ import type {
   QuoteItemRead,
   QuotePdfResponse,
   QuoteRead,
+  SandboxResult,
   ShipmentRead,
   VariantMappingWithLabelRead,
   VariantRead,
 } from "./types.gen";
 import {
   acceptQuoteApiV1B2bQuotesQuoteIdAcceptPost,
+  approveProposalApiV1AiProposalsProposalIdApprovePost,
+  assistantChatApiV1AiAssistantChatPost,
+  deactivateKbDocumentApiV1AiKbDocumentsDocIdDelete,
+  editApproveProposalApiV1AiProposalsProposalIdEditApprovePost,
+  getBillingWalletApiV1BillingWalletGet,
+  getCapabilitiesApiV1AiCapabilitiesGet,
+  listKbDocumentsApiV1AiKbDocumentsGet,
+  listProposalsApiV1AiProposalsGet,
+  listWarehousesApiV1OrdersWarehousesGet,
+  rejectProposalApiV1AiProposalsProposalIdRejectPost,
+  translateTextApiV1AiTranslatePost,
+  listChannelAccountsApiV1ChannelsAccountsGet,
+  listChannelConsentsApiV1ChannelsConsentsGet,
+  listChannelDlqApiV1ChannelsDlqGet,
+  listChannelSuppressionsApiV1ChannelsSuppressionsGet,
+  runSandboxTestApiV1OnboardingSandboxTestPost,
+  verifyEmailDnsApiV1OnboardingEmailVerifyDnsPost,
+  updateCapabilitiesApiV1AiCapabilitiesPatch,
+  uploadKbDocumentApiV1AiKbDocumentsPost,
   advanceOnboardingStageApiV1OnboardingAdvancePost,
   completeWhatsappEmbeddedSignupApiV1ChannelsWhatsappEmbeddedSignupPost,
   convertQuoteToOrderApiV1B2bQuotesQuoteIdConvertToOrderPost,
@@ -87,6 +115,7 @@ import {
   updateVariantApiV1CatalogVariantsVariantIdPatch,
   verifyPaymentRecordApiV1FinancePaymentsPaymentIdVerifyPost,
 } from "./sdk.gen";
+import type { AiProposalItem } from "@/components/ai/proposal-review-card";
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
 import type { InboxMessage } from "@/components/inbox/message-thread";
 
@@ -401,24 +430,23 @@ export function unwrap<T>(result: {
   return result.data;
 }
 
-// ---------------------------------------------------------------------------
-// Warehouse: the backend has no warehouse list/default endpoint, and both
-// convert-to-order and ship require a caller-supplied warehouse_id UUID.
-// Call sites pass NEXT_PUBLIC_DEFAULT_WAREHOUSE_ID when configured; without
-// it the adapter fails loudly before any network call instead of letting
-// the backend answer 422. (Mock mode never reaches this file.)
-// ---------------------------------------------------------------------------
+/** Resolve the authenticated tenant's warehouse without guessing among multiple entries. */
+async function resolveWarehouseId(): Promise<string> {
+  const { default_warehouse_id, items } = unwrap(
+    await listWarehousesApiV1OrdersWarehousesGet({ client: getBffClient() }),
+  );
+  if (default_warehouse_id) return default_warehouse_id;
+  if (items.length === 1) return items[0].id;
 
-export function requireDefaultWarehouseId(): string {
-  const id = process.env.NEXT_PUBLIC_DEFAULT_WAREHOUSE_ID;
-  if (id && id.trim()) return id.trim();
+  const ambiguous = items.length > 1;
   throw new BffApiError({
-    type: "https://erp.local/errors/no-warehouse-configured",
-    title: "No warehouse configured",
+    type: "https://erp.local/errors/warehouse-selection",
+    title: "No unique warehouse",
     status: 0,
-    detail:
-      "No warehouse configured: set NEXT_PUBLIC_DEFAULT_WAREHOUSE_ID to a warehouse UUID (backend requires warehouse_id for convert-to-order and ship; there is no warehouse list/default endpoint yet).",
-    code: "ERR_NO_WAREHOUSE_CONFIGURED",
+    detail: ambiguous
+      ? "Multiple warehouses are available. Set a default warehouse for this workspace before continuing."
+      : "No warehouse is available. Add stock to a warehouse for this workspace before continuing.",
+    code: ambiguous ? "ERR_WAREHOUSE_SELECTION_REQUIRED" : "ERR_NO_WAREHOUSE_CONFIGURED",
   });
 }
 
@@ -997,7 +1025,7 @@ export async function convertQuoteToOrder(
       client: getBffClient(),
       path: { quote_id: quoteId },
       body: {
-        warehouse_id: opts.warehouseId ?? requireDefaultWarehouseId(),
+        warehouse_id: opts.warehouseId ?? await resolveWarehouseId(),
         deposit_ratio: opts.depositRatio,
         order_mode: opts.orderMode,
       },
@@ -1079,7 +1107,7 @@ export async function shipOrder(
       client: getBffClient(),
       path: { order_id: orderId },
       body: {
-        warehouse_id: opts.warehouseId ?? requireDefaultWarehouseId(),
+        warehouse_id: opts.warehouseId ?? await resolveWarehouseId(),
         tracking_number: opts.trackingNumber,
         carrier_code: opts.carrierCode ?? "DHL",
         shipment_mode: opts.shipmentMode ?? "parcel",
@@ -1288,4 +1316,185 @@ export async function getCustomer(customerId: string): Promise<CustomerRead> {
       path: { customer_id: customerId },
     }),
   );
+}
+
+// Plan 04: generated requests with explicit adapters for UI-only presentation shapes.
+export type CapabilityConfigItem = Pick<CapabilityPolicyItem,
+  "capability" | "configured_autonomy" | "max_allowed_autonomy">;
+export type KbDocumentItem = Pick<KbDocumentRead, "id" | "title" | "chunk_count" | "status" | "created_at">;
+export type BillingWalletResponse = Pick<CreditWalletRead,
+  "plan_tier" | "included_credits_remaining" | "topup_credits_balance" | "auto_downgrade_to_l0">;
+
+function mapCitations(values: Array<Record<string, unknown>> = []): AiProposalItem["citations"] {
+  return values.flatMap(({ doc_id, chunk_id, score }) =>
+    typeof doc_id === "string" && typeof chunk_id === "string" && typeof score === "number"
+      ? [{ doc_id, chunk_id, score }]
+      : [],
+  );
+}
+
+export type AssistantChatResult = Pick<AssistantChatResponse,
+  "reply_text" | "should_abstain" | "degraded_to_l0"> & {
+    citations: AiProposalItem["citations"];
+    tool_calls: Array<{ tool_call_id?: string; tool_name?: string }>;
+};
+
+export async function listProposals(
+  status: ProposalStatus,
+  typeFilter: "" | ProposalType,
+): Promise<PaginatedResponse<AiProposalItem>> {
+  const data = unwrap(await listProposalsApiV1AiProposalsGet({
+    client: getBffClient(),
+    query: { status, limit: 20, offset: 0, proposal_type: typeFilter || undefined },
+  }));
+  return {
+    ...data,
+    items: data.items.map((proposal) => ({
+      ...proposal,
+      citations: mapCitations(proposal.citations),
+      confidence_score: Number(proposal.confidence_score),
+      estimated_margin_pct: proposal.estimated_margin_pct === null
+        ? null : Number(proposal.estimated_margin_pct),
+      source_tool_call_id: asString(proposal.proposed_payload.source_tool_call_id) || null,
+    })),
+  };
+}
+
+export async function fetchPendingProposalsCount(): Promise<{ total: number }> {
+  const { total } = unwrap(await listProposalsApiV1AiProposalsGet({
+    client: getBffClient(), query: { status: "pending", limit: 1, offset: 0 },
+  }));
+  return { total };
+}
+
+export async function approveProposal(id: string) {
+  return unwrap(await approveProposalApiV1AiProposalsProposalIdApprovePost({
+    client: getBffClient(), path: { proposal_id: id },
+  }));
+}
+
+export async function editApproveProposal(id: string, editedPayload: Record<string, unknown>) {
+  return unwrap(await editApproveProposalApiV1AiProposalsProposalIdEditApprovePost({
+    client: getBffClient(), path: { proposal_id: id }, body: { edited_payload: editedPayload },
+  }));
+}
+
+export async function rejectProposal(id: string, reason: string) {
+  return unwrap(await rejectProposalApiV1AiProposalsProposalIdRejectPost({
+    client: getBffClient(), path: { proposal_id: id }, body: { reason },
+  }));
+}
+
+export async function fetchCapabilities() {
+  return unwrap(await getCapabilitiesApiV1AiCapabilitiesGet({ client: getBffClient() }));
+}
+
+export async function updateCapability(capability: AiCapability, autonomy: AutonomyLevel) {
+  return unwrap(await updateCapabilitiesApiV1AiCapabilitiesPatch({
+    client: getBffClient(), body: { settings: { [capability]: autonomy } },
+  }));
+}
+
+export async function fetchWallet(): Promise<BillingWalletResponse> {
+  return unwrap(await getBillingWalletApiV1BillingWalletGet({ client: getBffClient() }));
+}
+
+export async function fetchKbDocuments() {
+  return unwrap(await listKbDocumentsApiV1AiKbDocumentsGet({ client: getBffClient() }));
+}
+
+export async function uploadKbDocument(form: FormData) {
+  const file = form.get("file");
+  const title = form.get("title");
+  if (!(file instanceof Blob) || typeof title !== "string") {
+    throw new TypeError("A knowledge base upload requires a file and title.");
+  }
+  return unwrap(await uploadKbDocumentApiV1AiKbDocumentsPost({
+    client: getBffClient(),
+    // hey-api 0.65 emits string for OpenAPI binary; its multipart serializer accepts File.
+    body: { file: file as unknown as string, title },
+  }));
+}
+
+export async function deleteKbDocument(id: string) {
+  return unwrap(await deactivateKbDocumentApiV1AiKbDocumentsDocIdDelete({
+    client: getBffClient(), path: { doc_id: id },
+  }));
+}
+
+export async function assistantChat(body: AssistantChatRequest): Promise<AssistantChatResult> {
+  const data = unwrap(await assistantChatApiV1AiAssistantChatPost({ client: getBffClient(), body }));
+  return {
+    ...data,
+    citations: mapCitations(data.citations),
+    tool_calls: (data.tool_calls ?? []).map(({ tool_call_id, tool_name }) => ({
+      tool_call_id: asString(tool_call_id) || undefined,
+      tool_name: asString(tool_name) || undefined,
+    })),
+  };
+}
+
+export async function translateText(text: string, targetLang: string) {
+  return unwrap(await translateTextApiV1AiTranslatePost({
+    client: getBffClient(), body: { text, target_lang: targetLang },
+  }));
+}
+
+// Onboarding readiness probes and channel settings reads (generated SDK).
+export async function verifyEmailDns(domain: string) {
+  return unwrap(await verifyEmailDnsApiV1OnboardingEmailVerifyDnsPost({
+    client: getBffClient(), body: { domain },
+  }));
+}
+
+export type SandboxScenarioId = "b2c_wismo" | "strict_rag_warranty" | "b2b_moq_quote";
+
+export async function runSandboxTest(
+  scenarioId: SandboxScenarioId,
+  message: string,
+): Promise<SandboxResult> {
+  return unwrap(await runSandboxTestApiV1OnboardingSandboxTestPost({
+    client: getBffClient(), body: { scenario_id: scenarioId, message },
+  }));
+}
+
+export async function fetchChannelAccounts(): Promise<PaginatedResponse<ChannelAccountApiItem>> {
+  const page = unwrap(await listChannelAccountsApiV1ChannelsAccountsGet({
+    client: getBffClient(), query: { limit: 20, offset: 0 },
+  }));
+  return {
+    ...page,
+    items: page.items.map(({ rate_limit_profile, ...account }) => ({
+      ...account,
+      rate_limit_profile: {
+        mps: rate_limit_profile.mps ?? undefined,
+        coexistence: rate_limit_profile.coexistence ?? undefined,
+      },
+    })),
+  };
+}
+
+export async function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
+  const page = unwrap(await listChannelDlqApiV1ChannelsDlqGet({
+    client: getBffClient(), query: { limit: 20, offset: 0 },
+  }));
+  return {
+    ...page,
+    items: page.items.map((row) => ({
+      ...row,
+      external_event_id: row.external_event_id ?? "",
+    })),
+  };
+}
+
+export async function fetchChannelConsents(): Promise<PaginatedResponse<ConsentLogApiItem>> {
+  return unwrap(await listChannelConsentsApiV1ChannelsConsentsGet({
+    client: getBffClient(), query: { limit: 20, offset: 0 },
+  }));
+}
+
+export async function fetchChannelSuppressions(): Promise<PaginatedResponse<SuppressionLogApiItem>> {
+  return unwrap(await listChannelSuppressionsApiV1ChannelsSuppressionsGet({
+    client: getBffClient(), query: { limit: 20, offset: 0 },
+  }));
 }

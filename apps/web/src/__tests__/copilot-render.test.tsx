@@ -140,7 +140,7 @@ describe("Task 5.3 ContextDrawer & FloatingCopilot", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
+        const { url } = normalizeFetchInput(input);
         if (url.includes("/ai/proposals")) {
           return new Response(
             JSON.stringify({ items: [], total: 6, limit: 1, offset: 0, has_more: true }),

@@ -4,12 +4,12 @@ import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
-import { ProposalReviewCard, type AiProposalItem } from "@/components/ai/proposal-review-card";
+import { ProposalReviewCard } from "@/components/ai/proposal-review-card";
 import {
   approveProposal,
   editApproveProposal,
   rejectProposal,
-} from "@/lib/api-client/plan04-bridge";
+} from "@/lib/api-client/live-client";
 import { fetchPendingProposalsCount, fetchProposals } from "@/lib/data-source";
 import type { ProposalStatus, ProposalType } from "@/lib/contracts";
 
@@ -21,7 +21,7 @@ export default function AiProposalsPage() {
 
   const proposalsQuery = useQuery({
     queryKey: ["ai", "proposals", statusFilter, typeFilter],
-    queryFn: () => fetchProposals<AiProposalItem>(statusFilter, typeFilter),
+    queryFn: () => fetchProposals(statusFilter, typeFilter),
   });
 
   const pendingCountQuery = useQuery({

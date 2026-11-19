@@ -177,6 +177,7 @@ class AsyncMultiProviderClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         settings = get_settings()
+        self.openai_base_url = settings.OPENAI_BASE_URL.rstrip("/")
         self.keys = {
             "openai": settings.OPENAI_API_KEY,
             "anthropic": settings.ANTHROPIC_API_KEY,
@@ -250,7 +251,10 @@ class AsyncMultiProviderClient:
         api_key = self.keys.get(provider)
         if not api_key:
             raise RuntimeError(f"Provider '{provider}' API key is not configured.")
-        return await self._request(api_key, model_id, provider, messages, max_tokens, temperature)
+        return await self._request(
+            api_key, model_id, provider, messages, max_tokens, temperature,
+            openai_base_url=self.openai_base_url,
+        )
 
     async def _request(
         self,
@@ -260,6 +264,8 @@ class AsyncMultiProviderClient:
         messages: list[dict[str, Any]],
         max_tokens: int,
         temperature: float,
+        *,
+        openai_base_url: str = "https://api.openai.com/v1",
     ) -> LlmProviderResponse:
         # Provider exceptions may include requests, URLs or response material. Never expose them.
         try:
@@ -270,6 +276,7 @@ class AsyncMultiProviderClient:
                 messages,
                 max_tokens,
                 temperature,
+                openai_base_url=openai_base_url,
             )
         except (httpx.HTTPError, TypeError, ValueError, IndexError, KeyError, AttributeError):
             raise RuntimeError("LLM provider request failed") from None
@@ -285,6 +292,8 @@ class AsyncMultiProviderClient:
         messages: list[dict[str, Any]],
         max_tokens: int,
         temperature: float,
+        *,
+        openai_base_url: str,
     ) -> LlmProviderResponse:
         async with httpx.AsyncClient(
             timeout=45.0,
@@ -293,7 +302,7 @@ class AsyncMultiProviderClient:
         ) as client:
             if provider in {"openai", "deepseek"}:
                 base_url = (
-                    "https://api.openai.com/v1/chat/completions"
+                    f"{openai_base_url}/chat/completions"
                     if provider == "openai"
                     else "https://api.deepseek.com/v1/chat/completions"
                 )
