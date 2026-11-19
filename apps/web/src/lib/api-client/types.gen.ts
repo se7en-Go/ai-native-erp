@@ -201,6 +201,11 @@ export type ChannelVolume = {
 
 export type ConfidenceLevel = 'deterministic' | 'human_verified' | 'probabilistic';
 
+export type ConnectMessagingResponse = {
+    channel_account_id: string;
+    external_account_id: string;
+};
+
 export type ConnectResponse = {
     channel_account_id: string;
     external_account_id: string;
@@ -517,6 +522,12 @@ export type IdentityType = 'email' | 'phone_e164' | 'whatsapp_waid' | 'whatsapp_
 
 export type Incoterm = 'EXW' | 'FOB' | 'CIF' | 'DDP' | 'DAP';
 
+export type InstagramConnectRequest = {
+    access_token: string;
+    display_name: string;
+    ig_account_id: string;
+};
+
 export type InventoryBalanceItemRead = {
     available_qty: number;
     on_hand_qty: number;
@@ -681,6 +692,12 @@ export type MessageRead = {
 };
 
 export type MessageSenderType = 'customer' | 'human_agent' | 'ai_agent' | 'system';
+
+export type MessengerConnectRequest = {
+    display_name: string;
+    page_access_token: string;
+    page_id: string;
+};
 
 export type MoqTierInputInput = {
     min_qty: number;
@@ -1623,6 +1640,11 @@ export type TaskUpdate = {
     priority?: ('low' | 'normal' | 'high') | null;
     status?: ('open' | 'done' | 'cancelled') | null;
     title?: string | null;
+};
+
+export type TelegramConnectRequest = {
+    bot_token: string;
+    display_name: string;
 };
 
 export type TenantMembershipOption = {
@@ -3586,6 +3608,62 @@ export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses = {
 
 export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponse = ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses[keyof ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses];
 
+export type ConnectInstagramApiV1ChannelsInstagramConnectPostData = {
+    body: InstagramConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/instagram/connect';
+};
+
+export type ConnectInstagramApiV1ChannelsInstagramConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectInstagramApiV1ChannelsInstagramConnectPostError = ConnectInstagramApiV1ChannelsInstagramConnectPostErrors[keyof ConnectInstagramApiV1ChannelsInstagramConnectPostErrors];
+
+export type ConnectInstagramApiV1ChannelsInstagramConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectMessagingResponse;
+};
+
+export type ConnectInstagramApiV1ChannelsInstagramConnectPostResponse = ConnectInstagramApiV1ChannelsInstagramConnectPostResponses[keyof ConnectInstagramApiV1ChannelsInstagramConnectPostResponses];
+
+export type ConnectMessengerApiV1ChannelsMessengerConnectPostData = {
+    body: MessengerConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/messenger/connect';
+};
+
+export type ConnectMessengerApiV1ChannelsMessengerConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectMessengerApiV1ChannelsMessengerConnectPostError = ConnectMessengerApiV1ChannelsMessengerConnectPostErrors[keyof ConnectMessengerApiV1ChannelsMessengerConnectPostErrors];
+
+export type ConnectMessengerApiV1ChannelsMessengerConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectMessagingResponse;
+};
+
+export type ConnectMessengerApiV1ChannelsMessengerConnectPostResponse = ConnectMessengerApiV1ChannelsMessengerConnectPostResponses[keyof ConnectMessengerApiV1ChannelsMessengerConnectPostResponses];
+
 export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetData = {
     body?: never;
     headers?: {
@@ -3616,6 +3694,34 @@ export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses = {
 };
 
 export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponse = ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses[keyof ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses];
+
+export type ConnectTelegramApiV1ChannelsTelegramConnectPostData = {
+    body: TelegramConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/telegram/connect';
+};
+
+export type ConnectTelegramApiV1ChannelsTelegramConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectTelegramApiV1ChannelsTelegramConnectPostError = ConnectTelegramApiV1ChannelsTelegramConnectPostErrors[keyof ConnectTelegramApiV1ChannelsTelegramConnectPostErrors];
+
+export type ConnectTelegramApiV1ChannelsTelegramConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectMessagingResponse;
+};
+
+export type ConnectTelegramApiV1ChannelsTelegramConnectPostResponse = ConnectTelegramApiV1ChannelsTelegramConnectPostResponses[keyof ConnectTelegramApiV1ChannelsTelegramConnectPostResponses];
 
 export type RecordWhatsappOptInApiV1ChannelsWhatsappConsentOptInPostData = {
     body: ConsentOptInRequest;

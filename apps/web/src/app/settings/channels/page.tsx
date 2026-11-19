@@ -4,14 +4,20 @@ import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, ShieldCheck, Ban } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import {
+  MessagingChannelCard,
+} from "@/components/channels/messaging-channel-cards";
 import { replayDlqEvent } from "@/lib/api-client/live-client";
 import {
+  connectMessagingChannel,
   fetchChannelAccounts,
   fetchChannelConsents,
   fetchChannelDlq,
   fetchChannelSuppressions,
   fetchPendingProposalsCount,
 } from "@/lib/data-source";
+
+const MESSAGING_CHANNELS = ["messenger", "instagram_dm", "telegram"] as const;
 
 export default function ChannelsSettingsPage() {
   const queryClient = useQueryClient();
@@ -49,6 +55,19 @@ export default function ChannelsSettingsPage() {
     },
   });
 
+  const connectMutation = useMutation({
+    mutationFn: ({
+      kind,
+      payload,
+    }: {
+      kind: (typeof MESSAGING_CHANNELS)[number];
+      payload: Parameters<typeof connectMessagingChannel>[1];
+    }) => connectMessagingChannel(kind, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["channels", "accounts"] });
+    },
+  });
+
   return (
     <AppShell
       currentPath="/settings/channels"
@@ -62,6 +81,28 @@ export default function ChannelsSettingsPage() {
           <p className="text-xs text-slate-500">
             Monitor rate-limit buckets (Coexistence vs Cloud API), replay DLQ webhooks, and audit consent/suppression records.
           </p>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs">
+          <h2 className="text-sm font-bold text-slate-900">
+            Messenger, Instagram DM & Telegram Business
+          </h2>
+          <p className="text-slate-500">
+            Bind Meta and Telegram messaging accounts. Provider tokens are envelope-encrypted at
+            rest and every webhook is verified against the raw request body.
+          </p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            {MESSAGING_CHANNELS.map((kind) => (
+              <MessagingChannelCard
+                key={kind}
+                kind={kind}
+                connected={(accountsQuery.data?.items ?? []).some(
+                  (acct) => acct.channel_type === kind
+                )}
+                onSubmit={(payload) => connectMutation.mutateAsync({ kind, payload })}
+              />
+            ))}
+          </div>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs">

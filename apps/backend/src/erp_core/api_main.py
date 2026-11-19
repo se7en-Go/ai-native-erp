@@ -28,6 +28,9 @@ from erp_core.ai_engine.sandbox import router as sandbox_router
 from erp_core.ai_engine.semantic_cache import SemanticCacheService
 from erp_core.billing.router import router as billing_router
 from erp_core.catalog.router import router as catalog_router
+from erp_core.channels.adapters.instagram_dm import instagram_router
+from erp_core.channels.adapters.messenger import messenger_router
+from erp_core.channels.adapters.telegram import telegram_router
 from erp_core.channels.adapters.whatsapp import whatsapp_router
 from erp_core.channels.ecommerce.connectors_router import router as connectors_router
 from erp_core.channels.ecommerce.shopify_router import router as shopify_router
@@ -120,6 +123,9 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(dlq_router)
     app.include_router(whatsapp_router)
+    app.include_router(messenger_router)
+    app.include_router(instagram_router)
+    app.include_router(telegram_router)
     app.include_router(widget_router)
     app.include_router(inbox_router)
     app.include_router(customer_router)

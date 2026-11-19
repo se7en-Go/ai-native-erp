@@ -1030,6 +1030,25 @@
         "title": "ConfidenceLevel",
         "type": "string"
       },
+      "ConnectMessagingResponse": {
+        "properties": {
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "external_account_id": {
+            "title": "External Account Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_account_id",
+          "external_account_id"
+        ],
+        "title": "ConnectMessagingResponse",
+        "type": "object"
+      },
       "ConnectResponse": {
         "properties": {
           "channel_account_id": {
@@ -2790,6 +2809,34 @@
         "title": "Incoterm",
         "type": "string"
       },
+      "InstagramConnectRequest": {
+        "properties": {
+          "access_token": {
+            "format": "password",
+            "title": "Access Token",
+            "type": "string",
+            "writeOnly": true
+          },
+          "display_name": {
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "ig_account_id": {
+            "pattern": "^[0-9]{1,32}$",
+            "title": "Ig Account Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ig_account_id",
+          "access_token",
+          "display_name"
+        ],
+        "title": "InstagramConnectRequest",
+        "type": "object"
+      },
       "InventoryBalanceItemRead": {
         "properties": {
           "available_qty": {
@@ -3585,6 +3632,34 @@
         ],
         "title": "MessageSenderType",
         "type": "string"
+      },
+      "MessengerConnectRequest": {
+        "properties": {
+          "display_name": {
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "page_access_token": {
+            "format": "password",
+            "title": "Page Access Token",
+            "type": "string",
+            "writeOnly": true
+          },
+          "page_id": {
+            "pattern": "^[0-9]{1,32}$",
+            "title": "Page Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id",
+          "page_access_token",
+          "display_name"
+        ],
+        "title": "MessengerConnectRequest",
+        "type": "object"
       },
       "MoqTierInput-Input": {
         "properties": {
@@ -8880,6 +8955,28 @@
         "title": "TaskUpdate",
         "type": "object"
       },
+      "TelegramConnectRequest": {
+        "properties": {
+          "bot_token": {
+            "format": "password",
+            "title": "Bot Token",
+            "type": "string",
+            "writeOnly": true
+          },
+          "display_name": {
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bot_token",
+          "display_name"
+        ],
+        "title": "TelegramConnectRequest",
+        "type": "object"
+      },
       "TenantMembershipOption": {
         "properties": {
           "is_active": {
@@ -13979,6 +14076,124 @@
         ]
       }
     },
+    "/api/v1/channels/instagram/connect": {
+      "post": {
+        "operationId": "connect_instagram_api_v1_channels_instagram_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstagramConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectMessagingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Instagram",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/messenger/connect": {
+      "post": {
+        "operationId": "connect_messenger_api_v1_channels_messenger_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessengerConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectMessagingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Messenger",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
     "/api/v1/channels/suppressions": {
       "get": {
         "operationId": "list_channel_suppressions_api_v1_channels_suppressions_get",
@@ -14046,6 +14261,65 @@
           }
         },
         "summary": "List Channel Suppressions",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/telegram/connect": {
+      "post": {
+        "operationId": "connect_telegram_api_v1_channels_telegram_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectMessagingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Telegram",
         "tags": [
           "channels"
         ]

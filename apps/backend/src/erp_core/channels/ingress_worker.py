@@ -52,6 +52,9 @@ _WORKER_CHANNELS: tuple[ChannelType, ...] = (
     ChannelType.WHATSAPP_COEXISTENCE,
     ChannelType.EMAIL,
     ChannelType.WEB_LIVECHAT,
+    ChannelType.MESSENGER,
+    ChannelType.INSTAGRAM_DM,
+    ChannelType.TELEGRAM,
 )
 
 
@@ -178,6 +181,40 @@ async def _link_extra_identity(
     )
 
 
+async def _resolve_telegram_customer(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    account_id: uuid.UUID,
+    thread: str,
+    display_name: str,
+) -> uuid.UUID:
+    # The schema has no Telegram IdentityType. Serialize first contact per scoped
+    # thread and reuse that customer even after the previous ticket was resolved.
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"telegram:{tenant_id}:{account_id}:{thread}"},
+    )
+    existing = await session.scalar(
+        text(
+            "SELECT customer_id FROM conversations WHERE tenant_id = :tid "
+            "AND channel_account_id = :aid AND external_thread_id = :thread "
+            "ORDER BY updated_at DESC, id DESC LIMIT 1"
+        ),
+        {"tid": tenant_id, "aid": account_id, "thread": thread},
+    )
+    if existing is not None:
+        return cast(uuid.UUID, existing)
+    customer_id = uuid.uuid4()
+    await session.execute(
+        text(
+            "INSERT INTO customers (id, tenant_id, customer_type, display_name) "
+            "VALUES (:id, :tid, 'b2c_consumer', :name)"
+        ),
+        {"id": customer_id, "tid": tenant_id, "name": display_name},
+    )
+    return customer_id
+
+
 async def _persist_inbound_event(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -200,30 +237,42 @@ async def _persist_inbound_event(
                 f"Parent message {event.parent_external_id} not yet arrived"
             )
 
-    customer_id, _ = await _resolve_identity_customer(
-        session=session,
-        tenant_id=tenant_id,
-        identity_type=event.sender_identity_type,
-        raw_value=event.sender_identity_value,
-        display_name=event.sender_display_name,
-        country_hint=event.country_hint,
-    )
-    for extra_type, extra_val in event.extra_identities:
-        await _link_extra_identity(session, tenant_id, customer_id, extra_type, extra_val)
-
-    identity_id = (
-        await session.execute(
-            text(
-                "SELECT id FROM customer_identities "
-                "WHERE tenant_id = :tid AND customer_id = :cid AND identity_type = :itype LIMIT 1"
-            ),
-            {
-                "tid": tenant_id,
-                "cid": customer_id,
-                "itype": event.sender_identity_type.value,
-            },
+    identity_id = None
+    if event.sender_identity_type is None:
+        if base_channel_type != ChannelType.TELEGRAM or not event.external_thread_id:
+            raise ValueError("Channel inbound event has no supported customer identity")
+        customer_id = await _resolve_telegram_customer(
+            session,
+            tenant_id,
+            channel_account_id,
+            event.external_thread_id,
+            event.sender_display_name,
         )
-    ).scalar_one_or_none()
+    else:
+        customer_id, _ = await _resolve_identity_customer(
+            session=session,
+            tenant_id=tenant_id,
+            identity_type=event.sender_identity_type,
+            raw_value=event.sender_identity_value,
+            display_name=event.sender_display_name,
+            country_hint=event.country_hint,
+        )
+        for extra_type, extra_val in event.extra_identities:
+            await _link_extra_identity(session, tenant_id, customer_id, extra_type, extra_val)
+        identity_id = (
+            await session.execute(
+                text(
+                    "SELECT id FROM customer_identities "
+                    "WHERE tenant_id = :tid AND customer_id = :cid "
+                    "AND identity_type = :itype LIMIT 1"
+                ),
+                {
+                    "tid": tenant_id,
+                    "cid": customer_id,
+                    "itype": event.sender_identity_type.value,
+                },
+            )
+        ).scalar_one_or_none()
 
     effective_channel = (
         event.override_channel_type.value if event.override_channel_type else base_channel_type
@@ -265,7 +314,7 @@ async def _persist_inbound_event(
             )
         ).scalar_one_or_none()
 
-    if conv_id is None:
+    if conv_id is None and base_channel_type != ChannelType.TELEGRAM:
         conv_id = (
             await session.execute(
                 text(
@@ -282,6 +331,11 @@ async def _persist_inbound_event(
     opens_window = event.direction == MessageDirection.INBOUND and event.opens_csw
     csw_until = now_ts + timedelta(hours=24) if opens_window else None
     fep_until = now_ts + timedelta(days=7) if event.ctwa_clid else None
+    human_until = (
+        now_ts + timedelta(days=7)
+        if opens_window and effective_channel in (ChannelType.MESSENGER, ChannelType.INSTAGRAM_DM)
+        else None
+    )
 
     if conv_id is None:
         conv_id = uuid.uuid4()
@@ -290,10 +344,11 @@ async def _persist_inbound_event(
                 "INSERT INTO conversations ("
                 "id, tenant_id, customer_id, channel_account_id, channel_type, external_thread_id, "
                 "subject, conversation_mode, status, csw_expires_at, fep_expires_at, ctwa_clid, "
+                "human_agent_window_expires_at, "
                 "last_inbound_at, last_message_preview, unread_count, updated_at"
                 ") VALUES ("
                 ":id, :tid, :cid, :aid, :ctype, :thread, :subj, :mode, :status, "
-                ":csw, :fep, :ctwa, :last_in, :preview, :unread, now()"
+                ":csw, :fep, :ctwa, :human, :last_in, :preview, :unread, now()"
                 ")"
             ),
             {
@@ -309,6 +364,7 @@ async def _persist_inbound_event(
                 "csw": csw_until,
                 "fep": fep_until,
                 "ctwa": event.ctwa_clid,
+                "human": human_until,
                 "last_in": now_ts if event.direction == MessageDirection.INBOUND else None,
                 "preview": (event.body_text or "")[:180],
                 "unread": 1 if event.direction == MessageDirection.INBOUND else 0,
@@ -318,7 +374,8 @@ async def _persist_inbound_event(
         await session.execute(
             text(
                 "UPDATE conversations SET "
-                "csw_expires_at = COALESCE(:csw, csw_expires_at), "
+                "csw_expires_at = GREATEST(:csw, csw_expires_at), "
+                "human_agent_window_expires_at = GREATEST(:human, human_agent_window_expires_at), "
                 "fep_expires_at = COALESCE(:fep, fep_expires_at), "
                 "ctwa_clid = COALESCE(:ctwa, ctwa_clid), "
                 "last_inbound_at = CASE WHEN :is_in THEN "
@@ -337,6 +394,7 @@ async def _persist_inbound_event(
                 "csw": csw_until,
                 "fep": fep_until,
                 "ctwa": event.ctwa_clid,
+                "human": human_until,
                 "is_in": event.direction == MessageDirection.INBOUND,
                 "is_out": event.direction == MessageDirection.OUTBOUND,
                 "ts": now_ts,
@@ -413,7 +471,28 @@ async def _apply_status_event(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     status_event: NormalizedStatusEvent,
+    channel_type: str | None = None,
 ) -> uuid.UUID | None:
+    if status_event.read_through_recipient_id and channel_type:
+        # Messenger/IG receipts may carry only a watermark for the thread. Advance every
+        # outbound message at or before it in this customer's conversation, never later ones.
+        await session.execute(
+            text(
+                "UPDATE messages m SET delivery_status = :dstat FROM conversations c "
+                "WHERE m.tenant_id = :tid AND c.tenant_id = m.tenant_id "
+                "AND c.id = m.conversation_id AND m.channel_type = :channel "
+                "AND m.direction = 'outbound' AND c.external_thread_id = :thread "
+                "AND m.source_timestamp <= :ts "
+                "AND m.delivery_status IN ('queued', 'sent', 'delivered')"
+            ),
+            {
+                "dstat": status_event.delivery_status.value,
+                "tid": tenant_id,
+                "channel": channel_type,
+                "thread": status_event.read_through_recipient_id,
+                "ts": status_event.timestamp,
+            },
+        )
     updated_id = (
         await session.execute(
             text(
@@ -612,6 +691,7 @@ async def process_raw_webhook_event(
                     session=t_sess,
                     tenant_id=tenant_id,
                     status_event=status_ev,
+                    channel_type=channel_type,
                 )
                 if updated_msg_id is not None:
                     published_events.append(
