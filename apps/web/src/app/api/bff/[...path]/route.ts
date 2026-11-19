@@ -100,8 +100,13 @@ async function handleMockMode(
   const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
 
   // Keep the inbox SSE stream alive in mock mode so EventSource never
-  // reconnect-loops against a dead backend.
-  if (upstreamPath === "/api/v1/inbox/events") {
+  // reconnect-loops against a dead backend. The contract endpoint is
+  // /api/v1/inbox/stream; /events is kept only for backward compatibility
+  // with older clients.
+  if (
+    upstreamPath === "/api/v1/inbox/stream" ||
+    upstreamPath === "/api/v1/inbox/events"
+  ) {
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(": mock heartbeat\n\n"));

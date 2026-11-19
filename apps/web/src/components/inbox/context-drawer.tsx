@@ -12,81 +12,19 @@ import {
   FileText,
   Truck,
 } from "lucide-react";
-import { bffFetch } from "@/lib/api";
 import {
-  formatMoney,
-  type ConfidenceLevel,
-  type CustomerType,
-  type IdentityType,
-  type Incoterm,
-} from "@/lib/contracts";
+  liveCheckSku,
+  mergeCustomers,
+  splitCustomers,
+} from "@/lib/api-client/live-client";
+import type { LiveSkuCheckRead } from "@/lib/api-client/types.gen";
+import {
+  fetchCustomerContext,
+  type CustomerContextPayload,
+} from "@/lib/api-client/plan04-bridge";
+import { formatMoney, type Incoterm } from "@/lib/contracts";
 
-export interface CustomerContextPayload {
-  customer: {
-    id: string;
-    display_name: string;
-    customer_type: CustomerType;
-    ltv_usd: string | number;
-    lifecycle_stage: string;
-  };
-  company?: {
-    id: string;
-    legal_name: string;
-    country_code: string;
-    credit_tier: string;
-    default_incoterm: Incoterm;
-  } | null;
-  identities: Array<{
-    id: string;
-    identity_type: IdentityType;
-    identity_value: string;
-    confidence_level: ConfidenceLevel;
-  }>;
-  probable_duplicates: Array<{
-    candidate_customer_id: string;
-    display_name: string;
-    matched_signal: string;
-    similarity_score: number;
-  }>;
-  merge_events: Array<{
-    id: string;
-    source_customer_id: string;
-    target_customer_id: string;
-    action: "merge" | "split";
-    reason?: string | null;
-  }>;
-  recent_orders: Array<{
-    id: string;
-    order_no: string;
-    order_mode: string;
-    fulfillment_status: string;
-    payment_status: string;
-    total_amount: string | number;
-    currency: string;
-    tracking_number?: string | null;
-    standardized_status?: string | null;
-    sub_status?: string | null;
-    is_stagnant_72h?: boolean;
-  }>;
-  recent_quotes: Array<{
-    id: string;
-    quote_no: string;
-    version: number;
-    incoterm: Incoterm;
-    total_amount: string | number;
-    quote_currency: string;
-    status: string;
-  }>;
-}
-
-interface LiveSkuCheckResult {
-  sku: string;
-  available_qty: number;
-  unit_price_quote_ccy: string;
-  moq_tier_applied: number;
-  incoterm: Incoterm;
-  source_tool_call_id: string;
-}
+export type { CustomerContextPayload };
 
 export function ContextDrawer({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
@@ -96,25 +34,17 @@ export function ContextDrawer({ customerId }: { customerId: string }) {
   const [skuInput, setSkuInput] = useState("");
   const [qtyInput, setQtyInput] = useState(100);
   const [incotermInput, setIncotermInput] = useState<Incoterm>("FOB");
-  const [liveSkuResult, setLiveSkuResult] = useState<LiveSkuCheckResult | null>(null);
+  const [liveSkuResult, setLiveSkuResult] = useState<LiveSkuCheckRead | null>(null);
 
   const contextQuery = useQuery({
     queryKey: ["identity", "context", customerId],
     enabled: Boolean(customerId),
-    queryFn: () =>
-      bffFetch<CustomerContextPayload>(`/v1/identity/customers/${customerId}/context`),
+    queryFn: () => fetchCustomerContext(customerId),
   });
 
   const mergeMutation = useMutation({
     mutationFn: (sourceCustomerId: string) =>
-      bffFetch("/v1/identity/merge", {
-        method: "POST",
-        body: JSON.stringify({
-          source_customer_id: sourceCustomerId,
-          target_customer_id: customerId,
-          reason: mergeReason,
-        }),
-      }),
+      mergeCustomers(sourceCustomerId, customerId, mergeReason),
     onSuccess: () => {
       setMergeDialogOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["identity", "context", customerId] });
@@ -123,27 +53,14 @@ export function ContextDrawer({ customerId }: { customerId: string }) {
 
   const splitMutation = useMutation({
     mutationFn: (mergeEventId: string) =>
-      bffFetch("/v1/identity/split", {
-        method: "POST",
-        body: JSON.stringify({
-          merge_event_id: mergeEventId,
-          reason: "Manual operator split",
-        }),
-      }),
+      splitCustomers(mergeEventId, "Manual operator split"),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["identity", "context", customerId] });
     },
   });
 
   const liveSkuMutation = useMutation({
-    mutationFn: () => {
-      const params = new URLSearchParams({
-        sku: skuInput.trim(),
-        qty: String(qtyInput),
-        incoterm: incotermInput,
-      });
-      return bffFetch<LiveSkuCheckResult>(`/v1/catalog/live-check?${params.toString()}`);
-    },
+    mutationFn: () => liveCheckSku(skuInput.trim(), qtyInput, incotermInput),
     onSuccess: (data) => {
       setLiveSkuResult(data);
     },

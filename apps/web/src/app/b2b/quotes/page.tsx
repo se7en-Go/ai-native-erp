@@ -4,7 +4,7 @@ import React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { QuotePiBuilder } from "@/components/b2b/quote-pi-builder";
-import { bffFetch } from "@/lib/api";
+import { updateOpportunityStage } from "@/lib/api-client/live-client";
 import {
   fetchB2bOpportunities,
   fetchB2bQuotes,
@@ -46,10 +46,7 @@ export default function B2bQuotesPage() {
 
   const moveStageMutation = useMutation({
     mutationFn: ({ id, stage }: { id: string; stage: OpportunityStage }) =>
-      bffFetch(`/v1/b2b/opportunities/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ stage }),
-      }),
+      updateOpportunityStage(id, stage),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["b2b", "opportunities"] });
     },

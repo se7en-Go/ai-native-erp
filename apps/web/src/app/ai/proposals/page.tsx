@@ -5,7 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { ProposalReviewCard, type AiProposalItem } from "@/components/ai/proposal-review-card";
-import { bffFetch } from "@/lib/api";
+import {
+  approveProposal,
+  editApproveProposal,
+  rejectProposal,
+} from "@/lib/api-client/plan04-bridge";
 import { fetchPendingProposalsCount, fetchProposals } from "@/lib/data-source";
 import type { ProposalStatus, ProposalType } from "@/lib/contracts";
 
@@ -26,8 +30,7 @@ export default function AiProposalsPage() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) =>
-      bffFetch(`/v1/ai/proposals/${id}/approve`, { method: "POST" }),
+    mutationFn: (id: string) => approveProposal(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["ai", "proposals"] });
     },
@@ -35,10 +38,7 @@ export default function AiProposalsPage() {
 
   const editApproveMutation = useMutation({
     mutationFn: ({ id, edited_payload }: { id: string; edited_payload: Record<string, unknown> }) =>
-      bffFetch(`/v1/ai/proposals/${id}/edit-approve`, {
-        method: "POST",
-        body: JSON.stringify({ edited_payload }),
-      }),
+      editApproveProposal(id, edited_payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["ai", "proposals"] });
     },
@@ -46,10 +46,7 @@ export default function AiProposalsPage() {
 
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      bffFetch(`/v1/ai/proposals/${id}/reject`, {
-        method: "POST",
-        body: JSON.stringify({ reason }),
-      }),
+      rejectProposal(id, reason),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["ai", "proposals"] });
     },

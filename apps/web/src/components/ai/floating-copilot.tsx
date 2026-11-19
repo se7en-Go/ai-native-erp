@@ -5,7 +5,14 @@ import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Bot, Send, ShieldCheck, X, AlertTriangle, ArrowUpRight } from "lucide-react";
 import { z } from "zod";
-import { bffFetch } from "@/lib/api";
+import {
+  assistantChat,
+  fetchCapabilities,
+  fetchPendingProposalsCount,
+  fetchWallet,
+  type AssistantChatResult,
+  type BillingWalletResponse,
+} from "@/lib/api-client/plan04-bridge";
 import {
   AiCapabilitySchema,
   AutonomyLevelSchema,
@@ -120,20 +127,7 @@ function renderSafeMetricValue(metric: z.infer<typeof CopilotMetricSchema>): str
   return typeof metric.value === "object" ? "—" : String(metric.value);
 }
 
-interface BillingWalletResponse {
-  plan_tier: string;
-  included_credits_remaining: number;
-  topup_credits_balance: number;
-  auto_downgrade_to_l0?: boolean;
-}
-
-interface AssistantChatResult {
-  reply_text: string;
-  citations: Array<{ doc_id: string; chunk_id: string; score: number }>;
-  tool_calls?: Array<{ tool_call_id?: string; tool_name?: string }>;
-  should_abstain: boolean;
-  degraded_to_l0?: boolean;
-}
+export type { AssistantChatResult, BillingWalletResponse };
 
 export function FloatingCopilot({ conversationId }: { conversationId?: string | null }) {
   const { t } = useI18n();
@@ -144,32 +138,28 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
 
   const capabilitiesQuery = useQuery({
     queryKey: ["ai", "capabilities"],
-    queryFn: () => bffFetch<{ capabilities: unknown[] }>("/v1/ai/capabilities"),
+    queryFn: () => fetchCapabilities(),
   });
 
   const walletQuery = useQuery({
     queryKey: ["ai", "wallet"],
-    queryFn: () => bffFetch<BillingWalletResponse>("/v1/billing/wallet"),
+    queryFn: () => fetchWallet(),
   });
 
   const pendingProposalsQuery = useQuery({
     queryKey: ["ai", "proposals", "pending-count"],
-    queryFn: () =>
-      bffFetch<{ total: number }>("/v1/ai/proposals?status=pending&limit=1&offset=0"),
+    queryFn: () => fetchPendingProposalsCount(),
   });
 
   const askMutation = useMutation({
     mutationFn: () =>
-      bffFetch<AssistantChatResult>("/v1/ai/assistant/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          capability: mode === "strict_rag" ? "cs_support" : "sales_quoting",
-          conversation_id: conversationId ?? undefined,
-          message: query,
-          strict_rag: mode === "strict_rag",
-          channel_type: "web_livechat",
-          context: { mode },
-        }),
+      assistantChat({
+        capability: mode === "strict_rag" ? "cs_support" : "sales_quoting",
+        conversation_id: conversationId ?? undefined,
+        message: query,
+        strict_rag: mode === "strict_rag",
+        channel_type: "web_livechat",
+        context: { mode },
       }),
     onSuccess: (res) => {
       setLastResult(res);

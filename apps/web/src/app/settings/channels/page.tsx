@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, ShieldCheck, Ban } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { bffFetch } from "@/lib/api";
+import { replayDlqEvent } from "@/lib/api-client/live-client";
 import {
   fetchChannelAccounts,
   fetchChannelConsents,
@@ -43,8 +43,7 @@ export default function ChannelsSettingsPage() {
   });
 
   const replayMutation = useMutation({
-    mutationFn: (dlqId: string) =>
-      bffFetch(`/v1/channels/dlq/${dlqId}/replay`, { method: "POST" }),
+    mutationFn: (dlqId: string) => replayDlqEvent(dlqId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["channels", "dlq"] });
     },

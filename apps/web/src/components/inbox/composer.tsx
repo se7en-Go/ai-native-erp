@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Send, StickyNote, Languages, ShieldCheck } from "lucide-react";
-import { bffFetch } from "@/lib/api";
+import { sendConversationMessage } from "@/lib/api-client/live-client";
+import { aiAssist, translateText } from "@/lib/api-client/plan04-bridge";
 import { BffApiError } from "@/lib/contracts";
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
 import { useI18n } from "@/lib/i18n";
@@ -26,10 +27,7 @@ export function InboxComposer({ conversation }: { conversation: ConversationSumm
       return;
     }
     const timer = setTimeout(() => {
-      void bffFetch<{ translated_text: string }>("/v1/ai/translate", {
-        method: "POST",
-        body: JSON.stringify({ text: bodyText, target_lang: targetLang }),
-      })
+      void translateText(bodyText, targetLang)
         .then((res) => setTranslatedPreview(res.translated_text))
         .catch(() => setTranslatedPreview(""));
     }, 150);
@@ -40,17 +38,11 @@ export function InboxComposer({ conversation }: { conversation: ConversationSumm
   const aiAssistMutation = useMutation({
     mutationFn: async (action: "draft" | "polish" | "summarize") => {
       if (!conversation) return null;
-      return bffFetch<{ text: string; abstained: boolean }>(
-        `/v1/inbox/conversations/${conversation.id}/ai-assist`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            action,
-            draft_text: bodyText || undefined,
-            strict_rag: strictRag,
-          }),
-        }
-      );
+      return aiAssist(conversation.id, {
+        action,
+        draft_text: bodyText || undefined,
+        strict_rag: strictRag,
+      });
     },
     onSuccess: (res) => {
       if (res?.text) {
@@ -66,15 +58,12 @@ export function InboxComposer({ conversation }: { conversation: ConversationSumm
         mode === "outbound" && liveTranslate && translatedPreview
           ? translatedPreview
           : bodyText;
-      return bffFetch(`/v1/inbox/conversations/${conversation.id}/messages`, {
-        method: "POST",
-        body: JSON.stringify({
-          direction: mode,
-          content_type: "text",
-          body_text: finalBody,
-          target_language: liveTranslate ? targetLang : undefined,
-          translate_before_send: mode === "outbound" && liveTranslate,
-        }),
+      return sendConversationMessage(conversation.id, {
+        direction: mode,
+        content_type: "text",
+        body_text: finalBody,
+        target_language: liveTranslate ? targetLang : undefined,
+        translate_before_send: mode === "outbound" && liveTranslate,
       });
     },
     onSuccess: () => {

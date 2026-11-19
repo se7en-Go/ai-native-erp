@@ -5,7 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Lock, Trash2, Upload } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
-import { bffFetch } from "@/lib/api";
+import {
+  deleteKbDocument,
+  updateCapability,
+  uploadKbDocument,
+} from "@/lib/api-client/plan04-bridge";
 import {
   fetchCapabilities,
   fetchKbDocuments,
@@ -83,11 +87,7 @@ export default function AiCapabilitiesPage() {
     }: {
       capability: AiCapability;
       autonomy_level: AutonomyLevel;
-    }) =>
-      bffFetch("/v1/ai/capabilities", {
-        method: "PATCH",
-        body: JSON.stringify({ settings: { [capability]: autonomy_level } }),
-      }),
+    }) => updateCapability(capability, autonomy_level),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["ai", "capabilities"] });
     },
@@ -99,10 +99,7 @@ export default function AiCapabilitiesPage() {
       const form = new FormData();
       form.append("file", selectedFile);
       form.append("title", docTitle.trim() || selectedFile.name);
-      return bffFetch("/v1/ai/kb/documents", {
-        method: "POST",
-        body: form,
-      });
+      return uploadKbDocument(form);
     },
     onSuccess: () => {
       setSelectedFile(null);
@@ -112,7 +109,7 @@ export default function AiCapabilitiesPage() {
   });
 
   const deleteKbMutation = useMutation({
-    mutationFn: (id: string) => bffFetch(`/v1/ai/kb/documents/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => deleteKbDocument(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["ai", "kb", "documents"] });
     },

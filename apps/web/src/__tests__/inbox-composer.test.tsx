@@ -4,6 +4,12 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@/lib/i18n";
 import { AuthSessionContext } from "@/components/providers";
+import {
+  fetchCallBody,
+  fetchCallMethod,
+  fetchCallUrl,
+  normalizeFetchInput,
+} from "@/__tests__/fetch-stub";
 import { ChannelRail } from "@/components/inbox/channel-rail";
 import { ConversationList, type ConversationSummary } from "@/components/inbox/conversation-list";
 import { MessageThread, type InboxMessage } from "@/components/inbox/message-thread";
@@ -140,7 +146,7 @@ describe("Task 5.2 4-Column Inbox & Composer", () => {
 
   it("submits internal_note via composer and previews bidirectional translation + Strict RAG draft", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/ai/translate")) {
         return new Response(
           JSON.stringify({
@@ -160,7 +166,7 @@ describe("Task 5.2 4-Column Inbox & Composer", () => {
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (url.includes("/messages") && init?.method === "POST") {
+      if (url.includes("/messages") && method === "POST") {
         return new Response(
           JSON.stringify({
             id: "msg-new",
@@ -186,10 +192,12 @@ describe("Task 5.2 4-Column Inbox & Composer", () => {
     fireEvent.click(screen.getByTestId("composer-strict-rag-toggle"));
     fireEvent.click(screen.getByRole("button", { name: /AI Draft/i }));
 
-    await waitFor(() => {
-      const assistCall = fetchMock.mock.calls.find((c) => String(c[0]).includes("/ai-assist"));
+    await waitFor(async () => {
+      const assistCall = fetchMock.mock.calls.find((c) =>
+        fetchCallUrl(c).includes("/ai-assist"),
+      );
       expect(assistCall).toBeDefined();
-      expect(JSON.parse(String(assistCall?.[1]?.body))).toMatchObject({
+      expect(JSON.parse(await fetchCallBody(assistCall!))).toMatchObject({
         action: "draft",
         strict_rag: true,
       });
@@ -214,12 +222,12 @@ describe("Task 5.2 4-Column Inbox & Composer", () => {
     });
     fireEvent.click(screen.getByTestId("composer-submit-btn"));
 
-    await waitFor(() => {
+    await waitFor(async () => {
       const postCall = fetchMock.mock.calls.find(
-        (c) => String(c[0]).includes("/messages") && c[1]?.method === "POST"
+        (c) => fetchCallUrl(c).includes("/messages") && fetchCallMethod(c) === "POST",
       );
       expect(postCall).toBeDefined();
-      expect(JSON.parse(String(postCall?.[1]?.body))).toMatchObject({
+      expect(JSON.parse(await fetchCallBody(postCall!))).toMatchObject({
         direction: "internal_note",
         body_text: "Check with production lead time",
       });

@@ -7,25 +7,41 @@ import { AuthSessionContext } from "@/components/providers";
 import CatalogPage from "@/app/catalog/page";
 import B2bQuotesPage from "@/app/b2b/quotes/page";
 import type { Principal } from "@/lib/contracts";
+import {
+  fetchCallBody,
+  fetchCallMethod,
+  fetchCallUrl,
+  normalizeFetchInput,
+} from "@/__tests__/fetch-stub";
 
+// Contract-shaped VariantRead (contracts/openapi.json): spu_code / category /
+// hs_code / certifications live in attributes, and MOQ unit prices arrive
+// as strings. The live adapter maps this onto the UI shape.
 const SAMPLE_VARIANT = {
   id: "var-1",
   product_id: "prod-1",
-  spu_code: "LED-COB-24V",
-  category: "LED Strip Lighting",
-  hs_code: "94054200",
-  certifications: ["CE", "RoHS", "UL"],
   sku: "LED-COB-24V-5M",
-  attributes: { cct: "4000K", ip_rating: "IP65" },
+  attributes: {
+    spu_code: "LED-COB-24V",
+    category: "LED Strip Lighting",
+    hs_code: "94054200",
+    certifications: ["CE", "RoHS", "UL"],
+    cct: "4000K",
+    ip_rating: "IP65",
+  },
   cost_price_base: "45.50",
   base_currency: "CNY",
   min_margin_floor_pct: "15.00",
   retail_price_usd: "29.90",
   b2b_moq_tiers: [
-    { min_qty: 50, unit_price_usd: 18.5 },
-    { min_qty: 500, unit_price_usd: 14.2 },
+    { min_qty: 50, unit_price_usd: "18.5" },
+    { min_qty: 500, unit_price_usd: "14.2" },
   ],
   lead_time_days: 7,
+  tenant_id: "t1",
+  created_at: "2026-11-19T00:00:00Z",
+  weight_grams: 120,
+  carton_dims_cm: null,
 };
 
 function wrapAuth(ui: React.ReactNode, role: Principal["role"]) {
@@ -54,11 +70,15 @@ function wrapAuth(ui: React.ReactNode, role: Principal["role"]) {
 describe("Task 5.5 Catalog COGS Masking, SKU Mapping & B2B PI Quote Builder", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Component tests run in live mode (NEXT_PUBLIC_USE_MOCK_API unset) with
+    // stubbed fetch, so convert/ship need a configured warehouse, as in a
+    // real live deployment (see live-client.requireDefaultWarehouseId).
+    process.env.NEXT_PUBLIC_DEFAULT_WAREHOUSE_ID = "wh-test-uuid";
   });
 
   it("hides cost_price_base from agent in Catalog and SkuMappingDrawer while saving bundle_multiplier", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/ai/proposals")) {
         return new Response(JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }), {
           status: 200,
@@ -97,7 +117,7 @@ describe("Task 5.5 Catalog COGS Masking, SKU Mapping & B2B PI Quote Builder", ()
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (url.includes("/catalog/mappings/map-1") && init?.method === "PUT") {
+      if (url.includes("/catalog/mappings/map-1") && method === "PUT") {
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -131,19 +151,21 @@ describe("Task 5.5 Catalog COGS Masking, SKU Mapping & B2B PI Quote Builder", ()
     fireEvent.change(multInput, { target: { value: "3" } });
     fireEvent.click(screen.getByTestId("save-mapping-btn-map-1"));
 
-    await waitFor(() => {
+    await waitFor(async () => {
       const putCall = fetchMock.mock.calls.find(
-        (c) => String(c[0]).includes("/catalog/mappings/map-1") && c[1]?.method === "PUT"
+        (c) =>
+          fetchCallUrl(c).includes("/catalog/mappings/map-1") &&
+          fetchCallMethod(c) === "PUT",
       );
       expect(putCall).toBeDefined();
-      expect(JSON.parse(String(putCall?.[1]?.body))).toMatchObject({ bundle_multiplier: 3 });
+      expect(JSON.parse(await fetchCallBody(putCall!))).toMatchObject({ bundle_multiplier: 3 });
     });
   });
 
   it("auto-computes MOQ tier pricing, shows Kanban stages, and converts accepted quote 1-Click", async () => {
     const futureIso = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/ai/proposals")) {
         return new Response(JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }), {
           status: 200,
@@ -177,7 +199,7 @@ describe("Task 5.5 Catalog COGS Masking, SKU Mapping & B2B PI Quote Builder", ()
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (url.includes("/b2b/quotes/q-1/convert-to-order") && init?.method === "POST") {
+      if (url.includes("/b2b/quotes/q-1/convert-to-order") && method === "POST") {
         return new Response(
           JSON.stringify({ order: { id: "ord-99", order_no: "ORD-B2B-99" } }),
           {

@@ -3,7 +3,14 @@
 import React, { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock, FileDown, CheckCircle2, RefreshCw, ArrowRightCircle } from "lucide-react";
-import { bffFetch } from "@/lib/api";
+import {
+  acceptQuote,
+  convertQuoteToOrder,
+  generateQuotePdf,
+  repriceQuoteVersion,
+  requireDefaultWarehouseId,
+} from "@/lib/api-client/live-client";
+import { shouldUseMockApi } from "@/lib/data-source";
 import { formatMoney, type Incoterm, type QuoteStatus } from "@/lib/contracts";
 import type { CatalogVariantItem, MoqTier } from "@/components/catalog/sku-mapping-drawer";
 
@@ -97,10 +104,7 @@ export function QuotePiBuilder({
   }, [activeVariant, previewQty]);
 
   const pdfMutation = useMutation({
-    mutationFn: (quoteId: string) =>
-      bffFetch<{ download_url: string }>(`/v1/b2b/quotes/${quoteId}/pdf`, {
-        method: "POST",
-      }),
+    mutationFn: (quoteId: string) => generateQuotePdf(quoteId),
     onSuccess: (res) => {
       setPdfPreviewUrl(res.download_url);
       void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
@@ -108,8 +112,7 @@ export function QuotePiBuilder({
   });
 
   const acceptMutation = useMutation({
-    mutationFn: (quoteId: string) =>
-      bffFetch(`/v1/b2b/quotes/${quoteId}/accept`, { method: "POST" }),
+    mutationFn: (quoteId: string) => acceptQuote(quoteId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
     },
@@ -117,13 +120,11 @@ export function QuotePiBuilder({
 
   const renewFxMutation = useMutation({
     mutationFn: (quoteId: string) =>
-      bffFetch(`/v1/b2b/quotes/${quoteId}/reprice-version`, {
-        method: "POST",
-        body: JSON.stringify({
-          fx_rate_snapshot: activeQuote?.fx_rate_snapshot ?? "7.120000",
-          fx_locked_until: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
-        }),
-      }),
+      repriceQuoteVersion(
+        quoteId,
+        activeQuote?.fx_rate_snapshot ?? "7.120000",
+        new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
     },
@@ -131,10 +132,12 @@ export function QuotePiBuilder({
 
   const convertMutation = useMutation({
     mutationFn: (quoteId: string) =>
-      bffFetch<{ order: { id: string; order_no: string } }>(
-        `/v1/b2b/quotes/${quoteId}/convert-to-order`,
-        { method: "POST" }
-      ),
+      convertQuoteToOrder(quoteId, {
+        // Mock mode: the BFF mock ignores the body, so any placeholder
+        // passes; live mode requires a real warehouse UUID (see
+        // live-client.requireDefaultWarehouseId).
+        warehouseId: shouldUseMockApi() ? "wh-sz" : requireDefaultWarehouseId(),
+      }),
     onSuccess: (res) => {
       setConvertedBanner(`Converted 1-Click to Order ${res.order.order_no} (${res.order.id})`);
       void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });

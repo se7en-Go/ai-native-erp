@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Lock, Truck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ShipmentTimelineDrawer } from "@/components/orders/shipment-timeline-drawer";
-import { bffFetch } from "@/lib/api";
-import { fetchOrders, fetchPendingProposalsCount } from "@/lib/data-source";
+import { shipOrder, requireDefaultWarehouseId } from "@/lib/api-client/live-client";
+import { fetchOrders, fetchPendingProposalsCount, shouldUseMockApi } from "@/lib/data-source";
 import { formatMoney, type OrderMode } from "@/lib/contracts";
 
 export default function OrdersPage() {
@@ -27,13 +27,14 @@ export default function OrdersPage() {
 
   const shipMutation = useMutation({
     mutationFn: ({ orderId, trackingNumber }: { orderId: string; trackingNumber: string }) =>
-      bffFetch(`/v1/orders/${orderId}/ship`, {
-        method: "POST",
-        body: JSON.stringify({
-          tracking_number: trackingNumber,
-          carrier_code: "DHL",
-          shipment_mode: "parcel",
-        }),
+      shipOrder(orderId, {
+        // Mock mode: the BFF mock ignores the body, so any placeholder
+        // passes; live mode requires a real warehouse UUID (see
+        // live-client.requireDefaultWarehouseId).
+        warehouseId: shouldUseMockApi() ? "wh-sz" : requireDefaultWarehouseId(),
+        trackingNumber,
+        carrierCode: "DHL",
+        shipmentMode: "parcel",
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["orders"] });
