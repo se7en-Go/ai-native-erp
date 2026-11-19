@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     )
 
     REDIS_URL: str = "redis://localhost:6379/0"
-    OPENAI_API_KEY: str = ""
+    OPENAI_API_KEY: str = Field(default="", repr=False)
+    ANTHROPIC_API_KEY: str = Field(default="", repr=False)
+    GEMINI_API_KEY: str = Field(default="", repr=False)
+    DEEPSEEK_API_KEY: str = Field(default="", repr=False)
 
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_BUCKET: str = "erp-assets"
