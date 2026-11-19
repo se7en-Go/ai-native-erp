@@ -20,7 +20,10 @@ from erp_core.tenancy.dependencies import CurrentPrincipal
 @pytest.mark.asyncio
 async def test_identity_deterministic_bsuid_probabilistic_and_reversible_split() -> None:
     migrator_engine = create_async_engine(
-        "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas",
+        os.environ.get(
+            "DATABASE_ADMIN_URL",
+            "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas",
+        ),
         future=True,
     )
     runtime_engine = create_async_engine(os.environ["DATABASE_RUNTIME_URL"], future=True)

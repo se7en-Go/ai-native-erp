@@ -19,6 +19,7 @@ dependencies = [
     "pyjwt>=2.10.0",
     "python-multipart>=0.0.19",
     "redis>=5.2.0",
+    "reportlab>=4.2.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "structlog>=24.4.0",
     "taskiq>=0.11.10",
