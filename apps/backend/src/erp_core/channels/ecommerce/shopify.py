@@ -679,7 +679,9 @@ async def process_shopify_webhook_event(
     return True
 
 
-async def process_shopify_webhook(receipt_id: str) -> int:
+async def process_shopify_webhook(
+    receipt_id: str, *, http_client: httpx.AsyncClient | None = None
+) -> int:
     """Drain one persisted Shopify delivery by its raw webhook receipt id."""
     from erp_core.channels.webhook_store import set_raw_webhook_processing_state
     from erp_core.shared.config import get_settings as load_settings
@@ -713,7 +715,8 @@ async def process_shopify_webhook(receipt_id: str) -> int:
             topic = str(headers.get("x-shopify-topic") or "")
             domain = str(headers.get("x-shopify-shop-domain") or "")
             applied = await process_shopify_webhook_event(
-                runtime_factory, topic, domain, dict(receipt.raw_payload or {})
+                runtime_factory, topic, domain, dict(receipt.raw_payload or {}),
+                http_client=http_client,
             )
             await set_raw_webhook_processing_state(
                 session,

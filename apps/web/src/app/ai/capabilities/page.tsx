@@ -65,9 +65,14 @@ export default function AiCapabilitiesPage() {
     queryFn: () => fetchCapabilities(),
   });
 
+  // The billing wallet contract is owner/admin/finance only; agents and managers
+  // can still open this page and read capability governance.
+  const canReadWallet =
+    principal?.role === "owner" || principal?.role === "admin" || principal?.role === "finance";
   const walletQuery = useQuery({
     queryKey: ["ai", "wallet"],
     queryFn: () => fetchWallet(),
+    enabled: canReadWallet,
   });
 
   const pendingProposalsQuery = useQuery({

@@ -20,6 +20,7 @@ import {
   type AiCapability,
 } from "@/lib/contracts";
 import { useI18n } from "@/lib/i18n";
+import { useAuthSession } from "@/components/providers";
 
 const SAFE_METRIC_LABELS: Record<string, string> = {
   open_threads: "Open Threads",
@@ -131,6 +132,7 @@ export type { AssistantChatResult, BillingWalletResponse };
 
 export function FloatingCopilot({ conversationId }: { conversationId?: string | null }) {
   const { t } = useI18n();
+  const { principal } = useAuthSession();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"global" | "strict_rag">("global");
   const [query, setQuery] = useState("");
@@ -141,9 +143,13 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
     queryFn: () => fetchCapabilities(),
   });
 
+  // GET /billing/wallet is owner/admin/finance only; agents reach the copilot too.
+  const canReadWallet =
+    principal?.role === "owner" || principal?.role === "admin" || principal?.role === "finance";
   const walletQuery = useQuery({
     queryKey: ["ai", "wallet"],
     queryFn: () => fetchWallet(),
+    enabled: canReadWallet,
   });
 
   const pendingProposalsQuery = useQuery({

@@ -13,6 +13,7 @@ import {
   Truck,
 } from "lucide-react";
 import {
+  getInboxCustomerContext,
   liveCheckSku,
   mergeCustomers,
   splitCustomers,
@@ -23,6 +24,7 @@ import {
   type CustomerContextPayload,
 } from "@/lib/api-client/plan04-bridge";
 import { formatMoney, type Incoterm } from "@/lib/contracts";
+import { shouldUseMockApi } from "@/lib/data-source";
 
 export type { CustomerContextPayload };
 
@@ -39,7 +41,8 @@ export function ContextDrawer({ customerId }: { customerId: string }) {
   const contextQuery = useQuery({
     queryKey: ["identity", "context", customerId],
     enabled: Boolean(customerId),
-    queryFn: () => fetchCustomerContext(customerId),
+    queryFn: (): Promise<CustomerContextPayload> => shouldUseMockApi()
+      ? fetchCustomerContext(customerId) : getInboxCustomerContext(customerId),
   });
 
   const mergeMutation = useMutation({

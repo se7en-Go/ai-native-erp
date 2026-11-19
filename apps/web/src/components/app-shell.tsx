@@ -105,7 +105,7 @@ export function AppShell({
   const { locale, toggleLocale, t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
 
-  useRealtimeInbox(Boolean(principal));
+  useRealtimeInbox(Boolean(principal && canAccessRoute(principal.role, "/inbox")));
 
   const role = principal?.role ?? null;
   const visiblePrimary = PRIMARY_NAV_ITEMS.filter((item) => !role || item.roles.includes(role));

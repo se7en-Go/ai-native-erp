@@ -1,9 +1,13 @@
 import { test, expect, type Locator } from "@playwright/test";
 import {
+  appJson,
   collectPageErrors,
+  enqueueInquiry,
   loginViaUi,
   postSignedWebhook,
+  shopifyDomain,
   signHmacSha256Base64,
+  waitForInquiry,
 } from "../helpers/auth-and-seed";
 import { isMockMode } from "../helpers/environment";
 
@@ -30,27 +34,32 @@ test.describe("Hybrid B2C WISMO, Strict RAG Abstention & Agent RBAC", () => {
     const errors = collectPageErrors(page);
     const shopifySecret = process.env.SHOPIFY_CLIENT_SECRET ?? "dev-shopify-secret";
 
+    const shopOrderId = `gid://shopify/Order/${process.env.E2E_SHOPIFY_ORDER_ID}`;
+    async function deliverShopifyOrder(topic: string) {
+      const orderPayload = { admin_graphql_api_id: shopOrderId, updated_at: new Date().toISOString() };
+      expect(await postSignedWebhook(request, "/api/v1/webhooks/shopify", orderPayload, {
+        "X-Shopify-Shop-Domain": shopifyDomain(),
+        "X-Shopify-Topic": topic,
+        "X-Shopify-Hmac-Sha256": signHmacSha256Base64(JSON.stringify(orderPayload), shopifySecret),
+      })).toMatchObject({ status: "accepted" });
+    }
     if (!isMockMode) {
-      // Live mode only: seed the Shopify order through the real webhook.
-      // Mock mode already ships the WISMO conversation in mock-fixtures.
-      const orderPayload = {
-        id: 9901042,
-        name: "#SH-1042",
-        email: "elena.vance@gmail.com",
-        total_price: "89.90",
-        currency: "USD",
-        line_items: [{ sku: "LED-COB-24V-5M", quantity: 3, price: "29.90" }],
-      };
-      await postSignedWebhook(
-        request,
-        "/api/v1/webhooks/shopify",
-        orderPayload,
-        "X-Shopify-Hmac-SHA256",
-        signHmacSha256Base64(JSON.stringify(orderPayload), shopifySecret)
-      );
+      await enqueueInquiry(request); // Also supports running this spec on its own (deduplicated).
+      await deliverShopifyOrder("orders/create");
     }
 
     await loginViaUi(page, "owner@quanzhou-led.example.com", "FactoryPass2026!");
+    if (!isMockMode) {
+      await waitForInquiry(page);
+      const orders = async () => (await appJson(page, "/orders")).items;
+      await expect.poll(orders, { timeout: 15_000 }).toEqual(expect.arrayContaining([
+        expect.objectContaining({ external_order_id: shopOrderId, fulfillment_status: "confirmed_reserved" }),
+      ]));
+      await deliverShopifyOrder("orders/updated");
+      await expect.poll(orders, { timeout: 15_000 }).toEqual(expect.arrayContaining([
+        expect.objectContaining({ external_order_id: shopOrderId, fulfillment_status: "shipped" }),
+      ]));
+    }
     await page.goto("/inbox");
 
     const conversations = page.getByTestId("inbox-conversation-list");
@@ -83,8 +92,15 @@ test.describe("Hybrid B2C WISMO, Strict RAG Abstention & Agent RBAC", () => {
     await msgToggle.click();
     await page.getByTestId("live-translate-toggle").click();
     await page.getByTestId("composer-textarea").fill("Hello, your order is on its way.");
-    await expect(page.getByTestId("live-translation-preview")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId("live-translation-preview")).toContainText("Translated:");
+    const preview = page.getByTestId("live-translation-preview");
+    await expect(preview).toBeVisible({ timeout: 10_000 });
+    if (isMockMode) {
+      await expect(preview).toContainText("Translated:");
+    } else {
+      // Live: the real /ai/translate pipeline charges credits and returns provider text.
+      await expect(preview).toContainText("Preview (EN):");
+      await expect(preview).toContainText("Your order is on its way.");
+    }
 
     // Open Floating Copilot & toggle Strict RAG
     await page.getByTestId("copilot-fab-btn").click();

@@ -47,7 +47,11 @@ export default function OnboardingPage() {
 
   const [isCoexistence, setIsCoexistence] = useState(false);
   const [coexistenceAck, setCoexistenceAck] = useState(false);
-  const [dnsVerified, setDnsVerified] = useState(false);
+  const [dnsStatus, setDnsStatus] = useState<{
+    spf_verified: boolean; dkim_verified: boolean; return_path_verified: boolean;
+  }>();
+  const dnsVerified = Boolean(dnsStatus?.spf_verified && dnsStatus.dkim_verified &&
+    dnsStatus.return_path_verified);
   const [emailDomain, setEmailDomain] = useState("mail.qzled.example.com");
 
   const [storefrontTab, setStorefrontTab] = useState<StorefrontTab>("Shopify");
@@ -78,11 +82,13 @@ export default function OnboardingPage() {
       setBaseCurrency(stateQuery.data.base_currency || "CNY");
       setIanaTimezone(stateQuery.data.iana_timezone || "Asia/Shanghai");
       setAllowedOriginsText((stateQuery.data.allowed_origins ?? []).join(", "));
-      setDnsVerified(
-        Boolean(
-          stateQuery.data.dns_status?.spf_verified && stateQuery.data.dns_status?.dkim_verified
-        )
-      );
+      if (stateQuery.data.dns_status) setDnsStatus(stateQuery.data.dns_status);
+      const savedStep = {
+        WorkspaceCreated: 1, ChannelConnecting: 2, ChannelVerified: 3,
+        CatalogSyncing: 4, AISandboxReady: 5, LiveProduction: 5,
+      } as const;
+      const next = savedStep[stateQuery.data.current_stage] ?? 1;
+      setStep((current) => current < next ? next : current);
     }
   }, [stateQuery.data]);
 
@@ -94,7 +100,9 @@ export default function OnboardingPage() {
         base_currency: baseCurrency,
         timezone: ianaTimezone,
       });
-      return advanceOnboarding("ChannelConnecting", { preset_type: preset });
+      return advanceOnboarding("ChannelConnecting", {
+        preset_type: preset, base_currency: baseCurrency, iana_timezone: ianaTimezone,
+      });
     },
     onSuccess: () => {
       setStep(2);
@@ -120,9 +128,23 @@ export default function OnboardingPage() {
 
   const verifyDnsMutation = useMutation({
     mutationFn: () => verifyEmailDns(emailDomain),
-    onSuccess: (res) => {
-      setDnsVerified(res.spf_verified && res.dkim_verified);
+    onSuccess: setDnsStatus,
+  });
+
+  const nextMutation = useMutation({
+    mutationFn: async (from: 2 | 3 | 4) => {
+      if (from === 2) {
+        await advanceOnboarding("ChannelVerified", {
+          dns_status: dnsStatus,
+          coexistence_acknowledged: isCoexistence && coexistenceAck,
+        });
+      } else if (from === 3) {
+        await advanceOnboarding("CatalogSyncing", {});
+      } else {
+        await advanceOnboarding("AISandboxReady", {});
+      }
     },
+    onSuccess: (_, from) => setStep(from === 2 ? 3 : from === 3 ? 4 : 5),
   });
 
   const connectStorefrontMutation = useMutation({
@@ -196,10 +218,9 @@ export default function OnboardingPage() {
             ].map((label, idx) => {
               const num = (idx + 1) as 1 | 2 | 3 | 4 | 5;
               return (
-                <button
+                <span
                   key={label}
-                  type="button"
-                  onClick={() => setStep(num)}
+                  aria-current={step === num ? "step" : undefined}
                   className={`rounded-md border px-2 py-2 font-semibold ${
                     step === num
                       ? "border-indigo-600 bg-indigo-50 text-indigo-700"
@@ -207,7 +228,7 @@ export default function OnboardingPage() {
                   }`}
                 >
                   {label}
-                </button>
+                </span>
               );
             })}
           </div>
@@ -215,6 +236,12 @@ export default function OnboardingPage() {
             <div className="mt-2 text-xs font-medium text-emerald-700">{copiedNotice}</div>
           )}
         </div>
+
+        {(saveWorkspaceMutation.error || nextMutation.error || completeMutation.error) && (
+          <p role="alert" className="text-sm text-red-700">
+            {(saveWorkspaceMutation.error ?? nextMutation.error ?? completeMutation.error)?.message}
+          </p>
+        )}
 
         {step === 1 && (
           <div className="rounded-lg border border-slate-200 bg-white p-5 text-xs space-y-4">
@@ -277,6 +304,7 @@ export default function OnboardingPage() {
             <button
               type="button"
               data-testid="onboarding-save-step1"
+              disabled={saveWorkspaceMutation.isPending}
               onClick={() => saveWorkspaceMutation.mutate()}
               className="rounded-md bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700"
             >
@@ -386,7 +414,8 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 data-testid="onboarding-next-btn"
-                onClick={() => setStep(3)}
+                disabled={!dnsVerified || nextMutation.isPending}
+                onClick={() => nextMutation.mutate(2)}
                 className="rounded-md bg-indigo-600 px-4 py-2 font-semibold text-white"
               >
                 Next: Storefront Connectors
@@ -482,7 +511,8 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 data-testid="onboarding-next-btn"
-                onClick={() => setStep(4)}
+                disabled={nextMutation.isPending}
+                onClick={() => nextMutation.mutate(3)}
                 className="rounded-md bg-indigo-600 px-4 py-2 font-semibold text-white"
               >
                 Next: WebChat Embed
@@ -533,7 +563,8 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 data-testid="onboarding-next-btn"
-                onClick={() => setStep(5)}
+                disabled={nextMutation.isPending}
+                onClick={() => nextMutation.mutate(4)}
                 className="rounded-md bg-indigo-600 px-4 py-2 font-semibold text-white"
               >
                 Next: 3-Message AI Sandbox

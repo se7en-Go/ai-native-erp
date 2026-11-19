@@ -30,13 +30,14 @@ export default function LoginPage() {
         }),
       });
       await refreshSession();
+      const landingPage = res.principal.role === "finance" ? "/finance" : "/inbox";
       if (res.principal.onboarding_stage) {
         // Mock mode (and any future backend that returns it): the principal
         // carries the stage directly.
         if (res.principal.onboarding_stage !== "LiveProduction") {
           router.push("/onboarding");
         } else {
-          router.push("/inbox");
+          router.push(landingPage);
         }
       } else {
         // Live mode: PrincipalResponse has no onboarding_stage, so ask the
@@ -49,7 +50,7 @@ export default function LoginPage() {
         } catch {
           stage = undefined;
         }
-        router.push(stage === "LiveProduction" ? "/inbox" : "/onboarding");
+        router.push(stage === "LiveProduction" ? landingPage : "/onboarding");
       }
     } catch (err) {
       if (err instanceof BffApiError) {

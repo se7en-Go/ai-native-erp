@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from uuid import uuid4
 
+import httpx
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from erp_core.ai_engine.ingestion import (
     DeterministicHashEmbeddingProvider,
     DocumentIngestionService,
+    OpenAIEmbeddingProvider,
 )
 from erp_core.ai_engine.rag_service import (
     ABSTENTION_THRESHOLD,
@@ -23,6 +25,24 @@ from erp_core.shared.db import (
     create_session_factory,
     tenant_session,
 )
+
+
+async def test_embeddings_use_same_configured_openai_endpoint_as_chat(monkeypatch) -> None:
+    async def post(_client, url, *, headers, json):
+        assert url == "http://127.0.0.1:9099/v1/embeddings"
+        assert headers == {"Authorization": "Bearer fixture-key"}
+        assert json["input"] == ["LED strip warranty"]
+        return httpx.Response(
+            200,
+            json={"data": [{"index": 0, "embedding": [1.0]}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(get_settings(), "OPENAI_BASE_URL", "http://127.0.0.1:9099/v1/")
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    provider = OpenAIEmbeddingProvider(api_key="fixture-key")
+    result = await provider.embed_texts(["LED strip warranty"])
+    assert result == [[1.0]]
 
 
 @pytest.fixture

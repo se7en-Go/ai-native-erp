@@ -24,6 +24,7 @@ import {
   getVariantMappings,
   liveCheckSku,
   mapChannelParam,
+  mapInboxMessage,
   mergeCustomers,
   replayDlqEvent,
   sendConversationMessage,
@@ -98,6 +99,29 @@ const CONVERSATION_PAGE = {
   offset: 0,
   has_more: false,
 };
+
+describe("mapInboxMessage", () => {
+  it("surfaces seeded detected language and stored translations from channel_metadata", () => {
+    const mapped = mapInboxMessage({
+      id: "m-1",
+      conversation_id: "c-1",
+      channel_type: "web_livechat",
+      direction: "inbound",
+      sender_type: "customer",
+      content_type: "text",
+      body_text: "Hola, ¿dónde está mi pedido?",
+      channel_metadata: {
+        detected_language: "es",
+        translations: { en: "Hello, where is my order?", zh: "\u4f60\u597d\uff0c\u6211\u7684\u8ba2\u5355\u5728\u54ea\u91cc\uff1f" },
+      },
+      delivery_status: "delivered",
+      source_timestamp: "2026-11-19T10:00:00Z",
+    } as never);
+    expect(mapped.detected_language).toBe("es");
+    expect(mapped.translated_text_en).toBe("Hello, where is my order?");
+    expect(mapped.translated_text_zh).toBe("\u4f60\u597d\uff0c\u6211\u7684\u8ba2\u5355\u5728\u54ea\u91cc\uff1f");
+  });
+});
 
 describe("live-client (generated SDK over the BFF)", () => {
   beforeEach(() => {

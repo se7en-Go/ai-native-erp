@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
@@ -31,9 +32,8 @@ _read_roles = Depends(
     require_roles(UserRole.OWNER, UserRole.FINANCE, UserRole.ADMIN, UserRole.MANAGER)
 )
 _verify_roles = Depends(require_roles(UserRole.OWNER, UserRole.FINANCE))
-_required_form = Form(...)
-_optional_file = File(default=None)
-_gateway_fee_form = Form(default=Decimal("0.00"))
+# Each multipart parameter needs its own Form/File instance: FastAPI derives the field
+# alias from the FieldInfo object, so a shared instance collapses every field onto one name.
 
 
 def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -92,13 +92,13 @@ async def list_receivables(
 async def submit_receivable_payment(
     request: Request,
     rp_id: UUID,
-    payment_method: str = _required_form,
-    external_tx_ref: str | None = Form(default=None),
-    amount_received: Decimal = _required_form,
-    currency: str = _required_form,
-    actual_fx_rate: Decimal = _required_form,
-    gateway_fee: Decimal = _gateway_fee_form,
-    receipt_file: UploadFile | None = _optional_file,
+    payment_method: Annotated[str, Form()],
+    amount_received: Annotated[Decimal, Form()],
+    currency: Annotated[str, Form()],
+    actual_fx_rate: Annotated[Decimal, Form()],
+    external_tx_ref: Annotated[str | None, Form()] = None,
+    gateway_fee: Annotated[Decimal, Form()] = Decimal("0.00"),
+    receipt_file: Annotated[UploadFile | None, File()] = None,
     principal: CurrentPrincipal = _read_roles,
 ) -> PaymentRecordRead:
     receipt_key: str | None = None

@@ -103,10 +103,10 @@ export type AutonomyLevel = 'L0_copilot' | 'L1_proposal' | 'L2_auto';
 export type BodySubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPost = {
     actual_fx_rate: number | string;
     amount_received: number | string;
-    currency: number | string;
+    currency: string;
     external_tx_ref?: string | null;
     gateway_fee?: number | string;
-    payment_method: number | string;
+    payment_method: string;
     receipt_file?: string | null;
 };
 
