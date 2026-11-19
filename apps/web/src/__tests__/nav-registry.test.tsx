@@ -80,11 +80,13 @@ describe("Phase 3A navigation registry", () => {
       "growth",
       "system",
     ]);
-    // Phase 3C adds the growth group without touching any existing route.
+    // Phase 3C adds the growth group and Phase 3D appends /social, touching no
+    // existing route.
     const growth = NAV_SECTIONS.find((section) => section.id === "growth");
     expect(growth?.items.map((item) => item.href)).toEqual([
       "/growth/collect",
       "/growth/campaigns",
+      "/social",
     ]);
     const phase3aPages = [
       "/dashboard",
