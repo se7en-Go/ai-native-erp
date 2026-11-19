@@ -6,8 +6,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from erp_core.shared.config import get_settings
+from erp_core.shared.db import create_runtime_engine, create_session_factory, system_session
 from erp_core.shared.errors import register_exception_handlers
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
@@ -18,12 +20,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     redis_client = create_redis_client(settings)
     storage = ObjectStorageService(settings)
+    runtime_engine = create_runtime_engine(settings)
+    session_factory = create_session_factory(runtime_engine)
+
     app.state.settings = settings
     app.state.redis = redis_client
     app.state.storage = storage
+    app.state.runtime_engine = runtime_engine
+    app.state.session_factory = session_factory
     try:
         yield
     finally:
+        await runtime_engine.dispose()
         await redis_client.aclose()
 
 
@@ -55,6 +63,13 @@ def create_app() -> FastAPI:
             checks["redis"] = "ok" if pong else "error"
         except Exception as exc:
             checks["redis"] = f"error: {type(exc).__name__}"
+
+        try:
+            async with system_session(request.app.state.session_factory) as session:
+                val = await session.scalar(text("SELECT 1"))
+                checks["postgres"] = "ok" if val == 1 else "error"
+        except Exception as exc:
+            checks["postgres"] = f"error: {type(exc).__name__}"
 
         is_ready = all(val == "ok" for val in checks.values())
         return JSONResponse(

@@ -26,6 +26,9 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["erp_core"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

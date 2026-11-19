@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault(
@@ -36,3 +37,27 @@ async def async_client() -> AsyncIterator[AsyncClient]:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as client:
             yield client
+
+
+@pytest.fixture
+async def runtime_session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    from erp_core.shared.config import get_settings
+    from erp_core.shared.db import create_runtime_engine, create_session_factory
+
+    engine = create_runtime_engine(get_settings())
+    try:
+        yield create_session_factory(engine)
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture
+async def migrator_session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    from erp_core.shared.config import get_settings
+    from erp_core.shared.db import create_migrator_engine, create_session_factory
+
+    engine = create_migrator_engine(get_settings())
+    try:
+        yield create_session_factory(engine)
+    finally:
+        await engine.dispose()
