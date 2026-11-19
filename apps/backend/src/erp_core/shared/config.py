@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = Field(default="", repr=False)
     GEMINI_API_KEY: str = Field(default="", repr=False)
     DEEPSEEK_API_KEY: str = Field(default="", repr=False)
+    STRIPE_SECRET_KEY: str = Field(default="", repr=False)
+    STRIPE_WEBHOOK_SECRET: str = Field(default="", repr=False)
 
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_BUCKET: str = "erp-assets"

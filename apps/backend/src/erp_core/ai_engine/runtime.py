@@ -18,9 +18,22 @@ from erp_core.ai_engine.ingestion import has_dynamic_pricing_signals
 from erp_core.ai_engine.models import AiProposal
 from erp_core.ai_engine.numeric_guard import ToolGroundedNumericGuard
 from erp_core.ai_engine.rag_service import HybridRagService, RagHit, verify_strict_citations
-from erp_core.ai_engine.router_llm import LlmGenerationResult, TieredModelRouter
+from erp_core.ai_engine.router_llm import (
+    MODEL_CATALOG,
+    LlmGenerationResult,
+    TieredModelRouter,
+    calculate_cost_and_credits,
+)
 from erp_core.ai_engine.tools import ErpToolRegistry, ToolResult
-from erp_core.shared.enums import AiCapability, AutonomyLevel, ChannelType, Incoterm, ProposalType
+from erp_core.billing.wallet_service import CreditWalletService
+from erp_core.shared.enums import (
+    AiCapability,
+    AutonomyLevel,
+    ChannelType,
+    Incoterm,
+    ProposalType,
+    UsageMetricType,
+)
 from erp_core.tenancy.audit import record_audit_event
 
 _L0 = AutonomyLevel.L0_COPILOT
@@ -136,12 +149,14 @@ class PolicyRuntime:
         numeric_guard: ToolGroundedNumericGuard | None = None,
         compliance_filter: OutboundComplianceFilter | None = None,
         llm_router: TieredModelRouter | None = None,
+        wallet_service: CreditWalletService | None = None,
     ) -> None:
         self.rag_service = rag_service or HybridRagService()
         self.tool_registry = tool_registry or ErpToolRegistry()
         self.numeric_guard = numeric_guard or ToolGroundedNumericGuard()
         self.compliance_filter = compliance_filter or OutboundComplianceFilter()
         self.llm_router = llm_router or TieredModelRouter()
+        self.wallet_service = wallet_service or CreditWalletService()
 
     async def _generate(
         self,
@@ -153,16 +168,51 @@ class PolicyRuntime:
         intent: str,
         result: CapabilityExecutionResult,
     ) -> LlmGenerationResult | None:
-        return await self.llm_router.generate(
+        system = CAPABILITY_SPECS[capability].system_prompt
+        tier = self.llm_router.select_tier(
+            capability=capability, intent=intent, text_length=len(query)
+        )
+        max_tokens = 600
+        # Byte length bounds normal tokenization; reserve additional framing tokens.
+        prompt_upper_bound = len((system + query + context).encode()) + 128
+        estimate = max(
+            calculate_cost_and_credits(model_id, prompt_upper_bound, 0, max_tokens)[1]
+            for model_id, spec in MODEL_CATALOG.items()
+            if spec.tier == tier
+        )
+        allowed = await self.wallet_service.lock_budget(
+            session, tenant_id, max(Decimal(1), estimate)
+        )
+        if not allowed:
+            result.degraded_to_l0 = result.l0_locked = True
+            result.reason = "credits_depleted"
+            return None
+        generation = await self.llm_router.generate(
             tenant_id=tenant_id,
             capability=capability,
             user_query=query,
-            system_prefix=CAPABILITY_SPECS[capability].system_prompt,
+            system_prefix=system,
             context_block=context,
             intent=intent,
             citations=result.citations,
             cacheable_faq=intent == "faq_static",
+            max_tokens=max_tokens,
         )
+        if not generation.cache_hit:
+            allowed, _ = await self.wallet_service.try_reserve_and_record_spend(
+                session,
+                tenant_id,
+                f"ai:{uuid4()}",
+                UsageMetricType.AI_CREDIT,
+                generation.credits_consumed,
+                generation.cost_usd,
+                generation.model_id,
+            )
+            if not allowed:
+                result.degraded_to_l0 = result.l0_locked = True
+                result.reason = "credits_depleted"
+                return None
+        return generation
 
     async def _proposal(
         self,
@@ -304,6 +354,10 @@ class PolicyRuntime:
             return result
         if result.autonomy_applied == _L0:
             return result.model_copy(update={"reason": "manual_policy", "l0_locked": True})
+        await self.wallet_service.ensure_wallet(session, tenant_id=tenant_id)
+        if not await self.wallet_service.lock_budget(session, tenant_id, Decimal(1)):
+            result.degraded_to_l0 = result.l0_locked = True
+            return await abstain("credits_depleted")
 
         mt = input_payload.get("channel_metadata")
         metadata: dict[str, Any] = dict(mt) if isinstance(mt, dict) else {}
