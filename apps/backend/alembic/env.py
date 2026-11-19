@@ -14,6 +14,7 @@ import erp_core.catalog.models  # noqa: F401
 import erp_core.channels.models  # noqa: F401
 import erp_core.crm.models  # noqa: F401
 import erp_core.finance.models  # noqa: F401
+import erp_core.growth.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
 import erp_core.supply_chain.models  # noqa: F401
