@@ -1,11 +1,26 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import {
   collectPageErrors,
-  isMockMode,
   loginViaUi,
   postSignedWebhook,
   signHmacSha256Base64,
 } from "../helpers/auth-and-seed";
+import { isMockMode } from "../helpers/environment";
+
+async function expectBuyerClock(thread: Locator) {
+  const badge = thread.getByTestId("buyer-local-time-badge");
+  await expect(badge).toBeVisible();
+  const badgeText = await badge.innerText();
+  const match = badgeText.match(/(\d{1,2}):\d{2}\s*([AP]M)\s*\([^)]+\)/i);
+  if (!match) throw new Error(`Expected a local time with timezone, got: ${badgeText}`);
+  const hour = Number(match[1]) % 12 + (match[2].toUpperCase() === "PM" ? 12 : 0);
+  const quietHours = thread.getByTestId("quiet-hours-pill");
+  if (hour >= 21 || hour < 8) {
+    await expect(quietHours).toBeVisible();
+  } else {
+    await expect(quietHours).toHaveCount(0);
+  }
+}
 
 test.describe("Hybrid B2C WISMO, Strict RAG Abstention & Agent RBAC", () => {
   test("handles Shopify/WebChat WISMO, Strict RAG abstention, and blocks Agent from Finance & COGS", async ({
@@ -38,35 +53,29 @@ test.describe("Hybrid B2C WISMO, Strict RAG Abstention & Agent RBAC", () => {
     await loginViaUi(page, "owner@quanzhou-led.example.com", "FactoryPass2026!");
     await page.goto("/inbox");
 
-    // Buyer local time + quiet-hours context switches per conversation.
-    await expect(page.getByTestId("conversation-item-conv-1")).toBeVisible({
-      timeout: 15_000,
-    });
-    await page.getByTestId("conversation-item-conv-1").click();
-    // Buyer local time + quiet-hours context switches per conversation.
-    // The pill renders iff the buyer's local hour is in quiet hours
-    // (21:00-08:00), so assert it against the displayed badge time
-    // instead of assuming a fixed time of day: conv-1 is Europe/Berlin,
-    // which is only in quiet hours 04:00-15:00 CST, so a hard
-    // toBeVisible() here fails every afternoon (pre-existing flake).
-    await expect(page.getByTestId("buyer-local-time-badge")).toBeVisible();
-    const badgeText =
-      (await page.getByTestId("buyer-local-time-badge").textContent()) ?? "";
-    const timeMatch = badgeText.match(/(\d{1,2}):(\d{2})\s*([AP]M)/i);
-    expect(timeMatch).not.toBeNull();
-    const hour12 = Number(timeMatch![1]);
-    const hour24 = timeMatch![3].toUpperCase() === "PM" ? (hour12 % 12) + 12 : hour12 % 12;
-    if (hour24 >= 21 || hour24 < 8) {
-      await expect(page.getByTestId("quiet-hours-pill")).toBeVisible();
-    } else {
-      await expect(page.getByTestId("quiet-hours-pill")).toHaveCount(0);
+    const conversations = page.getByTestId("inbox-conversation-list");
+    const thread = page.getByTestId("inbox-message-thread");
+    const inquiry = conversations.getByRole("button")
+      .filter({ has: page.getByText("b2b_inquiry", { exact: true }) }).first();
+    const webChat = conversations.getByRole("button")
+      .filter({ has: page.getByText("b2c_support", { exact: true }) })
+      .filter({ has: page.getByText("web_livechat", { exact: true }) }).first();
+
+    // Verify the selected buyer, then clock/quiet hours for each thread.
+    // Two buyers may share a timezone; their displayed times need not differ.
+    async function openThread(row: Locator) {
+      await expect(row).toBeVisible({ timeout: 15_000 });
+      const buyer = (await row.getAttribute("aria-label"))?.split(" — ")[0];
+      if (!buyer) throw new Error("Conversation row must identify its buyer");
+      await row.click();
+      await expect(thread.getByRole("heading", { name: buyer, exact: true })).toBeVisible();
+      await expectBuyerClock(thread);
+      return buyer;
     }
-    const berlinBadge = await page.getByTestId("buyer-local-time-badge").textContent();
-    await page.getByTestId("conversation-item-conv-2").click();
-    await expect(page.getByTestId("buyer-local-time-badge")).toBeVisible();
-    const newYorkBadge = await page.getByTestId("buyer-local-time-badge").textContent();
-    expect(newYorkBadge).not.toEqual(berlinBadge);
-    await page.getByTestId("conversation-item-conv-1").click();
+
+    const inquiryBuyer = await openThread(inquiry);
+    const supportBuyer = await openThread(webChat);
+    expect(supportBuyer).not.toBe(inquiryBuyer);
 
     // Per-message translation toggle + live-translate composer preview.
     const msgToggle = page.locator('[data-testid^="toggle-msg-translation-"]').first();
@@ -102,8 +111,14 @@ test.describe("Hybrid B2C WISMO, Strict RAG Abstention & Agent RBAC", () => {
     await expect(page.getByTestId("rbac-forbidden-guard")).toBeVisible();
 
     await page.goto("/catalog");
-    await expect(page.getByTestId("catalog-cost-header")).toHaveCount(0);
-    await expect(page.getByText("LED-COB-24V-5M")).toBeVisible();
+    const catalog = page.getByRole("table");
+    const skuRow = catalog.getByRole("row").filter({
+      has: page.getByText("LED-COB-24V-5M", { exact: true }),
+    });
+    await expect(skuRow).toBeVisible();
+    await expect(catalog.getByTestId("catalog-cost-header")).toHaveCount(0);
+    // Check the populated row too: a hidden heading alone must not mask a cost cell.
+    await expect(skuRow.getByRole("cell")).toHaveCount(await catalog.getByRole("columnheader").count());
 
     errors.assertClean();
   });

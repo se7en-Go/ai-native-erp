@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 import {
   collectPageErrors,
-  isMockMode,
   loginViaUi,
   postSignedWebhook,
   signHmacSha256Hex,
 } from "../helpers/auth-and-seed";
+import { isMockMode } from "../helpers/environment";
 
 test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click Order -> 30%/70% T/T -> 17TRACK -> CVP", () => {
   test("executes complete B2B quote-to-CVP margin lifecycle", async ({ page, request }) => {
@@ -42,18 +42,30 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
     await loginViaUi(page, "owner@quanzhou-led.example.com", "FactoryPass2026!");
     await page.goto("/inbox");
 
-    // The list row reads "Hans Weber (DE)" while the thread header reads
-    // "Hans Weber", so getByText is ambiguous — use the row testid.
-    await expect(page.getByTestId("conversation-item-conv-1")).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByTestId("buyer-local-time-badge")).toBeVisible();
+    const inquiry = page.getByTestId("inbox-conversation-list")
+      .getByRole("button", { name: /^Hans Weber — / })
+      .filter({ has: page.getByText("b2b_inquiry", { exact: true }) });
+    await expect(inquiry).toBeVisible({ timeout: 15_000 });
+    await inquiry.click();
+    const thread = page.getByTestId("inbox-message-thread");
+    await expect(thread.getByRole("heading", { name: "Hans Weber", exact: true })).toBeVisible();
+    await expect(thread.getByTestId("buyer-local-time-badge")).toBeVisible();
 
-    // Approve L1 CRM Extract & Quote Draft proposals
+    // Approve the L1 quote draft, not whichever proposal happens to appear first.
     await page.goto("/ai/proposals");
-    const crmApproveButtons = page.locator('[data-testid^="proposal-approve-"]');
-    await expect(crmApproveButtons.first()).toBeVisible({ timeout: 15_000 });
-    await crmApproveButtons.first().click();
+    const quoteDraft = page.locator('[data-testid^="proposal-card-"]').filter({
+      has: page.getByText("quote_draft", { exact: true }),
+    });
+    const approveBtn = quoteDraft.getByRole("button", { name: "Approve", exact: true });
+    await expect(approveBtn).toBeVisible({ timeout: 15_000 });
+    const [approval] = await Promise.all([
+      page.waitForResponse((res) =>
+        res.request().method() === "POST" &&
+        /^\/api\/bff\/v1\/ai\/proposals\/[^/]+\/approve$/.test(new URL(res.url()).pathname)
+      ),
+      approveBtn.click(),
+    ]);
+    expect(approval.ok()).toBe(true);
 
     // Verify B2B Quote PI and 1-Click Convert to Order
     await page.goto("/b2b/quotes");
@@ -66,14 +78,24 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
     await page.goto("/orders");
     await expect(page.locator('[data-testid^="order-ship-blocked-"]').first()).toBeVisible();
 
-    // Finance user verifies 30% deposit & 70% balance milestones
+    // Verify the pending 30% deposit; the 70% balance is still unpaid.
     await loginViaUi(page, "finance@quanzhou-led.example.com", "FactoryPass2026!");
     await page.goto("/finance");
-    const verifyButtons = page.locator('[data-testid^="verify-payment-btn-"]');
-    const count = await verifyButtons.count();
-    for (let i = 0; i < count; i++) {
-      await verifyButtons.first().click();
-    }
+    const deposit = page.getByRole("row").filter({
+      has: page.getByText("b2b_30_deposit", { exact: true }),
+    });
+    const balance = page.getByRole("row").filter({
+      has: page.getByText("b2b_70_balance", { exact: true }),
+    });
+    await expect(balance.getByText("70% Balance Unpaid — Shipment Blocked")).toBeVisible();
+    const [verification] = await Promise.all([
+      page.waitForResponse((res) =>
+        res.request().method() === "POST" &&
+        /^\/api\/bff\/api\/v1\/finance\/payments\/[^/]+\/verify$/.test(new URL(res.url()).pathname)
+      ),
+      deposit.getByRole("button", { name: /^Verify \(/ }).click(),
+    ]);
+    expect(verification.ok()).toBe(true);
 
     if (!isMockMode) {
       // Live mode only: trigger 17TRACK Delivered webhook.
