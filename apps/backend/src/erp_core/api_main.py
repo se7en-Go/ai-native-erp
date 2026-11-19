@@ -9,10 +9,12 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from erp_core.shared.config import get_settings
+from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import create_runtime_engine, create_session_factory, system_session
 from erp_core.shared.errors import register_exception_handlers
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
+from erp_core.tenancy.router import router as tenancy_router
 
 
 @asynccontextmanager
@@ -20,12 +22,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     redis_client = create_redis_client(settings)
     storage = ObjectStorageService(settings)
+    crypto_service = EnvelopeCryptoService(settings)
     runtime_engine = create_runtime_engine(settings)
     session_factory = create_session_factory(runtime_engine)
 
     app.state.settings = settings
     app.state.redis = redis_client
     app.state.storage = storage
+    app.state.crypto_service = crypto_service
     app.state.runtime_engine = runtime_engine
     app.state.session_factory = session_factory
     try:
@@ -50,6 +54,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     register_exception_handlers(app)
+    app.include_router(tenancy_router)
 
     @app.get("/healthz", tags=["health"])
     async def healthz() -> dict[str, str]:
