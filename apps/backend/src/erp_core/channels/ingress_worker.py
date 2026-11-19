@@ -457,9 +457,12 @@ async def _move_to_dlq(
     error_code: str | None,
     error_detail: str,
     attempt_count: int,
+    broker_session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> None:
     if raw_event_id is not None:
-        async with system_session(session_factory) as sys_sess:
+        if broker_session_factory is None:
+            raise RuntimeError("webhook broker session is not configured")
+        async with system_session(broker_session_factory) as sys_sess:
             await set_raw_webhook_processing_state(
                 sys_sess,
                 raw_event_id=raw_event_id,
@@ -500,11 +503,14 @@ async def process_raw_webhook_event(
     raw_event_id: uuid.UUID,
     adapter_registry: AdapterRegistry | None = None,
     attempt: int = 1,
+    broker_session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> str:
     """Process one persisted raw webhook event with out-of-order retry and DLQ fallback."""
+    if broker_session_factory is None:
+        raise RuntimeError("webhook broker session is not configured")
     registry = adapter_registry or build_default_adapter_registry()
 
-    async with system_session(session_factory) as sys_sess:
+    async with system_session(broker_session_factory) as sys_sess:
         row = await claim_raw_webhook_event(sys_sess, raw_event_id)
 
     if row is None:
@@ -547,6 +553,7 @@ async def process_raw_webhook_event(
             error_code="ERR_UNRESOLVED_CHANNEL_TENANT",
             error_detail=f"Cannot resolve tenant/channel_account for {channel_type}:{ext_acct_id}",
             attempt_count=attempt,
+            broker_session_factory=broker_session_factory,
         )
         return "dead_letter"
 
@@ -563,6 +570,7 @@ async def process_raw_webhook_event(
             error_code="ERR_ADAPTER_MISSING",
             error_detail=f"No adapter registered for {channel_type}",
             attempt_count=attempt,
+            broker_session_factory=broker_session_factory,
         )
         return "dead_letter"
 
@@ -614,7 +622,7 @@ async def process_raw_webhook_event(
                         }
                     )
 
-        async with system_session(session_factory) as sys_sess:
+        async with system_session(broker_session_factory) as sys_sess:
             await set_raw_webhook_processing_state(
                 sys_sess,
                 raw_event_id=raw_event_id,
@@ -630,7 +638,7 @@ async def process_raw_webhook_event(
 
     except OutOfOrderParentError as exc:
         if attempt <= MAX_INGRESS_ATTEMPTS:
-            async with system_session(session_factory) as sys_sess:
+            async with system_session(broker_session_factory) as sys_sess:
                 await set_raw_webhook_processing_state(
                     sys_sess,
                     raw_event_id=raw_event_id,
@@ -664,6 +672,7 @@ async def process_raw_webhook_event(
             error_code="ERR_OUT_OF_ORDER_EXHAUSTED",
             error_detail=str(exc),
             attempt_count=attempt,
+            broker_session_factory=broker_session_factory,
         )
         return "dead_letter"
 
@@ -679,6 +688,7 @@ async def process_raw_webhook_event(
             error_code="ERR_WEBHOOK_PROCESSING_FAILED",
             error_detail=f"{type(exc).__name__}: {exc}",
             attempt_count=attempt,
+            broker_session_factory=broker_session_factory,
         )
         return "dead_letter"
 
@@ -697,6 +707,7 @@ async def _ack_processed_entries(
     group_name: str,
     messages: list[tuple[Any, dict[Any, Any]]],
     adapter_registry: AdapterRegistry | None,
+    broker_session_factory: async_sessionmaker[AsyncSession],
 ) -> int:
     processed = 0
     for stream_msg_id, fields in messages:
@@ -711,6 +722,7 @@ async def _ack_processed_entries(
             raw_event_id=uuid.UUID(raw_id_str),
             adapter_registry=adapter_registry,
             attempt=int(attempt_raw),
+            broker_session_factory=broker_session_factory,
         )
         await redis.xack(stream_key, group_name, stream_msg_id)
         processed += 1
@@ -728,8 +740,11 @@ async def consume_webhook_stream_batch(
     block_ms: int = 50,
     min_idle_ms: int = 15_000,
     adapter_registry: AdapterRegistry | None = None,
+    broker_session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> int:
     """Read new stream entries and reclaim idle pending entries after a crash."""
+    if broker_session_factory is None:
+        raise RuntimeError("webhook broker session is not configured")
     stream_key = f"stream:webhooks:{channel_type.value}"
     try:
         await redis.xgroup_create(stream_key, group_name, id="0", mkstream=True)
@@ -754,6 +769,7 @@ async def consume_webhook_stream_batch(
         group_name,
         claimed_messages,
         adapter_registry,
+        broker_session_factory,
     )
 
     entries = await redis.xreadgroup(
@@ -775,18 +791,19 @@ async def consume_webhook_stream_batch(
             group_name,
             messages,
             adapter_registry,
+            broker_session_factory,
         )
     return processed
 
 
 async def compensate_unenqueued_webhooks(
-    session_factory: async_sessionmaker[AsyncSession],
+    broker_session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
     *,
     limit: int = 20,
 ) -> int:
     """Enqueue raw rows left in `received` when Redis failed after the DB commit."""
-    async with system_session(session_factory) as session:
+    async with system_session(broker_session_factory) as session:
         pending = await list_unenqueued_raw_webhook_ids(session, limit)
     enqueued = 0
     for raw_id, channel_type in pending:
@@ -794,7 +811,7 @@ async def compensate_unenqueued_webhooks(
             f"stream:webhooks:{channel_type}",
             {"raw_event_id": str(raw_id), "channel_type": channel_type, "attempt": "1"},
         )
-        async with system_session(session_factory) as session:
+        async with system_session(broker_session_factory) as session:
             await set_raw_webhook_processing_state(
                 session,
                 raw_event_id=raw_id,
@@ -808,6 +825,7 @@ async def compensate_unenqueued_webhooks(
 async def drain_deferred_webhooks(
     session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
+    broker_session_factory: async_sessionmaker[AsyncSession],
 ) -> int:
     now_score = datetime.now(UTC).timestamp()
     due_items = cast(
@@ -826,6 +844,7 @@ async def drain_deferred_webhooks(
             redis=redis,
             raw_event_id=uuid.UUID(item["raw_event_id"]),
             attempt=int(item.get("attempt", 1)),
+            broker_session_factory=broker_session_factory,
         )
         count += 1
     return count
@@ -837,9 +856,12 @@ async def run_webhook_worker_once(
     *,
     min_idle_ms: int = 15_000,
     adapter_registry: AdapterRegistry | None = None,
+    broker_session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> int:
     """One production pass: compensate, reclaim, read, and drain deferred retries."""
-    total = await compensate_unenqueued_webhooks(session_factory, redis)
+    if broker_session_factory is None:
+        raise RuntimeError("webhook broker session is not configured")
+    total = await compensate_unenqueued_webhooks(broker_session_factory, redis)
     for channel_type in _WORKER_CHANNELS:
         total += await consume_webhook_stream_batch(
             session_factory,
@@ -847,8 +869,9 @@ async def run_webhook_worker_once(
             channel_type,
             min_idle_ms=min_idle_ms,
             adapter_registry=adapter_registry,
+            broker_session_factory=broker_session_factory,
         )
-    total += await drain_deferred_webhooks(session_factory, redis)
+    total += await drain_deferred_webhooks(session_factory, redis, broker_session_factory)
     return total
 
 
@@ -860,6 +883,7 @@ async def run_webhook_worker_loop(
     min_idle_ms: int = 15_000,
     poll_interval: float = 0.05,
     adapter_registry: AdapterRegistry | None = None,
+    broker_session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> None:
     """Run until stop_event is set. This is the production webhook worker loop."""
     while not stop_event.is_set():
@@ -868,6 +892,7 @@ async def run_webhook_worker_loop(
             redis,
             min_idle_ms=min_idle_ms,
             adapter_registry=adapter_registry,
+            broker_session_factory=broker_session_factory,
         )
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=poll_interval)
@@ -1094,7 +1119,13 @@ async def replay_dead_letter_event(
     outcome = "queued"
     if dlq_row["direction"] == "inbound" and dlq_row["raw_webhook_event_id"] is not None:
         raw_id = dlq_row["raw_webhook_event_id"]
-        async with system_session(session_factory) as sys_sess:
+        broker_factory = getattr(request.app.state, "broker_session_factory", None)
+        if broker_factory is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="webhook broker is not configured",
+            )
+        async with system_session(broker_factory) as sys_sess:
             await set_raw_webhook_processing_state(
                 sys_sess,
                 raw_event_id=raw_id,
@@ -1127,6 +1158,7 @@ def register_channel_worker_tasks(
     broker: RedisStreamBroker,
     session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
+    broker_session_factory: async_sessionmaker[AsyncSession],
 ) -> dict[str, Any]:
     """Attach Taskiq webhook ingress and outbound dispatch tasks to the shared broker."""
 
@@ -1137,6 +1169,7 @@ def register_channel_worker_tasks(
             redis=redis,
             raw_event_id=uuid.UUID(raw_event_id),
             attempt=attempt,
+            broker_session_factory=broker_session_factory,
         )
 
     @broker.task
@@ -1153,11 +1186,15 @@ def register_channel_worker_tasks(
 
     @broker.task
     async def drain_delayed_queues_task() -> int:
-        return await drain_deferred_webhooks(session_factory, redis)
+        return await drain_deferred_webhooks(session_factory, redis, broker_session_factory)
 
     @broker.task
     async def consume_webhook_streams_task() -> int:
-        return await run_webhook_worker_once(session_factory, redis)
+        return await run_webhook_worker_once(
+            session_factory,
+            redis,
+            broker_session_factory=broker_session_factory,
+        )
 
     return {
         "process_webhook_event_task": process_webhook_event_task,

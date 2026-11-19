@@ -324,12 +324,6 @@ def upgrade() -> None:
         "AS PERMISSIVE FOR ALL TO app_migrator USING (true) WITH CHECK (true)"
     )
     op.execute(
-        "CREATE POLICY migrator_broker_restrictive ON raw_webhook_events "
-        "AS RESTRICTIVE FOR ALL TO app_migrator "
-        "USING (current_setting('app.webhook_broker', true) = '1') "
-        "WITH CHECK (current_setting('app.webhook_broker', true) = '1')"
-    )
-    op.execute(
         f"""
         CREATE OR REPLACE FUNCTION accept_raw_webhook_event(
             p_id UUID,
@@ -350,7 +344,6 @@ def upgrade() -> None:
             existing_id UUID;
             existing_status TEXT;
         BEGIN
-            PERFORM set_config('app.webhook_broker', '1', true);
             IF p_channel_type IS NULL OR p_external_event_id IS NULL THEN
                 RAISE EXCEPTION 'webhook identity required' USING ERRCODE = '22023';
             END IF;
@@ -415,7 +408,6 @@ def upgrade() -> None:
             IF p_id IS NULL THEN
                 RETURN;
             END IF;
-            PERFORM set_config('app.webhook_broker', '1', true);
             RETURN QUERY
                 SELECT e.id, e.tenant_id, e.channel_type, e.external_event_id,
                        e.external_account_id, e.headers, e.raw_payload, e.processing_status
@@ -445,10 +437,12 @@ def upgrade() -> None:
             ) THEN
                 RAISE EXCEPTION 'invalid webhook status' USING ERRCODE = '22023';
             END IF;
-            PERFORM set_config('app.webhook_broker', '1', true);
             UPDATE public.raw_webhook_events
             SET processing_status = p_status,
-                tenant_id = COALESCE(p_tenant_id, tenant_id),
+                tenant_id = CASE
+                    WHEN tenant_id IS NULL THEN p_tenant_id
+                    ELSE tenant_id
+                END,
                 attempt_count = COALESCE(p_attempt, attempt_count),
                 error_message = p_error,
                 processed_at = CASE
@@ -472,7 +466,6 @@ def upgrade() -> None:
             bounded INTEGER;
         BEGIN
             bounded := LEAST(GREATEST(COALESCE(p_limit, 1), 1), 50);
-            PERFORM set_config('app.webhook_broker', '1', true);
             RETURN QUERY
                 SELECT e.id, e.channel_type
                 FROM public.raw_webhook_events e
@@ -489,8 +482,7 @@ def upgrade() -> None:
         "set_raw_webhook_processing_state(UUID, TEXT, UUID, INTEGER, TEXT)",
         "list_unenqueued_raw_webhook_ids(INTEGER)",
     ):
-        op.execute(f"REVOKE ALL ON FUNCTION {fn_sig} FROM PUBLIC")
-        op.execute(f"GRANT EXECUTE ON FUNCTION {fn_sig} TO app_runtime")
+        op.execute(f"REVOKE ALL ON FUNCTION {fn_sig} FROM PUBLIC, app_runtime")
 
     # 4. dead_letter_events
     op.create_table(

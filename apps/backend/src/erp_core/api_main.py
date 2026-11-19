@@ -44,6 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.crypto_service = crypto_service
     app.state.runtime_engine = runtime_engine
     app.state.session_factory = session_factory
+    app.state.broker_session_factory = migrator_sessions
     try:
         async with migrator_sessions() as session, session.begin():
             await ensure_audit_child_rls(session)

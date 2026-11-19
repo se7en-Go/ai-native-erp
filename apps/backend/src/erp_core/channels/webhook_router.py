@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
@@ -86,6 +86,16 @@ def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
         factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         request.app.state.session_factory = factory
     return factory
+
+
+def _get_broker_factory(request: Request) -> async_sessionmaker[AsyncSession]:
+    factory = getattr(request.app.state, "broker_session_factory", None)
+    if factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="webhook broker is not configured",
+        )
+    return cast(async_sessionmaker[AsyncSession], factory)
 
 
 def _get_redis(request: Request) -> aioredis.Redis:
@@ -185,6 +195,7 @@ async def receive_webhook(channel: str, request: Request) -> JSONResponse:
         extracted_events = [(hashlib.sha256(raw_body).hexdigest(), None)]
 
     session_factory = _get_session_factory(request)
+    broker_factory = _get_broker_factory(request)
     redis = _get_redis(request)
 
     inserted_ids: list[str] = []
@@ -228,16 +239,17 @@ async def receive_webhook(channel: str, request: Request) -> JSONResponse:
             if ext_acct_id and ext_acct_id in resolved_tenants:
                 resolved_tid, resolved_ctype = resolved_tenants[ext_acct_id]
 
-            inserted = await accept_raw_webhook_event(
-                session,
-                event_id=uuid.uuid4(),
-                tenant_id=resolved_tid,
-                channel_type=resolved_ctype.value,
-                external_event_id=ext_event_id,
-                external_account_id=ext_acct_id,
-                headers_json=headers_json,
-                payload_json=payload_json,
-            )
+            async with system_session(broker_factory) as broker:
+                inserted = await accept_raw_webhook_event(
+                    broker,
+                    event_id=uuid.uuid4(),
+                    tenant_id=resolved_tid,
+                    channel_type=resolved_ctype.value,
+                    external_event_id=ext_event_id,
+                    external_account_id=ext_acct_id,
+                    headers_json=headers_json,
+                    payload_json=payload_json,
+                )
             if inserted is not None:
                 inserted_str = str(inserted)
                 inserted_ids.append(inserted_str)
@@ -255,7 +267,7 @@ async def receive_webhook(channel: str, request: Request) -> JSONResponse:
             logger.exception("webhook row %s committed but redis enqueue failed", raw_id_str)
             queue_failed = True
             continue
-        async with system_session(session_factory) as session:
+        async with system_session(broker_factory) as session:
             await set_raw_webhook_processing_state(
                 session,
                 raw_event_id=uuid.UUID(raw_id_str),
