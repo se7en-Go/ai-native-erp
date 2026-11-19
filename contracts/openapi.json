@@ -132,6 +132,82 @@
         "title": "AuditEventRead",
         "type": "object"
       },
+      "BuyerLocalTimeInfo": {
+        "properties": {
+          "formatted_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formatted Time"
+          },
+          "iana_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iana Timezone"
+          },
+          "is_quiet_hours": {
+            "default": false,
+            "title": "Is Quiet Hours",
+            "type": "boolean"
+          },
+          "local_hour": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Hour"
+          },
+          "local_iso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Iso"
+          },
+          "recommended_send_at_utc": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Send At Utc"
+          }
+        },
+        "title": "BuyerLocalTimeInfo",
+        "type": "object"
+      },
+      "ConfidenceLevel": {
+        "enum": [
+          "deterministic",
+          "human_verified",
+          "probabilistic"
+        ],
+        "title": "ConfidenceLevel",
+        "type": "string"
+      },
       "CostVisibilitySampleResponse": {
         "properties": {
           "cogs_base": {
@@ -202,6 +278,294 @@
           "unit_sale_price"
         ],
         "title": "CostVisibilitySampleResponse",
+        "type": "object"
+      },
+      "CustomerIdentityRead": {
+        "properties": {
+          "confidence_level": {
+            "$ref": "#/components/schemas/ConfidenceLevel"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "identity_type": {
+            "$ref": "#/components/schemas/IdentityType"
+          },
+          "identity_value": {
+            "title": "Identity Value",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "identity_type",
+          "identity_value",
+          "confidence_level",
+          "is_active",
+          "created_at"
+        ],
+        "title": "CustomerIdentityRead",
+        "type": "object"
+      },
+      "CustomerRead": {
+        "properties": {
+          "buyer_local_time": {
+            "$ref": "#/components/schemas/BuyerLocalTimeInfo"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_type": {
+            "$ref": "#/components/schemas/CustomerType"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "iana_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iana Timezone"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "identities": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerIdentityRead"
+            },
+            "title": "Identities",
+            "type": "array"
+          },
+          "lifecycle_stage": {
+            "title": "Lifecycle Stage",
+            "type": "string"
+          },
+          "ltv_usd": {
+            "title": "Ltv Usd",
+            "type": "string"
+          },
+          "merge_proposals": {
+            "items": {
+              "$ref": "#/components/schemas/MergeProposalCandidate"
+            },
+            "title": "Merge Proposals",
+            "type": "array"
+          },
+          "merged_into_customer_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Into Customer Id"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code"
+          },
+          "preferred_language": {
+            "title": "Preferred Language",
+            "type": "string"
+          },
+          "primary_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Email"
+          },
+          "primary_phone_e164": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Phone E164"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "timezone_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone Source"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "customer_type",
+          "display_name",
+          "preferred_language",
+          "lifecycle_stage",
+          "ltv_usd",
+          "created_at",
+          "buyer_local_time"
+        ],
+        "title": "CustomerRead",
+        "type": "object"
+      },
+      "CustomerType": {
+        "enum": [
+          "b2c_consumer",
+          "b2b_contact",
+          "b2b_company_rep"
+        ],
+        "title": "CustomerType",
+        "type": "string"
+      },
+      "CustomerUpdateRequest": {
+        "properties": {
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "customer_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "iana_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iana Timezone"
+          },
+          "lifecycle_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle Stage"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code"
+          },
+          "preferred_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Language"
+          }
+        },
+        "title": "CustomerUpdateRequest",
         "type": "object"
       },
       "GdprAnonymizeResult": {
@@ -325,6 +689,22 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IdentityType": {
+        "enum": [
+          "email",
+          "phone_e164",
+          "whatsapp_waid",
+          "whatsapp_bsuid",
+          "ig_psid",
+          "fb_psid",
+          "shopify_customer_id",
+          "tiktok_buyer_id",
+          "amazon_buyer_email",
+          "web_visitor_id"
+        ],
+        "title": "IdentityType",
+        "type": "string"
+      },
       "InviteMemberRequest": {
         "properties": {
           "email": {
@@ -441,6 +821,104 @@
         "title": "MembershipItem",
         "type": "object"
       },
+      "MergeCustomersRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_customer_id": {
+            "format": "uuid",
+            "title": "Source Customer Id",
+            "type": "string"
+          },
+          "target_customer_id": {
+            "format": "uuid",
+            "title": "Target Customer Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_customer_id",
+          "target_customer_id",
+          "reason"
+        ],
+        "title": "MergeCustomersRequest",
+        "type": "object"
+      },
+      "MergeCustomersResponse": {
+        "properties": {
+          "merge_event_id": {
+            "format": "uuid",
+            "title": "Merge Event Id",
+            "type": "string"
+          },
+          "source_customer_id": {
+            "format": "uuid",
+            "title": "Source Customer Id",
+            "type": "string"
+          },
+          "target_customer_id": {
+            "format": "uuid",
+            "title": "Target Customer Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merge_event_id",
+          "source_customer_id",
+          "target_customer_id"
+        ],
+        "title": "MergeCustomersResponse",
+        "type": "object"
+      },
+      "MergeProposalCandidate": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "proposal_type": {
+            "$ref": "#/components/schemas/ProposalType",
+            "default": "identity_merge"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "similarity_score": {
+            "title": "Similarity Score",
+            "type": "number"
+          },
+          "source_customer_id": {
+            "format": "uuid",
+            "title": "Source Customer Id",
+            "type": "string"
+          },
+          "target_customer_id": {
+            "format": "uuid",
+            "title": "Target Customer Id",
+            "type": "string"
+          },
+          "target_display_name": {
+            "title": "Target Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_customer_id",
+          "target_customer_id",
+          "target_display_name",
+          "similarity_score",
+          "reason",
+          "created_at"
+        ],
+        "title": "MergeProposalCandidate",
+        "type": "object"
+      },
       "OnboardingStage": {
         "enum": [
           "WorkspaceCreated",
@@ -532,6 +1010,42 @@
         "title": "PaginatedResponse[AuditEventRead]",
         "type": "object"
       },
+      "PaginatedResponse_CustomerRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[CustomerRead]",
+        "type": "object"
+      },
       "PaginatedResponse_MembershipItem_": {
         "properties": {
           "has_more": {
@@ -618,6 +1132,19 @@
         "title": "PrincipalResponse",
         "type": "object"
       },
+      "ProposalType": {
+        "enum": [
+          "reply_draft",
+          "crm_entity_extract",
+          "quote_draft",
+          "follow_up_suggestion",
+          "identity_merge",
+          "refund_or_reship",
+          "payment_match"
+        ],
+        "title": "ProposalType",
+        "type": "string"
+      },
       "RefreshRequest": {
         "properties": {
           "refresh_token": {
@@ -699,6 +1226,47 @@
           "tenant_name"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "SplitCustomerRequest": {
+        "properties": {
+          "merge_event_id": {
+            "format": "uuid",
+            "title": "Merge Event Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merge_event_id",
+          "reason"
+        ],
+        "title": "SplitCustomerRequest",
+        "type": "object"
+      },
+      "SplitCustomerResponse": {
+        "properties": {
+          "merge_event_id": {
+            "format": "uuid",
+            "title": "Merge Event Id",
+            "type": "string"
+          },
+          "split_event_id": {
+            "format": "uuid",
+            "title": "Split Event Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "split_event_id",
+          "merge_event_id"
+        ],
+        "title": "SplitCustomerResponse",
         "type": "object"
       },
       "TenantMembershipOption": {
@@ -1172,6 +1740,426 @@
         "summary": "Register",
         "tags": [
           "tenancy"
+        ]
+      }
+    },
+    "/api/v1/channels/dlq/{event_id}/replay": {
+      "post": {
+        "description": "Replay a failed inbound or outbound dead-letter event within the current tenant.",
+        "operationId": "replay_dead_letter_event_api_v1_channels_dlq__event_id__replay_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Replay Dead Letter Event Api V1 Channels Dlq  Event Id  Replay Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Dead Letter Event",
+        "tags": [
+          "channels-dlq"
+        ]
+      }
+    },
+    "/api/v1/customers": {
+      "get": {
+        "operationId": "list_customers_api_v1_customers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CustomerType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_merged",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Merged",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_CustomerRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Customers",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/api/v1/customers/merge": {
+      "post": {
+        "operationId": "merge_customers_endpoint_api_v1_customers_merge_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeCustomersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergeCustomersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Customers Endpoint",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/api/v1/customers/split": {
+      "post": {
+        "operationId": "split_customers_endpoint_api_v1_customers_split_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SplitCustomerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitCustomerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Split Customers Endpoint",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/api/v1/customers/{customer_id}": {
+      "get": {
+        "operationId": "get_customer_api_v1_customers__customer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Customer",
+        "tags": [
+          "identity"
+        ]
+      },
+      "patch": {
+        "operationId": "update_customer_api_v1_customers__customer_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Customer",
+        "tags": [
+          "identity"
         ]
       }
     },
@@ -1916,6 +2904,134 @@
         "summary": "Update Tenant Settings",
         "tags": [
           "tenancy"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{channel}": {
+      "get": {
+        "description": "Handle Meta webhook subscription verification handshake.",
+        "operationId": "verify_webhook_subscription_api_v1_webhooks__channel__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel",
+            "required": true,
+            "schema": {
+              "title": "Channel",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hub.mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hub.verify_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Verify Token"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hub.challenge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Challenge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Webhook Subscription",
+        "tags": [
+          "webhooks"
+        ]
+      },
+      "post": {
+        "description": "Verify raw HMAC signature, deduplicate into PostgreSQL, and stream to Taskiq in <100ms.",
+        "operationId": "receive_webhook_api_v1_webhooks__channel__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel",
+            "required": true,
+            "schema": {
+              "title": "Channel",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receive Webhook",
+        "tags": [
+          "webhooks"
         ]
       }
     },

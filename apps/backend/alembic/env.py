@@ -8,6 +8,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import erp_core.channels.models  # noqa: F401
+import erp_core.identity.models  # noqa: F401
 from erp_core.shared.config import get_settings
 from erp_core.shared.db import Base
 from erp_core.tenancy import models as _tenancy_models  # noqa: F401

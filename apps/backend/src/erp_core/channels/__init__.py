@@ -1,1 +1,1 @@
-"""Channels domain: webhooks, routing, rate limiting, channel adapters."""
+"""Omnichannel messaging adapters, webhook pipeline, and unified inbox."""
