@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bot, Send, ShieldCheck, X, AlertTriangle, ArrowUpRight } from "lucide-react";
+import { Bot, Send, ShieldCheck, X, AlertTriangle, ArrowUpRight, CalendarClock, PackageX, ClipboardCheck, Newspaper } from "lucide-react";
 import { z } from "zod";
 import {
   assistantChat,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/contracts";
 import { useI18n } from "@/lib/i18n";
 import { useAuthSession } from "@/components/providers";
+import { fetchInboxAssist } from "@/lib/phase3b-data";
 
 const SAFE_METRIC_LABELS: Record<string, string> = {
   open_threads: "Open Threads",
@@ -117,6 +118,19 @@ export function sanitizeCopilotCards(rawCards: unknown[]): CopilotSummaryCard[] 
   return clean;
 }
 
+/** Chips are navigation shortcuts plus one real daily brief; never raw payloads. */
+const COPILOT_CHIPS = [
+  { id: "daily-brief", label: "AI 日报", icon: Newspaper },
+  { id: "pending-proposals", label: "待审提案", icon: ClipboardCheck, href: "/ai/proposals" },
+  { id: "today-followups", label: "今日跟进", icon: CalendarClock, href: "/crm/followups" },
+  { id: "stock-alerts", label: "库存预警", icon: PackageX, href: "/wms" },
+] as const;
+
+/** Only plain strings are rendered, so a nested payload can never print [object Object]. */
+export function copilotBriefText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 function renderSafeMetricValue(metric: z.infer<typeof CopilotMetricSchema>): string {
   if (metric.kind === "money") {
     return formatMoney(metric.value, metric.currency ?? "USD");
@@ -137,6 +151,8 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
   const [mode, setMode] = useState<"global" | "strict_rag">("global");
   const [query, setQuery] = useState("");
   const [lastResult, setLastResult] = useState<AssistantChatResult | null>(null);
+  const [lastBrief, setLastBrief] = useState("");
+  const [briefError, setBriefError] = useState<string | null>(null);
 
   const capabilitiesQuery = useQuery({
     queryKey: ["ai", "capabilities"],
@@ -169,6 +185,19 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
       }),
     onSuccess: (res) => {
       setLastResult(res);
+    },
+  });
+
+  const briefMutation = useMutation({
+    mutationFn: () =>
+      fetchInboxAssist("daily_brief", { conversationId: conversationId ?? null, language: "zh" }),
+    onSuccess: (result) => {
+      setBriefError(null);
+      setLastBrief(copilotBriefText(result.text));
+    },
+    onError: (error) => {
+      setLastBrief("");
+      setBriefError(error.message);
     },
   });
 
@@ -262,6 +291,50 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
 
             {wallet && (
               <span className="text-[11px] text-slate-500">Credits: {remainingCredits}</span>
+            )}
+          </div>
+
+          <div className="border-b border-slate-200 bg-white px-3 py-2">
+            <div className="flex flex-wrap gap-1.5">
+              {COPILOT_CHIPS.map(({ id, label, icon: Icon, ...rest }) => {
+                const href = "href" in rest ? rest.href : undefined;
+                return href ? (
+                  <Link
+                    key={id}
+                    href={href}
+                    data-testid={`copilot-chip-${id}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-indigo-300 hover:text-indigo-700"
+                  >
+                    <Icon className="h-3 w-3" aria-hidden="true" />
+                    {label}
+                  </Link>
+                ) : (
+                  <button
+                    key={id}
+                    type="button"
+                    data-testid={`copilot-chip-${id}`}
+                    disabled={briefMutation.isPending}
+                    onClick={() => briefMutation.mutate()}
+                    className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                  >
+                    <Icon className="h-3 w-3" aria-hidden="true" />
+                    {briefMutation.isPending ? "生成中…" : label}
+                  </button>
+                );
+              })}
+            </div>
+            {briefError && (
+              <p role="alert" data-testid="copilot-brief-error" className="mt-1.5 text-[11px] text-rose-700">
+                {briefError}
+              </p>
+            )}
+            {lastBrief && (
+              <p
+                data-testid="copilot-brief"
+                className="mt-1.5 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-2 text-[11px] leading-relaxed text-slate-800"
+              >
+                {lastBrief}
+              </p>
             )}
           </div>
 

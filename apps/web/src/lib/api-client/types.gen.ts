@@ -10,6 +10,56 @@ export type AdvanceOnboardingRequest = {
 
 export type AiCapability = 'cs_support' | 'sales_quoting' | 'order_logistics' | 'content_studio' | 'biz_analytics' | 'finance_recon';
 
+/**
+ * Operator-supplied digital employee definition.
+ */
+export type AiEmployeeCreate = {
+    autonomy_level?: AutonomyLevel;
+    avatar_emoji?: string | null;
+    capability_codes?: Array<AiCapability>;
+    code: string;
+    department: string;
+    description: string;
+    display_name: string;
+    is_enabled?: boolean;
+    role_title: string;
+    system_persona?: string | null;
+    tool_count?: number;
+};
+
+export type AiEmployeeRead = {
+    actions_7d?: number;
+    autonomy_level: AutonomyLevel;
+    avatar_emoji: string | null;
+    capability_codes: Array<AiCapability>;
+    code: string;
+    created_at: string;
+    department: string;
+    description: string;
+    display_name: string;
+    id: string;
+    is_enabled: boolean;
+    role_title: string;
+    system_persona: string | null;
+    tasks_7d?: number;
+    tenant_id: string;
+    tool_count: number;
+    updated_at: string;
+};
+
+export type AiEmployeeUpdate = {
+    autonomy_level?: AutonomyLevel | null;
+    avatar_emoji?: string | null;
+    capability_codes?: Array<AiCapability> | null;
+    department?: string | null;
+    description?: string | null;
+    display_name?: string | null;
+    is_enabled?: boolean | null;
+    role_title?: string | null;
+    system_persona?: string | null;
+    tool_count?: number | null;
+};
+
 export type AiProposalRead = {
     capability: AiCapability;
     citations: Array<{
@@ -98,7 +148,20 @@ export type AuditEventRead = {
     user_agent?: string | null;
 };
 
+export type AutoExecutedCapability = {
+    auto_executed_7d: number;
+    capability: AiCapability;
+    display_name: string;
+    href: string;
+};
+
 export type AutonomyLevel = 'L0_copilot' | 'L1_proposal' | 'L2_auto';
+
+export type AutonomySummary = {
+    l0_copilot: number;
+    l1_proposal: number;
+    l2_auto: number;
+};
 
 export type BodySubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPost = {
     actual_fx_rate: number | string;
@@ -299,6 +362,46 @@ export type CreateStocktake = {
     request_id: string;
     variant_id: string;
     warehouse_id: string;
+};
+
+export type CreativeAssetCreate = {
+    asset_type: CreativeAssetType;
+    content_text?: string | null;
+    generate?: boolean;
+    language?: string;
+    prompt?: string | null;
+    sku_ref?: string | null;
+    title?: string | null;
+};
+
+export type CreativeAssetRead = {
+    asset_type: CreativeAssetType;
+    content_text: string;
+    created_at: string;
+    created_by: string;
+    id: string;
+    language: string;
+    numeric_guard_passed?: boolean;
+    prompt: string | null;
+    sku_ref: string | null;
+    status: CreativeAssetStatus;
+    tenant_id: string;
+    title: string;
+    tool_calls?: Array<{
+        [key: string]: unknown;
+    }>;
+    updated_at: string;
+};
+
+export type CreativeAssetStatus = 'draft' | 'approved' | 'archived';
+
+export type CreativeAssetType = 'product_copy' | 'listing' | 'email_template' | 'social_caption' | 'ad_hook';
+
+export type CreativeAssetUpdate = {
+    content_text?: string | null;
+    language?: string | null;
+    status?: CreativeAssetStatus | null;
+    title?: string | null;
 };
 
 export type CreditWalletRead = {
@@ -520,6 +623,35 @@ export type HttpValidationError = {
 
 export type IdentityType = 'email' | 'phone_e164' | 'whatsapp_waid' | 'whatsapp_bsuid' | 'ig_psid' | 'fb_psid' | 'shopify_customer_id' | 'tiktok_buyer_id' | 'amazon_buyer_email' | 'web_visitor_id';
 
+export type InboxAssistAction = 'polish' | 'summarize' | 'suggest_reply' | 'daily_brief';
+
+export type InboxAssistRequest = {
+    action: InboxAssistAction;
+    conversation_id?: string | null;
+    language?: string;
+    strict_rag?: boolean;
+    text?: string | null;
+};
+
+export type InboxAssistResponse = {
+    abstained?: boolean;
+    action: InboxAssistAction;
+    citations?: Array<{
+        [key: string]: unknown;
+    }>;
+    credits_consumed?: string;
+    data?: {
+        [key: string]: unknown;
+    } | null;
+    model_used?: string;
+    numeric_guard_passed?: boolean;
+    requires_human_review?: boolean;
+    text: string;
+    tool_calls?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
 export type Incoterm = 'EXW' | 'FOB' | 'CIF' | 'DDP' | 'DAP';
 
 export type InstagramConnectRequest = {
@@ -623,6 +755,13 @@ export type LiveSkuCheckRead = {
     sku: string;
     source_tool_call_id: string;
     unit_price_quote_ccy: string;
+};
+
+export type LockedGuardrail = {
+    code: string;
+    description: string;
+    href: string;
+    title: string;
 };
 
 export type LoginRequest = {
@@ -854,6 +993,14 @@ export type OverviewRead = {
     won_conversion_pct: string;
 };
 
+export type PaginatedResponseAiEmployeeRead = {
+    has_more: boolean;
+    items: Array<AiEmployeeRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseAiProposalRead = {
     has_more: boolean;
     items: Array<AiProposalRead>;
@@ -905,6 +1052,14 @@ export type PaginatedResponseChannelSuppressionRead = {
 export type PaginatedResponseConversationRead = {
     has_more: boolean;
     items: Array<ConversationRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseCreativeAssetRead = {
+    has_more: boolean;
+    items: Array<CreativeAssetRead>;
     limit: number;
     offset: number;
     total: number;
@@ -1014,6 +1169,14 @@ export type PaginatedResponsePurchaseOrderRead = {
     total: number;
 };
 
+export type PaginatedResponseQuickReplyRead = {
+    has_more: boolean;
+    items: Array<QuickReplyRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseQuoteRead = {
     has_more: boolean;
     items: Array<QuoteRead>;
@@ -1112,6 +1275,13 @@ export type PaymentVerifyResponse = {
     ok?: boolean;
     order_fulfillment_status: FulfillmentStatus;
     payment: PaymentRecordRead;
+};
+
+export type PendingProposalGroup = {
+    count: number;
+    href: string;
+    label: string;
+    proposal_type: ProposalType;
 };
 
 export type PreChatOptInPayload = {
@@ -1251,6 +1421,25 @@ export type PurchaseOrderUpdate = {
     status?: ('ordered' | 'cancelled') | null;
     supplier_id?: string | null;
     warehouse_id?: string | null;
+};
+
+export type QuickReplyCreate = {
+    body_text: string;
+    category: string;
+    language?: string;
+    shortcut_code: string;
+    title: string;
+};
+
+export type QuickReplyRead = {
+    body_text: string;
+    category: string;
+    created_at: string;
+    id: string;
+    language: string;
+    shortcut_code: string;
+    tenant_id: string;
+    title: string;
 };
 
 export type QuoteCreate = {
@@ -1894,6 +2083,21 @@ export type WooAuthUrlRequest = {
     store_url: string;
 };
 
+export type WorkforceKpis = {
+    actions_7d: number;
+    active_employees: number;
+    autonomy_summary: AutonomySummary;
+    today_llm_cost_usd: string;
+    total_employees: number;
+};
+
+export type WorkforceMatrixResponse = {
+    kpis: WorkforceKpis;
+    l0_locked: Array<LockedGuardrail>;
+    l1_pending: Array<PendingProposalGroup>;
+    l2_auto: Array<AutoExecutedCapability>;
+};
+
 export type AssistantChatApiV1AiAssistantChatPostData = {
     body: AssistantChatRequest;
     headers?: {
@@ -1978,6 +2182,125 @@ export type UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses = {
 
 export type UpdateCapabilitiesApiV1AiCapabilitiesPatchResponse = UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses[keyof UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses];
 
+export type ListEmployeesApiV1AiEmployeesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        department?: string | null;
+        is_enabled?: boolean | null;
+    };
+    url: '/api/v1/ai/employees';
+};
+
+export type ListEmployeesApiV1AiEmployeesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListEmployeesApiV1AiEmployeesGetError = ListEmployeesApiV1AiEmployeesGetErrors[keyof ListEmployeesApiV1AiEmployeesGetErrors];
+
+export type ListEmployeesApiV1AiEmployeesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseAiEmployeeRead;
+};
+
+export type ListEmployeesApiV1AiEmployeesGetResponse = ListEmployeesApiV1AiEmployeesGetResponses[keyof ListEmployeesApiV1AiEmployeesGetResponses];
+
+export type CreateEmployeeApiV1AiEmployeesPostData = {
+    body: AiEmployeeCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/employees';
+};
+
+export type CreateEmployeeApiV1AiEmployeesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateEmployeeApiV1AiEmployeesPostError = CreateEmployeeApiV1AiEmployeesPostErrors[keyof CreateEmployeeApiV1AiEmployeesPostErrors];
+
+export type CreateEmployeeApiV1AiEmployeesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AiEmployeeRead;
+};
+
+export type CreateEmployeeApiV1AiEmployeesPostResponse = CreateEmployeeApiV1AiEmployeesPostResponses[keyof CreateEmployeeApiV1AiEmployeesPostResponses];
+
+export type WorkforceMatrixApiV1AiEmployeesMatrixGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/employees/matrix';
+};
+
+export type WorkforceMatrixApiV1AiEmployeesMatrixGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WorkforceMatrixApiV1AiEmployeesMatrixGetError = WorkforceMatrixApiV1AiEmployeesMatrixGetErrors[keyof WorkforceMatrixApiV1AiEmployeesMatrixGetErrors];
+
+export type WorkforceMatrixApiV1AiEmployeesMatrixGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkforceMatrixResponse;
+};
+
+export type WorkforceMatrixApiV1AiEmployeesMatrixGetResponse = WorkforceMatrixApiV1AiEmployeesMatrixGetResponses[keyof WorkforceMatrixApiV1AiEmployeesMatrixGetResponses];
+
+export type UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchData = {
+    body: AiEmployeeUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        employee_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/employees/{employee_id}';
+};
+
+export type UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchError = UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchErrors[keyof UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchErrors];
+
+export type UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiEmployeeRead;
+};
+
+export type UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchResponse = UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchResponses[keyof UpdateEmployeeApiV1AiEmployeesEmployeeIdPatchResponses];
+
 export type FeedbackApiV1AiFeedbackPostData = {
     body: ProposalFeedbackRequest;
     headers?: {
@@ -2005,6 +2328,34 @@ export type FeedbackApiV1AiFeedbackPostResponses = {
 };
 
 export type FeedbackApiV1AiFeedbackPostResponse = FeedbackApiV1AiFeedbackPostResponses[keyof FeedbackApiV1AiFeedbackPostResponses];
+
+export type InboxAssistApiV1AiInboxAssistPostData = {
+    body: InboxAssistRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/inbox/assist';
+};
+
+export type InboxAssistApiV1AiInboxAssistPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type InboxAssistApiV1AiInboxAssistPostError = InboxAssistApiV1AiInboxAssistPostErrors[keyof InboxAssistApiV1AiInboxAssistPostErrors];
+
+export type InboxAssistApiV1AiInboxAssistPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboxAssistResponse;
+};
+
+export type InboxAssistApiV1AiInboxAssistPostResponse = InboxAssistApiV1AiInboxAssistPostResponses[keyof InboxAssistApiV1AiInboxAssistPostResponses];
 
 export type ListKbDocumentsApiV1AiKbDocumentsGetData = {
     body?: never;
@@ -2275,6 +2626,188 @@ export type RejectProposalApiV1AiProposalsProposalIdRejectPostResponses = {
 };
 
 export type RejectProposalApiV1AiProposalsProposalIdRejectPostResponse = RejectProposalApiV1AiProposalsProposalIdRejectPostResponses[keyof RejectProposalApiV1AiProposalsProposalIdRejectPostResponses];
+
+export type ListQuickRepliesApiV1AiQuickRepliesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        language?: string | null;
+        category?: string | null;
+    };
+    url: '/api/v1/ai/quick-replies';
+};
+
+export type ListQuickRepliesApiV1AiQuickRepliesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListQuickRepliesApiV1AiQuickRepliesGetError = ListQuickRepliesApiV1AiQuickRepliesGetErrors[keyof ListQuickRepliesApiV1AiQuickRepliesGetErrors];
+
+export type ListQuickRepliesApiV1AiQuickRepliesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseQuickReplyRead;
+};
+
+export type ListQuickRepliesApiV1AiQuickRepliesGetResponse = ListQuickRepliesApiV1AiQuickRepliesGetResponses[keyof ListQuickRepliesApiV1AiQuickRepliesGetResponses];
+
+export type CreateQuickReplyApiV1AiQuickRepliesPostData = {
+    body: QuickReplyCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/quick-replies';
+};
+
+export type CreateQuickReplyApiV1AiQuickRepliesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateQuickReplyApiV1AiQuickRepliesPostError = CreateQuickReplyApiV1AiQuickRepliesPostErrors[keyof CreateQuickReplyApiV1AiQuickRepliesPostErrors];
+
+export type CreateQuickReplyApiV1AiQuickRepliesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: QuickReplyRead;
+};
+
+export type CreateQuickReplyApiV1AiQuickRepliesPostResponse = CreateQuickReplyApiV1AiQuickRepliesPostResponses[keyof CreateQuickReplyApiV1AiQuickRepliesPostResponses];
+
+export type DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        template_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/quick-replies/{template_id}';
+};
+
+export type DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteError = DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteErrors[keyof DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteErrors];
+
+export type DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteResponse = DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteResponses[keyof DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteResponses];
+
+export type ListAssetsApiV1AiStudioAssetsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        asset_type?: CreativeAssetType | null;
+        status?: string | null;
+    };
+    url: '/api/v1/ai/studio/assets';
+};
+
+export type ListAssetsApiV1AiStudioAssetsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAssetsApiV1AiStudioAssetsGetError = ListAssetsApiV1AiStudioAssetsGetErrors[keyof ListAssetsApiV1AiStudioAssetsGetErrors];
+
+export type ListAssetsApiV1AiStudioAssetsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseCreativeAssetRead;
+};
+
+export type ListAssetsApiV1AiStudioAssetsGetResponse = ListAssetsApiV1AiStudioAssetsGetResponses[keyof ListAssetsApiV1AiStudioAssetsGetResponses];
+
+export type CreateAssetApiV1AiStudioAssetsPostData = {
+    body: CreativeAssetCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/studio/assets';
+};
+
+export type CreateAssetApiV1AiStudioAssetsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateAssetApiV1AiStudioAssetsPostError = CreateAssetApiV1AiStudioAssetsPostErrors[keyof CreateAssetApiV1AiStudioAssetsPostErrors];
+
+export type CreateAssetApiV1AiStudioAssetsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CreativeAssetRead;
+};
+
+export type CreateAssetApiV1AiStudioAssetsPostResponse = CreateAssetApiV1AiStudioAssetsPostResponses[keyof CreateAssetApiV1AiStudioAssetsPostResponses];
+
+export type UpdateAssetApiV1AiStudioAssetsAssetIdPatchData = {
+    body: CreativeAssetUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        asset_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/studio/assets/{asset_id}';
+};
+
+export type UpdateAssetApiV1AiStudioAssetsAssetIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateAssetApiV1AiStudioAssetsAssetIdPatchError = UpdateAssetApiV1AiStudioAssetsAssetIdPatchErrors[keyof UpdateAssetApiV1AiStudioAssetsAssetIdPatchErrors];
+
+export type UpdateAssetApiV1AiStudioAssetsAssetIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: CreativeAssetRead;
+};
+
+export type UpdateAssetApiV1AiStudioAssetsAssetIdPatchResponse = UpdateAssetApiV1AiStudioAssetsAssetIdPatchResponses[keyof UpdateAssetApiV1AiStudioAssetsAssetIdPatchResponses];
 
 export type TranslateTextApiV1AiTranslatePostData = {
     body: TranslateRequest;

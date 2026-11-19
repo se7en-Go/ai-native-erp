@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
+  Bot,
   Briefcase,
   Building2,
   ClipboardList,
@@ -11,6 +12,7 @@ import {
   LayoutDashboard,
   Package,
   PackageSearch,
+  Palette,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -120,6 +122,18 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/ai/capabilities",
         labelKey: "navCapabilities",
         icon: ShieldCheck,
+        roles: ALL_ROLES,
+      },
+      {
+        href: "/ai/employees",
+        labelKey: "navEmployees",
+        icon: Bot,
+        roles: ALL_ROLES,
+      },
+      {
+        href: "/ai/studio",
+        labelKey: "navStudio",
+        icon: Palette,
         roles: ALL_ROLES,
       },
     ],

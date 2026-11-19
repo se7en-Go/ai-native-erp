@@ -71,7 +71,10 @@ export default function InboxPage() {
             messages={messagesQuery.data?.items ?? []}
             onToggleDrawer={() => setDrawerOpen((prev) => !prev)}
           />
-          <InboxComposer conversation={activeConversation} />
+          <InboxComposer
+            conversation={activeConversation}
+            messages={messagesQuery.data?.items ?? []}
+          />
         </div>
         {drawerOpen && activeConversation && (
           <ContextDrawer customerId={activeConversation.customer_id} />
