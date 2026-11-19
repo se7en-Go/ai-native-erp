@@ -15,8 +15,14 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from erp_core.channels.webhook_store import accept_raw_webhook_event
-from erp_core.shared.db import system_session
+from erp_core.shared.config import get_settings
+from erp_core.shared.db import (
+    create_migrator_engine,
+    create_session_factory,
+    system_session,
+)
 from erp_core.shared.errors import AppError
+from erp_core.shared.redis_client import create_redis_client
 
 logger = structlog.get_logger(__name__)
 type SessionFactory = async_sessionmaker[AsyncSession]
@@ -35,44 +41,64 @@ async def accept_delivery(
     tenant_id: UUID | None = None,
     external_account_id: str | None = None,
     headers: dict[str, str] | None = None,
-) -> None:
-    """Store only authenticated deliveries. Redis failure leaves a recoverable receipt."""
-    broker_factory: SessionFactory = request.app.state.broker_session_factory
-    redis: Redis = request.app.state.redis
-    async with system_session(broker_factory) as session:
-        receipt_id = await accept_raw_webhook_event(
-            session,
-            event_id=uuid4(),
-            tenant_id=tenant_id,
-            channel_type=channel,
-            external_event_id=external_event_id,
-            external_account_id=external_account_id,
-            headers_json=json.dumps(headers or {}, separators=(",", ":")),
-            payload_json=json.dumps(payload, separators=(",", ":")),
-        )
-    if receipt_id is None:
-        return
+) -> bool:
+    """Store only authenticated deliveries; return False when already received.
+
+    Workers and tests may mount only ``state.session_factory``; in that case the
+    receipts still go through the migrator role that owns the SECURITY DEFINER path.
+    """
+    broker_factory: SessionFactory | None = getattr(
+        request.app.state, "broker_session_factory", None
+    )
+    owned_engine = None
+    if broker_factory is None:
+        owned_engine = create_migrator_engine(get_settings())
+        broker_factory = create_session_factory(owned_engine)
+    redis: Redis | None = getattr(request.app.state, "redis", None)
+    owned_redis = redis is None
+    if redis is None:
+        redis = create_redis_client(get_settings())
     try:
-        await redis.xadd(
-            _stream(channel),
-            {"raw_event_id": str(receipt_id), "channel_type": channel, "attempt": "1"},
-        )
-    except RedisError as exc:
-        raise AppError(
-            slug="webhook-queue-unavailable",
-            status_code=503,
-            code="ERR_WEBHOOK_QUEUE_UNAVAILABLE",
-            title="Webhook Queue Unavailable",
-            detail="Delivery stored; please retry.",
-        ) from exc
-    async with system_session(broker_factory) as session:
-        await session.execute(
-            text(
-                "UPDATE raw_webhook_events SET processing_status = 'queued' "
-                "WHERE id = :id AND processing_status = 'received'"
-            ),
-            {"id": receipt_id},
-        )
+        async with system_session(broker_factory) as session:
+            receipt_id = await accept_raw_webhook_event(
+                session,
+                event_id=uuid4(),
+                tenant_id=tenant_id,
+                channel_type=channel,
+                external_event_id=external_event_id,
+                external_account_id=external_account_id,
+                headers_json=json.dumps(headers or {}, separators=(",", ":")),
+                payload_json=json.dumps(payload, separators=(",", ":")),
+            )
+        if receipt_id is None:
+            return False
+        try:
+            await redis.xadd(
+                _stream(channel),
+                {"raw_event_id": str(receipt_id), "channel_type": channel, "attempt": "1"},
+            )
+        except RedisError as exc:
+            raise AppError(
+                slug="webhook-queue-unavailable",
+                status_code=503,
+                code="ERR_WEBHOOK_QUEUE_UNAVAILABLE",
+                title="Webhook Queue Unavailable",
+                detail="Delivery stored; please retry.",
+            ) from exc
+        async with system_session(broker_factory) as session:
+            await session.execute(
+                text(
+                    "UPDATE raw_webhook_events SET processing_status = 'queued' "
+                    "WHERE id = :id AND processing_status = 'received'"
+                ),
+                {"id": receipt_id},
+            )
+        return True
+    finally:
+        if owned_redis and redis is not None:
+            await redis.aclose()
+        if owned_engine is not None:
+            await owned_engine.dispose()
 
 
 async def drain_deliveries(

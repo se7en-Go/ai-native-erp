@@ -320,6 +320,25 @@
         "title": "ConfidenceLevel",
         "type": "string"
       },
+      "ConnectResponse": {
+        "properties": {
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "external_account_id": {
+            "title": "External Account Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_account_id",
+          "external_account_id"
+        ],
+        "title": "ConnectResponse",
+        "type": "object"
+      },
       "ConvertQuoteRequest": {
         "properties": {
           "deposit_ratio": {
@@ -4406,6 +4425,88 @@
         "title": "ShopifyCustomAppConnectRequest",
         "type": "object"
       },
+      "ShoplazzaConnectRequest": {
+        "properties": {
+          "access_token": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "client_secret": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Client Secret",
+            "type": "string"
+          },
+          "store_domain": {
+            "maxLength": 255,
+            "minLength": 4,
+            "title": "Store Domain",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warehouse Id"
+          }
+        },
+        "required": [
+          "store_domain",
+          "access_token",
+          "client_secret"
+        ],
+        "title": "ShoplazzaConnectRequest",
+        "type": "object"
+      },
+      "ShoplineConnectRequest": {
+        "properties": {
+          "access_token": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "app_secret": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "App Secret",
+            "type": "string"
+          },
+          "store_domain": {
+            "maxLength": 255,
+            "minLength": 4,
+            "title": "Store Domain",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warehouse Id"
+          }
+        },
+        "required": [
+          "store_domain",
+          "access_token",
+          "app_secret"
+        ],
+        "title": "ShoplineConnectRequest",
+        "type": "object"
+      },
       "SkuMappingCreate": {
         "properties": {
           "bundle_multiplier": {
@@ -5199,6 +5300,88 @@
           }
         },
         "title": "VariantUpdate",
+        "type": "object"
+      },
+      "WooAuthCallbackPayload": {
+        "properties": {
+          "consumer_key": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Consumer Key",
+            "type": "string"
+          },
+          "consumer_secret": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Consumer Secret",
+            "type": "string"
+          },
+          "store_url": {
+            "maxLength": 2048,
+            "minLength": 8,
+            "title": "Store Url",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warehouse Id"
+          },
+          "webhook_secret": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Secret"
+          }
+        },
+        "required": [
+          "store_url",
+          "consumer_key",
+          "consumer_secret"
+        ],
+        "title": "WooAuthCallbackPayload",
+        "type": "object"
+      },
+      "WooAuthUrlRequest": {
+        "properties": {
+          "callback_url": {
+            "maxLength": 2048,
+            "minLength": 8,
+            "title": "Callback Url",
+            "type": "string"
+          },
+          "return_url": {
+            "maxLength": 2048,
+            "minLength": 8,
+            "title": "Return Url",
+            "type": "string"
+          },
+          "store_url": {
+            "maxLength": 2048,
+            "minLength": 8,
+            "title": "Store Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "store_url",
+          "return_url",
+          "callback_url"
+        ],
+        "title": "WooAuthUrlRequest",
         "type": "object"
       }
     }
@@ -7268,6 +7451,339 @@
         "summary": "Shopify Oauth Install",
         "tags": [
           "shopify"
+        ]
+      }
+    },
+    "/api/v1/connectors/shoplazza/connect": {
+      "post": {
+        "operationId": "connect_shoplazza_api_v1_connectors_shoplazza_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShoplazzaConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Shoplazza",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/connectors/shoplazza/oauth/callback": {
+      "get": {
+        "operationId": "shoplazza_oauth_callback_api_v1_connectors_shoplazza_oauth_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "shop",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 4,
+              "title": "Shop",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timestamp",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Timestamp",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hmac",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Hmac",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shoplazza Oauth Callback",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/connectors/shopline/connect": {
+      "post": {
+        "operationId": "connect_shopline_api_v1_connectors_shopline_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShoplineConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Shopline",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/connectors/woocommerce/auth-callback": {
+      "post": {
+        "operationId": "woocommerce_auth_callback_api_v1_connectors_woocommerce_auth_callback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WooAuthCallbackPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Woocommerce Auth Callback",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/connectors/woocommerce/auth-url": {
+      "post": {
+        "operationId": "get_woocommerce_auth_url_api_v1_connectors_woocommerce_auth_url_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WooAuthUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Get Woocommerce Auth Url Api V1 Connectors Woocommerce Auth Url Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Woocommerce Auth Url",
+        "tags": [
+          "connectors"
         ]
       }
     },
@@ -9938,6 +10454,111 @@
         "summary": "Receive Shopify Webhook",
         "tags": [
           "shopify"
+        ]
+      }
+    },
+    "/api/v1/webhooks/shoplazza": {
+      "post": {
+        "operationId": "receive_shoplazza_webhook_api_v1_webhooks_shoplazza_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Shoplazza Webhook Api V1 Webhooks Shoplazza Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Shoplazza Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/shopline": {
+      "post": {
+        "operationId": "receive_shopline_webhook_api_v1_webhooks_shopline_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Shopline Webhook Api V1 Webhooks Shopline Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Shopline Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/woocommerce": {
+      "post": {
+        "operationId": "receive_woocommerce_webhook_api_v1_webhooks_woocommerce_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Woocommerce Webhook Api V1 Webhooks Woocommerce Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Woocommerce Webhook",
+        "tags": [
+          "connectors"
         ]
       }
     },

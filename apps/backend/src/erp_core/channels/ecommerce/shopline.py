@@ -1,0 +1,287 @@
+"""SHOPLINE connector with Redis-backed leaky-bucket pacing and B2B PO mapping."""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import hashlib
+import hmac
+import time
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
+
+import httpx
+from redis.asyncio import Redis
+
+from erp_core.channels.ecommerce.base import (
+    CommercePlatformAdapter,
+    NormalizedB2BCompany,
+    NormalizedCustomer,
+    NormalizedLineItem,
+    NormalizedOrder,
+    NormalizedProduct,
+)
+from erp_core.shared.enums import FulfillmentStatus, IdentityType, OrderMode, PaymentStatus
+from erp_core.shared.errors import AppError
+
+SHOPLINE_API_VERSION = "v20240301"
+_CONSUME_TOKENS = """
+local rate = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local state = redis.call('HMGET', KEYS[1], 'tokens', 'ts')
+local tokens = tonumber(state[1]) or tonumber(ARGV[3])
+local ts = tonumber(state[2]) or now
+tokens = math.min(tonumber(ARGV[3]), tokens + math.max(0, now - ts) * rate)
+local allowed = 0
+local wait_ms = 0
+if tokens >= 1 then
+  tokens = tokens - 1
+  allowed = 1
+else
+  wait_ms = math.ceil((1 - tokens) / rate * 1000)
+end
+redis.call('HMSET', KEYS[1], 'tokens', tokens, 'ts', now)
+redis.call('PEXPIRE', KEYS[1], 60000)
+return {allowed, wait_ms}
+"""
+
+
+class LeakyBucketLimiter:
+    """Shared leaky bucket: Redis Lua for workers, in-process fallback for local tests."""
+
+    def __init__(self, redis_client: Redis | None = None) -> None:
+        self._redis = redis_client
+        self._local: dict[str, tuple[float, float]] = {}
+        self._lock = asyncio.Lock()
+
+    async def acquire(
+        self, bucket_key: str, rate_per_sec: float, capacity: int
+    ) -> tuple[bool, int]:
+        if rate_per_sec <= 0 or capacity <= 0:
+            raise ValueError("rate_per_sec and capacity must be positive")
+        now = time.monotonic()
+        if self._redis is not None:
+            allowed, wait_ms = await self._redis.eval(
+                _CONSUME_TOKENS,
+                1,
+                f"erp:leaky:{bucket_key}",
+                str(rate_per_sec),
+                str(time.time()),
+                str(capacity),
+            )
+            return bool(int(allowed)), int(wait_ms)
+        async with self._lock:
+            tokens, stamp = self._local.get(bucket_key, (float(capacity), now))
+            tokens = min(float(capacity), tokens + max(0.0, now - stamp) * rate_per_sec)
+            if tokens >= 1:
+                self._local[bucket_key] = (tokens - 1, now)
+                return True, 0
+            self._local[bucket_key] = (tokens, now)
+            return False, int((1 - tokens) / rate_per_sec * 1000)
+
+    async def wait_and_acquire(self, bucket_key: str, rate_per_sec: float, capacity: int) -> None:
+        allowed, wait_ms = await self.acquire(bucket_key, rate_per_sec, capacity)
+        while not allowed:
+            await asyncio.sleep(max(wait_ms, 1) / 1000)
+            allowed, wait_ms = await self.acquire(bucket_key, rate_per_sec, capacity)
+
+
+def verify_shopline_webhook(raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
+    signature = headers.get("X-Shopline-Hmac-Sha256") or headers.get("x-shopline-hmac-sha256") or ""
+    if not signature or not secret:
+        return False
+    expected = base64.b64encode(
+        hmac.new(secret.encode(), raw_body, hashlib.sha256).digest()
+    ).decode()
+    return hmac.compare_digest(expected, signature.strip())
+
+
+class ShoplineAdapter(CommercePlatformAdapter):
+    """SHOPLINE OpenAPI adapter (B2B purchase orders + leaky-bucket pacing)."""
+
+    def __init__(
+        self,
+        store_domain: str,
+        access_token: str,
+        leaky_bucket: LeakyBucketLimiter | None = None,
+        http_client: httpx.AsyncClient | None = None,
+        webhook_secret: str = "",
+        rate_per_sec: float = 4.0,
+        capacity: int = 40,
+    ) -> None:
+        self.store_domain = store_domain.strip().lower()
+        self.access_token = access_token
+        self.bucket = leaky_bucket or LeakyBucketLimiter()
+        self._http_client = http_client
+        self.webhook_secret = webhook_secret
+        self.rate_per_sec = rate_per_sec
+        self.capacity = capacity
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json_body: Any = None,
+    ) -> dict[str, Any]:
+        await self.bucket.wait_and_acquire(
+            f"shopline:{self.store_domain}", self.rate_per_sec, self.capacity
+        )
+        url = f"https://{self.store_domain}/admin/openapi/{SHOPLINE_API_VERSION}{path}"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        if self._http_client is not None:
+            response = await self._http_client.request(
+                method, url, params=params, json=json_body, headers=headers
+            )
+        else:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.request(
+                    method, url, params=params, json=json_body, headers=headers
+                )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise AppError(
+                slug="shopline-invalid-response",
+                status_code=502,
+                code="ERR_SHOPLINE_INVALID_RESPONSE",
+                title="SHOPLINE Invalid Response",
+                detail="Expected a JSON object.",
+            )
+        return payload
+
+    @staticmethod
+    def _decimal(value: Any) -> Decimal:
+        return Decimal(str(value if value not in (None, "") else "0"))
+
+    def _normalize_order(self, order: dict[str, Any]) -> NormalizedOrder:
+        customer = order.get("customer") or {}
+        location = order.get("b2b_company_location") or {}
+        company_name = str(location.get("company_name") or "").strip()
+        metadata: dict[str, Any] = {"shopline_order_number": order.get("order_number")}
+        if order.get("purchase_order_number"):
+            metadata["po_number"] = order["purchase_order_number"]
+        financial = str(order.get("financial_status") or "").lower()
+        payment_status = (
+            PaymentStatus.PAID
+            if financial == "paid"
+            else PaymentStatus.PARTIALLY_PAID
+            if financial in {"partially_paid", "partially_refunded"}
+            else PaymentStatus.REFUNDED
+            if financial == "refunded"
+            else PaymentStatus.UNPAID
+        )
+        fulfillment = str(order.get("fulfillment_status") or "").lower()
+        fulfillment_status = (
+            FulfillmentStatus.SHIPPED
+            if fulfillment == "fulfilled"
+            else FulfillmentStatus.PARTIALLY_SHIPPED
+            if fulfillment == "partial"
+            else FulfillmentStatus.CONFIRMED_RESERVED
+        )
+        name = f"{customer.get('first_name') or ''} {customer.get('last_name') or ''}".strip()
+        return NormalizedOrder(
+            external_order_id=str(order["id"]),
+            external_order_number=str(order.get("order_number") or order["id"]),
+            order_mode=OrderMode.B2B_WHOLESALE if company_name else OrderMode.B2C_RETAIL,
+            currency=str(order.get("currency") or "USD"),
+            subtotal_amount=self._decimal(order.get("subtotal_price")),
+            shipping_charged=self._decimal(order.get("total_shipping_price")),
+            tax_collected=self._decimal(order.get("total_tax")),
+            total_amount=self._decimal(order.get("total_price")),
+            fulfillment_status=fulfillment_status,
+            payment_status=payment_status,
+            customer=NormalizedCustomer(
+                email=customer.get("email"),
+                phone_e164=customer.get("phone"),
+                external_customer_id=str(customer.get("id") or "") or None,
+                external_identity_type=IdentityType.EMAIL,
+                display_name=name or customer.get("email") or "SHOPLINE Buyer",
+                country_code=location.get("country_code"),
+            ),
+            b2b_company=(
+                NormalizedB2BCompany(
+                    legal_name=company_name, country_code=location.get("country_code") or "US"
+                )
+                if company_name
+                else None
+            ),
+            line_items=[
+                NormalizedLineItem(
+                    external_sku=str(item["sku"]),
+                    title=str(item.get("title") or item["sku"]),
+                    quantity=int(item["quantity"]),
+                    line_total=self._decimal(item.get("price")) * int(item["quantity"]),
+                )
+                for item in order.get("line_items") or []
+                if str(item.get("sku") or "").strip()
+            ],
+            channel_metadata=metadata,
+            updated_at=datetime.fromisoformat(
+                str(order["updated_at"]).replace("Z", "+00:00")
+            ).astimezone(UTC),
+        )
+
+    async def fetch_orders_updated_since(
+        self, since: datetime, cursor: str | None = None
+    ) -> tuple[list[NormalizedOrder], str | None]:
+        payload = await self._request(
+            "GET",
+            "/orders.json",
+            params={
+                "updated_at_min": since.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "limit": 50,
+                "page": int(cursor or 1),
+            },
+        )
+        rows = payload.get("orders") or []
+        return [self._normalize_order(row) for row in rows], (
+            str(int(cursor or 1) + 1) if len(rows) == 50 else None
+        )
+
+    async def fetch_products_updated_since(
+        self, since: datetime, cursor: str | None = None
+    ) -> tuple[list[NormalizedProduct], str | None]:
+        payload = await self._request(
+            "GET",
+            "/products.json",
+            params={
+                "updated_at_min": since.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "limit": 50,
+                "page": int(cursor or 1),
+            },
+        )
+        rows = payload.get("products") or []
+        return [
+            NormalizedProduct(
+                external_product_id=str(row["id"]),
+                title=str(row.get("title") or row["id"]),
+                variants=list(row.get("variants") or []),
+            )
+            for row in rows
+        ], (str(int(cursor or 1) + 1) if len(rows) == 50 else None)
+
+    async def create_fulfillment(
+        self,
+        external_order_id: str,
+        tracking_number: str,
+        carrier_company: str,
+        tracking_url: str | None = None,
+        fulfillment_order_id: str | None = None,
+        notify_customer: bool = True,
+    ) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            f"/orders/{external_order_id}/fulfillments.json",
+            json_body={
+                "tracking_number": tracking_number,
+                "tracking_company": carrier_company,
+                "tracking_url": tracking_url,
+                "notify_customer": notify_customer,
+            },
+        )
+
+    def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
+        return verify_shopline_webhook(raw_body, headers, secret or self.webhook_secret)
