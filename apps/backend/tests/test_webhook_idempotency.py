@@ -26,7 +26,10 @@ from erp_core.shared.db import tenant_session
 
 
 def _admin_url() -> str:
-    return "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas"
+    return os.environ.get(
+        "DATABASE_ADMIN_URL",
+        "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas",
+    )
 
 
 def _sign(secret: str, body: bytes) -> str:

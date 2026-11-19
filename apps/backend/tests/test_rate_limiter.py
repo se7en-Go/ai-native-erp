@@ -59,14 +59,17 @@ async def test_coexistence_20mps_vs_cloud_80mps_and_atomic_no_leak(
 ) -> None:
     limiter = DualTokenBucketLimiter(redis_client, pair_burst_capacity=1)
 
+    frozen_ms = 1_700_000_000_000
     coex_acct = f"coex-{uuid.uuid4().hex[:8]}"
-    # 20 distinct recipients consume all 20 mps tokens on coexistence account
+    # 20 distinct recipients consume all 20 mps tokens on coexistence account.
+    # `now_ms` pins the clock so continuous refill cannot mask the ceiling.
     for idx in range(20):
         allowed, wait_ms = await limiter.acquire(
             ChannelType.WHATSAPP_COEXISTENCE,
             coex_acct,
             recipient_id=f"+49170000{idx:04d}",
             is_coexistence=True,
+            now_ms=frozen_ms,
         )
         assert allowed is True
         assert wait_ms == 0
@@ -77,11 +80,15 @@ async def test_coexistence_20mps_vs_cloud_80mps_and_atomic_no_leak(
         coex_acct,
         recipient_id="+491700009999",
         is_coexistence=True,
+        now_ms=frozen_ms,
     )
     assert allowed_21 is False
     assert wait_ms_21 > 0
 
-    # Standard Cloud API account allows 80 mps before throttling on 81st
+    # Standard Cloud API account allows 80 mps before throttling on the 81st.
+    # The refill is continuous (`tokens + elapsed * rate`), so the clock is pinned with the
+    # limiter's `now_ms` hook -- otherwise the ~12 ms of Redis round-trips for 80 calls
+    # refills a whole token and the 81st is legitimately admitted.
     cloud_acct = f"cloud-{uuid.uuid4().hex[:8]}"
     for idx in range(80):
         allowed, wait_ms = await limiter.acquire(
@@ -89,6 +96,7 @@ async def test_coexistence_20mps_vs_cloud_80mps_and_atomic_no_leak(
             cloud_acct,
             recipient_id=f"+44770090{idx:04d}",
             is_coexistence=False,
+            now_ms=frozen_ms,
         )
         assert allowed is True
         assert wait_ms == 0
@@ -98,6 +106,7 @@ async def test_coexistence_20mps_vs_cloud_80mps_and_atomic_no_leak(
         cloud_acct,
         recipient_id="+447700909999",
         is_coexistence=False,
+        now_ms=frozen_ms,
     )
     assert allowed_81 is False
     assert wait_ms_81 > 0
@@ -214,12 +223,15 @@ async def test_concurrent_account_bucket_is_atomic(redis_client: aioredis.Redis)
     limiter = DualTokenBucketLimiter(client, pair_burst_capacity=5)
     account_id = f"race-{uuid.uuid4().hex[:8]}"
 
+    frozen_ms = 1_700_000_000_000
+
     async def one(idx: int) -> bool:
         allowed, _wait = await limiter.acquire(
             ChannelType.WHATSAPP_CLOUD,
             account_id,
             recipient_id=f"+1555000{idx:04d}",
             is_coexistence=False,
+            now_ms=frozen_ms,
         )
         return allowed
 

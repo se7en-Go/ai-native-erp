@@ -35,9 +35,9 @@ def _migrator_url() -> str:
 
 def _admin_url() -> str:
     """Plan 01 FORCE RLS blocks app_migrator DML on tenants."""
-    return (
-        "postgresql+asyncpg://postgres:postgres_dev_pass"
-        "@localhost:5432/erp_saas"
+    return os.environ.get(
+        "DATABASE_ADMIN_URL",
+        "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas",
     )
 
 
@@ -47,7 +47,9 @@ async def test_migration_0002_objects_exist() -> None:
     try:
         async with engine.connect() as conn:
             rev = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-            assert rev == "0002_channels_identity_inbox"
+            # `0002` is no longer the head once Plan 03 lands; this test owns the 0002
+            # objects, so accept `0002` or any descendant revision.
+            assert rev in {"0002_channels_identity_inbox", "0003"}
 
             tables = set(
                 (
