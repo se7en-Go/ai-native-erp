@@ -1,4 +1,4 @@
-import { client } from "@/lib/api-client/client.gen";
+import { bffBaseUrl, client } from "@/lib/api-client/client.gen";
 import type { ProblemDetail } from "@/lib/contracts";
 import { BffApiError } from "@/lib/contracts";
 
@@ -7,7 +7,7 @@ let configured = false;
 export function getBffClient() {
   if (!configured) {
     client.setConfig({
-      baseUrl: "/api/bff",
+      baseUrl: bffBaseUrl(),
       credentials: "include",
     });
     configured = true;
