@@ -27,18 +27,20 @@ import {
   type SuppressionLogApiItem,
 } from "@/lib/api-client/live-client";
 import {
-  fetchCapabilities as bridgeFetchCapabilities,
+  fetchCapabilities as liveFetchCapabilities,
+  fetchKbDocuments as liveFetchKbDocuments,
+  fetchPendingProposalsCount as liveFetchPendingProposalsCount,
+  fetchWallet as liveFetchWallet,
+  listProposals,
+  type BillingWalletResponse,
+  type CapabilityConfigItem,
+  type KbDocumentItem,
+} from "@/lib/api-client/live-client";
+import {
   fetchChannelAccounts as bridgeFetchChannelAccounts,
   fetchChannelConsents as bridgeFetchChannelConsents,
   fetchChannelDlq as bridgeFetchChannelDlq,
   fetchChannelSuppressions as bridgeFetchChannelSuppressions,
-  fetchKbDocuments as bridgeFetchKbDocuments,
-  fetchPendingProposalsCount as bridgeFetchPendingProposalsCount,
-  fetchWallet as bridgeFetchWallet,
-  listProposals as bridgeListProposals,
-  type BillingWalletResponse,
-  type CapabilityConfigItem,
-  type KbDocumentItem,
 } from "@/lib/api-client/plan04-bridge";
 import type {
   AiCapability,
@@ -69,6 +71,7 @@ import {
   mockVariantsPage,
   mockWallet,
 } from "@/lib/mock-fixtures";
+import type { AiProposalItem } from "@/components/ai/proposal-review-card";
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
 import type { InboxMessage } from "@/components/inbox/message-thread";
 
@@ -101,23 +104,23 @@ export function fetchConversationMessages(
   return getConversationMessages(conversationId);
 }
 
-export function fetchProposals<T>(
+export function fetchProposals(
   status: ProposalStatus,
   typeFilter: "" | ProposalType,
-): Promise<PaginatedResponse<T>> {
+): Promise<PaginatedResponse<AiProposalItem>> {
   if (shouldUseMockApi()) {
     const items = mockProposals.filter(
       (p) => p.status === status && (!typeFilter || p.proposal_type === typeFilter),
     );
     return Promise.resolve({
-      items: items as unknown as T[],
+      items,
       total: items.length,
       limit: 20,
       offset: 0,
       has_more: false,
     });
   }
-  return bridgeListProposals<T>(status, typeFilter);
+  return listProposals(status, typeFilter);
 }
 
 export function fetchCapabilities(): Promise<{
@@ -132,14 +135,14 @@ export function fetchCapabilities(): Promise<{
       })),
     });
   }
-  return bridgeFetchCapabilities();
+  return liveFetchCapabilities();
 }
 
 export function fetchWallet(): Promise<BillingWalletResponse> {
   if (shouldUseMockApi()) {
     return Promise.resolve(mockWallet);
   }
-  return bridgeFetchWallet();
+  return liveFetchWallet();
 }
 
 export function fetchKbDocuments(): Promise<PaginatedResponse<KbDocumentItem>> {
@@ -152,7 +155,7 @@ export function fetchKbDocuments(): Promise<PaginatedResponse<KbDocumentItem>> {
       has_more: false,
     });
   }
-  return bridgeFetchKbDocuments();
+  return liveFetchKbDocuments();
 }
 
 export function fetchCatalogVariants(
@@ -311,5 +314,5 @@ export function fetchPendingProposalsCount(): Promise<{ total: number }> {
       total: mockProposals.filter((p) => p.status === "pending").length,
     });
   }
-  return bridgeFetchPendingProposalsCount();
+  return liveFetchPendingProposalsCount();
 }

@@ -70,10 +70,6 @@ function wrapAuth(ui: React.ReactNode, role: Principal["role"]) {
 describe("Task 5.5 Catalog COGS Masking, SKU Mapping & B2B PI Quote Builder", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    // Component tests run in live mode (NEXT_PUBLIC_USE_MOCK_API unset) with
-    // stubbed fetch, so convert/ship need a configured warehouse, as in a
-    // real live deployment (see live-client.requireDefaultWarehouseId).
-    process.env.NEXT_PUBLIC_DEFAULT_WAREHOUSE_ID = "wh-test-uuid";
   });
 
   it("hides cost_price_base from agent in Catalog and SkuMappingDrawer while saving bundle_multiplier", async () => {
@@ -198,6 +194,9 @@ describe("Task 5.5 Catalog COGS Masking, SKU Mapping & B2B PI Quote Builder", ()
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
+      }
+      if (url.endsWith("/orders/warehouses")) {
+        return Response.json({ default_warehouse_id: "wh-test-uuid", items: [{ id: "wh-test-uuid", is_default: true }] });
       }
       if (url.includes("/b2b/quotes/q-1/convert-to-order") && method === "POST") {
         return new Response(

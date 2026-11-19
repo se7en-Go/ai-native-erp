@@ -1,31 +1,31 @@
-// Wave 3A: Plan 04 bridge tests. Every call stays on bffFetch with the
-// exact pre-Plan-04 path and payload, so these assertions pin the bridge
-// contract until Plan 04 lands in contracts/openapi.json and the bridge is
-// switched to the generated SDK.
+// @vitest-environment node
+// Plan 04 generated SDK requests, plus compatibility checks for the remaining bridge.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  aiAssist,
   approveProposal,
   assistantChat,
-  connectStorefront,
   deleteKbDocument,
   editApproveProposal,
   fetchCapabilities,
-  fetchChannelAccounts,
-  fetchChannelConsents,
-  fetchChannelDlq,
-  fetchChannelSuppressions,
-  fetchCustomerContext,
   fetchKbDocuments,
   fetchPendingProposalsCount,
   fetchWallet,
   listProposals,
   rejectProposal,
-  runSandboxTest,
-  saveWebchat,
   translateText,
   updateCapability,
   uploadKbDocument,
+} from "@/lib/api-client/live-client";
+import {
+  aiAssist,
+  connectStorefront,
+  fetchChannelAccounts,
+  fetchChannelConsents,
+  fetchChannelDlq,
+  fetchChannelSuppressions,
+  fetchCustomerContext,
+  runSandboxTest,
+  saveWebchat,
   verifyEmailDns,
 } from "@/lib/api-client/plan04-bridge";
 
@@ -46,7 +46,21 @@ function stubFetch(handler: (url: string, init?: RequestInit) => Response) {
   return mock;
 }
 
-describe("plan04-bridge (pre-Plan-04 BFF paths)", () => {
+function stubSdkFetch(handler: (url: string) => Response) {
+  const mock = vi.fn(async (url: string, _init?: RequestInit) => handler(url));
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (input instanceof Request) {
+      return mock(new URL(input.url).pathname + new URL(input.url).search, {
+        method: input.method,
+        body: await input.text(),
+      });
+    }
+    return mock(String(input), init);
+  });
+  return mock;
+}
+
+describe("Plan 04 API over BFF", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -55,51 +69,51 @@ describe("plan04-bridge (pre-Plan-04 BFF paths)", () => {
   });
 
   it("listProposals passes status/typeFilter as query params", async () => {
-    const fetchMock = stubFetch(() =>
+    const fetchMock = stubSdkFetch(() =>
       jsonResponse({ items: [], total: 0, limit: 20, offset: 0, has_more: false }),
     );
     await listProposals("pending", "quote_draft");
     expect(fetchMock.mock.calls[0][0]).toBe(
-      `${BFF}/v1/ai/proposals?status=pending&limit=20&offset=0&proposal_type=quote_draft`,
+      `${BFF}/api/v1/ai/proposals?status=pending&limit=20&offset=0&proposal_type=quote_draft`,
     );
     await listProposals("approved", "");
     expect(fetchMock.mock.calls[1][0]).toBe(
-      `${BFF}/v1/ai/proposals?status=approved&limit=20&offset=0`,
+      `${BFF}/api/v1/ai/proposals?status=approved&limit=20&offset=0`,
     );
   });
 
   it("fetchPendingProposalsCount uses limit=1", async () => {
-    const fetchMock = stubFetch(() => jsonResponse({ total: 3 }));
+    const fetchMock = stubSdkFetch(() => jsonResponse({ total: 3 }));
     const res = await fetchPendingProposalsCount();
     expect(fetchMock.mock.calls[0][0]).toBe(
-      `${BFF}/v1/ai/proposals?status=pending&limit=1&offset=0`,
+      `${BFF}/api/v1/ai/proposals?status=pending&limit=1&offset=0`,
     );
     expect(res.total).toBe(3);
   });
 
   it("proposal decisions post to the exact Plan 04 paths with contract bodies", async () => {
-    const fetchMock = stubFetch(() => jsonResponse({ ok: true }));
+    const fetchMock = stubSdkFetch(() => jsonResponse({ ok: true }));
     await approveProposal("prop-1");
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/v1/ai/proposals/prop-1/approve`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/api/v1/ai/proposals/prop-1/approve`);
     expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
 
     await editApproveProposal("prop-1", { total_amount: "7000.00" });
     expect(fetchMock.mock.calls[1][0]).toBe(
-      `${BFF}/v1/ai/proposals/prop-1/edit-approve`,
+      `${BFF}/api/v1/ai/proposals/prop-1/edit-approve`,
     );
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
       edited_payload: { total_amount: "7000.00" },
     });
 
     await rejectProposal("prop-1", "Price too high");
-    expect(fetchMock.mock.calls[2][0]).toBe(`${BFF}/v1/ai/proposals/prop-1/reject`);
+    expect(fetchMock.mock.calls[2][0]).toBe(`${BFF}/api/v1/ai/proposals/prop-1/reject`);
     expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({
       reason: "Price too high",
     });
   });
 
   it("capabilities, wallet and kb documents use the locked paths", async () => {
-    const fetchMock = stubFetch((url) => {
+    const fetchMock = stubSdkFetch((url) => {
       if (url.includes("/ai/capabilities")) {
         return jsonResponse({ capabilities: [] });
       }
@@ -113,14 +127,14 @@ describe("plan04-bridge (pre-Plan-04 BFF paths)", () => {
       return jsonResponse({ items: [], total: 0, limit: 20, offset: 0, has_more: false });
     });
     await fetchCapabilities();
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/v1/ai/capabilities`);
-    await fetchWallet();
-    expect(fetchMock.mock.calls[1][0]).toBe(`${BFF}/v1/billing/wallet`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/api/v1/ai/capabilities`);
+    expect((await fetchWallet()).included_credits_remaining).toBe(4200);
+    expect(fetchMock.mock.calls[1][0]).toBe(`${BFF}/api/v1/billing/wallet`);
     await fetchKbDocuments();
-    expect(fetchMock.mock.calls[2][0]).toBe(`${BFF}/v1/ai/kb/documents`);
+    expect(fetchMock.mock.calls[2][0]).toBe(`${BFF}/api/v1/ai/kb/documents`);
 
     await updateCapability("cs_support", "L1_proposal");
-    expect(fetchMock.mock.calls[3][0]).toBe(`${BFF}/v1/ai/capabilities`);
+    expect(fetchMock.mock.calls[3][0]).toBe(`${BFF}/api/v1/ai/capabilities`);
     expect(fetchMock.mock.calls[3][1]?.method).toBe("PATCH");
     expect(JSON.parse(String(fetchMock.mock.calls[3][1]?.body))).toEqual({
       settings: { cs_support: "L1_proposal" },
@@ -128,17 +142,19 @@ describe("plan04-bridge (pre-Plan-04 BFF paths)", () => {
 
     const form = new FormData();
     form.append("file", new Blob(["x"]), "doc.pdf");
+    form.append("title", "Demo KB");
     await uploadKbDocument(form);
-    expect(fetchMock.mock.calls[4][0]).toBe(`${BFF}/v1/ai/kb/documents`);
+    expect(String(fetchMock.mock.calls[4][1]?.body)).toContain('filename="doc.pdf"');
+    expect(fetchMock.mock.calls[4][0]).toBe(`${BFF}/api/v1/ai/kb/documents`);
     expect(fetchMock.mock.calls[4][1]?.method).toBe("POST");
 
     await deleteKbDocument("doc-1");
-    expect(fetchMock.mock.calls[5][0]).toBe(`${BFF}/v1/ai/kb/documents/doc-1`);
+    expect(fetchMock.mock.calls[5][0]).toBe(`${BFF}/api/v1/ai/kb/documents/doc-1`);
     expect(fetchMock.mock.calls[5][1]?.method).toBe("DELETE");
   });
 
   it("assistantChat and translateText send the exact bodies", async () => {
-    const fetchMock = stubFetch(() =>
+    const fetchMock = stubSdkFetch(() =>
       jsonResponse({
         reply_text: "ok",
         citations: [],
@@ -152,14 +168,14 @@ describe("plan04-bridge (pre-Plan-04 BFF paths)", () => {
       channel_type: "web_livechat",
       context: { mode: "strict_rag" },
     });
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/v1/ai/assistant/chat`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BFF}/api/v1/ai/assistant/chat`);
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
       capability: "cs_support",
       strict_rag: true,
       message: "Do you offer free helicopter shipping to Mars?",
     });
 
-    stubFetch(() => jsonResponse({ translated_text: "Translated: Hola" }));
+    stubSdkFetch(() => jsonResponse({ translated_text: "Translated: Hola" }));
     const res = await translateText("Hola", "en");
     expect(res.translated_text).toBe("Translated: Hola");
   });

@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Lock, Truck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ShipmentTimelineDrawer } from "@/components/orders/shipment-timeline-drawer";
-import { shipOrder, requireDefaultWarehouseId } from "@/lib/api-client/live-client";
-import { fetchOrders, fetchPendingProposalsCount, shouldUseMockApi } from "@/lib/data-source";
+import { shipOrder } from "@/lib/api-client/live-client";
+import { fetchOrders, fetchPendingProposalsCount } from "@/lib/data-source";
 import { formatMoney, type OrderMode } from "@/lib/contracts";
 
 export default function OrdersPage() {
@@ -28,10 +28,6 @@ export default function OrdersPage() {
   const shipMutation = useMutation({
     mutationFn: ({ orderId, trackingNumber }: { orderId: string; trackingNumber: string }) =>
       shipOrder(orderId, {
-        // Mock mode: the BFF mock ignores the body, so any placeholder
-        // passes; live mode requires a real warehouse UUID (see
-        // live-client.requireDefaultWarehouseId).
-        warehouseId: shouldUseMockApi() ? "wh-sz" : requireDefaultWarehouseId(),
         trackingNumber,
         carrierCode: "DHL",
         shipmentMode: "parcel",
@@ -69,6 +65,12 @@ export default function OrdersPage() {
             <option value="b2b_wholesale">b2b_wholesale</option>
           </select>
         </div>
+
+        {shipMutation.isError && (
+          <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
+            {shipMutation.error.message}
+          </p>
+        )}
 
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="w-full text-left text-xs">

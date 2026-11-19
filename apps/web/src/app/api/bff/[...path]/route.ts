@@ -251,6 +251,13 @@ async function handleMockMode(
     });
   }
 
+  if (method === "GET" && upstreamPath === "/api/v1/orders/warehouses") {
+    return NextResponse.json({
+      default_warehouse_id: "wh-sz",
+      items: [{ id: "wh-sz", is_default: true }],
+    });
+  }
+
   if (!isMutation) {
     return NextResponse.json(
       {

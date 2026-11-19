@@ -6,6 +6,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { AuthSessionContext } from "@/components/providers";
 import AiProposalsPage from "@/app/ai/proposals/page";
 import AiCapabilitiesPage from "@/app/ai/capabilities/page";
+import { fetchCallBody, fetchCallUrl, normalizeFetchInput } from "@/__tests__/fetch-stub";
 import type { Principal } from "@/lib/contracts";
 
 function renderWithAuth(ui: React.ReactNode, role: Principal["role"] = "owner") {
@@ -38,7 +39,7 @@ describe("Task 5.4 L1 Proposal Queue & AI Governance Console", () => {
 
   it("displays margin floor, [doc#chunk] citations, and executes Edit & Approve mutation", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/ai/proposals?") || url.endsWith("/ai/proposals")) {
         return new Response(
           JSON.stringify({
@@ -55,9 +56,8 @@ describe("Task 5.4 L1 Proposal Queue & AI Governance Console", () => {
                   incoterm: "FOB",
                 },
                 citations: [{ doc_id: "doc-led", chunk_id: "c4", score: 0.89 }],
-                confidence_score: 0.92,
-                estimated_margin_pct: 24.5,
-                min_margin_floor_pct: 15.0,
+                confidence_score: "0.92",
+                estimated_margin_pct: "24.5",
                 status: "pending",
                 created_at: "2026-11-19T08:10:00Z",
               },
@@ -70,7 +70,7 @@ describe("Task 5.4 L1 Proposal Queue & AI Governance Console", () => {
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (url.includes("/ai/proposals/prop-101/edit-approve") && init?.method === "POST") {
+      if (url.includes("/ai/proposals/prop-101/edit-approve") && method === "POST") {
         return new Response(JSON.stringify({ id: "prop-101", status: "edited_and_approved" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -102,12 +102,12 @@ describe("Task 5.4 L1 Proposal Queue & AI Governance Console", () => {
     });
     fireEvent.click(screen.getByTestId("proposal-edit-submit-prop-101"));
 
-    await waitFor(() => {
+    await waitFor(async () => {
       const editCall = fetchMock.mock.calls.find((c) =>
-        String(c[0]).includes("/ai/proposals/prop-101/edit-approve")
+        fetchCallUrl(c).includes("/ai/proposals/prop-101/edit-approve")
       );
       expect(editCall).toBeDefined();
-      expect(JSON.parse(String(editCall?.[1]?.body))).toMatchObject({
+      expect(JSON.parse(await fetchCallBody(editCall!))).toMatchObject({
         edited_payload: { unit_price_usd: 13.8 },
       });
     });
@@ -117,7 +117,7 @@ describe("Task 5.4 L1 Proposal Queue & AI Governance Console", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
+        const { url } = normalizeFetchInput(input);
         if (url.includes("/ai/proposals")) {
           return new Response(
             JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }),

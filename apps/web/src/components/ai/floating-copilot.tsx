@@ -12,7 +12,7 @@ import {
   fetchWallet,
   type AssistantChatResult,
   type BillingWalletResponse,
-} from "@/lib/api-client/plan04-bridge";
+} from "@/lib/api-client/live-client";
 import {
   AiCapabilitySchema,
   AutonomyLevelSchema,
@@ -309,7 +309,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                     strip the inline [doc#chunk] markers from the prose to
                     avoid rendering the same citation twice. */}
                 <p className="whitespace-pre-wrap">
-                  {lastResult.reply_text
+                  {(lastResult.reply_text ?? "")
                     .replace(/\[[^\]]+#[^\]]+\]/g, "")
                     .replace(/  +/g, " ")
                     .trim()}

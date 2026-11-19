@@ -8,9 +8,7 @@ import {
   convertQuoteToOrder,
   generateQuotePdf,
   repriceQuoteVersion,
-  requireDefaultWarehouseId,
 } from "@/lib/api-client/live-client";
-import { shouldUseMockApi } from "@/lib/data-source";
 import { formatMoney, type Incoterm, type QuoteStatus } from "@/lib/contracts";
 import type { CatalogVariantItem, MoqTier } from "@/components/catalog/sku-mapping-drawer";
 
@@ -131,13 +129,7 @@ export function QuotePiBuilder({
   });
 
   const convertMutation = useMutation({
-    mutationFn: (quoteId: string) =>
-      convertQuoteToOrder(quoteId, {
-        // Mock mode: the BFF mock ignores the body, so any placeholder
-        // passes; live mode requires a real warehouse UUID (see
-        // live-client.requireDefaultWarehouseId).
-        warehouseId: shouldUseMockApi() ? "wh-sz" : requireDefaultWarehouseId(),
-      }),
+    mutationFn: (quoteId: string) => convertQuoteToOrder(quoteId),
     onSuccess: (res) => {
       setConvertedBanner(`Converted 1-Click to Order ${res.order.order_no} (${res.order.id})`);
       void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
@@ -225,6 +217,12 @@ export function QuotePiBuilder({
           <div className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 font-semibold text-emerald-900">
             {convertedBanner}
           </div>
+        )}
+
+        {convertMutation.isError && (
+          <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
+            {convertMutation.error.message}
+          </p>
         )}
 
         {activeQuote ? (

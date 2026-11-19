@@ -96,7 +96,6 @@ const CONVERSATION_PAGE = {
 describe("live-client (generated SDK over the BFF)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    delete process.env.NEXT_PUBLIC_DEFAULT_WAREHOUSE_ID;
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -278,45 +277,49 @@ describe("live-client (generated SDK over the BFF)", () => {
     expect(bundle.mappings[0].channel_label).toBe("Shopify US Flagship");
   });
 
-  it("convertQuoteToOrder refuses without a warehouse and sends warehouse_id when set", async () => {
-    const { mock, captured } = stubFetch(() =>
-      jsonResponse({
-        order: { id: "ord-1", order_no: "ORD-1" },
-        quote: {},
-        receivables: [],
-      }),
-    );
-    await expect(convertQuoteToOrder("q-1")).rejects.toMatchObject({
-      code: "ERR_NO_WAREHOUSE_CONFIGURED",
-    });
-    expect(mock).not.toHaveBeenCalled();
-
-    const res = await convertQuoteToOrder("q-1", { warehouseId: "wh-uuid-1" });
-    expect(res.order.order_no).toBe("ORD-1");
-    expect(captured[0].url).toBe(`${BFF}/api/v1/b2b/quotes/q-1/convert-to-order`);
-    expect(JSON.parse(captured[0].bodyText ?? "")).toMatchObject({
-      warehouse_id: "wh-uuid-1",
-    });
+  it("convertQuoteToOrder prefers the tenant default when several warehouses exist", async () => {
+    const { captured } = stubFetch((url) => url.endsWith("/warehouses")
+      ? jsonResponse({ default_warehouse_id: "wh-2", items: [{ id: "wh-1" }, { id: "wh-2" }] })
+      : jsonResponse({ order: { id: "ord-1", order_no: "ORD-1" } }, 201));
+    const result = await convertQuoteToOrder("q-1");
+    expect(result.order.order_no).toBe("ORD-1");
+    expect(captured.map(({url, method}) => [url, method])).toEqual([
+      [`${BFF}/api/v1/orders/warehouses`, "GET"],
+      [`${BFF}/api/v1/b2b/quotes/q-1/convert-to-order`, "POST"],
+    ]);
+    expect(JSON.parse(captured[1].bodyText ?? "")).toMatchObject({ warehouse_id: "wh-2" });
   });
 
-  it("shipOrder requires a warehouse and posts tracking fields", async () => {
-    const { mock, captured } = stubFetch(() => jsonResponse({ id: "sh-1" }, 201));
-    await expect(
-      shipOrder("ord-1", { trackingNumber: "DHL99887766" }),
-    ).rejects.toMatchObject({ code: "ERR_NO_WAREHOUSE_CONFIGURED" });
-    expect(mock).not.toHaveBeenCalled();
-
-    await shipOrder("ord-1", {
-      warehouseId: "wh-uuid-1",
-      trackingNumber: "DHL99887766",
-    });
-    expect(captured[0].url).toBe(`${BFF}/api/v1/orders/ord-1/ship`);
-    expect(JSON.parse(captured[0].bodyText ?? "")).toMatchObject({
-      warehouse_id: "wh-uuid-1",
+  it("shipOrder uses the only warehouse when no default is set", async () => {
+    const { captured } = stubFetch((url) => url.endsWith("/warehouses")
+      ? jsonResponse({ default_warehouse_id: null, items: [{ id: "wh-1" }] })
+      : jsonResponse({ id: "sh-1" }, 201));
+    await shipOrder("ord-1", { trackingNumber: "DHL99887766" });
+    expect(captured[0].url).toBe(`${BFF}/api/v1/orders/warehouses`);
+    expect(captured[1].url).toBe(`${BFF}/api/v1/orders/ord-1/ship`);
+    expect(JSON.parse(captured[1].bodyText ?? "")).toMatchObject({
+      warehouse_id: "wh-1",
       tracking_number: "DHL99887766",
       carrier_code: "DHL",
       shipment_mode: "parcel",
     });
+  });
+
+  it.each([
+    [[], "ERR_NO_WAREHOUSE_CONFIGURED"],
+    [[{ id: "wh-1" }, { id: "wh-2" }], "ERR_WAREHOUSE_SELECTION_REQUIRED"],
+  ] as const)("does not convert or ship with no unambiguous warehouse (%j)", async (items, code) => {
+    const { captured } = stubFetch(() => jsonResponse({ default_warehouse_id: null, items }));
+    await expect(convertQuoteToOrder("q-1")).rejects.toMatchObject({ code });
+    await expect(shipOrder("ord-1", { trackingNumber: "ABC" })).rejects.toMatchObject({ code });
+    expect(captured.map(({ url }) => url)).toEqual(Array(2).fill(`${BFF}/api/v1/orders/warehouses`));
+  });
+
+  it("uses an explicitly selected warehouse without looking up the default", async () => {
+    const { captured } = stubFetch(() => jsonResponse({ order: { id: "ord-1" } }, 201));
+    await convertQuoteToOrder("q-1", { warehouseId: "wh-selected" });
+    expect(captured).toHaveLength(1);
+    expect(JSON.parse(captured[0].bodyText ?? "")).toMatchObject({ warehouse_id: "wh-selected" });
   });
 
   it("generateQuotePdf returns the signed download_url", async () => {
