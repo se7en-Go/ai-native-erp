@@ -39,6 +39,10 @@ def test_export_openapi_contract_paths_without_frontend_codegen() -> None:
         "/api/v1/tenancy/gdpr/customers/{customer_id}/export",
         "/api/v1/onboarding/state",
         "/api/v1/onboarding/advance",
+        "/api/v1/ai/proposals/{proposal_id}/edit-approve",
+        "/api/v1/ai/assistant/chat",
+        "/api/v1/billing/wallet",
+        "/api/v1/orders/warehouses",
     ):
         assert expected_path in spec["paths"], f"Missing OpenAPI path: {expected_path}"
 

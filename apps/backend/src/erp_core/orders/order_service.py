@@ -19,6 +19,8 @@ from erp_core.orders.schemas import (
     OrderRead,
     ShipmentRead,
     ShipOrderRequest,
+    WarehouseListRead,
+    WarehouseRead,
 )
 from erp_core.shared.enums import (
     FulfillmentStatus,
@@ -49,6 +51,41 @@ class OrderService:
     ) -> None:
         self.inventory = inventory_service or InventoryLedgerService()
         self.catalog = catalog_service or CatalogService()
+
+    async def list_warehouses(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+    ) -> WarehouseListRead:
+        rows = (
+            await session.execute(
+                text("""
+            SELECT CAST(warehouse_id AS text) AS id, false AS configured
+            FROM inventory_balances WHERE tenant_id = :tid
+            UNION
+            SELECT config ->> 'warehouse_id' AS id, true AS configured
+            FROM channel_accounts
+            WHERE tenant_id = :tid AND config ->> 'warehouse_id' IS NOT NULL
+        """),
+                {"tid": tenant_id},
+            )
+        ).all()
+        ids: set[UUID] = set()
+        defaults: set[UUID] = set()
+        for raw_id, configured in rows:
+            try:
+                warehouse_id = UUID(raw_id)
+            except ValueError:
+                # Old connector settings can contain arbitrary labels instead of UUIDs.
+                continue
+            ids.add(warehouse_id)
+            if configured:
+                defaults.add(warehouse_id)
+        default_id = next(iter(defaults)) if len(defaults) == 1 else None
+        return WarehouseListRead(
+            items=[WarehouseRead(id=wid, is_default=wid == default_id) for wid in sorted(ids)],
+            default_warehouse_id=default_id,
+        )
 
     async def _serialize_order(
         self, session: AsyncSession, tenant_id: UUID, order: Order

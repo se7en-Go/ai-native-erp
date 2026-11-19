@@ -10,6 +10,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from erp_core.shared.enums import FulfillmentStatus, OrderMode, PaymentStatus, TrackingProvider
 
 
+class WarehouseRead(BaseModel):
+    id: UUID
+    is_default: bool
+
+
+class WarehouseListRead(BaseModel):
+    items: list[WarehouseRead]
+    default_warehouse_id: UUID | None
+
+
 class InventoryBalanceRead(BaseModel):
     tenant_id: UUID
     warehouse_id: UUID

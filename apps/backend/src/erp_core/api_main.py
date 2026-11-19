@@ -20,6 +20,11 @@ import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
 from erp_core.ai_engine.kb_router import router as kb_router
+from erp_core.ai_engine.router import router as ai_router
+from erp_core.ai_engine.router_llm import TieredModelRouter
+from erp_core.ai_engine.runtime import PolicyRuntime
+from erp_core.ai_engine.semantic_cache import SemanticCacheService
+from erp_core.billing.router import router as billing_router
 from erp_core.catalog.router import router as catalog_router
 from erp_core.channels.adapters.whatsapp import whatsapp_router
 from erp_core.channels.ecommerce.connectors_router import router as connectors_router
@@ -62,6 +67,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.settings = settings
     app.state.redis = redis_client
+    app.state.ai_runtime = PolicyRuntime(
+        llm_router=TieredModelRouter(semantic_cache=SemanticCacheService(redis_client)),
+    )
     app.state.storage = storage
     app.state.crypto_service = crypto_service
     app.state.runtime_engine = runtime_engine
@@ -110,6 +118,8 @@ def create_app() -> FastAPI:
     app.include_router(orders_router, prefix="/api/v1")
     app.include_router(finance_router, prefix="/api/v1")
     app.include_router(kb_router)
+    app.include_router(ai_router)
+    app.include_router(billing_router)
 
     @app.get("/healthz", tags=["health"])
     async def healthz() -> dict[str, str]:

@@ -15,6 +15,7 @@ from erp_core.orders.schemas import (
     OrderRead,
     ShipmentRead,
     ShipOrderRequest,
+    WarehouseListRead,
 )
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import FulfillmentStatus, OrderMode, PaymentStatus, UserRole
@@ -100,6 +101,13 @@ async def list_inventory_ledger(
         return await _service.inventory.list_ledger(
             session, principal.tenant_id, variant_id=variant_id, limit=limit, offset=offset
         )
+
+
+@router.get("/warehouses", response_model=WarehouseListRead)
+async def list_warehouses(request: Request, principal: ReaderPrincipal) -> WarehouseListRead:
+    """List warehouse IDs visible to this tenant without creating a fallback default."""
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await _service.list_warehouses(session, principal.tenant_id)
 
 
 @router.get("/{order_id}", response_model=OrderRead)

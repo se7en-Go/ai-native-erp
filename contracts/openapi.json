@@ -23,6 +23,371 @@
         "title": "AdvanceOnboardingRequest",
         "type": "object"
       },
+      "AiCapability": {
+        "enum": [
+          "cs_support",
+          "sales_quoting",
+          "order_logistics",
+          "content_studio",
+          "biz_analytics",
+          "finance_recon"
+        ],
+        "title": "AiCapability",
+        "type": "string"
+      },
+      "AiProposalRead": {
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/AiCapability"
+          },
+          "citations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "confidence_score": {
+            "title": "Confidence Score",
+            "type": "string"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited_payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited Payload"
+          },
+          "estimated_margin_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Margin Pct"
+          },
+          "execution_result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Result"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "proposal_type": {
+            "$ref": "#/components/schemas/ProposalType"
+          },
+          "proposed_payload": {
+            "additionalProperties": true,
+            "title": "Proposed Payload",
+            "type": "object"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By User Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProposalStatus"
+          },
+          "target_entity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Entity Id"
+          },
+          "target_entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Entity Type"
+          }
+        },
+        "required": [
+          "id",
+          "capability",
+          "proposal_type",
+          "conversation_id",
+          "target_entity_type",
+          "target_entity_id",
+          "proposed_payload",
+          "citations",
+          "confidence_score",
+          "estimated_margin_pct",
+          "status",
+          "reviewed_by_user_id",
+          "edited_payload",
+          "rejection_reason",
+          "execution_result",
+          "expires_at",
+          "created_at",
+          "reviewed_at"
+        ],
+        "title": "AiProposalRead",
+        "type": "object"
+      },
+      "AssistantChatRequest": {
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/AiCapability",
+            "default": "cs_support"
+          },
+          "channel_type": {
+            "$ref": "#/components/schemas/ChannelType",
+            "default": "web_livechat"
+          },
+          "context": {
+            "additionalProperties": true,
+            "title": "Context",
+            "type": "object"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "message": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "strict_rag": {
+            "default": false,
+            "title": "Strict Rag",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "AssistantChatRequest",
+        "type": "object"
+      },
+      "AssistantChatResponse": {
+        "description": "Result of a single authenticated assistant turn.",
+        "properties": {
+          "auto_executed": {
+            "default": false,
+            "title": "Auto Executed",
+            "type": "boolean"
+          },
+          "autonomy_applied": {
+            "$ref": "#/components/schemas/AutonomyLevel"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/AiCapability"
+          },
+          "citations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "compliance_blocked": {
+            "default": false,
+            "title": "Compliance Blocked",
+            "type": "boolean"
+          },
+          "compliance_violations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Compliance Violations",
+            "type": "array"
+          },
+          "credits_consumed": {
+            "default": "0",
+            "title": "Credits Consumed",
+            "type": "string"
+          },
+          "degraded_to_l0": {
+            "default": false,
+            "title": "Degraded To L0",
+            "type": "boolean"
+          },
+          "estimated_margin_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Margin Pct"
+          },
+          "l0_locked": {
+            "default": false,
+            "title": "L0 Locked",
+            "type": "boolean"
+          },
+          "model_used": {
+            "default": "",
+            "title": "Model Used",
+            "type": "string"
+          },
+          "numeric_guard_passed": {
+            "default": true,
+            "title": "Numeric Guard Passed",
+            "type": "boolean"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "proposal_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reply_text": {
+            "default": "",
+            "title": "Reply Text",
+            "type": "string"
+          },
+          "should_abstain": {
+            "default": false,
+            "title": "Should Abstain",
+            "type": "boolean"
+          },
+          "tool_calls": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tool Calls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "capability",
+          "autonomy_applied"
+        ],
+        "title": "AssistantChatResponse",
+        "type": "object"
+      },
       "AuditEventRead": {
         "properties": {
           "action": {
@@ -356,6 +721,76 @@
           "reason"
         ],
         "title": "CancelOrderRequest",
+        "type": "object"
+      },
+      "CapabilitiesOverviewResponse": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityPolicyItem"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "capabilities"
+        ],
+        "title": "CapabilitiesOverviewResponse",
+        "type": "object"
+      },
+      "CapabilitiesUpdateRequest": {
+        "properties": {
+          "settings": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AutonomyLevel"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/AiCapability"
+            },
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "settings"
+        ],
+        "title": "CapabilitiesUpdateRequest",
+        "type": "object"
+      },
+      "CapabilityPolicyItem": {
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/AiCapability"
+          },
+          "configured_autonomy": {
+            "$ref": "#/components/schemas/AutonomyLevel"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "executed_actions_7d": {
+            "title": "Executed Actions 7D",
+            "type": "integer"
+          },
+          "max_allowed_autonomy": {
+            "$ref": "#/components/schemas/AutonomyLevel"
+          },
+          "pending_proposals_7d": {
+            "title": "Pending Proposals 7D",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capability",
+          "display_name",
+          "configured_autonomy",
+          "max_allowed_autonomy",
+          "pending_proposals_7d",
+          "executed_actions_7d"
+        ],
+        "title": "CapabilityPolicyItem",
         "type": "object"
       },
       "ChannelType": {
@@ -904,6 +1339,72 @@
           "unit_sale_price"
         ],
         "title": "CostVisibilitySampleResponse",
+        "type": "object"
+      },
+      "CreditWalletRead": {
+        "properties": {
+          "auto_downgrade_to_l0": {
+            "title": "Auto Downgrade To L0",
+            "type": "boolean"
+          },
+          "billing_cycle_end": {
+            "format": "date-time",
+            "title": "Billing Cycle End",
+            "type": "string"
+          },
+          "fractional_credit_carry": {
+            "title": "Fractional Credit Carry",
+            "type": "string"
+          },
+          "included_credits_remaining": {
+            "title": "Included Credits Remaining",
+            "type": "integer"
+          },
+          "overage_spend_cap_cents": {
+            "title": "Overage Spend Cap Cents",
+            "type": "integer"
+          },
+          "overage_spent_cents": {
+            "title": "Overage Spent Cents",
+            "type": "integer"
+          },
+          "plan_tier": {
+            "title": "Plan Tier",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "topup_credits_balance": {
+            "title": "Topup Credits Balance",
+            "type": "integer"
+          },
+          "total_credits_available": {
+            "title": "Total Credits Available",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "plan_tier",
+          "included_credits_remaining",
+          "topup_credits_balance",
+          "total_credits_available",
+          "fractional_credit_carry",
+          "overage_spend_cap_cents",
+          "overage_spent_cents",
+          "auto_downgrade_to_l0",
+          "billing_cycle_end",
+          "updated_at"
+        ],
+        "title": "CreditWalletRead",
         "type": "object"
       },
       "CustomerIdentityRead": {
@@ -3217,6 +3718,42 @@
         "title": "OrderRead",
         "type": "object"
       },
+      "PaginatedResponse_AiProposalRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AiProposalRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[AiProposalRead]",
+        "type": "object"
+      },
       "PaginatedResponse_AuditEventRead_": {
         "properties": {
           "has_more": {
@@ -3755,6 +4292,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[SkuMappingRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_UsageLedgerRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UsageLedgerRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[UsageLedgerRead]",
         "type": "object"
       },
       "PaginatedResponse_VariantRead_": {
@@ -4314,6 +4887,100 @@
         ],
         "title": "ProfitSummaryRead",
         "type": "object"
+      },
+      "ProposalEditApproveRequest": {
+        "properties": {
+          "edited_payload": {
+            "additionalProperties": true,
+            "title": "Edited Payload",
+            "type": "object"
+          },
+          "feedback_note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback Note"
+          }
+        },
+        "required": [
+          "edited_payload"
+        ],
+        "title": "ProposalEditApproveRequest",
+        "type": "object"
+      },
+      "ProposalFeedbackRequest": {
+        "properties": {
+          "feedback_note": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Feedback Note",
+            "type": "string"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "feedback_note"
+        ],
+        "title": "ProposalFeedbackRequest",
+        "type": "object"
+      },
+      "ProposalFeedbackResponse": {
+        "properties": {
+          "feedback_id": {
+            "format": "uuid",
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "feedback_id"
+        ],
+        "title": "ProposalFeedbackResponse",
+        "type": "object"
+      },
+      "ProposalRejectRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ProposalRejectRequest",
+        "type": "object"
+      },
+      "ProposalStatus": {
+        "enum": [
+          "pending",
+          "approved",
+          "edited_and_approved",
+          "rejected",
+          "expired",
+          "failed"
+        ],
+        "title": "ProposalStatus",
+        "type": "string"
       },
       "ProposalType": {
         "enum": [
@@ -6028,6 +6695,56 @@
         "title": "TokenResponse",
         "type": "object"
       },
+      "TopupCreditsRequest": {
+        "properties": {
+          "credits": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000.0,
+            "title": "Credits",
+            "type": "integer"
+          },
+          "reference": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credits",
+          "reference"
+        ],
+        "title": "TopupCreditsRequest",
+        "type": "object"
+      },
+      "TopupPaymentRead": {
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "client_secret": {
+            "title": "Client Secret",
+            "type": "string"
+          },
+          "currency": {
+            "default": "usd",
+            "title": "Currency",
+            "type": "string"
+          },
+          "payment_intent_id": {
+            "title": "Payment Intent Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_intent_id",
+          "client_secret",
+          "amount_cents"
+        ],
+        "title": "TopupPaymentRead",
+        "type": "object"
+      },
       "TrackingProvider": {
         "enum": [
           "17track",
@@ -6036,6 +6753,56 @@
         ],
         "title": "TrackingProvider",
         "type": "string"
+      },
+      "TranslateRequest": {
+        "properties": {
+          "target_lang": {
+            "maxLength": 17,
+            "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{2,8})?$",
+            "title": "Target Lang",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "target_lang"
+        ],
+        "title": "TranslateRequest",
+        "type": "object"
+      },
+      "TranslateResponse": {
+        "properties": {
+          "credits_consumed": {
+            "title": "Credits Consumed",
+            "type": "string"
+          },
+          "model_used": {
+            "title": "Model Used",
+            "type": "string"
+          },
+          "target_lang": {
+            "title": "Target Lang",
+            "type": "string"
+          },
+          "translated_text": {
+            "title": "Translated Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "translated_text",
+          "target_lang",
+          "model_used",
+          "credits_consumed"
+        ],
+        "title": "TranslateResponse",
+        "type": "object"
       },
       "UpdateConversationRequest": {
         "properties": {
@@ -6181,6 +6948,76 @@
         },
         "title": "UpdateTenantSettingsRequest",
         "type": "object"
+      },
+      "UsageLedgerRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "metric_type": {
+            "$ref": "#/components/schemas/UsageMetricType"
+          },
+          "model_or_provider": {
+            "title": "Model Or Provider",
+            "type": "string"
+          },
+          "raw_provider_cost_usd": {
+            "title": "Raw Provider Cost Usd",
+            "type": "string"
+          },
+          "stripe_meter_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Meter Event Id"
+          },
+          "stripe_meter_synced": {
+            "title": "Stripe Meter Synced",
+            "type": "boolean"
+          },
+          "units_consumed": {
+            "title": "Units Consumed",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "idempotency_key",
+          "metric_type",
+          "units_consumed",
+          "raw_provider_cost_usd",
+          "model_or_provider",
+          "stripe_meter_synced",
+          "stripe_meter_event_id",
+          "created_at"
+        ],
+        "title": "UsageLedgerRead",
+        "type": "object"
+      },
+      "UsageMetricType": {
+        "enum": [
+          "ai_credit",
+          "whatsapp_template",
+          "whatsapp_service",
+          "tracking_quota"
+        ],
+        "title": "UsageMetricType",
+        "type": "string"
       },
       "UserRole": {
         "enum": [
@@ -6595,6 +7432,54 @@
         "title": "VariantUpdate",
         "type": "object"
       },
+      "WarehouseListRead": {
+        "properties": {
+          "default_warehouse_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Warehouse Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WarehouseRead"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "default_warehouse_id"
+        ],
+        "title": "WarehouseListRead",
+        "type": "object"
+      },
+      "WarehouseRead": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "is_default"
+        ],
+        "title": "WarehouseRead",
+        "type": "object"
+      },
       "WidgetIdentifyRequest": {
         "properties": {
           "display_name": {
@@ -6944,6 +7829,230 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/ai/assistant/chat": {
+      "post": {
+        "operationId": "assistant_chat_api_v1_ai_assistant_chat_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Chat",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/capabilities": {
+      "get": {
+        "operationId": "get_capabilities_api_v1_ai_capabilities_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Capabilities",
+        "tags": [
+          "ai"
+        ]
+      },
+      "patch": {
+        "operationId": "update_capabilities_api_v1_ai_capabilities_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CapabilitiesUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Capabilities",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/feedback": {
+      "post": {
+        "operationId": "feedback_api_v1_ai_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalFeedbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feedback",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
     "/api/v1/ai/kb/documents": {
       "get": {
         "operationId": "list_kb_documents_api_v1_ai_kb_documents_get",
@@ -7181,6 +8290,425 @@
         "summary": "Search Kb Hybrid",
         "tags": [
           "ai-kb"
+        ]
+      }
+    },
+    "/api/v1/ai/proposals": {
+      "get": {
+        "operationId": "list_proposals_api_v1_ai_proposals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ProposalStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "proposal_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ProposalType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proposal Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_AiProposalRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Proposals",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/proposals/{proposal_id}": {
+      "get": {
+        "operationId": "proposal_detail_api_v1_ai_proposals__proposal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProposalRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proposal Detail",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/proposals/{proposal_id}/approve": {
+      "post": {
+        "operationId": "approve_proposal_api_v1_ai_proposals__proposal_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProposalRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Proposal",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/proposals/{proposal_id}/edit-approve": {
+      "post": {
+        "operationId": "edit_approve_proposal_api_v1_ai_proposals__proposal_id__edit_approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalEditApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProposalRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Approve Proposal",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/proposals/{proposal_id}/reject": {
+      "post": {
+        "operationId": "reject_proposal_api_v1_ai_proposals__proposal_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalRejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProposalRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Proposal",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/translate": {
+      "post": {
+        "operationId": "translate_text_api_v1_ai_translate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Translate Text",
+        "tags": [
+          "ai"
         ]
       }
     },
@@ -8206,6 +9734,233 @@
         "summary": "Send Quote",
         "tags": [
           "b2b"
+        ]
+      }
+    },
+    "/api/v1/billing/stripe/webhook": {
+      "post": {
+        "operationId": "stripe_billing_webhook_api_v1_billing_stripe_webhook_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "stripe-signature",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Stripe-Signature",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Stripe Billing Webhook Api V1 Billing Stripe Webhook Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stripe Billing Webhook",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/billing/topup": {
+      "post": {
+        "operationId": "topup_credits_api_v1_billing_topup_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopupCreditsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopupPaymentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Topup Credits",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/billing/usage": {
+      "get": {
+        "operationId": "list_billing_usage_api_v1_billing_usage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_UsageLedgerRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Billing Usage",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/billing/wallet": {
+      "get": {
+        "operationId": "get_billing_wallet_api_v1_billing_wallet_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditWalletRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Billing Wallet",
+        "tags": [
+          "billing"
         ]
       }
     },
@@ -11671,6 +13426,56 @@
           }
         },
         "summary": "List Inventory Ledger",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/warehouses": {
+      "get": {
+        "description": "List warehouse IDs visible to this tenant without creating a fallback default.",
+        "operationId": "list_warehouses_api_v1_orders_warehouses_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarehouseListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Warehouses",
         "tags": [
           "orders"
         ]
