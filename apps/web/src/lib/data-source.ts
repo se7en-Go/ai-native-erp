@@ -1,4 +1,34 @@
 import { bffFetch } from "@/lib/api";
+import {
+  getB2bOpportunities,
+  getB2bQuotes,
+  getCatalogVariants,
+  getChannelAccounts,
+  getChannelConsents,
+  getChannelDlq,
+  getChannelSuppressions,
+  getFinanceOverview,
+  getInventoryBalances,
+  getInventoryLedger,
+  getOnboardingState,
+  getOrderDetail,
+  getOrders,
+  getVariantMappings,
+  type B2bOpportunityApiItem,
+  type B2bQuoteApiItem,
+  type CatalogVariantApiItem,
+  type ChannelAccountApiItem,
+  type ConsentLogApiItem,
+  type DlqEventApiItem,
+  type FinanceOverviewApiItem,
+  type InventoryBalanceApiItem,
+  type InventoryLedgerApiItem,
+  type OnboardingStateApiItem,
+  type OrderDetailApiItem,
+  type OrderSummaryApiItem,
+  type PlatformSkuMappingApiItem,
+  type SuppressionLogApiItem,
+} from "@/lib/api-client/client.gen";
 import type {
   AiCapability,
   AutonomyLevel,
@@ -8,10 +38,24 @@ import type {
 } from "@/lib/contracts";
 import {
   mockCapabilities,
+  mockChannelAccounts,
+  mockChannelConsents,
+  mockChannelDlq,
+  mockChannelSuppressions,
   mockConversationsPage,
+  mockFinanceOverview,
+  mockInventoryBalancesPage,
+  mockInventoryLedgerPage,
   mockKbDocuments,
   mockMessagesPage,
+  mockOnboardingState,
+  mockOpportunitiesPage,
+  mockOrderDetail,
+  mockOrdersPage,
   mockProposals,
+  mockQuotesPage,
+  mockVariantDetail,
+  mockVariantsPage,
   mockWallet,
 } from "@/lib/mock-fixtures";
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
@@ -123,6 +167,156 @@ export function fetchKbDocuments(): Promise<PaginatedResponse<KbDocumentItem>> {
     });
   }
   return bffFetch<PaginatedResponse<KbDocumentItem>>("/v1/ai/kb/documents");
+}
+
+export function fetchCatalogVariants(
+  query: string,
+): Promise<PaginatedResponse<CatalogVariantApiItem>> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockVariantsPage(query) as unknown as PaginatedResponse<CatalogVariantApiItem>,
+    );
+  }
+  return getCatalogVariants(query, 50, 0);
+}
+
+export function fetchVariantDetail(
+  variantId: string,
+): Promise<{
+  variant: CatalogVariantApiItem;
+  mappings: PlatformSkuMappingApiItem[];
+}> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockVariantDetail(variantId) as unknown as {
+        variant: CatalogVariantApiItem;
+        mappings: PlatformSkuMappingApiItem[];
+      },
+    );
+  }
+  return getVariantMappings(variantId);
+}
+
+export function fetchB2bOpportunities(): Promise<
+  PaginatedResponse<B2bOpportunityApiItem>
+> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockOpportunitiesPage() as unknown as PaginatedResponse<B2bOpportunityApiItem>,
+    );
+  }
+  return getB2bOpportunities(50, 0);
+}
+
+export function fetchB2bQuotes(
+  opportunityId = "",
+): Promise<PaginatedResponse<B2bQuoteApiItem>> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockQuotesPage(opportunityId || undefined) as unknown as PaginatedResponse<B2bQuoteApiItem>,
+    );
+  }
+  return getB2bQuotes(opportunityId, 20, 0);
+}
+
+export function fetchOrders(
+  orderMode = "",
+): Promise<PaginatedResponse<OrderSummaryApiItem>> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockOrdersPage(orderMode) as unknown as PaginatedResponse<OrderSummaryApiItem>,
+    );
+  }
+  return getOrders(orderMode, 20, 0);
+}
+
+export function fetchOrderDetail(orderId: string): Promise<OrderDetailApiItem> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(mockOrderDetail as unknown as OrderDetailApiItem);
+  }
+  return getOrderDetail(orderId);
+}
+
+export function fetchInventoryBalances(): Promise<
+  PaginatedResponse<InventoryBalanceApiItem>
+> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockInventoryBalancesPage() as unknown as PaginatedResponse<InventoryBalanceApiItem>,
+    );
+  }
+  return getInventoryBalances("", 20, 0);
+}
+
+export function fetchInventoryLedger(): Promise<
+  PaginatedResponse<InventoryLedgerApiItem>
+> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockInventoryLedgerPage() as unknown as PaginatedResponse<InventoryLedgerApiItem>,
+    );
+  }
+  return getInventoryLedger("", 20, 0);
+}
+
+export function fetchFinanceOverview(): Promise<FinanceOverviewApiItem> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockFinanceOverview as unknown as FinanceOverviewApiItem,
+    );
+  }
+  return getFinanceOverview();
+}
+
+export function fetchOnboardingState(): Promise<OnboardingStateApiItem> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockOnboardingState as unknown as OnboardingStateApiItem,
+    );
+  }
+  return getOnboardingState();
+}
+
+export function fetchChannelAccounts(): Promise<
+  PaginatedResponse<ChannelAccountApiItem>
+> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockChannelAccounts as unknown as PaginatedResponse<ChannelAccountApiItem>,
+    );
+  }
+  return getChannelAccounts();
+}
+
+export function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockChannelDlq as unknown as PaginatedResponse<DlqEventApiItem>,
+    );
+  }
+  return getChannelDlq();
+}
+
+export function fetchChannelConsents(): Promise<
+  PaginatedResponse<ConsentLogApiItem>
+> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockChannelConsents as unknown as PaginatedResponse<ConsentLogApiItem>,
+    );
+  }
+  return getChannelConsents();
+}
+
+export function fetchChannelSuppressions(): Promise<
+  PaginatedResponse<SuppressionLogApiItem>
+> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockChannelSuppressions as unknown as PaginatedResponse<SuppressionLogApiItem>,
+    );
+  }
+  return getChannelSuppressions();
 }
 
 export function fetchPendingProposalsCount(): Promise<{ total: number }> {

@@ -2,3 +2,8 @@ export * from "@/lib/mock-fixtures/conversations";
 export * from "@/lib/mock-fixtures/ai";
 export * from "@/lib/mock-fixtures/customer-context";
 export * from "@/lib/mock-fixtures/finance";
+export * from "@/lib/mock-fixtures/catalog";
+export * from "@/lib/mock-fixtures/b2b";
+export * from "@/lib/mock-fixtures/orders";
+export * from "@/lib/mock-fixtures/onboarding";
+export * from "@/lib/mock-fixtures/channels";
