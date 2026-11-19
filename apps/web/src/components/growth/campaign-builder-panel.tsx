@@ -7,7 +7,8 @@ import type { CampaignChannel, CampaignDraft, SuppressionPreview } from "./types
 
 export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
   targetIds: readonly string[];
-  onPreview: (draft: CampaignDraft) => Promise<SuppressionPreview>;
+  /** Optional: a server-side preview needs a saved campaign id, so list views own it. */
+  onPreview?: (draft: CampaignDraft) => Promise<SuppressionPreview>;
   onSaveDraft: (draft: CampaignDraft) => void | Promise<void>;
 }) {
   const [channel, setChannel] = useState<CampaignChannel>("email");
@@ -27,12 +28,12 @@ export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
   function clearResult() { setResult(null); setFeedback(null); }
 
   async function run(action: "preview" | "save") {
-    if (pending || !ready || (action === "preview" && !uniqueTargets.length)) return;
+    if (pending || !ready || (action === "preview" && (!uniqueTargets.length || !onPreview))) return;
     setPending(action);
     setFeedback(null);
     if (action === "preview") setResult(null);
     try {
-      if (action === "preview") setResult({ data: await onPreview(draft), key });
+      if (action === "preview" && onPreview) setResult({ data: await onPreview(draft), key });
       else { await onSaveDraft(draft); setFeedback({ error: false, text: "战役草稿已保存。" }); }
     } catch {
       setFeedback({ error: true, text: action === "preview" ? "无法获取退订拦截预览，请重试。" : "保存失败，请重试。" });
@@ -63,7 +64,7 @@ export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
               <textarea required rows={5} value={body} onChange={(event) => { clearResult(); setBody(event.target.value); }} className={field + " resize-y"} />
             </label>
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={!ready || !uniqueTargets.length || !!pending} className={button} onClick={() => void run("preview")}><ShieldCheck aria-hidden="true" size={16} />{pending === "preview" ? "检查中…" : "预览退订拦截"}</button>
+              {onPreview && <button type="button" disabled={!ready || !uniqueTargets.length || !!pending} className={button} onClick={() => void run("preview")}><ShieldCheck aria-hidden="true" size={16} />{pending === "preview" ? "检查中…" : "预览退订拦截"}</button>}
               <button type="submit" disabled={!ready || !!pending} className={primary}><Save aria-hidden="true" size={16} />保存草稿</button>
             </div>
           </fieldset>
@@ -82,7 +83,9 @@ export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
             {!!preview.reasons.length && <ul className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-sm">
               {preview.reasons.map(({ reason, count: amount }) => <li key={reason} className="flex justify-between gap-2"><span>{reason}</span><span>{count(amount)} 条</span></li>)}
             </ul>}
-          </section> : <p className="mt-3 text-sm text-slate-600">{uniqueTargets.length ? "尚未生成当前配置的拦截结果。" : "选择目标线索后才能预览。"}</p>}
+          </section> : <p className="mt-3 text-sm text-slate-600">{!onPreview
+            ? "保存草稿后，在战役列表对已存战役执行服务端合规预检。"
+            : uniqueTargets.length ? "尚未生成当前配置的拦截结果。" : "选择目标线索后才能预览。"}</p>}
         </aside>
       </div>
       {feedback && <p role={feedback.error ? "alert" : "status"} className={"mt-3 text-sm " + (feedback.error ? "text-rose-700" : "text-teal-900")}>{feedback.text}</p>}

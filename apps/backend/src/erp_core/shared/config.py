@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = Field(default="", repr=False)
     STRIPE_SECRET_KEY: str = Field(default="", repr=False)
     STRIPE_WEBHOOK_SECRET: str = Field(default="", repr=False)
+    # Phase 3C compliant lead collection (BYOK; empty means the source is disabled).
+    GOOGLE_PLACES_API_KEY: str = Field(default="", repr=False)
 
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_BUCKET: str = "erp-assets"

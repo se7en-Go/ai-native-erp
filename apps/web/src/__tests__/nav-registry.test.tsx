@@ -70,14 +70,21 @@ describe("Phase 3A navigation registry", () => {
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 
-  it("registers the six grouped sections and Phase 3A pages", () => {
+  it("registers the grouped sections and the Phase 3A/3C pages", () => {
     expect(NAV_SECTIONS.map((section) => section.id)).toEqual([
       "core",
       "business",
       "trade",
       "finance",
       "ai",
+      "growth",
       "system",
+    ]);
+    // Phase 3C adds the growth group without touching any existing route.
+    const growth = NAV_SECTIONS.find((section) => section.id === "growth");
+    expect(growth?.items.map((item) => item.href)).toEqual([
+      "/growth/collect",
+      "/growth/campaigns",
     ]);
     const phase3aPages = [
       "/dashboard",

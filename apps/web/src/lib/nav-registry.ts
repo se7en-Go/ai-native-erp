@@ -9,6 +9,8 @@ import {
   FileText,
   Inbox,
   Landmark,
+  MapPinned,
+  Megaphone,
   LayoutDashboard,
   Package,
   PackageSearch,
@@ -135,6 +137,24 @@ export const NAV_SECTIONS: NavSection[] = [
         labelKey: "navStudio",
         icon: Palette,
         roles: ALL_ROLES,
+      },
+    ],
+  },
+  {
+    id: "growth",
+    labelKey: "navGroupGrowth",
+    items: [
+      {
+        href: "/growth/collect",
+        labelKey: "navGrowthCollect",
+        icon: MapPinned,
+        roles: SALES_ROLES,
+      },
+      {
+        href: "/growth/campaigns",
+        labelKey: "navGrowthCampaigns",
+        icon: Megaphone,
+        roles: SALES_ROLES,
       },
     ],
   },

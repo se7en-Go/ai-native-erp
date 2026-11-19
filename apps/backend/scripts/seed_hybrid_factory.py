@@ -6,6 +6,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
 from sqlalchemy import text
@@ -27,6 +28,7 @@ import erp_core.tenancy.models  # noqa: F401
 from erp_core.ai_engine.ingestion import DocumentIngestionService
 from erp_core.ai_engine.tools import ErpToolRegistry
 from erp_core.channels.ecommerce.base import CredentialVaultHelper, register_channel_routing
+from erp_core.growth.service import dedupe_fingerprint, grade_for
 from erp_core.shared.config import Settings, get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import create_runtime_engine, create_session_factory, tenant_session
@@ -303,6 +305,11 @@ async def seed_hybrid_factory(
             # The Phase 3B roster is reconciled on every demo seed run, so it does not
             # depend on the catalogue guard above (which only seeds once).
             await _seed_phase3b_workforce(
+                session, tenant_id=TENANT_A_ID, owner_id=owner_uid
+            )
+            # Phase 3C global-map collection, graded prospect pool and a compliant
+            # email campaign draft. Reconciled on every demo seed run (no guard).
+            await _seed_phase3c_growth(
                 session, tenant_id=TENANT_A_ID, owner_id=owner_uid
             )
 
@@ -633,6 +640,233 @@ async def _seed_phase3b_workforce(
                 "content_text": content,
                 "status": status,
                 "created_by": owner_id,
+            },
+        )
+
+
+_PHASE3C_PROSPECTS = (
+    {
+        "key": "gulf-lighting",
+        "company_name": "Gulf Lighting Trading LLC",
+        "contact_name": "Aisha Khan",
+        "phone_e164": "+97145550100",
+        "email": "aisha@gulf-lighting.example.ae",
+        "website": "https://gulf-lighting.example.ae",
+        "country": "AE",
+        "city": "Dubai",
+        "latitude": 25.2048,
+        "longitude": 55.2708,
+        "rating": "4.80",
+        "sync_status": "cleaned",
+    },
+    {
+        "key": "pacific-led",
+        "company_name": "Pacific LED Wholesale Inc.",
+        "contact_name": "Dana Reed",
+        "phone_e164": "+12135550142",
+        "email": "buyers@pacificled.example.com",
+        "website": "https://pacificled.example.com",
+        "country": "US",
+        "city": "Los Angeles",
+        "latitude": 34.0522,
+        "longitude": -118.2437,
+        "rating": "4.50",
+        "sync_status": "cleaned",
+    },
+    {
+        "key": "milan-illuminazione",
+        "company_name": "Milan Illuminazione SRL",
+        "contact_name": "Marco Rossi",
+        "phone_e164": "+390255550111",
+        "email": "info@milanilluminazione.example.it",
+        "website": "https://milanilluminazione.example.it",
+        "country": "IT",
+        "city": "Milan",
+        "latitude": 45.4642,
+        "longitude": 9.1900,
+        "rating": "4.20",
+        "sync_status": "cleaned",
+    },
+    {
+        "key": "jakarta-cahaya",
+        "company_name": "Jakarta Cahaya Lighting",
+        "contact_name": "Budi Santoso",
+        "phone_e164": "+622155501234",
+        "email": "budi@cahaya-lighting.example.id",
+        "website": "https://cahaya-lighting.example.id",
+        "country": "ID",
+        "city": "Jakarta",
+        "latitude": -6.2088,
+        "longitude": 106.8456,
+        "rating": "4.10",
+        "sync_status": "cleaned",
+    },
+    {
+        "key": "shannon-lighting",
+        "company_name": "Shannon Retail Lighting",
+        "contact_name": "Aoife Byrne",
+        "phone_e164": "+35315550123",
+        "email": None,
+        "website": None,
+        "country": "IE",
+        "city": "Dublin",
+        "latitude": 53.3498,
+        "longitude": -6.2603,
+        "rating": "4.00",
+        "sync_status": "cleaned",
+    },
+    {
+        "key": "lagos-lighting",
+        "company_name": "Lagos Lighting Mart",
+        "contact_name": None,
+        "phone_e164": None,
+        "email": None,
+        "website": "https://lagos-lighting.example.ng",
+        "country": "NG",
+        "city": "Lagos",
+        "latitude": 6.5244,
+        "longitude": 3.3792,
+        "rating": None,
+        "sync_status": "raw",
+    },
+)
+
+
+async def _seed_phase3c_growth(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    owner_id: UUID,
+) -> None:
+    """Idempotently seed one completed global-map job, six graded prospects and a campaign.
+
+    Grades are derived with the same deterministic `grade_for` used by the API, so
+    the demo data can never drift from the production grading rules.
+    """
+    job_id = uuid5(tenant_id, "growth-job-global-map")
+    campaign_id = uuid5(tenant_id, "growth-campaign-dubai-milan")
+    await session.execute(
+        text("""
+            INSERT INTO lead_collection_jobs (id, tenant_id, source_provider, keywords,
+                target_region, max_results, min_rating, require_phone, status,
+                collected_count, cleaned_count, synced_count, created_by, created_at,
+                completed_at)
+            VALUES (:id, :tid, 'overture_poi',
+                CAST(:keywords AS jsonb), 'Dubai / Los Angeles / Milan / Jakarta', 50,
+                CAST('4.00' AS numeric(3,2)), false, 'completed', 6, 5, 0, :owner,
+                now() - interval '2 days', now() - interval '2 days')
+            ON CONFLICT (tenant_id, id) DO UPDATE SET
+                keywords = EXCLUDED.keywords,
+                target_region = EXCLUDED.target_region,
+                status = EXCLUDED.status,
+                collected_count = EXCLUDED.collected_count,
+                cleaned_count = EXCLUDED.cleaned_count,
+                synced_count = EXCLUDED.synced_count,
+                completed_at = EXCLUDED.completed_at
+        """),
+        {
+            "id": job_id,
+            "tid": tenant_id,
+            "owner": owner_id,
+            "keywords": json.dumps(["led lighting distributor", "wholesale lighting"]),
+        },
+    )
+    for prospect in _PHASE3C_PROSPECTS:
+        fingerprint = dedupe_fingerprint(
+            phone_e164=prospect["phone_e164"],
+            email=prospect["email"],
+            website=prospect["website"],
+            company_name=prospect["company_name"],
+            city=prospect["city"],
+            country=prospect["country"],
+        )
+        grade = grade_for(
+            phone_e164=prospect["phone_e164"],
+            email=prospect["email"],
+            website=prospect["website"],
+            rating=Decimal(prospect["rating"]) if prospect["rating"] else None,
+        )
+        await session.execute(
+            text("""
+                INSERT INTO collected_prospects (id, tenant_id, job_id, company_name,
+                    contact_name, phone_e164, email, website, country, city, latitude,
+                    longitude, rating, grade, whatsapp_reachable, dedupe_fingerprint,
+                    sync_status, raw_metadata, created_at)
+                VALUES (:id, :tid, :job, :company_name, :contact_name, :phone_e164, :email,
+                    :website, :country, :city, :latitude, :longitude,
+                    CAST(:rating AS numeric(3,2)), :grade, :whatsapp, :fingerprint,
+                    :sync_status, CAST(:raw_metadata AS jsonb), now() - interval '2 days')
+                ON CONFLICT (tenant_id, id) DO UPDATE SET
+                    company_name = EXCLUDED.company_name,
+                    contact_name = EXCLUDED.contact_name,
+                    phone_e164 = EXCLUDED.phone_e164,
+                    email = EXCLUDED.email,
+                    website = EXCLUDED.website,
+                    country = EXCLUDED.country,
+                    city = EXCLUDED.city,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    rating = EXCLUDED.rating,
+                    grade = EXCLUDED.grade,
+                    whatsapp_reachable = EXCLUDED.whatsapp_reachable,
+                    dedupe_fingerprint = EXCLUDED.dedupe_fingerprint,
+                    sync_status = EXCLUDED.sync_status,
+                    raw_metadata = EXCLUDED.raw_metadata
+            """),
+            {
+                **prospect,
+                "id": uuid5(tenant_id, f"growth-prospect:{prospect['key']}"),
+                "tid": tenant_id,
+                "job": job_id,
+                "whatsapp": prospect["phone_e164"] is not None,
+                "fingerprint": fingerprint,
+                "grade": grade,
+                "raw_metadata": json.dumps(
+                    {
+                        "provider": "overture_poi",
+                        "dataset": "Overture Maps Places (CDLA-Permissive-2.0)",
+                        "license": "CDLA-Permissive-2.0",
+                        "demo": True,
+                    }
+                ),
+            },
+        )
+    await session.execute(
+        text("""
+            INSERT INTO marketing_campaigns (id, tenant_id, name, channel_type, subject,
+                body_template, status, total_targets, sent_count, suppressed_count,
+                replied_count, created_by, created_at, updated_at)
+            VALUES (:id, :tid, 'Dubai & Milan LED wholesale outreach', 'email',
+                '2026 COB strip catalogue and FOB pricing',
+                'Hello {{company_name}}, our 2026 COB strip catalogue is ready. '
+                || 'Reply STOP or use the one-click unsubscribe link to opt out.',
+                'draft', 2, 0, 0, 0, :owner,
+                now() - interval '1 day', now() - interval '1 day')
+            ON CONFLICT (tenant_id, id) DO UPDATE SET
+                name = EXCLUDED.name,
+                subject = EXCLUDED.subject,
+                body_template = EXCLUDED.body_template,
+                total_targets = EXCLUDED.total_targets,
+                updated_at = EXCLUDED.updated_at
+        """),
+        {"id": campaign_id, "tid": tenant_id, "owner": owner_id},
+    )
+    for key, address in (
+        ("hans", "hans.weber@berlin-lighting.de"),
+        ("elena", "elena@example.com"),
+    ):
+        await session.execute(
+            text("""
+                INSERT INTO campaign_recipients (tenant_id, campaign_id, customer_id,
+                    address, status)
+                VALUES (:tid, :campaign, :customer, :address, 'queued')
+                ON CONFLICT (tenant_id, campaign_id, address) DO NOTHING
+            """),
+            {
+                "tid": tenant_id,
+                "campaign": campaign_id,
+                "customer": uuid5(tenant_id, key),
+                "address": address,
             },
         )
 
