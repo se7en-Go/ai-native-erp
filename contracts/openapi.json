@@ -199,6 +199,27 @@
         "title": "BuyerLocalTimeInfo",
         "type": "object"
       },
+      "CancelOrderRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "format": "uuid",
+            "title": "Warehouse Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "warehouse_id",
+          "reason"
+        ],
+        "title": "CancelOrderRequest",
+        "type": "object"
+      },
       "ConfidenceLevel": {
         "enum": [
           "deterministic",
@@ -207,6 +228,147 @@
         ],
         "title": "ConfidenceLevel",
         "type": "string"
+      },
+      "ConvertQuoteRequest": {
+        "properties": {
+          "deposit_ratio": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.30",
+            "title": "Deposit Ratio"
+          },
+          "order_mode": {
+            "default": "b2b_wholesale",
+            "enum": [
+              "b2b_wholesale",
+              "b2b_sample"
+            ],
+            "title": "Order Mode",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "format": "uuid",
+            "title": "Warehouse Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "warehouse_id"
+        ],
+        "title": "ConvertQuoteRequest",
+        "type": "object"
+      },
+      "ConvertQuoteResponse": {
+        "properties": {
+          "order": {
+            "$ref": "#/components/schemas/ConvertedOrderSummary"
+          },
+          "quote": {
+            "$ref": "#/components/schemas/QuoteRead"
+          },
+          "receivables": {
+            "items": {
+              "$ref": "#/components/schemas/ConvertedReceivableSummary"
+            },
+            "title": "Receivables",
+            "type": "array"
+          }
+        },
+        "required": [
+          "quote",
+          "order",
+          "receivables"
+        ],
+        "title": "ConvertQuoteResponse",
+        "type": "object"
+      },
+      "ConvertedOrderSummary": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "fulfillment_status": {
+            "$ref": "#/components/schemas/FulfillmentStatus"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "order_mode": {
+            "$ref": "#/components/schemas/OrderMode"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          },
+          "payment_status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "order_no",
+          "order_mode",
+          "fulfillment_status",
+          "payment_status",
+          "total_amount",
+          "currency"
+        ],
+        "title": "ConvertedOrderSummary",
+        "type": "object"
+      },
+      "ConvertedReceivableSummary": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "due_amount": {
+            "title": "Due Amount",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "milestone_label": {
+            "title": "Milestone Label",
+            "type": "string"
+          },
+          "paid_amount": {
+            "title": "Paid Amount",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "milestone_label",
+          "due_amount",
+          "paid_amount",
+          "currency",
+          "status"
+        ],
+        "title": "ConvertedReceivableSummary",
+        "type": "object"
       },
       "CostVisibilitySampleResponse": {
         "properties": {
@@ -568,6 +730,21 @@
         "title": "CustomerUpdateRequest",
         "type": "object"
       },
+      "FulfillmentStatus": {
+        "enum": [
+          "pending_payment",
+          "confirmed_reserved",
+          "in_production",
+          "partially_shipped",
+          "shipped",
+          "delivered",
+          "exception",
+          "cancelled",
+          "refunded"
+        ],
+        "title": "FulfillmentStatus",
+        "type": "string"
+      },
       "GdprAnonymizeResult": {
         "properties": {
           "customer_id": {
@@ -705,6 +882,113 @@
         "title": "IdentityType",
         "type": "string"
       },
+      "Incoterm": {
+        "enum": [
+          "EXW",
+          "FOB",
+          "CIF",
+          "DDP",
+          "DAP"
+        ],
+        "title": "Incoterm",
+        "type": "string"
+      },
+      "InventoryBalanceItemRead": {
+        "properties": {
+          "available_qty": {
+            "title": "Available Qty",
+            "type": "integer"
+          },
+          "on_hand_qty": {
+            "title": "On Hand Qty",
+            "type": "integer"
+          },
+          "reserved_qty": {
+            "title": "Reserved Qty",
+            "type": "integer"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "format": "uuid",
+            "title": "Warehouse Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "warehouse_id",
+          "variant_id",
+          "sku",
+          "on_hand_qty",
+          "reserved_qty",
+          "available_qty"
+        ],
+        "title": "InventoryBalanceItemRead",
+        "type": "object"
+      },
+      "InventoryLedgerRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "qty_delta_on_hand": {
+            "title": "Qty Delta On Hand",
+            "type": "integer"
+          },
+          "qty_delta_reserved": {
+            "title": "Qty Delta Reserved",
+            "type": "integer"
+          },
+          "reference_id": {
+            "format": "uuid",
+            "title": "Reference Id",
+            "type": "string"
+          },
+          "reference_type": {
+            "title": "Reference Type",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "variant_id",
+          "event_type",
+          "qty_delta_on_hand",
+          "qty_delta_reserved",
+          "reference_type",
+          "reference_id",
+          "idempotency_key",
+          "created_at"
+        ],
+        "title": "InventoryLedgerRead",
+        "type": "object"
+      },
       "InviteMemberRequest": {
         "properties": {
           "email": {
@@ -735,6 +1019,184 @@
           "role"
         ],
         "title": "InviteMemberRequest",
+        "type": "object"
+      },
+      "LeadCreate": {
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "extracted_requirements": {
+            "additionalProperties": true,
+            "title": "Extracted Requirements",
+            "type": "object"
+          },
+          "lead_type": {
+            "default": "b2b_inquiry",
+            "enum": [
+              "b2b_inquiry",
+              "b2c_vip_pre_sale"
+            ],
+            "title": "Lead Type",
+            "type": "string"
+          },
+          "qualification_score": {
+            "default": 0,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Qualification Score",
+            "type": "integer"
+          },
+          "source_channel": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Channel",
+            "type": "string"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          }
+        },
+        "required": [
+          "customer_id",
+          "source_channel"
+        ],
+        "title": "LeadCreate",
+        "type": "object"
+      },
+      "LeadRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "extracted_requirements": {
+            "additionalProperties": true,
+            "title": "Extracted Requirements",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lead_type": {
+            "title": "Lead Type",
+            "type": "string"
+          },
+          "qualification_score": {
+            "title": "Qualification Score",
+            "type": "integer"
+          },
+          "source_channel": {
+            "title": "Source Channel",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LeadStatus"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "customer_id",
+          "source_channel",
+          "utm_campaign",
+          "lead_type",
+          "qualification_score",
+          "extracted_requirements",
+          "status",
+          "created_at"
+        ],
+        "title": "LeadRead",
+        "type": "object"
+      },
+      "LeadStatus": {
+        "enum": [
+          "new",
+          "contacted",
+          "qualified",
+          "disqualified",
+          "converted"
+        ],
+        "title": "LeadStatus",
+        "type": "string"
+      },
+      "LiveSkuCheckRead": {
+        "properties": {
+          "available_qty": {
+            "title": "Available Qty",
+            "type": "integer"
+          },
+          "incoterm": {
+            "title": "Incoterm",
+            "type": "string"
+          },
+          "moq_tier_applied": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moq Tier Applied"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "source_tool_call_id": {
+            "title": "Source Tool Call Id",
+            "type": "string"
+          },
+          "unit_price_quote_ccy": {
+            "title": "Unit Price Quote Ccy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku",
+          "available_qty",
+          "unit_price_quote_ccy",
+          "moq_tier_applied",
+          "incoterm",
+          "source_tool_call_id"
+        ],
+        "title": "LiveSkuCheckRead",
         "type": "object"
       },
       "LoginRequest": {
@@ -919,6 +1381,52 @@
         "title": "MergeProposalCandidate",
         "type": "object"
       },
+      "MoqTierInput-Input": {
+        "properties": {
+          "min_qty": {
+            "minimum": 1.0,
+            "title": "Min Qty",
+            "type": "integer"
+          },
+          "unit_price_usd": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Unit Price Usd"
+          }
+        },
+        "required": [
+          "min_qty",
+          "unit_price_usd"
+        ],
+        "title": "MoqTierInput",
+        "type": "object"
+      },
+      "MoqTierInput-Output": {
+        "properties": {
+          "min_qty": {
+            "minimum": 1.0,
+            "title": "Min Qty",
+            "type": "integer"
+          },
+          "unit_price_usd": {
+            "title": "Unit Price Usd",
+            "type": "string"
+          }
+        },
+        "required": [
+          "min_qty",
+          "unit_price_usd"
+        ],
+        "title": "MoqTierInput",
+        "type": "object"
+      },
       "OnboardingStage": {
         "enum": [
           "WorkspaceCreated",
@@ -972,6 +1480,575 @@
           "updated_at"
         ],
         "title": "OnboardingStateRead",
+        "type": "object"
+      },
+      "OpportunityCreate": {
+        "properties": {
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "expected_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Expected Amount"
+          },
+          "expected_close_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Close Date"
+          },
+          "lead_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Id"
+          },
+          "owner_user_id": {
+            "format": "uuid",
+            "title": "Owner User Id",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/OpportunityStage",
+            "default": "quoting"
+          },
+          "title": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "title",
+          "owner_user_id"
+        ],
+        "title": "OpportunityCreate",
+        "type": "object"
+      },
+      "OpportunityRead": {
+        "properties": {
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "expected_amount": {
+            "title": "Expected Amount",
+            "type": "string"
+          },
+          "expected_close_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Close Date"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lead_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Id"
+          },
+          "owner_user_id": {
+            "format": "uuid",
+            "title": "Owner User Id",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/OpportunityStage"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "lead_id",
+          "company_id",
+          "customer_id",
+          "title",
+          "stage",
+          "expected_amount",
+          "currency",
+          "expected_close_date",
+          "owner_user_id",
+          "created_at"
+        ],
+        "title": "OpportunityRead",
+        "type": "object"
+      },
+      "OpportunityStage": {
+        "enum": [
+          "discovery",
+          "sampling",
+          "quoting",
+          "negotiating",
+          "closed_won",
+          "closed_lost"
+        ],
+        "title": "OpportunityStage",
+        "type": "string"
+      },
+      "OpportunityStageUpdate": {
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/OpportunityStage"
+          }
+        },
+        "required": [
+          "stage"
+        ],
+        "title": "OpportunityStageUpdate",
+        "type": "object"
+      },
+      "OrderCreateRequest": {
+        "properties": {
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "discount_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Discount Amount"
+          },
+          "fx_rate_to_base": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "7.200000",
+            "title": "Fx Rate To Base"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderItemInput"
+            },
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "order_mode": {
+            "$ref": "#/components/schemas/OrderMode",
+            "default": "b2c_retail"
+          },
+          "shipping_charged": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Shipping Charged"
+          },
+          "tax_collected": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Tax Collected"
+          },
+          "warehouse_id": {
+            "format": "uuid",
+            "title": "Warehouse Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "warehouse_id",
+          "items"
+        ],
+        "title": "OrderCreateRequest",
+        "type": "object"
+      },
+      "OrderItemInput": {
+        "properties": {
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Price"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "quantity"
+        ],
+        "title": "OrderItemInput",
+        "type": "object"
+      },
+      "OrderItemRead": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_total": {
+            "title": "Line Total",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "sku_snapshot": {
+            "title": "Sku Snapshot",
+            "type": "string"
+          },
+          "unit_cost_base_snapshot": {
+            "title": "Unit Cost Base Snapshot",
+            "type": "string"
+          },
+          "unit_price": {
+            "title": "Unit Price",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "order_id",
+          "variant_id",
+          "sku_snapshot",
+          "quantity",
+          "unit_price",
+          "unit_cost_base_snapshot",
+          "line_total"
+        ],
+        "title": "OrderItemRead",
+        "type": "object"
+      },
+      "OrderMode": {
+        "enum": [
+          "b2c_retail",
+          "b2b_sample",
+          "b2b_wholesale"
+        ],
+        "title": "OrderMode",
+        "type": "string"
+      },
+      "OrderRead": {
+        "properties": {
+          "channel_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Account Id"
+          },
+          "channel_metadata": {
+            "additionalProperties": true,
+            "title": "Channel Metadata",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "discount_amount": {
+            "title": "Discount Amount",
+            "type": "string"
+          },
+          "external_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Order Id"
+          },
+          "fulfillment_status": {
+            "$ref": "#/components/schemas/FulfillmentStatus"
+          },
+          "fx_rate_to_base": {
+            "title": "Fx Rate To Base",
+            "type": "string"
+          },
+          "has_72h_stagnation_alert": {
+            "default": false,
+            "title": "Has 72H Stagnation Alert",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderItemRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "order_mode": {
+            "$ref": "#/components/schemas/OrderMode"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          },
+          "payment_status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Id"
+          },
+          "shipments": {
+            "items": {
+              "$ref": "#/components/schemas/ShipmentRead"
+            },
+            "title": "Shipments",
+            "type": "array"
+          },
+          "shipping_charged": {
+            "title": "Shipping Charged",
+            "type": "string"
+          },
+          "subtotal_amount": {
+            "title": "Subtotal Amount",
+            "type": "string"
+          },
+          "tax_collected": {
+            "title": "Tax Collected",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "order_no",
+          "order_mode",
+          "channel_account_id",
+          "external_order_id",
+          "customer_id",
+          "quote_id",
+          "currency",
+          "fx_rate_to_base",
+          "subtotal_amount",
+          "shipping_charged",
+          "discount_amount",
+          "tax_collected",
+          "total_amount",
+          "fulfillment_status",
+          "payment_status",
+          "channel_metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OrderRead",
         "type": "object"
       },
       "PaginatedResponse_AuditEventRead_": {
@@ -1046,6 +2123,114 @@
         "title": "PaginatedResponse[CustomerRead]",
         "type": "object"
       },
+      "PaginatedResponse_InventoryBalanceItemRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryBalanceItemRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[InventoryBalanceItemRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_InventoryLedgerRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryLedgerRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[InventoryLedgerRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_LeadRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LeadRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[LeadRead]",
+        "type": "object"
+      },
       "PaginatedResponse_MembershipItem_": {
         "properties": {
           "has_more": {
@@ -1081,6 +2266,233 @@
         ],
         "title": "PaginatedResponse[MembershipItem]",
         "type": "object"
+      },
+      "PaginatedResponse_OpportunityRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpportunityRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[OpportunityRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_OrderRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[OrderRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_ProductRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[ProductRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_QuoteRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuoteRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[QuoteRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_SkuMappingRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SkuMappingRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[SkuMappingRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_VariantRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VariantRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[VariantRead]",
+        "type": "object"
+      },
+      "PaymentStatus": {
+        "enum": [
+          "unpaid",
+          "deposit_paid",
+          "partially_paid",
+          "paid",
+          "refunded"
+        ],
+        "title": "PaymentStatus",
+        "type": "string"
       },
       "PrincipalResponse": {
         "properties": {
@@ -1132,6 +2544,143 @@
         "title": "PrincipalResponse",
         "type": "object"
       },
+      "ProductCreate": {
+        "properties": {
+          "ai_faq_facts": {
+            "additionalProperties": true,
+            "title": "Ai Faq Facts",
+            "type": "object"
+          },
+          "category": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "certifications": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Certifications",
+            "type": "array"
+          },
+          "hs_code": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hs Code"
+          },
+          "i18n_specs": {
+            "additionalProperties": true,
+            "title": "I18N Specs",
+            "type": "object"
+          },
+          "origin_country": {
+            "default": "CN",
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Origin Country",
+            "type": "string"
+          },
+          "spu_code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Spu Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "spu_code",
+          "category"
+        ],
+        "title": "ProductCreate",
+        "type": "object"
+      },
+      "ProductRead": {
+        "properties": {
+          "ai_faq_facts": {
+            "additionalProperties": true,
+            "title": "Ai Faq Facts",
+            "type": "object"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "certifications": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Certifications",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "hs_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hs Code"
+          },
+          "i18n_specs": {
+            "additionalProperties": true,
+            "title": "I18N Specs",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "origin_country": {
+            "title": "Origin Country",
+            "type": "string"
+          },
+          "spu_code": {
+            "title": "Spu Code",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "spu_code",
+          "category",
+          "hs_code",
+          "origin_country",
+          "i18n_specs",
+          "certifications",
+          "ai_faq_facts",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProductRead",
+        "type": "object"
+      },
       "ProposalType": {
         "enum": [
           "reply_draft",
@@ -1143,6 +2692,567 @@
           "payment_match"
         ],
         "title": "ProposalType",
+        "type": "string"
+      },
+      "QuoteCreate": {
+        "properties": {
+          "base_currency": {
+            "default": "CNY",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "customs_duty_estimate": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Customs Duty Estimate"
+          },
+          "freight_fee": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Freight Fee"
+          },
+          "fx_locked_until": {
+            "format": "date-time",
+            "title": "Fx Locked Until",
+            "type": "string"
+          },
+          "fx_rate_snapshot": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Fx Rate Snapshot"
+          },
+          "incoterm": {
+            "$ref": "#/components/schemas/Incoterm",
+            "default": "FOB"
+          },
+          "insurance_fee": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Insurance Fee"
+          },
+          "is_proforma_invoice": {
+            "default": true,
+            "title": "Is Proforma Invoice",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuoteItemInput"
+            },
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "opportunity_id": {
+            "format": "uuid",
+            "title": "Opportunity Id",
+            "type": "string"
+          },
+          "override_margin_floor": {
+            "default": false,
+            "title": "Override Margin Floor",
+            "type": "boolean"
+          },
+          "payment_terms": {
+            "default": "30% T/T deposit, 70% before shipment",
+            "title": "Payment Terms",
+            "type": "string"
+          },
+          "port_of_destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port Of Destination"
+          },
+          "port_of_loading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Xiamen, China",
+            "title": "Port Of Loading"
+          },
+          "quote_currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Quote Currency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "opportunity_id",
+          "fx_rate_snapshot",
+          "fx_locked_until",
+          "items"
+        ],
+        "title": "QuoteCreate",
+        "type": "object"
+      },
+      "QuoteItemInput": {
+        "properties": {
+          "description_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description Override"
+          },
+          "language": {
+            "default": "en",
+            "title": "Language",
+            "type": "string"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "unit_price_quote_ccy": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Price Quote Ccy"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "quantity"
+        ],
+        "title": "QuoteItemInput",
+        "type": "object"
+      },
+      "QuoteItemRead": {
+        "properties": {
+          "description_i18n": {
+            "title": "Description I18N",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_total_quote_ccy": {
+            "title": "Line Total Quote Ccy",
+            "type": "string"
+          },
+          "moq_tier_applied": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moq Tier Applied"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "sku_snapshot": {
+            "title": "Sku Snapshot",
+            "type": "string"
+          },
+          "unit_cost_base_snapshot": {
+            "title": "Unit Cost Base Snapshot",
+            "type": "string"
+          },
+          "unit_price_quote_ccy": {
+            "title": "Unit Price Quote Ccy",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "quote_id",
+          "variant_id",
+          "sku_snapshot",
+          "description_i18n",
+          "quantity",
+          "moq_tier_applied",
+          "unit_price_quote_ccy",
+          "unit_cost_base_snapshot",
+          "line_total_quote_ccy"
+        ],
+        "title": "QuoteItemRead",
+        "type": "object"
+      },
+      "QuotePdfResponse": {
+        "properties": {
+          "download_url": {
+            "title": "Download Url",
+            "type": "string"
+          },
+          "pdf_r2_key": {
+            "title": "Pdf R2 Key",
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "quote_no": {
+            "title": "Quote No",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "quote_id",
+          "quote_no",
+          "version",
+          "pdf_r2_key",
+          "download_url"
+        ],
+        "title": "QuotePdfResponse",
+        "type": "object"
+      },
+      "QuoteRead": {
+        "properties": {
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "converted_order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Converted Order Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customs_duty_estimate": {
+            "title": "Customs Duty Estimate",
+            "type": "string"
+          },
+          "freight_fee": {
+            "title": "Freight Fee",
+            "type": "string"
+          },
+          "fx_locked_until": {
+            "format": "date-time",
+            "title": "Fx Locked Until",
+            "type": "string"
+          },
+          "fx_rate_snapshot": {
+            "title": "Fx Rate Snapshot",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incoterm": {
+            "$ref": "#/components/schemas/Incoterm"
+          },
+          "insurance_fee": {
+            "title": "Insurance Fee",
+            "type": "string"
+          },
+          "is_proforma_invoice": {
+            "title": "Is Proforma Invoice",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuoteItemRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "opportunity_id": {
+            "format": "uuid",
+            "title": "Opportunity Id",
+            "type": "string"
+          },
+          "payment_terms": {
+            "title": "Payment Terms",
+            "type": "string"
+          },
+          "pdf_r2_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf R2 Key"
+          },
+          "port_of_destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port Of Destination"
+          },
+          "port_of_loading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port Of Loading"
+          },
+          "quote_currency": {
+            "title": "Quote Currency",
+            "type": "string"
+          },
+          "quote_no": {
+            "title": "Quote No",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteStatus"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "opportunity_id",
+          "quote_no",
+          "version",
+          "is_proforma_invoice",
+          "incoterm",
+          "port_of_loading",
+          "port_of_destination",
+          "payment_terms",
+          "base_currency",
+          "quote_currency",
+          "fx_rate_snapshot",
+          "fx_locked_until",
+          "freight_fee",
+          "insurance_fee",
+          "customs_duty_estimate",
+          "total_amount",
+          "pdf_r2_key",
+          "status",
+          "converted_order_id",
+          "created_at"
+        ],
+        "title": "QuoteRead",
+        "type": "object"
+      },
+      "QuoteRepriceRequest": {
+        "properties": {
+          "customs_duty_estimate": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customs Duty Estimate"
+          },
+          "freight_fee": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freight Fee"
+          },
+          "fx_locked_until": {
+            "format": "date-time",
+            "title": "Fx Locked Until",
+            "type": "string"
+          },
+          "fx_rate_snapshot": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Fx Rate Snapshot"
+          },
+          "insurance_fee": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurance Fee"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/QuoteItemInput"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          },
+          "override_margin_floor": {
+            "default": false,
+            "title": "Override Margin Floor",
+            "type": "boolean"
+          },
+          "payment_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Terms"
+          }
+        },
+        "required": [
+          "fx_rate_snapshot",
+          "fx_locked_until"
+        ],
+        "title": "QuoteRepriceRequest",
+        "type": "object"
+      },
+      "QuoteStatus": {
+        "enum": [
+          "draft",
+          "pending_approval",
+          "sent",
+          "accepted",
+          "expired",
+          "converted"
+        ],
+        "title": "QuoteStatus",
         "type": "string"
       },
       "RefreshRequest": {
@@ -1226,6 +3336,357 @@
           "tenant_name"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "ShipOrderRequest": {
+        "properties": {
+          "actual_shipping_cost_base": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Actual Shipping Cost Base"
+          },
+          "carrier_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carrier Code"
+          },
+          "override_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override Reason"
+          },
+          "override_unpaid_balance": {
+            "default": false,
+            "title": "Override Unpaid Balance",
+            "type": "boolean"
+          },
+          "shipment_mode": {
+            "default": "parcel",
+            "pattern": "^(parcel|air_freight|sea_lcl|sea_fcl)$",
+            "title": "Shipment Mode",
+            "type": "string"
+          },
+          "tracking_number": {
+            "maxLength": 128,
+            "minLength": 3,
+            "title": "Tracking Number",
+            "type": "string"
+          },
+          "tracking_provider": {
+            "$ref": "#/components/schemas/TrackingProvider",
+            "default": "17track"
+          },
+          "warehouse_id": {
+            "format": "uuid",
+            "title": "Warehouse Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "warehouse_id",
+          "tracking_number"
+        ],
+        "title": "ShipOrderRequest",
+        "type": "object"
+      },
+      "ShipmentRead": {
+        "properties": {
+          "actual_shipping_cost_base": {
+            "title": "Actual Shipping Cost Base",
+            "type": "string"
+          },
+          "carrier_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carrier Code"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "estimated_delivery_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Delivery At"
+          },
+          "exception_alert_sent": {
+            "title": "Exception Alert Sent",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_stagnant_72h": {
+            "default": false,
+            "title": "Is Stagnant 72H",
+            "type": "boolean"
+          },
+          "last_event_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Event At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "shipment_mode": {
+            "title": "Shipment Mode",
+            "type": "string"
+          },
+          "standardized_status": {
+            "title": "Standardized Status",
+            "type": "string"
+          },
+          "sub_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Status"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "tracking_events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tracking Events",
+            "type": "array"
+          },
+          "tracking_number": {
+            "title": "Tracking Number",
+            "type": "string"
+          },
+          "tracking_provider": {
+            "$ref": "#/components/schemas/TrackingProvider"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "order_id",
+          "tracking_provider",
+          "tracking_number",
+          "carrier_code",
+          "shipment_mode",
+          "standardized_status",
+          "sub_status",
+          "last_event_at",
+          "last_synced_at",
+          "estimated_delivery_at",
+          "tracking_events",
+          "actual_shipping_cost_base",
+          "exception_alert_sent",
+          "created_at"
+        ],
+        "title": "ShipmentRead",
+        "type": "object"
+      },
+      "SkuMappingCreate": {
+        "properties": {
+          "bundle_multiplier": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Bundle Multiplier",
+            "type": "integer"
+          },
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "external_product_id": {
+            "minLength": 1,
+            "title": "External Product Id",
+            "type": "string"
+          },
+          "external_sku": {
+            "minLength": 1,
+            "title": "External Sku",
+            "type": "string"
+          },
+          "sync_inventory_enabled": {
+            "default": true,
+            "title": "Sync Inventory Enabled",
+            "type": "boolean"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "channel_account_id",
+          "external_product_id",
+          "external_sku"
+        ],
+        "title": "SkuMappingCreate",
+        "type": "object"
+      },
+      "SkuMappingRead": {
+        "properties": {
+          "bundle_multiplier": {
+            "title": "Bundle Multiplier",
+            "type": "integer"
+          },
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "external_product_id": {
+            "title": "External Product Id",
+            "type": "string"
+          },
+          "external_sku": {
+            "title": "External Sku",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "sync_inventory_enabled": {
+            "title": "Sync Inventory Enabled",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "variant_id",
+          "channel_account_id",
+          "external_product_id",
+          "external_sku",
+          "bundle_multiplier",
+          "sync_inventory_enabled",
+          "created_at"
+        ],
+        "title": "SkuMappingRead",
+        "type": "object"
+      },
+      "SkuMappingUpdate": {
+        "properties": {
+          "bundle_multiplier": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Multiplier"
+          },
+          "external_sku": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Sku"
+          },
+          "sync_inventory_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Inventory Enabled"
+          }
+        },
+        "title": "SkuMappingUpdate",
         "type": "object"
       },
       "SplitCustomerRequest": {
@@ -1373,6 +3834,15 @@
         "title": "TokenResponse",
         "type": "object"
       },
+      "TrackingProvider": {
+        "enum": [
+          "17track",
+          "aftership",
+          "manual"
+        ],
+        "title": "TrackingProvider",
+        "type": "string"
+      },
       "UpdateMemberRoleRequest": {
         "properties": {
           "is_active": {
@@ -1508,6 +3978,368 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VariantCreate": {
+        "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "title": "Attributes",
+            "type": "object"
+          },
+          "b2b_moq_tiers": {
+            "items": {
+              "$ref": "#/components/schemas/MoqTierInput-Input"
+            },
+            "title": "B2B Moq Tiers",
+            "type": "array"
+          },
+          "base_currency": {
+            "default": "CNY",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "carton_dims_cm": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carton Dims Cm"
+          },
+          "cost_price_base": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Cost Price Base"
+          },
+          "lead_time_days": {
+            "default": 7,
+            "minimum": 0.0,
+            "title": "Lead Time Days",
+            "type": "integer"
+          },
+          "min_margin_floor_pct": {
+            "anyOf": [
+              {
+                "maximum": 99.99,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "15.00",
+            "title": "Min Margin Floor Pct"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "retail_price_usd": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Retail Price Usd"
+          },
+          "sku": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sku",
+            "type": "string"
+          },
+          "weight_grams": {
+            "minimum": 0.0,
+            "title": "Weight Grams",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_id",
+          "sku",
+          "cost_price_base",
+          "retail_price_usd",
+          "weight_grams"
+        ],
+        "title": "VariantCreate",
+        "type": "object"
+      },
+      "VariantMappingWithLabelRead": {
+        "properties": {
+          "bundle_multiplier": {
+            "title": "Bundle Multiplier",
+            "type": "integer"
+          },
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "channel_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Label"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "external_product_id": {
+            "title": "External Product Id",
+            "type": "string"
+          },
+          "external_sku": {
+            "title": "External Sku",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "sync_inventory_enabled": {
+            "title": "Sync Inventory Enabled",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "variant_id",
+          "channel_account_id",
+          "external_product_id",
+          "external_sku",
+          "bundle_multiplier",
+          "sync_inventory_enabled",
+          "created_at"
+        ],
+        "title": "VariantMappingWithLabelRead",
+        "type": "object"
+      },
+      "VariantMappingsBundleRead": {
+        "properties": {
+          "mappings": {
+            "items": {
+              "$ref": "#/components/schemas/VariantMappingWithLabelRead"
+            },
+            "title": "Mappings",
+            "type": "array"
+          },
+          "variant": {
+            "$ref": "#/components/schemas/VariantRead"
+          }
+        },
+        "required": [
+          "variant",
+          "mappings"
+        ],
+        "title": "VariantMappingsBundleRead",
+        "type": "object"
+      },
+      "VariantRead": {
+        "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "title": "Attributes",
+            "type": "object"
+          },
+          "b2b_moq_tiers": {
+            "items": {
+              "$ref": "#/components/schemas/MoqTierInput-Output"
+            },
+            "title": "B2B Moq Tiers",
+            "type": "array"
+          },
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "carton_dims_cm": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carton Dims Cm"
+          },
+          "cost_price_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Price Base"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lead_time_days": {
+            "title": "Lead Time Days",
+            "type": "integer"
+          },
+          "min_margin_floor_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Margin Floor Pct"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "retail_price_usd": {
+            "title": "Retail Price Usd",
+            "type": "string"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "weight_grams": {
+            "title": "Weight Grams",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "product_id",
+          "sku",
+          "attributes",
+          "base_currency",
+          "retail_price_usd",
+          "b2b_moq_tiers",
+          "weight_grams",
+          "carton_dims_cm",
+          "lead_time_days",
+          "created_at"
+        ],
+        "title": "VariantRead",
+        "type": "object"
+      },
+      "VariantUpdate": {
+        "properties": {
+          "b2b_moq_tiers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MoqTierInput-Input"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "B2B Moq Tiers"
+          },
+          "lead_time_days": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Time Days"
+          },
+          "min_margin_floor_pct": {
+            "anyOf": [
+              {
+                "maximum": 99.99,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Margin Floor Pct"
+          },
+          "retail_price_usd": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retail Price Usd"
+          }
+        },
+        "title": "VariantUpdate",
         "type": "object"
       }
     }
@@ -1740,6 +4572,1554 @@
         "summary": "Register",
         "tags": [
           "tenancy"
+        ]
+      }
+    },
+    "/api/v1/b2b/leads": {
+      "get": {
+        "operationId": "list_leads_api_v1_b2b_leads_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_LeadRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Leads",
+        "tags": [
+          "b2b"
+        ]
+      },
+      "post": {
+        "operationId": "create_lead_api_v1_b2b_leads_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Lead",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/opportunities": {
+      "get": {
+        "operationId": "list_opportunities_api_v1_b2b_opportunities_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_OpportunityRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Opportunities",
+        "tags": [
+          "b2b"
+        ]
+      },
+      "post": {
+        "operationId": "create_opportunity_api_v1_b2b_opportunities_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpportunityCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpportunityRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Opportunity",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/opportunities/{opportunity_id}": {
+      "patch": {
+        "operationId": "update_opportunity_stage_api_v1_b2b_opportunities__opportunity_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "opportunity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Opportunity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpportunityStageUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpportunityRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Opportunity Stage",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/quotes": {
+      "get": {
+        "operationId": "list_quotes_api_v1_b2b_quotes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "opportunity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Opportunity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_QuoteRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Quotes",
+        "tags": [
+          "b2b"
+        ]
+      },
+      "post": {
+        "operationId": "create_quote_api_v1_b2b_quotes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Quote",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/quotes/{quote_id}/accept": {
+      "post": {
+        "operationId": "accept_quote_api_v1_b2b_quotes__quote_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Quote",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/quotes/{quote_id}/convert-to-order": {
+      "post": {
+        "operationId": "convert_quote_to_order_api_v1_b2b_quotes__quote_id__convert_to_order_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertQuoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertQuoteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Convert Quote To Order",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/quotes/{quote_id}/pdf": {
+      "post": {
+        "operationId": "generate_quote_pdf_api_v1_b2b_quotes__quote_id__pdf_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "maxLength": 5,
+              "minLength": 2,
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotePdfResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Quote Pdf",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/quotes/{quote_id}/reprice-version": {
+      "post": {
+        "operationId": "reprice_quote_version_api_v1_b2b_quotes__quote_id__reprice_version_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRepriceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reprice Quote Version",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/quotes/{quote_id}/send": {
+      "post": {
+        "operationId": "send_quote_api_v1_b2b_quotes__quote_id__send_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Quote",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/catalog/live-check": {
+      "get": {
+        "operationId": "live_check_sku_api_v1_catalog_live_check_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sku",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Sku",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "qty",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Qty",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "incoterm",
+            "required": false,
+            "schema": {
+              "default": "FOB",
+              "maxLength": 8,
+              "minLength": 3,
+              "title": "Incoterm",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveSkuCheckRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Check Sku",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/mappings/{mapping_id}": {
+      "put": {
+        "operationId": "update_sku_mapping_api_v1_catalog_mappings__mapping_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mapping_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mapping Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkuMappingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkuMappingRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Sku Mapping",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/products": {
+      "get": {
+        "operationId": "list_products_api_v1_catalog_products_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ProductRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Products",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "operationId": "create_product_api_v1_catalog_products_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Product",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/sku-mappings": {
+      "get": {
+        "operationId": "list_sku_mappings_api_v1_catalog_sku_mappings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "channel_account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel Account Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_SkuMappingRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sku Mappings",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "operationId": "create_sku_mapping_api_v1_catalog_sku_mappings_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkuMappingCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkuMappingRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Sku Mapping",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/variants": {
+      "get": {
+        "operationId": "list_variants_api_v1_catalog_variants_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "product_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sku",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sku"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_VariantRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Variants",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "operationId": "create_variant_api_v1_catalog_variants_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariantCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariantRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Variant",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/variants/{variant_id}": {
+      "patch": {
+        "operationId": "update_variant_api_v1_catalog_variants__variant_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "variant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Variant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariantUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariantRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Variant",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/variants/{variant_id}/mappings": {
+      "get": {
+        "operationId": "list_variant_mappings_api_v1_catalog_variants__variant_id__mappings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "variant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Variant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariantMappingsBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Variant Mappings",
+        "tags": [
+          "catalog"
         ]
       }
     },
@@ -2327,6 +6707,591 @@
         "summary": "Get Onboarding State",
         "tags": [
           "onboarding"
+        ]
+      }
+    },
+    "/api/v1/orders": {
+      "get": {
+        "operationId": "list_orders_api_v1_orders_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "order_mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/OrderMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fulfillment_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/FulfillmentStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fulfillment Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "payment_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PaymentStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Payment Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_OrderRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Orders",
+        "tags": [
+          "orders"
+        ]
+      },
+      "post": {
+        "operationId": "create_order_api_v1_orders_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Order",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/inventory/balances": {
+      "get": {
+        "operationId": "list_inventory_balances_api_v1_orders_inventory_balances_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "variant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Variant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_InventoryBalanceItemRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Inventory Balances",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/inventory/ledger": {
+      "get": {
+        "operationId": "list_inventory_ledger_api_v1_orders_inventory_ledger_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "variant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Variant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_InventoryLedgerRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Inventory Ledger",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}": {
+      "get": {
+        "operationId": "get_order_api_v1_orders__order_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Order",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/cancel": {
+      "post": {
+        "operationId": "cancel_order_api_v1_orders__order_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Order",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/ship": {
+      "post": {
+        "operationId": "ship_order_api_v1_orders__order_id__ship_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShipOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ship Order",
+        "tags": [
+          "orders"
         ]
       }
     },
