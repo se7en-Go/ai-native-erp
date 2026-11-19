@@ -37,6 +37,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 logger = structlog.get_logger(__name__)
 
+import erp_core.tenancy.models  # noqa: E402,F401  (registers `tenants` on Base.metadata)
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _REVISION_0003_PATH = _REPO_ROOT / "apps/backend/alembic/versions/0003_dual_mode_erp_and_cvp.py"
 
@@ -60,6 +62,34 @@ def _load_revision_module() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def register_plan02_metadata_stand_ins() -> None:
+    """Register stand-in `Table` objects for the Plan 02 tables on `Base.metadata`.
+
+    The Plan 03 ORM models carry real foreign keys onto `customers`, `b2b_companies` and
+    `channel_accounts` (migration `0002` owns those tables, and its ORM models live in
+    `erp_core.channels` / `erp_core.identity`, which do not exist on `main` yet). SQLAlchemy
+    resolves those string foreign keys when it configures the mappers, so a *test-only*
+    minimal table declaration keeps the production model definitions untouched while the
+    real DDL (and its real constraints) still comes from `0003`.
+    """
+    from sqlalchemy import Column, Table
+    from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+    from erp_core.shared.db import Base
+
+    metadata = Base.metadata
+    if "customers" in metadata.tables:
+        return
+    for table_name in ("b2b_companies", "customers", "channel_accounts", "customer_identities"):
+        Table(
+            table_name,
+            metadata,
+            Column("id", PG_UUID(as_uuid=True), primary_key=True),
+            Column("tenant_id", PG_UUID(as_uuid=True)),
+        )
+    logger.info("erp_schema_bootstrap.registered_metadata_stand_ins")
 
 
 def _enable_force_rls(table_name: str) -> None:
