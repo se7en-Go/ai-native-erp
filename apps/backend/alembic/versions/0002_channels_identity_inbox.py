@@ -18,15 +18,33 @@ down_revision: str | None = "0001_tenancy_rls_and_audit"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-CHANNEL_TYPE_CHECK = (
-    "channel_type IN ("
-    "'whatsapp_cloud', 'whatsapp_coexistence', 'email', 'web_livechat', "
-    "'shopify', 'woocommerce', 'shopline', 'shoplazza', 'tiktok_shop', "
-    "'made_in_china_email', 'alibaba_email', 'messenger', 'instagram_dm', "
-    "'telegram', 'amazon_sp', 'ebay', 'mercado_libre', 'temu', "
-    "'walmart', 'shopee', 'lazada'"
-    ")"
+_CHANNEL_TYPES: tuple[str, ...] = (
+    "whatsapp_cloud",
+    "whatsapp_coexistence",
+    "email",
+    "web_livechat",
+    "shopify",
+    "woocommerce",
+    "shopline",
+    "shoplazza",
+    "tiktok_shop",
+    "made_in_china_email",
+    "alibaba_email",
+    "messenger",
+    "instagram_dm",
+    "telegram",
+    "amazon_sp",
+    "ebay",
+    "mercado_libre",
+    "temu",
+    "walmart",
+    "shopee",
+    "lazada",
 )
+CHANNEL_TYPE_CHECK = (
+    "channel_type IN (" + ", ".join(f"'{item}'" for item in _CHANNEL_TYPES) + ")"
+)
+_CHANNEL_SQL_LIST = ", ".join(f"'{item}'" for item in _CHANNEL_TYPES)
 
 TENANT_RLS_TABLES: tuple[str, ...] = (
     "channel_accounts",
@@ -84,25 +102,68 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("channel_type", "external_account_id"),
     )
     op.execute("REVOKE ALL ON TABLE channel_routing_directory FROM PUBLIC, app_runtime")
+    op.execute("GRANT SELECT ON TABLE channel_routing_directory TO app_runtime")
+    op.execute("ALTER TABLE channel_routing_directory ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE channel_routing_directory FORCE ROW LEVEL SECURITY")
     op.execute(
-        """
+        "CREATE POLICY app_runtime_permissive ON channel_routing_directory "
+        "AS PERMISSIVE FOR ALL TO app_runtime USING (true) WITH CHECK (false)"
+    )
+    op.execute(
+        "CREATE POLICY tenant_isolation_policy ON channel_routing_directory "
+        "AS RESTRICTIVE FOR ALL TO app_runtime "
+        "USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid) "
+        "WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)"
+    )
+    op.execute(
+        "CREATE POLICY migrator_lookup_permissive ON channel_routing_directory "
+        "AS PERMISSIVE FOR SELECT TO app_migrator USING (true)"
+    )
+    op.execute(
+        "CREATE POLICY migrator_lookup_restrictive ON channel_routing_directory "
+        "AS RESTRICTIVE FOR SELECT TO app_migrator USING ("
+        "channel_type = current_setting('app.routing_lookup_channel', true) "
+        "AND external_account_id = current_setting('app.routing_lookup_external', true) "
+        "AND current_setting('app.routing_lookup_channel', true) <> '' "
+        "AND current_setting('app.routing_lookup_external', true) <> ''"
+        ")"
+    )
+    op.execute(
+        f"""
         CREATE OR REPLACE FUNCTION resolve_tenant_by_channel_external_id(
             p_channel_type TEXT,
             p_external_id TEXT
         )
         RETURNS TABLE (tenant_id UUID, channel_account_id UUID)
-        LANGUAGE sql
+        LANGUAGE plpgsql
+        VOLATILE
         SECURITY DEFINER
-        STABLE
         SET search_path = public, pg_temp
-        AS $$
-            SELECT crd.tenant_id, crd.channel_account_id
-            FROM public.channel_routing_directory crd
-            WHERE crd.channel_type = p_channel_type
-              AND crd.external_account_id = p_external_id
-              AND crd.is_active = true
-            LIMIT 1;
-        $$;
+        AS $fn$
+        BEGIN
+            IF p_channel_type IS NULL OR p_external_id IS NULL THEN
+                RETURN;
+            END IF;
+            IF p_channel_type NOT IN ({_CHANNEL_SQL_LIST}) THEN
+                RETURN;
+            END IF;
+            IF length(p_external_id) = 0 OR length(p_external_id) > 256 THEN
+                RETURN;
+            END IF;
+            IF p_external_id ~ '[^A-Za-z0-9_.:@+\\-]' THEN
+                RETURN;
+            END IF;
+            PERFORM set_config('app.routing_lookup_channel', p_channel_type, true);
+            PERFORM set_config('app.routing_lookup_external', p_external_id, true);
+            RETURN QUERY
+                SELECT crd.tenant_id, crd.channel_account_id
+                FROM public.channel_routing_directory crd
+                WHERE crd.channel_type = p_channel_type
+                  AND crd.external_account_id = p_external_id
+                  AND crd.is_active = true
+                LIMIT 1;
+        END;
+        $fn$;
         """
     )
     op.execute(
@@ -237,7 +298,199 @@ def upgrade() -> None:
         "raw_webhook_events",
         ["processing_status", "received_at"],
     )
-    op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE raw_webhook_events TO app_runtime")
+    op.execute("REVOKE ALL ON TABLE raw_webhook_events FROM PUBLIC")
+    op.execute(
+        "GRANT SELECT, UPDATE ON TABLE raw_webhook_events TO app_runtime"
+    )
+    op.execute("ALTER TABLE raw_webhook_events ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE raw_webhook_events FORCE ROW LEVEL SECURITY")
+    op.execute(
+        "CREATE POLICY app_runtime_permissive ON raw_webhook_events "
+        "AS PERMISSIVE FOR ALL TO app_runtime USING (true) WITH CHECK (true)"
+    )
+    op.execute(
+        "CREATE POLICY tenant_isolation_policy ON raw_webhook_events "
+        "AS RESTRICTIVE FOR ALL TO app_runtime "
+        "USING ("
+        "tenant_id IS NOT NULL AND "
+        "tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid"
+        ") WITH CHECK ("
+        "tenant_id IS NOT NULL AND "
+        "tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid"
+        ")"
+    )
+    op.execute(
+        "CREATE POLICY migrator_broker_permissive ON raw_webhook_events "
+        "AS PERMISSIVE FOR ALL TO app_migrator USING (true) WITH CHECK (true)"
+    )
+    op.execute(
+        "CREATE POLICY migrator_broker_restrictive ON raw_webhook_events "
+        "AS RESTRICTIVE FOR ALL TO app_migrator "
+        "USING (current_setting('app.webhook_broker', true) = '1') "
+        "WITH CHECK (current_setting('app.webhook_broker', true) = '1')"
+    )
+    op.execute(
+        f"""
+        CREATE OR REPLACE FUNCTION accept_raw_webhook_event(
+            p_id UUID,
+            p_tenant_id UUID,
+            p_channel_type TEXT,
+            p_external_event_id TEXT,
+            p_external_account_id TEXT,
+            p_headers JSONB,
+            p_payload JSONB
+        ) RETURNS UUID
+        LANGUAGE plpgsql
+        VOLATILE
+        SECURITY DEFINER
+        SET search_path = public, pg_temp
+        AS $fn$
+        DECLARE
+            inserted_id UUID;
+            existing_id UUID;
+            existing_status TEXT;
+        BEGIN
+            PERFORM set_config('app.webhook_broker', '1', true);
+            IF p_channel_type IS NULL OR p_external_event_id IS NULL THEN
+                RAISE EXCEPTION 'webhook identity required' USING ERRCODE = '22023';
+            END IF;
+            IF p_channel_type NOT IN ({_CHANNEL_SQL_LIST}) THEN
+                RAISE EXCEPTION 'unsupported channel' USING ERRCODE = '22023';
+            END IF;
+            IF length(p_external_event_id) = 0 OR length(p_external_event_id) > 512 THEN
+                RAISE EXCEPTION 'event id length' USING ERRCODE = '22023';
+            END IF;
+            IF p_external_account_id IS NOT NULL
+               AND length(p_external_account_id) > 256 THEN
+                RAISE EXCEPTION 'account id length' USING ERRCODE = '22023';
+            END IF;
+            IF octet_length(coalesce(p_payload, '{{}}'::jsonb)::text) > 1048576
+               OR octet_length(coalesce(p_headers, '{{}}'::jsonb)::text) > 65536 THEN
+                RAISE EXCEPTION 'webhook payload too large' USING ERRCODE = '22023';
+            END IF;
+            INSERT INTO public.raw_webhook_events (
+                id, tenant_id, channel_type, external_event_id, external_account_id,
+                headers, raw_payload, signature_verified, processing_status
+            ) VALUES (
+                p_id, p_tenant_id, p_channel_type, p_external_event_id,
+                p_external_account_id, coalesce(p_headers, '{{}}'::jsonb),
+                coalesce(p_payload, '{{}}'::jsonb), true, 'received'
+            )
+            ON CONFLICT (channel_type, external_event_id) DO NOTHING
+            RETURNING id INTO inserted_id;
+            IF inserted_id IS NOT NULL THEN
+                RETURN inserted_id;
+            END IF;
+            SELECT id, processing_status INTO existing_id, existing_status
+            FROM public.raw_webhook_events
+            WHERE channel_type = p_channel_type
+              AND external_event_id = p_external_event_id;
+            IF existing_status = 'received' THEN
+                RETURN existing_id;
+            END IF;
+            RETURN NULL;
+        END;
+        $fn$;
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION claim_raw_webhook_event(p_id UUID)
+        RETURNS TABLE (
+            id UUID,
+            tenant_id UUID,
+            channel_type TEXT,
+            external_event_id TEXT,
+            external_account_id TEXT,
+            headers JSONB,
+            raw_payload JSONB,
+            processing_status TEXT
+        )
+        LANGUAGE plpgsql
+        VOLATILE
+        SECURITY DEFINER
+        SET search_path = public, pg_temp
+        AS $fn$
+        BEGIN
+            IF p_id IS NULL THEN
+                RETURN;
+            END IF;
+            PERFORM set_config('app.webhook_broker', '1', true);
+            RETURN QUERY
+                SELECT e.id, e.tenant_id, e.channel_type, e.external_event_id,
+                       e.external_account_id, e.headers, e.raw_payload, e.processing_status
+                FROM public.raw_webhook_events e
+                WHERE e.id = p_id;
+        END;
+        $fn$;
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION set_raw_webhook_processing_state(
+            p_id UUID,
+            p_status TEXT,
+            p_tenant_id UUID,
+            p_attempt INTEGER,
+            p_error TEXT
+        ) RETURNS VOID
+        LANGUAGE plpgsql
+        VOLATILE
+        SECURITY DEFINER
+        SET search_path = public, pg_temp
+        AS $fn$
+        BEGIN
+            IF p_status NOT IN (
+                'received', 'queued', 'processing', 'processed', 'deferred', 'dead_letter'
+            ) THEN
+                RAISE EXCEPTION 'invalid webhook status' USING ERRCODE = '22023';
+            END IF;
+            PERFORM set_config('app.webhook_broker', '1', true);
+            UPDATE public.raw_webhook_events
+            SET processing_status = p_status,
+                tenant_id = COALESCE(p_tenant_id, tenant_id),
+                attempt_count = COALESCE(p_attempt, attempt_count),
+                error_message = p_error,
+                processed_at = CASE
+                    WHEN p_status = 'processed' THEN now() ELSE processed_at
+                END
+            WHERE id = p_id;
+        END;
+        $fn$;
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION list_unenqueued_raw_webhook_ids(p_limit INTEGER)
+        RETURNS TABLE (id UUID, channel_type TEXT)
+        LANGUAGE plpgsql
+        VOLATILE
+        SECURITY DEFINER
+        SET search_path = public, pg_temp
+        AS $fn$
+        DECLARE
+            bounded INTEGER;
+        BEGIN
+            bounded := LEAST(GREATEST(COALESCE(p_limit, 1), 1), 50);
+            PERFORM set_config('app.webhook_broker', '1', true);
+            RETURN QUERY
+                SELECT e.id, e.channel_type
+                FROM public.raw_webhook_events e
+                WHERE e.processing_status = 'received'
+                ORDER BY e.received_at
+                LIMIT bounded;
+        END;
+        $fn$;
+        """
+    )
+    for fn_sig in (
+        "accept_raw_webhook_event(UUID, UUID, TEXT, TEXT, TEXT, JSONB, JSONB)",
+        "claim_raw_webhook_event(UUID)",
+        "set_raw_webhook_processing_state(UUID, TEXT, UUID, INTEGER, TEXT)",
+        "list_unenqueued_raw_webhook_ids(INTEGER)",
+    ):
+        op.execute(f"REVOKE ALL ON FUNCTION {fn_sig} FROM PUBLIC")
+        op.execute(f"GRANT EXECUTE ON FUNCTION {fn_sig} TO app_runtime")
 
     # 4. dead_letter_events
     op.create_table(
@@ -893,6 +1146,16 @@ def upgrade() -> None:
 def downgrade() -> None:
     for table_name in reversed(TENANT_RLS_TABLES):
         op.drop_table(table_name)
+    op.execute(
+        "DROP FUNCTION IF EXISTS "
+        "accept_raw_webhook_event(UUID, UUID, TEXT, TEXT, TEXT, JSONB, JSONB)"
+    )
+    op.execute("DROP FUNCTION IF EXISTS claim_raw_webhook_event(UUID)")
+    op.execute(
+        "DROP FUNCTION IF EXISTS "
+        "set_raw_webhook_processing_state(UUID, TEXT, UUID, INTEGER, TEXT)"
+    )
+    op.execute("DROP FUNCTION IF EXISTS list_unenqueued_raw_webhook_ids(INTEGER)")
     op.drop_table("raw_webhook_events")
     op.execute("DROP FUNCTION IF EXISTS resolve_tenant_by_channel_external_id(TEXT, TEXT)")
     op.drop_table("channel_routing_directory")

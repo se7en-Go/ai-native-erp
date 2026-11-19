@@ -39,6 +39,9 @@ local function eval_bucket(key, cap, rate)
     else
         local elapsed_sec = math.max(0.0, (now_ms - last_ms) / 1000.0)
         tokens = math.min(cap, tokens + elapsed_sec * rate)
+        if (cap - tokens) < 0.000001 then
+            tokens = cap
+        end
         last_ms = now_ms
     end
     local allowed = tokens >= 1.0
@@ -82,7 +85,7 @@ class DualTokenBucketLimiter:
         self,
         redis: Redis,
         *,
-        pair_burst_capacity: int = 5,
+        pair_burst_capacity: int = 1,
         pair_window_seconds: float = 6.0,
         cloud_mps: int = 80,
         coexistence_mps: int = 20,

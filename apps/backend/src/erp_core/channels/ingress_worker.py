@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -21,6 +22,11 @@ from erp_core.channels.adapters.base import (
 )
 from erp_core.channels.rate_limiter import DualTokenBucketLimiter
 from erp_core.channels.webhook_router import build_default_adapter_registry
+from erp_core.channels.webhook_store import (
+    claim_raw_webhook_event,
+    list_unenqueued_raw_webhook_ids,
+    set_raw_webhook_processing_state,
+)
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import system_session, tenant_session
@@ -41,7 +47,20 @@ _require_dlq_operator = require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.M
 
 MAX_INGRESS_ATTEMPTS = 5
 MAX_OUTBOUND_ATTEMPTS = 6
-DEFER_DELAY_SECONDS = 30
+_WORKER_CHANNELS: tuple[ChannelType, ...] = (
+    ChannelType.WHATSAPP_CLOUD,
+    ChannelType.WHATSAPP_COEXISTENCE,
+    ChannelType.EMAIL,
+    ChannelType.WEB_LIVECHAT,
+)
+
+
+def _defer_delay_seconds() -> float:
+    raw = os.environ.get("WEBHOOK_DEFER_DELAY_SECONDS", "30")
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 30.0
 
 
 class OutOfOrderParentError(Exception):
@@ -63,14 +82,6 @@ def _get_redis(request: Request) -> aioredis.Redis:
         client = aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
         request.app.state.redis = client
     return client
-
-
-def _get_adapter_registry(request: Request) -> AdapterRegistry:
-    registry = getattr(request.app.state, "adapter_registry", None)
-    if registry is None:
-        registry = build_default_adapter_registry()
-        request.app.state.adapter_registry = registry
-    return registry
 
 
 async def _resolve_identity_customer(
@@ -449,13 +460,12 @@ async def _move_to_dlq(
 ) -> None:
     if raw_event_id is not None:
         async with system_session(session_factory) as sys_sess:
-            await sys_sess.execute(
-                text(
-                    "UPDATE raw_webhook_events SET "
-                    "processing_status = 'dead_letter', attempt_count = :att, error_message = :err "
-                    "WHERE id = :id"
-                ),
-                {"id": raw_event_id, "att": attempt_count, "err": error_detail[:500]},
+            await set_raw_webhook_processing_state(
+                sys_sess,
+                raw_event_id=raw_event_id,
+                status="dead_letter",
+                attempt=attempt_count,
+                error_message=error_detail[:500],
             )
     if tenant_id is not None:
         async with tenant_session(session_factory, tenant_id) as t_sess:
@@ -495,16 +505,7 @@ async def process_raw_webhook_event(
     registry = adapter_registry or build_default_adapter_registry()
 
     async with system_session(session_factory) as sys_sess:
-        row = (
-            await sys_sess.execute(
-                text(
-                    "SELECT id, tenant_id, channel_type, external_event_id, "
-                    "external_account_id, headers, raw_payload, processing_status "
-                    "FROM raw_webhook_events WHERE id = :id"
-                ),
-                {"id": raw_event_id},
-            )
-        ).mappings().first()
+        row = await claim_raw_webhook_event(sys_sess, raw_event_id)
 
     if row is None:
         return "missing"
@@ -614,14 +615,13 @@ async def process_raw_webhook_event(
                     )
 
         async with system_session(session_factory) as sys_sess:
-            await sys_sess.execute(
-                text(
-                    "UPDATE raw_webhook_events SET "
-                    "tenant_id = :tid, processing_status = 'processed', "
-                    "attempt_count = :att, processed_at = now(), error_message = NULL "
-                    "WHERE id = :id"
-                ),
-                {"id": raw_event_id, "tid": tenant_id, "att": attempt},
+            await set_raw_webhook_processing_state(
+                sys_sess,
+                raw_event_id=raw_event_id,
+                status="processed",
+                tenant_id=tenant_id,
+                attempt=attempt,
+                error_message=None,
             )
 
         for ev in published_events:
@@ -631,16 +631,14 @@ async def process_raw_webhook_event(
     except OutOfOrderParentError as exc:
         if attempt <= MAX_INGRESS_ATTEMPTS:
             async with system_session(session_factory) as sys_sess:
-                await sys_sess.execute(
-                    text(
-                        "UPDATE raw_webhook_events SET "
-                        "processing_status = 'deferred', attempt_count = :att, "
-                        "error_message = :err "
-                        "WHERE id = :id"
-                    ),
-                    {"id": raw_event_id, "att": attempt, "err": str(exc)[:500]},
+                await set_raw_webhook_processing_state(
+                    sys_sess,
+                    raw_event_id=raw_event_id,
+                    status="deferred",
+                    attempt=attempt,
+                    error_message=str(exc)[:500],
                 )
-            retry_at = datetime.now(UTC).timestamp() + DEFER_DELAY_SECONDS
+            retry_at = datetime.now(UTC).timestamp() + _defer_delay_seconds()
             await redis.zadd(
                 "queue:webhooks:deferred",
                 {
@@ -685,6 +683,40 @@ async def process_raw_webhook_event(
         return "dead_letter"
 
 
+def _decode_stream_field(fields: dict[Any, Any], key: str) -> str:
+    raw = fields.get(key.encode(), fields.get(key))
+    if isinstance(raw, bytes):
+        return raw.decode()
+    return "" if raw is None else str(raw)
+
+
+async def _ack_processed_entries(
+    redis: aioredis.Redis,
+    session_factory: async_sessionmaker[AsyncSession],
+    stream_key: str,
+    group_name: str,
+    messages: list[tuple[Any, dict[Any, Any]]],
+    adapter_registry: AdapterRegistry | None,
+) -> int:
+    processed = 0
+    for stream_msg_id, fields in messages:
+        raw_id_str = _decode_stream_field(fields, "raw_event_id")
+        attempt_raw = _decode_stream_field(fields, "attempt") or "1"
+        if not raw_id_str:
+            await redis.xack(stream_key, group_name, stream_msg_id)
+            continue
+        await process_raw_webhook_event(
+            session_factory=session_factory,
+            redis=redis,
+            raw_event_id=uuid.UUID(raw_id_str),
+            adapter_registry=adapter_registry,
+            attempt=int(attempt_raw),
+        )
+        await redis.xack(stream_key, group_name, stream_msg_id)
+        processed += 1
+    return processed
+
+
 async def consume_webhook_stream_batch(
     session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
@@ -693,9 +725,11 @@ async def consume_webhook_stream_batch(
     group_name: str = "erp_webhook_workers",
     consumer_name: str = "worker-1",
     count: int = 20,
+    block_ms: int = 50,
+    min_idle_ms: int = 15_000,
     adapter_registry: AdapterRegistry | None = None,
 ) -> int:
-    """Consume pending events from Redis Stream via XREADGROUP and ACK on completion."""
+    """Read new stream entries and reclaim idle pending entries after a crash."""
     stream_key = f"stream:webhooks:{channel_type.value}"
     try:
         await redis.xgroup_create(stream_key, group_name, id="0", mkstream=True)
@@ -703,36 +737,142 @@ async def consume_webhook_stream_batch(
         if "BUSYGROUP" not in str(exc):
             raise
 
+    processed = 0
+    claimed = await redis.xautoclaim(
+        stream_key,
+        group_name,
+        consumer_name,
+        min_idle_ms,
+        start_id="0-0",
+        count=count,
+    )
+    claimed_messages = cast(list[tuple[Any, dict[Any, Any]]], claimed[1] if claimed else [])
+    processed += await _ack_processed_entries(
+        redis,
+        session_factory,
+        stream_key,
+        group_name,
+        claimed_messages,
+        adapter_registry,
+    )
+
     entries = await redis.xreadgroup(
         groupname=group_name,
         consumername=consumer_name,
         streams={stream_key: ">"},
         count=count,
-        block=100,
+        block=block_ms,
     )
     stream_batches = cast(
         list[tuple[Any, list[tuple[Any, dict[Any, Any]]]]],
         entries or [],
     )
-    processed = 0
     for _, messages in stream_batches:
-        for stream_msg_id, fields in messages:
-            raw_id_str = fields.get(b"raw_event_id", fields.get("raw_event_id"))
-            attempt_raw = fields.get(b"attempt", fields.get("attempt", b"1"))
-            if isinstance(raw_id_str, bytes):
-                raw_id_str = raw_id_str.decode()
-            if isinstance(attempt_raw, bytes):
-                attempt_raw = attempt_raw.decode()
-            await process_raw_webhook_event(
-                session_factory=session_factory,
-                redis=redis,
-                raw_event_id=uuid.UUID(raw_id_str),
-                adapter_registry=adapter_registry,
-                attempt=int(attempt_raw),
-            )
-            await redis.xack(stream_key, group_name, stream_msg_id)
-            processed += 1
+        processed += await _ack_processed_entries(
+            redis,
+            session_factory,
+            stream_key,
+            group_name,
+            messages,
+            adapter_registry,
+        )
     return processed
+
+
+async def compensate_unenqueued_webhooks(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+    *,
+    limit: int = 20,
+) -> int:
+    """Enqueue raw rows left in `received` when Redis failed after the DB commit."""
+    async with system_session(session_factory) as session:
+        pending = await list_unenqueued_raw_webhook_ids(session, limit)
+    enqueued = 0
+    for raw_id, channel_type in pending:
+        await redis.xadd(
+            f"stream:webhooks:{channel_type}",
+            {"raw_event_id": str(raw_id), "channel_type": channel_type, "attempt": "1"},
+        )
+        async with system_session(session_factory) as session:
+            await set_raw_webhook_processing_state(
+                session,
+                raw_event_id=raw_id,
+                status="queued",
+                attempt=1,
+            )
+        enqueued += 1
+    return enqueued
+
+
+async def drain_deferred_webhooks(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+) -> int:
+    now_score = datetime.now(UTC).timestamp()
+    due_items = cast(
+        list[bytes | str],
+        await redis.zrangebyscore("queue:webhooks:deferred", "-inf", now_score),
+    )
+    count = 0
+    for raw in due_items:
+        removed = await redis.zrem("queue:webhooks:deferred", raw)
+        if not removed:
+            continue
+        payload = raw.decode() if isinstance(raw, bytes) else raw
+        item = json.loads(payload)
+        await process_raw_webhook_event(
+            session_factory=session_factory,
+            redis=redis,
+            raw_event_id=uuid.UUID(item["raw_event_id"]),
+            attempt=int(item.get("attempt", 1)),
+        )
+        count += 1
+    return count
+
+
+async def run_webhook_worker_once(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+    *,
+    min_idle_ms: int = 15_000,
+    adapter_registry: AdapterRegistry | None = None,
+) -> int:
+    """One production pass: compensate, reclaim, read, and drain deferred retries."""
+    total = await compensate_unenqueued_webhooks(session_factory, redis)
+    for channel_type in _WORKER_CHANNELS:
+        total += await consume_webhook_stream_batch(
+            session_factory,
+            redis,
+            channel_type,
+            min_idle_ms=min_idle_ms,
+            adapter_registry=adapter_registry,
+        )
+    total += await drain_deferred_webhooks(session_factory, redis)
+    return total
+
+
+async def run_webhook_worker_loop(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+    stop_event: asyncio.Event,
+    *,
+    min_idle_ms: int = 15_000,
+    poll_interval: float = 0.05,
+    adapter_registry: AdapterRegistry | None = None,
+) -> None:
+    """Run until stop_event is set. This is the production webhook worker loop."""
+    while not stop_event.is_set():
+        await run_webhook_worker_once(
+            session_factory,
+            redis,
+            min_idle_ms=min_idle_ms,
+            adapter_registry=adapter_registry,
+        )
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=poll_interval)
+        except TimeoutError:
+            continue
 
 
 async def send_outbound_message(
@@ -916,8 +1056,6 @@ async def replay_dead_letter_event(
     """Replay a failed inbound or outbound dead-letter event within the current tenant."""
     session_factory = _get_session_factory(request)
     redis = _get_redis(request)
-    registry = _get_adapter_registry(request)
-
     async with tenant_session(session_factory, principal.tenant_id) as t_sess:
         dlq_row = (
             await t_sess.execute(
@@ -953,16 +1091,16 @@ async def replay_dead_letter_event(
             after_state={"status": "replayed"},
         )
 
-    outcome = "replayed"
+    outcome = "queued"
     if dlq_row["direction"] == "inbound" and dlq_row["raw_webhook_event_id"] is not None:
         raw_id = dlq_row["raw_webhook_event_id"]
         async with system_session(session_factory) as sys_sess:
-            await sys_sess.execute(
-                text(
-                    "UPDATE raw_webhook_events SET processing_status = 'queued', "
-                    "attempt_count = 0, error_message = NULL WHERE id = :id"
-                ),
-                {"id": raw_id},
+            await set_raw_webhook_processing_state(
+                sys_sess,
+                raw_event_id=raw_id,
+                status="queued",
+                attempt=1,
+                error_message=None,
             )
         await redis.xadd(
             f"stream:webhooks:{dlq_row['channel_type']}",
@@ -971,13 +1109,6 @@ async def replay_dead_letter_event(
                 "channel_type": str(dlq_row["channel_type"]),
                 "attempt": "1",
             },
-        )
-        outcome = await process_raw_webhook_event(
-            session_factory=session_factory,
-            redis=redis,
-            raw_event_id=raw_id,
-            adapter_registry=registry,
-            attempt=1,
         )
     elif dlq_row["direction"] == "outbound":
         await redis.xadd(
@@ -1022,29 +1153,15 @@ def register_channel_worker_tasks(
 
     @broker.task
     async def drain_delayed_queues_task() -> int:
-        now_score = datetime.now(UTC).timestamp()
-        due_items = cast(
-            list[bytes | str],
-            await redis.zrangebyscore("queue:webhooks:deferred", "-inf", now_score),
-        )
-        count = 0
-        for raw in due_items:
-            removed = await redis.zrem("queue:webhooks:deferred", raw)
-            if not removed:
-                continue
-            payload = raw.decode() if isinstance(raw, bytes) else raw
-            item = json.loads(payload)
-            await process_raw_webhook_event(
-                session_factory=session_factory,
-                redis=redis,
-                raw_event_id=uuid.UUID(item["raw_event_id"]),
-                attempt=int(item.get("attempt", 1)),
-            )
-            count += 1
-        return count
+        return await drain_deferred_webhooks(session_factory, redis)
+
+    @broker.task
+    async def consume_webhook_streams_task() -> int:
+        return await run_webhook_worker_once(session_factory, redis)
 
     return {
         "process_webhook_event_task": process_webhook_event_task,
         "send_outbound_message_task": send_outbound_message_task,
         "drain_delayed_queues_task": drain_delayed_queues_task,
+        "consume_webhook_streams_task": consume_webhook_streams_task,
     }

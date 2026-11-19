@@ -148,6 +148,62 @@ def test_meta_4_power_x_backoff_computation(redis_client: aioredis.Redis) -> Non
 
 
 @pytest.mark.asyncio
+async def test_default_peer_bucket_allows_one_message_per_six_seconds(
+    redis_client: aioredis.Redis,
+) -> None:
+    import asyncio
+
+    client = aioredis.from_url(
+        os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+        max_connections=50,
+    )
+    limiter = DualTokenBucketLimiter(client)
+    account_id = f"peer-{uuid.uuid4().hex[:8]}"
+    recipient = "+14155552671"
+    start_ms = 1_763_500_000_000
+
+    async def once() -> bool:
+        allowed, _wait = await limiter.acquire(
+            ChannelType.WHATSAPP_CLOUD,
+            account_id,
+            recipient_id=recipient,
+            now_ms=start_ms,
+        )
+        return allowed
+
+    try:
+        assert limiter._pair_burst_capacity == 1
+        results = await asyncio.gather(*(once() for _ in range(8)))
+        assert sum(1 for ok in results if ok) == 1
+        early, early_wait = await limiter.acquire(
+            ChannelType.WHATSAPP_CLOUD,
+            account_id,
+            recipient_id=recipient,
+            now_ms=start_ms + 5_999,
+        )
+        assert early is False
+        assert early_wait > 0
+        opened, opened_wait = await limiter.acquire(
+            ChannelType.WHATSAPP_CLOUD,
+            account_id,
+            recipient_id=recipient,
+            now_ms=start_ms + 6_000,
+        )
+        assert opened is True
+        assert opened_wait == 0
+        other, other_wait = await limiter.acquire(
+            ChannelType.WHATSAPP_CLOUD,
+            account_id,
+            recipient_id="+14155550000",
+            now_ms=start_ms,
+        )
+        assert other is True
+        assert other_wait == 0
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_concurrent_account_bucket_is_atomic(redis_client: aioredis.Redis) -> None:
     import asyncio
 

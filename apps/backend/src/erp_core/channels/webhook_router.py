@@ -15,6 +15,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from erp_core.channels.adapters.base import AdapterRegistry
+from erp_core.channels.adapters.gateway import GatewayIngressAdapter
+from erp_core.channels.webhook_store import (
+    accept_raw_webhook_event,
+    set_raw_webhook_processing_state,
+)
 from erp_core.shared.db import system_session
 from erp_core.shared.enums import ChannelType
 
@@ -33,8 +38,20 @@ _CHANNEL_ALIASES: dict[str, ChannelType] = {
 
 
 def build_default_adapter_registry() -> AdapterRegistry:
-    """Construct default adapter registry lazily importing implemented channel adapters."""
+    """Register the gateway ingress adapter, then any later channel adapters."""
     registry = AdapterRegistry()
+    gateway = GatewayIngressAdapter()
+    for key in (
+        "whatsapp",
+        ChannelType.WHATSAPP_CLOUD.value,
+        ChannelType.WHATSAPP_COEXISTENCE.value,
+        "email",
+        "resend",
+        "postmark",
+        ChannelType.EMAIL.value,
+        ChannelType.WEB_LIVECHAT.value,
+    ):
+        registry.register(key, gateway)
     try:
         from erp_core.channels.adapters.whatsapp import (  # type: ignore[import-untyped]
             WhatsAppAdapter,
@@ -211,40 +228,44 @@ async def receive_webhook(channel: str, request: Request) -> JSONResponse:
             if ext_acct_id and ext_acct_id in resolved_tenants:
                 resolved_tid, resolved_ctype = resolved_tenants[ext_acct_id]
 
-            new_id = uuid.uuid4()
-            inserted = (
-                await session.execute(
-                    text(
-                        "INSERT INTO raw_webhook_events ("
-                        "id, tenant_id, channel_type, external_event_id, external_account_id, "
-                        "headers, raw_payload, signature_verified, processing_status"
-                        ") VALUES ("
-                        ":id, :tid, :ctype, :eeid, :eaid, "
-                        "CAST(:headers AS jsonb), CAST(:payload AS jsonb), true, 'received'"
-                        ") ON CONFLICT (channel_type, external_event_id) DO NOTHING "
-                        "RETURNING id"
-                    ),
-                    {
-                        "id": new_id,
-                        "tid": resolved_tid,
-                        "ctype": resolved_ctype.value,
-                        "eeid": ext_event_id,
-                        "eaid": ext_acct_id,
-                        "headers": headers_json,
-                        "payload": payload_json,
-                    },
-                )
-            ).scalar_one_or_none()
+            inserted = await accept_raw_webhook_event(
+                session,
+                event_id=uuid.uuid4(),
+                tenant_id=resolved_tid,
+                channel_type=resolved_ctype.value,
+                external_event_id=ext_event_id,
+                external_account_id=ext_acct_id,
+                headers_json=headers_json,
+                payload_json=payload_json,
+            )
             if inserted is not None:
                 inserted_str = str(inserted)
                 inserted_ids.append(inserted_str)
                 stream_entries.append((inserted_str, resolved_ctype.value))
 
+    queue_failed = False
     for raw_id_str, ctype_val in stream_entries:
         stream_key = f"stream:webhooks:{ctype_val}"
-        await redis.xadd(
-            stream_key,
-            {"raw_event_id": raw_id_str, "channel_type": str(ctype_val), "attempt": "1"},
+        try:
+            await redis.xadd(
+                stream_key,
+                {"raw_event_id": raw_id_str, "channel_type": str(ctype_val), "attempt": "1"},
+            )
+        except Exception:
+            logger.exception("webhook row %s committed but redis enqueue failed", raw_id_str)
+            queue_failed = True
+            continue
+        async with system_session(session_factory) as session:
+            await set_raw_webhook_processing_state(
+                session,
+                raw_event_id=uuid.UUID(raw_id_str),
+                status="queued",
+                attempt=1,
+            )
+    if queue_failed:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook stored but the queue is unavailable; retry to enqueue",
         )
 
     return JSONResponse(

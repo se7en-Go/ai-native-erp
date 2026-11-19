@@ -375,3 +375,193 @@ async def test_messages_idempotency_and_rls_isolation() -> None:
             )
         await runtime_engine.dispose()
         await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_twelve_tables_force_rls_and_hide_foreign_raw_payloads() -> None:
+    admin_engine = create_async_engine(_admin_url(), future=True)
+    runtime_engine = create_async_engine(_runtime_url(), future=True)
+    runtime_factory = async_sessionmaker(
+        runtime_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    tenant_a = uuid.uuid4()
+    tenant_b = uuid.uuid4()
+    raw_a = uuid.uuid4()
+    raw_unresolved = uuid.uuid4()
+    account_a = uuid.uuid4()
+    external_id = f"pn_{account_a.hex[:12]}"
+    try:
+        async with admin_engine.connect() as conn:
+            flags = (
+                await conn.execute(
+                    text(
+                        "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity "
+                        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                        "WHERE n.nspname = 'public' AND c.relkind = 'r' "
+                        "AND c.relname = ANY(:names)"
+                    ),
+                    {
+                        "names": [
+                            "channel_routing_directory",
+                            "channel_accounts",
+                            "raw_webhook_events",
+                            "dead_letter_events",
+                            "b2b_companies",
+                            "customers",
+                            "customer_identities",
+                            "identity_merge_events",
+                            "conversations",
+                            "messages",
+                            "consent_records",
+                            "suppression_list",
+                        ]
+                    },
+                )
+            ).all()
+            assert len(flags) == 12
+            assert all(row.relrowsecurity and row.relforcerowsecurity for row in flags)
+            policy_rows = (
+                await conn.execute(
+                    text(
+                        "SELECT tablename, policyname FROM pg_policies "
+                        "WHERE schemaname = 'public' AND policyname IN "
+                        "('app_runtime_permissive', 'tenant_isolation_policy')"
+                    )
+                )
+            ).all()
+            policies: dict[str, set[str]] = {}
+            for table_name, policy_name in policy_rows:
+                policies.setdefault(str(table_name), set()).add(str(policy_name))
+            required = {"app_runtime_permissive", "tenant_isolation_policy"}
+            for row in flags:
+                assert required <= policies.get(str(row.relname), set())
+
+        async with admin_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO tenants (id, slug, name) VALUES "
+                    "(:ta, :sa, 'RLS A'), (:tb, :sb, 'RLS B')"
+                ),
+                {
+                    "ta": tenant_a,
+                    "sa": f"rls-a-{tenant_a.hex[:8]}",
+                    "tb": tenant_b,
+                    "sb": f"rls-b-{tenant_b.hex[:8]}",
+                },
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO channel_routing_directory "
+                    "(channel_type, external_account_id, tenant_id, channel_account_id) "
+                    "VALUES ('whatsapp_cloud', :ext, :tid, :aid)"
+                ),
+                {"ext": external_id, "tid": tenant_a, "aid": account_a},
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO raw_webhook_events ("
+                    "id, tenant_id, channel_type, external_event_id, raw_payload"
+                    ") VALUES ("
+                    ":id, :tid, 'whatsapp_cloud', :eid, CAST(:payload AS jsonb)"
+                    ")"
+                ),
+                {
+                    "id": raw_a,
+                    "tid": tenant_a,
+                    "eid": f"evt-{raw_a.hex}",
+                    "payload": '{"secret":"pii-probe"}',
+                },
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO raw_webhook_events ("
+                    "id, tenant_id, channel_type, external_event_id, raw_payload"
+                    ") VALUES ("
+                    ":id, NULL, 'whatsapp_cloud', :eid, CAST(:payload AS jsonb)"
+                    ")"
+                ),
+                {
+                    "id": raw_unresolved,
+                    "eid": f"evt-{raw_unresolved.hex}",
+                    "payload": '{"secret":"unresolved-pii"}',
+                },
+            )
+
+        async with tenant_session(runtime_factory, tenant_b) as sess_b:
+            leaked = (
+                await sess_b.execute(
+                    text(
+                        "SELECT raw_payload->>'secret' FROM raw_webhook_events "
+                        "WHERE id = :id"
+                    ),
+                    {"id": raw_a},
+                )
+            ).scalar_one_or_none()
+            assert leaked is None
+            unresolved = (
+                await sess_b.execute(
+                    text("SELECT count(*) FROM raw_webhook_events WHERE tenant_id IS NULL")
+                )
+            ).scalar_one()
+            assert unresolved == 0
+            foreign_routes = (
+                await sess_b.execute(text("SELECT count(*) FROM channel_routing_directory"))
+            ).scalar_one()
+            assert foreign_routes == 0
+
+        async with tenant_session(runtime_factory, tenant_a) as sess_a:
+            own = (
+                await sess_a.execute(
+                    text("SELECT raw_payload->>'secret' FROM raw_webhook_events WHERE id = :id"),
+                    {"id": raw_a},
+                )
+            ).scalar_one()
+            assert own == "pii-probe"
+            hidden = (
+                await sess_a.execute(
+                    text("SELECT count(*) FROM raw_webhook_events WHERE tenant_id IS NULL")
+                )
+            ).scalar_one()
+            assert hidden == 0
+            resolved = (
+                await sess_a.execute(
+                    text(
+                        "SELECT tenant_id FROM resolve_tenant_by_channel_external_id("
+                        "'whatsapp_cloud', :ext)"
+                    ),
+                    {"ext": external_id},
+                )
+            ).scalar_one()
+            assert resolved == tenant_a
+
+        async with runtime_factory() as bare:
+            with pytest.raises(DBAPIError):
+                async with bare.begin():
+                    await bare.execute(
+                        text(
+                            "INSERT INTO channel_routing_directory "
+                            "(channel_type, external_account_id, tenant_id, channel_account_id) "
+                            "VALUES ('whatsapp_cloud', :ext, :tid, :aid)"
+                        ),
+                        {
+                            "ext": f"forged-{uuid.uuid4().hex[:8]}",
+                            "tid": tenant_b,
+                            "aid": uuid.uuid4(),
+                        },
+                    )
+    finally:
+        async with admin_engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM raw_webhook_events WHERE id IN (:a, :u)"),
+                {"a": raw_a, "u": raw_unresolved},
+            )
+            await conn.execute(
+                text("DELETE FROM channel_routing_directory WHERE tenant_id IN (:ta, :tb)"),
+                {"ta": tenant_a, "tb": tenant_b},
+            )
+            await conn.execute(
+                text("DELETE FROM tenants WHERE id IN (:ta, :tb)"),
+                {"ta": tenant_a, "tb": tenant_b},
+            )
+        await runtime_engine.dispose()
+        await admin_engine.dispose()

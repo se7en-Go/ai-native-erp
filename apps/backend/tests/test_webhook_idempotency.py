@@ -4,188 +4,136 @@ import asyncio
 import hashlib
 import hmac
 import json
-import os
 import time
 import uuid
-from collections.abc import Mapping
-from datetime import UTC, datetime
-from typing import Any, ClassVar
+from collections.abc import Awaitable, Callable
 
 import pytest
 import redis.asyncio as aioredis
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
-from erp_core.channels.adapters.base import (
-    AdapterRegistry,
-    MessagingChannelAdapter,
-    NormalizedInboundEvent,
-    NormalizedStatusEvent,
-    NormalizedWebhookBatch,
-    OutboundMessageRequest,
-    OutboundSendResult,
-)
-from erp_core.channels.ingress_worker import (
-    consume_webhook_stream_batch,
-    dlq_router,
-    process_raw_webhook_event,
-)
-from erp_core.channels.webhook_router import webhook_router
-from erp_core.shared.enums import (
-    ChannelType,
-    ConversationMode,
-    DeliveryStatus,
-    IdentityType,
-    MessageContentType,
-    MessageDirection,
-    MessageSenderType,
-    UserRole,
-)
-from erp_core.tenancy.dependencies import CurrentPrincipal
+from erp_core.api_main import create_app
+from erp_core.channels.ingress_worker import run_webhook_worker_loop
+from erp_core.shared.db import tenant_session
 
 
-class _TestWhatsAppEchoAdapter(MessagingChannelAdapter):
-    channel_types: ClassVar[tuple[ChannelType, ...]] = (ChannelType.WHATSAPP_CLOUD,)
+def _admin_url() -> str:
+    return "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas"
 
-    def verify_webhook_signature(
-        self, raw_body: bytes, headers: Mapping[str, str], secret: str
-    ) -> bool:
-        sig = headers.get("x-hub-signature-256", "")
-        expected = "sha256=" + hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
-        return hmac.compare_digest(sig, expected)
 
-    def extract_external_event_ids(
-        self, payload: dict[str, Any], raw_body: bytes, headers: Mapping[str, str]
-    ) -> list[tuple[str, str | None]]:
-        events: list[tuple[str, str | None]] = []
-        for entry in payload.get("entry", []):
-            for change in entry.get("changes", []):
-                val = change.get("value", {})
-                phone_id = val.get("metadata", {}).get("phone_number_id")
-                for msg in val.get("messages", []):
-                    events.append((msg["id"], phone_id))
-                for status in val.get("statuses", []):
-                    events.append(
-                        (f"status:{status['id']}:{status['status']}", phone_id)
-                    )
-        if not events:
-            events.append((hashlib.sha256(raw_body).hexdigest(), None))
-        return events
+def _sign(secret: str, body: bytes) -> str:
+    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
-    async def parse_webhook(
-        self,
-        session: AsyncSession,
-        tenant_id: uuid.UUID,
-        channel_account_id: uuid.UUID,
-        payload: dict[str, Any],
-        headers: Mapping[str, str],
-    ) -> NormalizedWebhookBatch:
-        inbound: list[NormalizedInboundEvent] = []
-        statuses: list[NormalizedStatusEvent] = []
-        for entry in payload.get("entry", []):
-            for change in entry.get("changes", []):
-                val = change.get("value", {})
-                for msg in val.get("messages", []):
-                    inbound.append(
-                        NormalizedInboundEvent(
-                            external_event_id=msg["id"],
-                            external_account_id=val["metadata"]["phone_number_id"],
-                            external_message_id=msg["id"],
-                            external_thread_id=msg["from"],
-                            sender_identity_type=IdentityType.WHATSAPP_WAID,
-                            sender_identity_value=msg["from"],
-                            sender_display_name="Storm Tester",
-                            direction=MessageDirection.INBOUND,
-                            sender_type=MessageSenderType.CUSTOMER,
-                            content_type=MessageContentType.TEXT,
-                            body_text=msg["text"]["body"],
-                            source_timestamp=datetime.fromtimestamp(
-                                int(msg["timestamp"]), tz=UTC
-                            ),
-                            conversation_mode=ConversationMode.B2C_SUPPORT,
-                            parent_external_id=msg.get("parent_external_id"),
-                        )
-                    )
-                for st in val.get("statuses", []):
-                    statuses.append(
-                        NormalizedStatusEvent(
-                            external_message_id=st["id"],
-                            external_account_id=val["metadata"]["phone_number_id"],
-                            delivery_status=DeliveryStatus(st["status"]),
-                            timestamp=datetime.fromtimestamp(
-                                int(st["timestamp"]), tz=UTC
-                            ),
-                            require_existing_message=True,
-                        )
-                    )
-        return NormalizedWebhookBatch(inbound_events=inbound, status_events=statuses)
 
-    async def send_message(
-        self,
-        session: AsyncSession,
-        tenant_id: uuid.UUID,
-        credentials: dict[str, Any],
-        request: OutboundMessageRequest,
-    ) -> OutboundSendResult:
-        return OutboundSendResult(success=True, external_message_id="wamid.out.1")
+def _message_payload(wamid: str, phone_number_id: str, body: str) -> bytes:
+    return json.dumps(
+        {
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "field": "messages",
+                            "value": {
+                                "metadata": {"phone_number_id": phone_number_id},
+                                "messages": [
+                                    {
+                                        "from": "14155552671",
+                                        "id": wamid,
+                                        "timestamp": "1763500000",
+                                        "text": {"body": body},
+                                        "type": "text",
+                                    }
+                                ],
+                            },
+                        }
+                    ]
+                }
+            ]
+        }
+    ).encode()
+
+
+class _BoomRedis:
+    """Real Redis client whose XADD fails once the ingress has committed."""
+
+    def __init__(self, inner: aioredis.Redis) -> None:
+        self._inner = inner
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+    async def xadd(self, *args: object, **kwargs: object) -> str:
+        del args, kwargs
+        raise ConnectionError("redis unavailable after commit")
+
+
+async def _wait_until(predicate: Callable[[], Awaitable[bool]], timeout: float = 8.0) -> None:
+    deadline = time.perf_counter() + timeout
+    while time.perf_counter() < deadline:
+        if await predicate():
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError("condition was not met before timeout")
 
 
 @pytest.mark.asyncio
-async def test_webhook_hmac_latency_100x_storm_and_dlq_replay(monkeypatch) -> None:
+async def test_production_app_rejects_invalid_signature_with_401(monkeypatch) -> None:
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", "test_whatsapp_app_secret")
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=transport, base_url="http://test"
+    ) as client:
+        missing = await client.post(
+            "/api/v1/webhooks/whatsapp",
+            content=b'{"entry":[]}',
+            headers={"Content-Type": "application/json"},
+        )
+        invalid = await client.post(
+            "/api/v1/webhooks/whatsapp",
+            content=b'{"entry":[]}',
+            headers={"X-Hub-Signature-256": "sha256=deadbeef", "Content-Type": "application/json"},
+        )
+    assert missing.status_code == 401
+    assert invalid.status_code == 401
+    assert app.dependency_overrides == {}
+
+
+@pytest.mark.asyncio
+async def test_production_worker_storm_reclaim_compensation_and_dlq(monkeypatch) -> None:
     secret = "test_whatsapp_app_secret"
     monkeypatch.setenv("WHATSAPP_APP_SECRET", secret)
-    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "verify_tok_123")
-
-    migrator_engine = create_async_engine(
-        "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas",
-        future=True,
-    )
-    runtime_engine = create_async_engine(os.environ["DATABASE_RUNTIME_URL"], future=True)
-    session_factory = async_sessionmaker(
-        runtime_engine, class_=AsyncSession, expire_on_commit=False
-    )
-    redis = aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
-
-    tenant_id = uuid.uuid4()
-    account_id = uuid.uuid4()
+    monkeypatch.setenv("WEBHOOK_DEFER_DELAY_SECONDS", "0")
+    app = create_app()
+    admin = create_async_engine(_admin_url(), future=True)
     phone_number_id = f"pn_{uuid.uuid4().hex[:10]}"
-
-    registry = AdapterRegistry()
-    registry.register("whatsapp", _TestWhatsAppEchoAdapter())
-    registry.register(ChannelType.WHATSAPP_CLOUD.value, _TestWhatsAppEchoAdapter())
-
-    app = FastAPI()
-    app.state.session_factory = session_factory
-    app.state.redis = redis
-    app.state.adapter_registry = registry
-    app.include_router(webhook_router)
-    app.include_router(dlq_router)
-
-    # Override RBAC dependency on dlq_router to act as tenant admin
-    from erp_core.channels.ingress_worker import _require_dlq_operator
-
-    app.dependency_overrides[_require_dlq_operator] = lambda: CurrentPrincipal(
-        user_id=uuid.uuid4(),
-        tenant_id=tenant_id,
-        role=UserRole.ADMIN,
-        email="admin@factory.test",
-    )
-
-    try:
-        async with migrator_engine.begin() as conn:
-            await conn.execute(
-                text("INSERT INTO tenants (id, slug, name) VALUES (:id, :slug, 'Storm Factory')"),
-                {"id": tenant_id, "slug": f"storm-{tenant_id.hex[:8]}"},
-            )
+    account_id = uuid.uuid4()
+    tenant_id: uuid.UUID | None = None
+    transport = ASGITransport(app=app)
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=transport, base_url="http://test"
+    ) as client:
+        registered = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"wh-{uuid.uuid4().hex[:8]}@factory.example.com",
+                "password": "StrongPassword2026!",
+                "full_name": "Webhook Owner",
+                "tenant_name": "Webhook Factory",
+                "tenant_slug": f"wh-{uuid.uuid4().hex[:8]}",
+            },
+        )
+        assert registered.status_code == 201, registered.text
+        token = registered.json()["access_token"]
+        tenant_id = uuid.UUID(registered.json()["principal"]["tenant_id"])
+        async with admin.begin() as conn:
             await conn.execute(
                 text(
                     "INSERT INTO channel_accounts "
-                    "(id, tenant_id, channel_type, external_account_id, display_name, "
-                    "status, rate_limit_profile) "
-                    "VALUES (:id, :tid, 'whatsapp_cloud', :ext, 'Storm WA', 'active', "
-                    "'{\"mps\": 80}'::jsonb)"
+                    "(id, tenant_id, channel_type, external_account_id, display_name, status) "
+                    "VALUES (:id, :tid, 'whatsapp_cloud', :ext, 'WA', 'active')"
                 ),
                 {"id": account_id, "tid": tenant_id, "ext": phone_number_id},
             )
@@ -198,221 +146,322 @@ async def test_webhook_hmac_latency_100x_storm_and_dlq_replay(monkeypatch) -> No
                 {"ext": phone_number_id, "tid": tenant_id, "aid": account_id},
             )
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            # 1. Invalid HMAC must return 401
-            bad_resp = await client.post(
-                "/api/v1/webhooks/whatsapp",
-                content=b'{"entry":[]}',
-                headers={"X-Hub-Signature-256": "sha256=deadbeef"},
-            )
-            assert bad_resp.status_code == 401
+        session_factory = app.state.session_factory
+        real_redis = app.state.redis
 
-            # 2. Warmup + <100ms 200 OK persistence check
-            warmup_payload = {
-                "entry": [
-                    {
-                        "changes": [
-                            {
-                                "field": "messages",
-                                "value": {
-                                    "metadata": {"phone_number_id": phone_number_id},
-                                    "messages": [
-                                        {
-                                            "id": f"wamid.warm.{uuid.uuid4().hex[:8]}",
-                                            "from": "14155550199",
-                                            "timestamp": "1763500000",
-                                            "type": "text",
-                                            "text": {"body": "Warmup"},
-                                        }
-                                    ],
-                                },
-                            }
-                        ]
-                    }
-                ]
-            }
-            warm_raw = json.dumps(warmup_payload).encode()
-            warm_sig = "sha256=" + hmac.new(secret.encode(), warm_raw, hashlib.sha256).hexdigest()
-            t0 = time.perf_counter()
-            warm_resp = await client.post(
-                "/api/v1/webhooks/whatsapp",
-                content=warm_raw,
-                headers={"X-Hub-Signature-256": warm_sig, "Content-Type": "application/json"},
+        async def raw_count(event_id: str) -> int:
+            async with admin.connect() as conn:
+                return int(
+                    (
+                        await conn.execute(
+                            text(
+                                "SELECT count(*) FROM raw_webhook_events "
+                                "WHERE external_event_id = :eid"
+                            ),
+                            {"eid": event_id},
+                        )
+                    ).scalar_one()
+                )
+
+        async def message_count(event_id: str) -> int:
+            assert tenant_id is not None
+            async with tenant_session(session_factory, tenant_id) as sess:
+                return int(
+                    (
+                        await sess.execute(
+                            text(
+                                "SELECT count(*) FROM messages "
+                                "WHERE tenant_id = :tid AND external_message_id = :eid"
+                            ),
+                            {"tid": tenant_id, "eid": event_id},
+                        )
+                    ).scalar_one()
+                )
+
+        comp_id = f"wamid.comp.{uuid.uuid4().hex[:8]}"
+        comp_body = _message_payload(comp_id, phone_number_id, "compensate")
+        app.state.redis = _BoomRedis(real_redis)
+        failed = await client.post(
+            "/api/v1/webhooks/whatsapp",
+            content=comp_body,
+            headers={
+                "X-Hub-Signature-256": _sign(secret, comp_body),
+                "Content-Type": "application/json",
+            },
+        )
+        assert failed.status_code == 503
+        assert await raw_count(comp_id) == 1
+        assert await message_count(comp_id) == 0
+        app.state.redis = real_redis
+
+        retry_id = f"wamid.retry.{uuid.uuid4().hex[:8]}"
+        retry_body = _message_payload(retry_id, phone_number_id, "retry")
+        app.state.redis = _BoomRedis(real_redis)
+        first = await client.post(
+            "/api/v1/webhooks/whatsapp",
+            content=retry_body,
+            headers={
+                "X-Hub-Signature-256": _sign(secret, retry_body),
+                "Content-Type": "application/json",
+            },
+        )
+        assert first.status_code == 503
+        app.state.redis = real_redis
+        second = await client.post(
+            "/api/v1/webhooks/whatsapp",
+            content=retry_body,
+            headers={
+                "X-Hub-Signature-256": _sign(secret, retry_body),
+                "Content-Type": "application/json",
+            },
+        )
+        assert second.status_code == 200
+        assert second.json()["deduplicated"] is False
+        assert await raw_count(retry_id) == 1
+
+        reclaim_id = f"wamid.reclaim.{uuid.uuid4().hex[:8]}"
+        reclaim_body = _message_payload(reclaim_id, phone_number_id, "reclaim")
+        queued = await client.post(
+            "/api/v1/webhooks/whatsapp",
+            content=reclaim_body,
+            headers={
+                "X-Hub-Signature-256": _sign(secret, reclaim_body),
+                "Content-Type": "application/json",
+            },
+        )
+        assert queued.status_code == 200
+        try:
+            await real_redis.xgroup_create(
+                "stream:webhooks:whatsapp_cloud",
+                "erp_webhook_workers",
+                id="0",
+                mkstream=True,
             )
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
-            assert warm_resp.status_code == 200
+        except Exception as exc:
+            if "BUSYGROUP" not in str(exc):
+                raise
+        pending = await real_redis.xreadgroup(
+            groupname="erp_webhook_workers",
+            consumername="crasher",
+            streams={"stream:webhooks:whatsapp_cloud": ">"},
+            count=20,
+        )
+        assert pending
+        crasher_ids = [item[0] for _stream, items in pending for item in items]
+        assert crasher_ids
+
+        stop = asyncio.Event()
+        worker = asyncio.create_task(
+            run_webhook_worker_loop(
+                session_factory,
+                real_redis,
+                stop,
+                min_idle_ms=0,
+                poll_interval=0.02,
+            )
+        )
+        try:
+            await _wait_until(lambda: _eq(message_count(comp_id), 1))
+            await _wait_until(lambda: _eq(message_count(retry_id), 1))
+            await _wait_until(lambda: _eq(message_count(reclaim_id), 1))
+            assert await raw_count(comp_id) == 1
+            assert await raw_count(retry_id) == 1
+            assert await raw_count(reclaim_id) == 1
+
+            latency_id = f"wamid.latency.{uuid.uuid4().hex[:8]}"
+            latency_body = _message_payload(latency_id, phone_number_id, "latency")
+            started = time.perf_counter()
+            latency = await client.post(
+                "/api/v1/webhooks/whatsapp",
+                content=latency_body,
+                headers={
+                    "X-Hub-Signature-256": _sign(secret, latency_body),
+                    "Content-Type": "application/json",
+                },
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1000.0
+            assert latency.status_code == 200
             assert elapsed_ms < 100.0
 
-            # 3. 100 duplicate webhook storm -> 1 persisted message + 0 duplicates
-            storm_wamid = f"wamid.storm.{uuid.uuid4().hex[:8]}"
-            storm_payload = {
-                "entry": [
-                    {
-                        "changes": [
-                            {
-                                "field": "messages",
-                                "value": {
-                                    "metadata": {"phone_number_id": phone_number_id},
-                                    "messages": [
-                                        {
-                                            "id": storm_wamid,
-                                            "from": "14155550188",
-                                            "timestamp": "1763500100",
-                                            "type": "text",
-                                            "text": {"body": "Need 2000m LED strip quote"},
-                                        }
-                                    ],
-                                },
-                            }
-                        ]
-                    }
-                ]
-            }
-            storm_raw = json.dumps(storm_payload).encode()
-            storm_sig = "sha256=" + hmac.new(secret.encode(), storm_raw, hashlib.sha256).hexdigest()
-
+            storm_id = f"wamid.storm.{uuid.uuid4().hex[:8]}"
+            storm_body = _message_payload(storm_id, phone_number_id, "storm")
             responses = await asyncio.gather(
                 *[
                     client.post(
                         "/api/v1/webhooks/whatsapp",
-                        content=storm_raw,
+                        content=storm_body,
                         headers={
-                            "X-Hub-Signature-256": storm_sig,
+                            "X-Hub-Signature-256": _sign(secret, storm_body),
                             "Content-Type": "application/json",
                         },
                     )
                     for _ in range(100)
                 ]
             )
-            assert all(r.status_code == 200 for r in responses)
-            new_accepts = [r.json() for r in responses if not r.json()["deduplicated"]]
-            assert len(new_accepts) == 1
+            assert all(item.status_code == 200 for item in responses)
+            await _wait_until(lambda: _eq(message_count(storm_id), 1))
+            assert await raw_count(storm_id) == 1
+            assert await message_count(storm_id) == 1
+            assert await message_count(latency_id) == 1
 
-            raw_event_id = uuid.UUID(new_accepts[0]["raw_event_ids"][0])
-            assert raw_event_id.version == 4
-            consumed = 0
-            for _ in range(4):
-                consumed += await consume_webhook_stream_batch(
-                    session_factory,
-                    redis,
-                    ChannelType.WHATSAPP_CLOUD,
-                    adapter_registry=registry,
-                    count=50,
-                )
-            assert consumed >= 1
-            again = await consume_webhook_stream_batch(
-                session_factory,
-                redis,
-                ChannelType.WHATSAPP_CLOUD,
-                adapter_registry=registry,
-                count=50,
-            )
-            assert again == 0
-
-            async with migrator_engine.connect() as conn:
-                raw_cnt = (
-                    await conn.execute(
-                        text(
-                            "SELECT count(*) FROM raw_webhook_events WHERE external_event_id = :eid"
-                        ),
-                        {"eid": storm_wamid},
-                    )
-                ).scalar_one()
-                msg_cnt = (
-                    await conn.execute(
-                        text(
-                            "SELECT count(*) FROM messages "
-                            "WHERE tenant_id = :tid AND external_message_id = :eid"
-                        ),
-                        {"tid": tenant_id, "eid": storm_wamid},
-                    )
-                ).scalar_one()
-                assert raw_cnt == 1
-                assert msg_cnt == 1
-
-            # 4. Out-of-order parent -> DLQ after max attempts -> Replay API
-            orphan_status_payload = {
-                "entry": [
-                    {
-                        "changes": [
-                            {
-                                "field": "messages",
-                                "value": {
-                                    "metadata": {"phone_number_id": phone_number_id},
-                                    "statuses": [
-                                        {
-                                            "id": f"wamid.missing.{uuid.uuid4().hex[:8]}",
-                                            "status": "delivered",
-                                            "timestamp": "1763500200",
-                                        }
-                                    ],
-                                },
-                            }
-                        ]
-                    }
-                ]
-            }
-            orphan_raw = json.dumps(orphan_status_payload).encode()
-            orphan_sig = (
-                "sha256=" + hmac.new(secret.encode(), orphan_raw, hashlib.sha256).hexdigest()
-            )
-            orphan_resp = await client.post(
+            orphan_id = f"wamid.missing.{uuid.uuid4().hex[:8]}"
+            orphan_body = json.dumps(
+                {
+                    "entry": [
+                        {
+                            "changes": [
+                                {
+                                    "field": "messages",
+                                    "value": {
+                                        "metadata": {"phone_number_id": phone_number_id},
+                                        "statuses": [
+                                            {
+                                                "id": orphan_id,
+                                                "status": "delivered",
+                                                "timestamp": "1763500200",
+                                            }
+                                        ],
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ).encode()
+            orphan = await client.post(
                 "/api/v1/webhooks/whatsapp",
-                content=orphan_raw,
-                headers={"X-Hub-Signature-256": orphan_sig, "Content-Type": "application/json"},
+                content=orphan_body,
+                headers={
+                    "X-Hub-Signature-256": _sign(secret, orphan_body),
+                    "Content-Type": "application/json",
+                },
             )
-            assert orphan_resp.status_code == 200
-            orphan_raw_id = uuid.UUID(orphan_resp.json()["raw_event_ids"][0])
+            assert orphan.status_code == 200
 
-            # Attempt 6 exceeds max 5 retries -> writes to dead_letter_events
-            await process_raw_webhook_event(
-                session_factory, redis, orphan_raw_id, registry, attempt=6
-            )
-            async with migrator_engine.connect() as conn:
-                dlq_id = (
-                    await conn.execute(
-                        text(
-                            "SELECT id FROM dead_letter_events WHERE raw_webhook_event_id = :rid"
-                        ),
-                        {"rid": orphan_raw_id},
-                    )
-                ).scalar_one()
+            async def dlq_id() -> uuid.UUID | None:
+                assert tenant_id is not None
+                async with tenant_session(session_factory, tenant_id) as sess:
+                    found = (
+                        await sess.execute(
+                            text(
+                                "SELECT id FROM dead_letter_events "
+                                "WHERE tenant_id = :tid AND external_event_id LIKE :pat "
+                                "ORDER BY created_at DESC LIMIT 1"
+                            ),
+                            {"tid": tenant_id, "pat": f"%{orphan_id}%"},
+                        )
+                    ).scalar_one_or_none()
+                return None if found is None else uuid.UUID(str(found))
 
-            replay_resp = await client.post(f"/api/v1/channels/dlq/{dlq_id}/replay")
-            assert replay_resp.status_code == 200
-            assert replay_resp.json()["status"] == "replayed"
-    finally:
-        async with migrator_engine.begin() as conn:
-            await conn.execute(
-                text("DELETE FROM audit_events WHERE tenant_id = :tid"), {"tid": tenant_id}
+            await _wait_until(lambda: _present(dlq_id()), timeout=12.0)
+            event_id = await dlq_id()
+            assert event_id is not None
+            denied = await client.post(f"/api/v1/channels/dlq/{event_id}/replay")
+            assert denied.status_code == 401
+
+            customer_id = uuid.uuid4()
+            conv_id = uuid.uuid4()
+            async with admin.begin() as conn:
+                await conn.execute(
+                    text(
+                        "INSERT INTO customers (id, tenant_id, display_name) "
+                        "VALUES (:id, :tid, 'Replay Buyer')"
+                    ),
+                    {"id": customer_id, "tid": tenant_id},
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO conversations ("
+                        "id, tenant_id, customer_id, channel_account_id, channel_type, status"
+                        ") VALUES (:id, :tid, :cid, :aid, 'whatsapp_cloud', 'open')"
+                    ),
+                    {"id": conv_id, "tid": tenant_id, "cid": customer_id, "aid": account_id},
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO messages ("
+                        "id, tenant_id, conversation_id, customer_id, channel_type, "
+                        "external_message_id, direction, sender_type, content_type, "
+                        "body_text, delivery_status, source_timestamp"
+                        ") VALUES ("
+                        ":id, :tid, :conv, :cid, 'whatsapp_cloud', :eid, "
+                        "'inbound', 'customer', 'text', 'parent', 'queued', now()"
+                        ")"
+                    ),
+                    {
+                        "id": uuid.uuid4(),
+                        "tid": tenant_id,
+                        "conv": conv_id,
+                        "cid": customer_id,
+                        "eid": orphan_id,
+                    },
+                )
+            replayed = await client.post(
+                f"/api/v1/channels/dlq/{event_id}/replay",
+                headers={"Authorization": f"Bearer {token}"},
             )
-            await conn.execute(
-                text("DELETE FROM dead_letter_events WHERE tenant_id = :tid"), {"tid": tenant_id}
-            )
-            await conn.execute(
-                text("DELETE FROM raw_webhook_events WHERE tenant_id = :tid"), {"tid": tenant_id}
-            )
-            await conn.execute(
-                text("DELETE FROM channel_routing_directory WHERE tenant_id = :tid"),
-                {"tid": tenant_id},
-            )
-            await conn.execute(
-                text("DELETE FROM messages WHERE tenant_id = :tid"), {"tid": tenant_id}
-            )
-            await conn.execute(
-                text("DELETE FROM conversations WHERE tenant_id = :tid"), {"tid": tenant_id}
-            )
-            await conn.execute(
-                text("DELETE FROM customer_identities WHERE tenant_id = :tid"), {"tid": tenant_id}
-            )
-            await conn.execute(
-                text("DELETE FROM customers WHERE tenant_id = :tid"), {"tid": tenant_id}
-            )
-            await conn.execute(
-                text("DELETE FROM channel_accounts WHERE tenant_id = :tid"), {"tid": tenant_id}
-            )
-            await conn.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
-        await redis.aclose()
-        await runtime_engine.dispose()
-        await migrator_engine.dispose()
+            assert replayed.status_code == 200
+            assert replayed.json()["status"] == "replayed"
+            assert replayed.json()["outcome"] == "queued"
+
+            async def delivered() -> bool:
+                assert tenant_id is not None
+                async with tenant_session(session_factory, tenant_id) as sess:
+                    status = (
+                        await sess.execute(
+                            text(
+                                "SELECT delivery_status FROM messages "
+                                "WHERE tenant_id = :tid AND external_message_id = :eid"
+                            ),
+                            {"tid": tenant_id, "eid": orphan_id},
+                        )
+                    ).scalar_one()
+                return str(status) == "delivered"
+
+            await _wait_until(delivered)
+        finally:
+            stop.set()
+            await worker
+            async with admin.begin() as conn:
+                assert tenant_id is not None
+                await conn.execute(
+                    text("DELETE FROM dead_letter_events WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+                await conn.execute(
+                    text("DELETE FROM raw_webhook_events WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+                await conn.execute(
+                    text("DELETE FROM messages WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+                await conn.execute(
+                    text("DELETE FROM conversations WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+                await conn.execute(
+                    text("DELETE FROM customer_identities WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+                await conn.execute(
+                    text("DELETE FROM customers WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+                await conn.execute(
+                    text("DELETE FROM channel_routing_directory WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+                await conn.execute(
+                    text("DELETE FROM channel_accounts WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+            await admin.dispose()
+
+
+async def _eq(awaitable: Awaitable[int], expected: int) -> bool:
+    return await awaitable == expected
+
+
+async def _present(awaitable: Awaitable[uuid.UUID | None]) -> bool:
+    return await awaitable is not None

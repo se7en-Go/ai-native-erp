@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+
 from taskiq import TaskiqScheduler
 from taskiq_redis import ListRedisScheduleSource, RedisStreamBroker
 
-from erp_core.channels.ingress_worker import register_channel_worker_tasks
+from erp_core.channels.ingress_worker import (
+    register_channel_worker_tasks,
+    run_webhook_worker_loop,
+)
 from erp_core.shared.config import get_settings
 from erp_core.shared.db import create_runtime_engine, create_session_factory
 from erp_core.shared.redis_client import create_redis_client
@@ -21,3 +26,9 @@ register_channel_worker_tasks(broker, _session_factory, _redis)
 @broker.task
 async def worker_ping() -> str:
     return "pong"
+
+
+async def serve() -> None:
+    """Production worker entrypoint: Taskiq tasks plus the webhook stream loop."""
+    stop = asyncio.Event()
+    await run_webhook_worker_loop(_session_factory, _redis, stop)

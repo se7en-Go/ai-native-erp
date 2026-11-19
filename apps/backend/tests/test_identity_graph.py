@@ -210,6 +210,20 @@ async def test_identity_deterministic_bsuid_probabilistic_and_reversible_split()
                 )
             ).scalar_one()
             assert ig_owner_after_split == cid_ig
+            phone_owner = (
+                await sess.execute(
+                    text(
+                        "SELECT customer_id FROM customer_identities "
+                        "WHERE tenant_id = :tid AND identity_type = 'phone_e164'"
+                    ),
+                    {"tid": tenant_id},
+                )
+            ).scalar_one()
+            assert phone_owner == cid_phone
+
+        async with tenant_session(session_factory, uuid.uuid4()) as other:
+            visible = (await other.execute(text("SELECT count(*) FROM customers"))).scalar_one()
+            assert visible == 0
 
         # 5. Router smoke check for /api/v1/customers
         app = FastAPI()
@@ -289,6 +303,16 @@ def test_compute_buyer_local_time_quiet_hours() -> None:
     end_info = service.compute_buyer_local_time("America/New_York", quiet_end)
     assert end_info.local_hour == 8
     assert end_info.is_quiet_hours is False
+
+    before_open = datetime(2026, 11, 19, 12, 59, tzinfo=UTC)
+    before_info = service.compute_buyer_local_time("America/New_York", before_open)
+    assert before_info.local_hour == 7
+    assert before_info.is_quiet_hours is True
+
+    before_quiet = datetime(2026, 11, 19, 1, 59, tzinfo=UTC)
+    evening_info = service.compute_buyer_local_time("America/New_York", before_quiet)
+    assert evening_info.local_hour == 20
+    assert evening_info.is_quiet_hours is False
 
     dst_night = datetime(2026, 7, 19, 1, 0, tzinfo=UTC)
     dst_info = service.compute_buyer_local_time("America/New_York", dst_night)
