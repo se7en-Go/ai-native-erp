@@ -86,3 +86,8 @@ jobs:
         run: |
           uv run --directory apps/backend alembic upgrade head
           uv run pytest -v
+
+      - name: Verify zero OpenAPI contract drift
+        run: |
+          uv run python apps/backend/scripts/export_openapi.py
+          git diff --exit-code contracts/openapi.json
