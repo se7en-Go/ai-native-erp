@@ -28,6 +28,7 @@ from erp_core.ai_engine.router_llm import TieredModelRouter
 from erp_core.ai_engine.runtime import PolicyRuntime
 from erp_core.ai_engine.sandbox import router as sandbox_router
 from erp_core.ai_engine.semantic_cache import SemanticCacheService
+from erp_core.ai_engine.social_caption import AiEngineCaptionProvider
 from erp_core.ai_engine.workforce_router import workforce_router
 from erp_core.billing.router import router as billing_router
 from erp_core.catalog.router import router as catalog_router
@@ -60,6 +61,7 @@ from erp_core.shared.db import (
 from erp_core.shared.errors import register_exception_handlers
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
+from erp_core.social.router import router as social_router
 from erp_core.supply_chain.analytics import router as executive_router
 from erp_core.supply_chain.router import supply_router, wms_router
 from erp_core.tenancy.audit import ensure_audit_child_rls
@@ -83,6 +85,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.redis = redis_client
     app.state.ai_runtime = PolicyRuntime(
         llm_router=TieredModelRouter(semantic_cache=SemanticCacheService(redis_client)),
+    )
+    # Social copywriting is injected through the social module's CaptionProvider
+    # protocol: erp_core.social never imports erp_core.ai_engine (import-linter).
+    app.state.social_caption_provider = AiEngineCaptionProvider(
+        llm_router=app.state.ai_runtime.llm_router,
+        wallet_service=app.state.ai_runtime.wallet_service,
+        tool_registry=app.state.ai_runtime.tool_registry,
     )
     app.state.storage = storage
     app.state.crypto_service = crypto_service
@@ -143,6 +152,7 @@ def create_app() -> FastAPI:
     app.include_router(finance_router, prefix="/api/v1")
     app.include_router(kb_router)
     app.include_router(growth_router, prefix="/api/v1")
+    app.include_router(social_router, prefix="/api/v1")
     app.include_router(ai_router)
     app.include_router(workforce_router)
     app.include_router(billing_router)
