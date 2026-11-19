@@ -132,6 +132,97 @@
         "title": "AuditEventRead",
         "type": "object"
       },
+      "Body_submit_receivable_payment_api_v1_finance_receivables__rp_id__payments_post": {
+        "properties": {
+          "actual_fx_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Actual Fx Rate"
+          },
+          "amount_received": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount Received"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Currency"
+          },
+          "external_tx_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Tx Ref"
+          },
+          "gateway_fee": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Gateway Fee"
+          },
+          "payment_method": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Payment Method"
+          },
+          "receipt_file": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt File"
+          }
+        },
+        "required": [
+          "payment_method",
+          "amount_received",
+          "currency",
+          "actual_fx_rate"
+        ],
+        "title": "Body_submit_receivable_payment_api_v1_finance_receivables__rp_id__payments_post",
+        "type": "object"
+      },
       "BuyerLocalTimeInfo": {
         "properties": {
           "formatted_time": {
@@ -728,6 +819,213 @@
           }
         },
         "title": "CustomerUpdateRequest",
+        "type": "object"
+      },
+      "FinanceOverviewRead": {
+        "properties": {
+          "cvp_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/FinanceOverviewSnapshotItem"
+            },
+            "title": "Cvp Snapshots",
+            "type": "array"
+          },
+          "receivables": {
+            "items": {
+              "$ref": "#/components/schemas/FinanceOverviewReceivableItem"
+            },
+            "title": "Receivables",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/FinanceOverviewSummaryRead"
+          }
+        },
+        "required": [
+          "summary",
+          "receivables",
+          "cvp_snapshots"
+        ],
+        "title": "FinanceOverviewRead",
+        "type": "object"
+      },
+      "FinanceOverviewReceivableItem": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "due_amount": {
+            "title": "Due Amount",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "milestone_label": {
+            "title": "Milestone Label",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_mode": {
+            "$ref": "#/components/schemas/OrderMode"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          },
+          "paid_amount": {
+            "title": "Paid Amount",
+            "type": "string"
+          },
+          "pending_payment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Payment Id"
+          },
+          "pending_tx_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Tx Ref"
+          },
+          "shipment_blocked_70_unpaid": {
+            "title": "Shipment Blocked 70 Unpaid",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "order_id",
+          "order_no",
+          "order_mode",
+          "milestone_label",
+          "due_amount",
+          "paid_amount",
+          "currency",
+          "status",
+          "shipment_blocked_70_unpaid"
+        ],
+        "title": "FinanceOverviewReceivableItem",
+        "type": "object"
+      },
+      "FinanceOverviewSnapshotItem": {
+        "properties": {
+          "ad_attribution_cost_base": {
+            "title": "Ad Attribution Cost Base",
+            "type": "string"
+          },
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "channel_msg_cost_base": {
+            "title": "Channel Msg Cost Base",
+            "type": "string"
+          },
+          "cogs_base": {
+            "title": "Cogs Base",
+            "type": "string"
+          },
+          "fx_gain_loss_base": {
+            "title": "Fx Gain Loss Base",
+            "type": "string"
+          },
+          "gross_revenue_base": {
+            "title": "Gross Revenue Base",
+            "type": "string"
+          },
+          "net_contribution_margin_base": {
+            "title": "Net Contribution Margin Base",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          },
+          "payment_gateway_fee_base": {
+            "title": "Payment Gateway Fee Base",
+            "type": "string"
+          },
+          "platform_commission_base": {
+            "title": "Platform Commission Base",
+            "type": "string"
+          },
+          "shipping_and_duty_base": {
+            "title": "Shipping And Duty Base",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "order_no",
+          "base_currency",
+          "gross_revenue_base",
+          "cogs_base",
+          "platform_commission_base",
+          "payment_gateway_fee_base",
+          "shipping_and_duty_base",
+          "channel_msg_cost_base",
+          "ad_attribution_cost_base",
+          "fx_gain_loss_base",
+          "net_contribution_margin_base"
+        ],
+        "title": "FinanceOverviewSnapshotItem",
+        "type": "object"
+      },
+      "FinanceOverviewSummaryRead": {
+        "properties": {
+          "avg_margin_pct": {
+            "title": "Avg Margin Pct",
+            "type": "string"
+          },
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "total_gross_revenue_base": {
+            "title": "Total Gross Revenue Base",
+            "type": "string"
+          },
+          "total_net_margin_base": {
+            "title": "Total Net Margin Base",
+            "type": "string"
+          }
+        },
+        "required": [
+          "total_gross_revenue_base",
+          "total_net_margin_base",
+          "avg_margin_pct",
+          "base_currency"
+        ],
+        "title": "FinanceOverviewSummaryRead",
         "type": "object"
       },
       "FulfillmentStatus": {
@@ -1887,6 +2185,87 @@
         "title": "OrderMode",
         "type": "string"
       },
+      "OrderProfitSnapshotRead": {
+        "properties": {
+          "ad_attribution_cost_base": {
+            "title": "Ad Attribution Cost Base",
+            "type": "string"
+          },
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "channel_msg_cost_base": {
+            "title": "Channel Msg Cost Base",
+            "type": "string"
+          },
+          "cogs_base": {
+            "title": "Cogs Base",
+            "type": "string"
+          },
+          "contribution_margin_pct": {
+            "title": "Contribution Margin Pct",
+            "type": "string"
+          },
+          "fx_gain_loss_base": {
+            "title": "Fx Gain Loss Base",
+            "type": "string"
+          },
+          "gross_revenue_base": {
+            "title": "Gross Revenue Base",
+            "type": "string"
+          },
+          "net_contribution_margin_base": {
+            "title": "Net Contribution Margin Base",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "payment_gateway_fee_base": {
+            "title": "Payment Gateway Fee Base",
+            "type": "string"
+          },
+          "platform_commission_base": {
+            "title": "Platform Commission Base",
+            "type": "string"
+          },
+          "recalculated_at": {
+            "format": "date-time",
+            "title": "Recalculated At",
+            "type": "string"
+          },
+          "shipping_and_duty_base": {
+            "title": "Shipping And Duty Base",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "tenant_id",
+          "base_currency",
+          "gross_revenue_base",
+          "cogs_base",
+          "platform_commission_base",
+          "payment_gateway_fee_base",
+          "shipping_and_duty_base",
+          "channel_msg_cost_base",
+          "ad_attribution_cost_base",
+          "fx_gain_loss_base",
+          "net_contribution_margin_base",
+          "contribution_margin_pct",
+          "recalculated_at"
+        ],
+        "title": "OrderProfitSnapshotRead",
+        "type": "object"
+      },
       "OrderRead": {
         "properties": {
           "channel_account_id": {
@@ -2411,6 +2790,42 @@
         "title": "PaginatedResponse[QuoteRead]",
         "type": "object"
       },
+      "PaginatedResponse_ReceivableRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReceivableRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[ReceivableRead]",
+        "type": "object"
+      },
       "PaginatedResponse_SkuMappingRead_": {
         "properties": {
           "has_more": {
@@ -2483,6 +2898,207 @@
         "title": "PaginatedResponse[VariantRead]",
         "type": "object"
       },
+      "PaymentCreate": {
+        "properties": {
+          "actual_fx_rate": {
+            "anyOf": [
+              {
+                "minimum": 1e-06,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Actual Fx Rate"
+          },
+          "amount_received": {
+            "anyOf": [
+              {
+                "minimum": 0.01,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount Received"
+          },
+          "currency": {
+            "pattern": "^[A-Za-z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "external_tx_ref": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Tx Ref"
+          },
+          "gateway_fee": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Gateway Fee"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "payment_method": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Payment Method",
+            "type": "string"
+          },
+          "receipt_r2_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt R2 Key"
+          },
+          "rp_id": {
+            "format": "uuid",
+            "title": "Rp Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rp_id",
+          "payment_method",
+          "amount_received",
+          "currency",
+          "actual_fx_rate"
+        ],
+        "title": "PaymentCreate",
+        "type": "object"
+      },
+      "PaymentRecordRead": {
+        "properties": {
+          "actual_fx_rate": {
+            "title": "Actual Fx Rate",
+            "type": "string"
+          },
+          "amount_received": {
+            "title": "Amount Received",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "external_tx_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Tx Ref"
+          },
+          "gateway_fee": {
+            "title": "Gateway Fee",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "paid_at": {
+            "format": "date-time",
+            "title": "Paid At",
+            "type": "string"
+          },
+          "payment_method": {
+            "title": "Payment Method",
+            "type": "string"
+          },
+          "receipt_r2_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt R2 Key"
+          },
+          "rp_id": {
+            "format": "uuid",
+            "title": "Rp Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "verified_by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified By User Id"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "rp_id",
+          "payment_method",
+          "external_tx_ref",
+          "amount_received",
+          "currency",
+          "actual_fx_rate",
+          "gateway_fee",
+          "receipt_r2_key",
+          "verified_by_user_id",
+          "paid_at",
+          "created_at"
+        ],
+        "title": "PaymentRecordRead",
+        "type": "object"
+      },
       "PaymentStatus": {
         "enum": [
           "unpaid",
@@ -2493,6 +3109,27 @@
         ],
         "title": "PaymentStatus",
         "type": "string"
+      },
+      "PaymentVerifyResponse": {
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "order_fulfillment_status": {
+            "$ref": "#/components/schemas/FulfillmentStatus"
+          },
+          "payment": {
+            "$ref": "#/components/schemas/PaymentRecordRead"
+          }
+        },
+        "required": [
+          "payment",
+          "order_fulfillment_status"
+        ],
+        "title": "PaymentVerifyResponse",
+        "type": "object"
       },
       "PrincipalResponse": {
         "properties": {
@@ -2679,6 +3316,64 @@
           "updated_at"
         ],
         "title": "ProductRead",
+        "type": "object"
+      },
+      "ProfitSummaryRead": {
+        "properties": {
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "cogs_base": {
+            "title": "Cogs Base",
+            "type": "string"
+          },
+          "contribution_margin_pct": {
+            "title": "Contribution Margin Pct",
+            "type": "string"
+          },
+          "fx_gain_loss_base": {
+            "title": "Fx Gain Loss Base",
+            "type": "string"
+          },
+          "gross_revenue_base": {
+            "title": "Gross Revenue Base",
+            "type": "string"
+          },
+          "net_contribution_margin_base": {
+            "title": "Net Contribution Margin Base",
+            "type": "string"
+          },
+          "order_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_orders": {
+            "title": "Total Orders",
+            "type": "integer"
+          },
+          "total_variable_expenses_base": {
+            "title": "Total Variable Expenses Base",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_currency",
+          "total_orders",
+          "gross_revenue_base",
+          "cogs_base",
+          "total_variable_expenses_base",
+          "fx_gain_loss_base",
+          "net_contribution_margin_base",
+          "contribution_margin_pct"
+        ],
+        "title": "ProfitSummaryRead",
         "type": "object"
       },
       "ProposalType": {
@@ -3254,6 +3949,81 @@
         ],
         "title": "QuoteStatus",
         "type": "string"
+      },
+      "ReceivableRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "due_amount": {
+            "title": "Due Amount",
+            "type": "string"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "milestone_label": {
+            "title": "Milestone Label",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "paid_amount": {
+            "title": "Paid Amount",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "order_id",
+          "direction",
+          "milestone_label",
+          "due_amount",
+          "paid_amount",
+          "currency",
+          "due_date",
+          "status",
+          "created_at"
+        ],
+        "title": "ReceivableRead",
+        "type": "object"
       },
       "RefreshRequest": {
         "properties": {
@@ -6552,6 +7322,535 @@
         "summary": "Update Customer",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/api/v1/finance/cvp/export.csv": {
+      "get": {
+        "operationId": "export_cvp_csv_api_v1_finance_cvp_export_csv_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Cvp Csv",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/orders/{order_id}/profit": {
+      "get": {
+        "operationId": "get_order_profit_api_v1_finance_orders__order_id__profit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderProfitSnapshotRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Order Profit",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/overview": {
+      "get": {
+        "operationId": "get_finance_overview_api_v1_finance_overview_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceOverviewRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Finance Overview",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/payments": {
+      "post": {
+        "operationId": "record_payment_api_v1_finance_payments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRecordRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Payment",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/payments/{payment_id}/verify": {
+      "post": {
+        "operationId": "verify_payment_record_api_v1_finance_payments__payment_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentVerifyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Payment Record",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/profit-summary": {
+      "get": {
+        "operationId": "get_profit_summary_api_v1_finance_profit_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "order_mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/OrderMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel_account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel Account Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfitSummaryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Profit Summary",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/receivables": {
+      "get": {
+        "operationId": "list_receivables_api_v1_finance_receivables_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "order_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ReceivableRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Receivables",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/receivables/{rp_id}/payments": {
+      "post": {
+        "operationId": "submit_receivable_payment_api_v1_finance_receivables__rp_id__payments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rp_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rp Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_submit_receivable_payment_api_v1_finance_receivables__rp_id__payments_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRecordRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Receivable Payment",
+        "tags": [
+          "finance"
         ]
       }
     },
