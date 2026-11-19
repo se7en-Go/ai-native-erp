@@ -44,6 +44,7 @@ from erp_core.channels.widget_router import widget_router
 from erp_core.crm.router import router as b2b_router
 from erp_core.crm.workbench import router as crm_workbench_router
 from erp_core.finance.router import router as finance_router
+from erp_core.growth.router import router as growth_router
 from erp_core.identity.router import customer_router
 from erp_core.orders.router import router as orders_router
 from erp_core.orders.tracking_router import router as tracking_router
@@ -140,6 +141,7 @@ def create_app() -> FastAPI:
     app.include_router(orders_router, prefix="/api/v1")
     app.include_router(finance_router, prefix="/api/v1")
     app.include_router(kb_router)
+    app.include_router(growth_router, prefix="/api/v1")
     app.include_router(ai_router)
     app.include_router(workforce_router)
     app.include_router(billing_router)

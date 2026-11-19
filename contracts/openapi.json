@@ -1074,6 +1074,446 @@
         "title": "BuyerLocalTimeInfo",
         "type": "object"
       },
+      "CampaignCreate": {
+        "properties": {
+          "body_template": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Body Template",
+            "type": "string"
+          },
+          "channel_type": {
+            "enum": [
+              "email",
+              "whatsapp_cloud"
+            ],
+            "title": "Channel Type",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "target_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Target Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "channel_type",
+          "body_template",
+          "target_ids"
+        ],
+        "title": "CampaignCreate",
+        "type": "object"
+      },
+      "CampaignLaunchResult": {
+        "properties": {
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "queued_remaining": {
+            "title": "Queued Remaining",
+            "type": "integer"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/SuppressionReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "scheduled",
+              "running",
+              "paused",
+              "completed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suppressed": {
+            "title": "Suppressed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "status",
+          "sent",
+          "suppressed",
+          "queued_remaining",
+          "reasons"
+        ],
+        "title": "CampaignLaunchResult",
+        "type": "object"
+      },
+      "CampaignPreview": {
+        "description": "Authoritative compliance snapshot; the UI must never treat it as authorization.",
+        "properties": {
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "channel_type": {
+            "enum": [
+              "email",
+              "whatsapp_cloud"
+            ],
+            "title": "Channel Type",
+            "type": "string"
+          },
+          "eligible_count": {
+            "title": "Eligible Count",
+            "type": "integer"
+          },
+          "list_unsubscribe_header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Unsubscribe Header"
+          },
+          "rate_limit_remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit Remaining"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/SuppressionReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "suppressed_count": {
+            "title": "Suppressed Count",
+            "type": "integer"
+          },
+          "total_targets": {
+            "title": "Total Targets",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "channel_type",
+          "eligible_count",
+          "suppressed_count",
+          "reasons",
+          "total_targets"
+        ],
+        "title": "CampaignPreview",
+        "type": "object"
+      },
+      "CampaignRead": {
+        "properties": {
+          "body_template": {
+            "title": "Body Template",
+            "type": "string"
+          },
+          "channel_type": {
+            "enum": [
+              "email",
+              "whatsapp_cloud"
+            ],
+            "title": "Channel Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "replied_count": {
+            "title": "Replied Count",
+            "type": "integer"
+          },
+          "sent_count": {
+            "title": "Sent Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "scheduled",
+              "running",
+              "paused",
+              "completed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "suppressed_count": {
+            "title": "Suppressed Count",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_targets": {
+            "title": "Total Targets",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "channel_type",
+          "subject",
+          "body_template",
+          "status",
+          "total_targets",
+          "sent_count",
+          "suppressed_count",
+          "replied_count",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CampaignRead",
+        "type": "object"
+      },
+      "CampaignRecipientRead": {
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "error_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Reason"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "prospect_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prospect Id"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "sent",
+              "suppressed",
+              "failed",
+              "replied"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "campaign_id",
+          "customer_id",
+          "prospect_id",
+          "address",
+          "status",
+          "error_reason",
+          "sent_at"
+        ],
+        "title": "CampaignRecipientRead",
+        "type": "object"
+      },
+      "CampaignUpdate": {
+        "properties": {
+          "body_template": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Template"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "draft",
+                  "scheduled",
+                  "running",
+                  "paused",
+                  "completed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "target_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 500,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Ids"
+          }
+        },
+        "title": "CampaignUpdate",
+        "type": "object"
+      },
       "CancelOrderRequest": {
         "properties": {
           "reason": {
@@ -1405,6 +1845,35 @@
           "conversations"
         ],
         "title": "ChannelVolume",
+        "type": "object"
+      },
+      "CollectionSummary": {
+        "description": "KPI header for the collection page; always the real tenant-wide counts.",
+        "properties": {
+          "cleaned": {
+            "title": "Cleaned",
+            "type": "integer"
+          },
+          "collected": {
+            "title": "Collected",
+            "type": "integer"
+          },
+          "jobs": {
+            "title": "Jobs",
+            "type": "integer"
+          },
+          "synced": {
+            "title": "Synced",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "collected",
+          "cleaned",
+          "synced",
+          "jobs"
+        ],
+        "title": "CollectionSummary",
         "type": "object"
       },
       "ConfidenceLevel": {
@@ -3857,6 +4326,223 @@
         "title": "KbSearchRequest",
         "type": "object"
       },
+      "LeadCollectionJobCreate": {
+        "properties": {
+          "csv_content": {
+            "anyOf": [
+              {
+                "maxLength": 4000000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csv Content"
+          },
+          "keywords": {
+            "items": {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "max_results": {
+            "default": 100,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "min_rating": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Rating"
+          },
+          "require_phone": {
+            "default": false,
+            "title": "Require Phone",
+            "type": "boolean"
+          },
+          "source_provider": {
+            "enum": [
+              "google_places",
+              "overpass_osm",
+              "overture_poi",
+              "csv_import"
+            ],
+            "title": "Source Provider",
+            "type": "string"
+          },
+          "target_region": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Region"
+          }
+        },
+        "required": [
+          "source_provider"
+        ],
+        "title": "LeadCollectionJobCreate",
+        "type": "object"
+      },
+      "LeadCollectionJobRead": {
+        "properties": {
+          "cleaned_count": {
+            "title": "Cleaned Count",
+            "type": "integer"
+          },
+          "collected_count": {
+            "title": "Collected Count",
+            "type": "integer"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "max_results": {
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "min_rating": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Rating"
+          },
+          "require_phone": {
+            "title": "Require Phone",
+            "type": "boolean"
+          },
+          "source_provider": {
+            "enum": [
+              "google_places",
+              "overpass_osm",
+              "overture_poi",
+              "csv_import"
+            ],
+            "title": "Source Provider",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "synced_count": {
+            "title": "Synced Count",
+            "type": "integer"
+          },
+          "target_region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Region"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "source_provider",
+          "keywords",
+          "target_region",
+          "max_results",
+          "min_rating",
+          "require_phone",
+          "status",
+          "collected_count",
+          "cleaned_count",
+          "synced_count",
+          "error_message",
+          "created_by",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "LeadCollectionJobRead",
+        "type": "object"
+      },
       "LeadCreate": {
         "properties": {
           "customer_id": {
@@ -5452,6 +6138,78 @@
         "title": "PaginatedResponse[AuditEventRead]",
         "type": "object"
       },
+      "PaginatedResponse_CampaignRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CampaignRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[CampaignRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_CampaignRecipientRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CampaignRecipientRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[CampaignRecipientRead]",
+        "type": "object"
+      },
       "PaginatedResponse_ChannelAccountRead_": {
         "properties": {
           "has_more": {
@@ -5848,6 +6606,42 @@
         "title": "PaginatedResponse[KbDocumentRead]",
         "type": "object"
       },
+      "PaginatedResponse_LeadCollectionJobRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LeadCollectionJobRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[LeadCollectionJobRead]",
+        "type": "object"
+      },
       "PaginatedResponse_LeadRead_": {
         "properties": {
           "has_more": {
@@ -6098,6 +6892,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[ProductRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_ProspectRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProspectRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[ProspectRead]",
         "type": "object"
       },
       "PaginatedResponse_PurchaseOrderRead_": {
@@ -7115,6 +7945,275 @@
         ],
         "title": "ProposalType",
         "type": "string"
+      },
+      "ProspectCleanRequest": {
+        "description": "Omit `prospect_ids` to clean every raw prospect of the workspace.",
+        "properties": {
+          "prospect_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 500,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prospect Ids"
+          }
+        },
+        "title": "ProspectCleanRequest",
+        "type": "object"
+      },
+      "ProspectCleanResult": {
+        "properties": {
+          "cleaned": {
+            "title": "Cleaned",
+            "type": "integer"
+          },
+          "discarded_duplicates": {
+            "title": "Discarded Duplicates",
+            "type": "integer"
+          },
+          "graded": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "A",
+                "B",
+                "C"
+              ]
+            },
+            "title": "Graded",
+            "type": "object"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProspectRead"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cleaned",
+          "discarded_duplicates",
+          "graded",
+          "items"
+        ],
+        "title": "ProspectCleanResult",
+        "type": "object"
+      },
+      "ProspectRead": {
+        "properties": {
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "company_name": {
+            "title": "Company Name",
+            "type": "string"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "crm_lead_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crm Lead Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "grade": {
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ],
+            "title": "Grade",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "phone_e164": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone E164"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "raw_metadata": {
+            "additionalProperties": true,
+            "title": "Raw Metadata",
+            "type": "object"
+          },
+          "sync_status": {
+            "enum": [
+              "raw",
+              "cleaned",
+              "synced_to_crm",
+              "discarded"
+            ],
+            "title": "Sync Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website"
+          },
+          "whatsapp_reachable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp Reachable"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "job_id",
+          "company_name",
+          "contact_name",
+          "phone_e164",
+          "email",
+          "website",
+          "country",
+          "city",
+          "latitude",
+          "longitude",
+          "rating",
+          "grade",
+          "whatsapp_reachable",
+          "sync_status",
+          "crm_lead_id",
+          "raw_metadata",
+          "created_at"
+        ],
+        "title": "ProspectRead",
+        "type": "object"
       },
       "PurchaseOrderCreate": {
         "properties": {
@@ -9712,6 +10811,108 @@
           }
         },
         "title": "SupplierUpdate",
+        "type": "object"
+      },
+      "SuppressionReason": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "count"
+        ],
+        "title": "SuppressionReason",
+        "type": "object"
+      },
+      "SyncToCrmRequest": {
+        "properties": {
+          "prospect_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Prospect Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "prospect_ids"
+        ],
+        "title": "SyncToCrmRequest",
+        "type": "object"
+      },
+      "SyncToCrmResult": {
+        "properties": {
+          "leads": {
+            "items": {
+              "$ref": "#/components/schemas/SyncedLead"
+            },
+            "title": "Leads",
+            "type": "array"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "synced": {
+            "title": "Synced",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "synced",
+          "skipped",
+          "leads"
+        ],
+        "title": "SyncToCrmResult",
+        "type": "object"
+      },
+      "SyncedLead": {
+        "properties": {
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "crm_lead_id": {
+            "format": "uuid",
+            "title": "Crm Lead Id",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "prospect_id": {
+            "format": "uuid",
+            "title": "Prospect Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prospect_id",
+          "crm_lead_id",
+          "customer_id",
+          "company_id"
+        ],
+        "title": "SyncedLead",
         "type": "object"
       },
       "TaskCreate": {
@@ -17815,6 +19016,967 @@
         "summary": "Submit Receivable Payment",
         "tags": [
           "finance"
+        ]
+      }
+    },
+    "/api/v1/growth/campaigns": {
+      "get": {
+        "operationId": "list_campaigns_api_v1_growth_campaigns_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_CampaignRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Campaigns",
+        "tags": [
+          "growth"
+        ]
+      },
+      "post": {
+        "operationId": "create_campaign_api_v1_growth_campaigns_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Campaign",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/campaigns/{campaign_id}": {
+      "patch": {
+        "operationId": "update_campaign_api_v1_growth_campaigns__campaign_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Campaign",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/campaigns/{campaign_id}/launch": {
+      "post": {
+        "operationId": "launch_campaign_api_v1_growth_campaigns__campaign_id__launch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignLaunchResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Launch Campaign",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/campaigns/{campaign_id}/preview": {
+      "post": {
+        "operationId": "preview_campaign_api_v1_growth_campaigns__campaign_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Campaign",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/campaigns/{campaign_id}/recipients": {
+      "get": {
+        "operationId": "list_campaign_recipients_api_v1_growth_campaigns__campaign_id__recipients_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_CampaignRecipientRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Campaign Recipients",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/jobs": {
+      "get": {
+        "operationId": "list_jobs_api_v1_growth_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_LeadCollectionJobRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "growth"
+        ]
+      },
+      "post": {
+        "description": "Map/POI jobs stay `pending` until `/run`; a CSV payload runs immediately.\n\nThe uploaded CSV bytes are request-scoped and never persisted, so the import\nhas to execute while the payload is still in memory.",
+        "operationId": "create_job_api_v1_growth_jobs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadCollectionJobCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCollectionJobRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Job",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/jobs/{job_id}/run": {
+      "post": {
+        "operationId": "run_job_api_v1_growth_jobs__job_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCollectionJobRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Job",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/prospects": {
+      "get": {
+        "operationId": "list_prospects_api_v1_growth_prospects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "grade",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[ABC]$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Grade"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sync_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(raw|cleaned|synced_to_crm|discarded)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sync Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ProspectRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Prospects",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/prospects/clean": {
+      "post": {
+        "operationId": "clean_prospects_api_v1_growth_prospects_clean_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProspectCleanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectCleanResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clean Prospects",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/prospects/export.csv": {
+      "get": {
+        "operationId": "export_prospects_api_v1_growth_prospects_export_csv_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Prospects",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/prospects/sync-crm": {
+      "post": {
+        "operationId": "sync_to_crm_api_v1_growth_prospects_sync_crm_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncToCrmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncToCrmResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync To Crm",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
+    "/api/v1/growth/summary": {
+      "get": {
+        "operationId": "collection_summary_api_v1_growth_summary_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Collection Summary",
+        "tags": [
+          "growth"
         ]
       }
     },

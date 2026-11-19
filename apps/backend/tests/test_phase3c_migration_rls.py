@@ -54,11 +54,15 @@ async def test_phase3c_alembic_upgrade_downgrade_upgrade(
     migrator_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     script = ScriptDirectory(str(Path(__file__).parents[1] / "alembic"))
-    assert script.get_current_head() == REVISION
+    # Later verticals extend the chain; this test owns one revision and round-trips
+    # the whole chain from its parent back up to the current head.
+    head = script.get_current_head()
+    assert head is not None and head != PARENT
     assert len(REVISION) <= 32
     revision = script.get_revision(REVISION)
     assert revision is not None
     assert revision.down_revision == PARENT
+    assert head == REVISION or script.get_revision(head) is not None
 
     tables = (
         "lead_collection_jobs",
@@ -73,10 +77,10 @@ async def test_phase3c_alembic_upgrade_downgrade_upgrade(
         def roundtrip(sync_conn):
             # Roll back the whole DDL round trip, including version changes and any existing data.
             ctx = MigrationContext.configure(sync_conn)
-            assert ctx.get_current_revision() == REVISION
+            assert ctx.get_current_revision() == head
             for target, planner, present in (
                 (PARENT, script._downgrade_revs, False),
-                (REVISION, script._upgrade_revs, True),
+                (head, script._upgrade_revs, True),
             ):
                 migration = MigrationContext.configure(
                     sync_conn,
