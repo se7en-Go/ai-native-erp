@@ -17,6 +17,7 @@ import erp_core.finance.models  # noqa: F401
 import erp_core.growth.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
+import erp_core.social.models  # noqa: F401
 import erp_core.supply_chain.models  # noqa: F401
 from erp_core.shared.config import get_settings
 from erp_core.shared.db import Base
