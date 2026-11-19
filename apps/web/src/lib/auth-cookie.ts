@@ -23,6 +23,12 @@ export function buildAuthCookieOptions(maxAgeSeconds: number): CookieOptions {
 
 export const ROUTE_ROLE_ALLOWLIST: Array<{ prefix: string; roles: UserRole[] }> = [
   { prefix: "/finance", roles: ["owner", "admin", "manager", "finance"] },
+  { prefix: "/supply-chain", roles: ["owner", "admin", "manager", "finance"] },
+  { prefix: "/crm", roles: ["owner", "admin", "manager", "agent"] },
+  { prefix: "/tasks", roles: ["owner", "admin", "manager", "agent"] },
+  { prefix: "/dashboard", roles: ["owner", "admin", "manager", "agent", "finance"] },
+  { prefix: "/wms", roles: ["owner", "admin", "manager", "agent", "finance"] },
+  { prefix: "/analytics", roles: ["owner", "admin", "manager", "agent", "finance"] },
   { prefix: "/settings", roles: ["owner", "admin"] },
   { prefix: "/onboarding", roles: ["owner", "admin"] },
   { prefix: "/ai/capabilities", roles: ["owner", "admin", "manager", "agent", "finance"] },

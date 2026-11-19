@@ -18,6 +18,7 @@ import erp_core.crm.models  # noqa: F401
 import erp_core.finance.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
+import erp_core.supply_chain.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
 from erp_core.ai_engine.kb_router import router as kb_router
 from erp_core.ai_engine.router import router as ai_router
@@ -36,6 +37,7 @@ from erp_core.channels.settings_router import router as channel_settings_router
 from erp_core.channels.webhook_router import webhook_router
 from erp_core.channels.widget_router import widget_router
 from erp_core.crm.router import router as b2b_router
+from erp_core.crm.workbench import router as crm_workbench_router
 from erp_core.finance.router import router as finance_router
 from erp_core.identity.router import customer_router
 from erp_core.orders.router import router as orders_router
@@ -51,6 +53,8 @@ from erp_core.shared.db import (
 from erp_core.shared.errors import register_exception_handlers
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
+from erp_core.supply_chain.analytics import router as executive_router
+from erp_core.supply_chain.router import supply_router, wms_router
 from erp_core.tenancy.audit import ensure_audit_child_rls
 from erp_core.tenancy.onboarding import onboarding_router
 from erp_core.tenancy.onboarding_dns import router as onboarding_dns_router
@@ -121,6 +125,10 @@ def create_app() -> FastAPI:
     app.include_router(customer_router)
     app.include_router(catalog_router, prefix="/api/v1")
     app.include_router(b2b_router, prefix="/api/v1")
+    app.include_router(crm_workbench_router, prefix="/api/v1")
+    app.include_router(supply_router, prefix="/api/v1")
+    app.include_router(wms_router, prefix="/api/v1")
+    app.include_router(executive_router, prefix="/api/v1")
     app.include_router(orders_router, prefix="/api/v1")
     app.include_router(finance_router, prefix="/api/v1")
     app.include_router(kb_router)

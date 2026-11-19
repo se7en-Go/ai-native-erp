@@ -4,8 +4,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.crm.models import Lead
 from erp_core.crm.quote_service import QuoteService
 from erp_core.crm.schemas import (
     ConvertQuoteRequest,
@@ -20,9 +22,12 @@ from erp_core.crm.schemas import (
     QuoteRead,
     QuoteRepriceRequest,
 )
+from erp_core.crm.workbench import create_scoped_opportunity, require_customer, update_lead
+from erp_core.crm.workbench_schemas import LeadUpdate
 from erp_core.shared.db import tenant_session
-from erp_core.shared.enums import UserRole
+from erp_core.shared.enums import LeadStatus, UserRole
 from erp_core.shared.pagination import PaginatedResponse
+from erp_core.shared.query import page_of
 from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
 
 router = APIRouter(prefix="/b2b", tags=["b2b"])
@@ -58,9 +63,19 @@ async def list_leads(
     principal: SalesPrincipal,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    lead_status: LeadStatus | None = None,
 ) -> PaginatedResponse[LeadRead]:
+    stmt = select(Lead).where(Lead.tenant_id == principal.tenant_id)
+    if lead_status is not None:
+        stmt = stmt.where(Lead.status == lead_status)
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.list_leads(session, principal.tenant_id, limit=limit, offset=offset)
+        return await page_of(
+            session,
+            stmt.order_by(Lead.created_at.desc(), Lead.id),
+            LeadRead.model_validate,
+            limit,
+            offset,
+        )
 
 
 @router.post("/leads", response_model=LeadRead, status_code=status.HTTP_201_CREATED)
@@ -70,7 +85,21 @@ async def create_lead(
     payload: LeadCreate,
 ) -> LeadRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        await require_customer(session, principal.tenant_id, payload.customer_id)
         return await _service.create_lead(session, principal.tenant_id, payload)
+
+
+@router.patch("/leads/{lead_id}", response_model=LeadRead)
+async def patch_lead(
+    request: Request,
+    principal: SalesPrincipal,
+    lead_id: UUID,
+    payload: LeadUpdate,
+) -> LeadRead:
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return LeadRead.model_validate(
+            await update_lead(session, principal.tenant_id, lead_id, payload)
+        )
 
 
 @router.get("/opportunities", response_model=PaginatedResponse[OpportunityRead])
@@ -93,7 +122,7 @@ async def create_opportunity(
     payload: OpportunityCreate,
 ) -> OpportunityRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.create_opportunity(session, principal.tenant_id, payload)
+        return await create_scoped_opportunity(session, principal.tenant_id, payload, _service)
 
 
 @router.patch("/opportunities/{opportunity_id}", response_model=OpportunityRead)

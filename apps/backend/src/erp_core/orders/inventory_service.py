@@ -103,6 +103,73 @@ class InventoryLedgerService:
             )
             return int(ledger_id)
 
+    async def adjust_stocktake(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        warehouse_id: UUID,
+        variant_id: UUID,
+        qty_delta: int,
+        reference_id: UUID,
+        idempotency_key: str,
+    ) -> int | None:
+        """Apply a signed ledger movement without consuming reserved stock."""
+        if not -1_000_000_000 <= qty_delta <= 1_000_000_000 or qty_delta == 0:
+            raise ValueError("Stocktake delta must be nonzero and within the supported range")
+        params = {
+            "tid": tenant_id,
+            "wid": warehouse_id,
+            "vid": variant_id,
+            "qty": qty_delta,
+            "ref": reference_id,
+            "key": idempotency_key,
+        }
+        async with session.begin_nested():
+            ledger_id = await session.scalar(
+                text("""
+                INSERT INTO inventory_ledger (
+                    tenant_id, warehouse_id, variant_id, event_type, qty_delta_on_hand,
+                    qty_delta_reserved, reference_type, reference_id, idempotency_key
+                ) VALUES (:tid, :wid, :vid, 'stocktake_adjust', :qty, 0, 'stocktake', :ref, :key)
+                ON CONFLICT (tenant_id, idempotency_key) DO NOTHING RETURNING id
+            """),
+                params,
+            )
+            if ledger_id is None:
+                return None
+            if qty_delta > 0:
+                quantity = await session.scalar(
+                    text("""
+                    INSERT INTO inventory_balances (
+                        tenant_id, warehouse_id, variant_id, on_hand_qty, reserved_qty
+                    ) VALUES (:tid, :wid, :vid, :qty, 0)
+                    ON CONFLICT (tenant_id, warehouse_id, variant_id) DO UPDATE
+                    SET on_hand_qty = inventory_balances.on_hand_qty + EXCLUDED.on_hand_qty
+                    WHERE inventory_balances.on_hand_qty <= 2147483647 - EXCLUDED.on_hand_qty
+                    RETURNING on_hand_qty
+                """),
+                    params,
+                )
+            else:
+                quantity = await session.scalar(
+                    text("""
+                    UPDATE inventory_balances SET on_hand_qty = on_hand_qty + :qty
+                    WHERE tenant_id = :tid AND warehouse_id = :wid AND variant_id = :vid
+                      AND on_hand_qty - reserved_qty >= -CAST(:qty AS integer)
+                    RETURNING on_hand_qty
+                """),
+                    params,
+                )
+            if quantity is None:
+                raise AppError(
+                    slug="stocktake-out-of-range",
+                    status_code=409,
+                    code="ERR_STOCKTAKE_OUT_OF_RANGE",
+                    title="Invalid stocktake quantity",
+                    detail="The count would use reserved units or exceed inventory limits.",
+                )
+            return int(ledger_id)
+
     async def reserve_for_order(
         self,
         session: AsyncSession,

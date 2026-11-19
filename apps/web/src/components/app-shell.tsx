@@ -4,92 +4,21 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Inbox,
-  Sparkles,
-  Briefcase,
-  Package,
-  Truck,
-  Landmark,
-  Settings,
-  ShieldCheck,
-  Wand2,
-  PanelLeftClose,
-  PanelLeftOpen,
+  ChevronDown,
+  ChevronRight,
   Languages,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
   ShieldAlert,
 } from "lucide-react";
 import { useAuthSession } from "@/components/providers";
+import { CommandPalette, useCommandPalette } from "@/components/command-palette";
 import { useRealtimeInbox } from "@/hooks/use-realtime-inbox";
 import { canAccessRoute } from "@/lib/auth-cookie";
-import { useI18n, type I18nKey } from "@/lib/i18n";
-import type { UserRole } from "@/lib/contracts";
-
-interface NavItem {
-  href: string;
-  labelKey: I18nKey;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: UserRole[];
-  badgeKey?: "proposals";
-}
-
-const PRIMARY_NAV_ITEMS: NavItem[] = [
-  { href: "/inbox", labelKey: "navInbox", icon: Inbox, roles: ["owner", "admin", "manager", "agent"] },
-  {
-    href: "/ai/proposals",
-    labelKey: "navProposals",
-    icon: Sparkles,
-    roles: ["owner", "admin", "manager", "agent", "finance"],
-    badgeKey: "proposals",
-  },
-  {
-    href: "/b2b/quotes",
-    labelKey: "navQuotes",
-    icon: Briefcase,
-    roles: ["owner", "admin", "manager", "agent"],
-  },
-  {
-    href: "/catalog",
-    labelKey: "navCatalog",
-    icon: Package,
-    roles: ["owner", "admin", "manager", "agent", "finance"],
-  },
-  {
-    href: "/orders",
-    labelKey: "navOrders",
-    icon: Truck,
-    roles: ["owner", "admin", "manager", "agent", "finance"],
-  },
-  {
-    href: "/finance",
-    labelKey: "navFinance",
-    icon: Landmark,
-    roles: ["owner", "admin", "manager", "finance"],
-  },
-  {
-    href: "/settings/channels",
-    labelKey: "navSettings",
-    icon: Settings,
-    // Nav link stays visible to every signed-in role; the /settings route
-    // itself is still guarded by canAccessRoute (owner/admin only).
-    roles: ["owner", "admin", "manager", "agent", "finance"],
-  },
-];
-
-const SECONDARY_NAV_ITEMS: NavItem[] = [
-  {
-    href: "/ai/capabilities",
-    labelKey: "navCapabilities",
-    icon: ShieldCheck,
-    roles: ["owner", "admin", "manager", "agent", "finance"],
-  },
-  {
-    href: "/onboarding",
-    labelKey: "navOnboarding",
-    icon: Wand2,
-    roles: ["owner", "admin"],
-  },
-];
+import { useI18n } from "@/lib/i18n";
+import { visibleNavSections } from "@/lib/nav-registry";
 
 export function AppShell({
   children,
@@ -104,12 +33,13 @@ export function AppShell({
   const { principal, isLoading, logout } = useAuthSession();
   const { locale, toggleLocale, t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const palette = useCommandPalette();
 
   useRealtimeInbox(Boolean(principal && canAccessRoute(principal.role, "/inbox")));
 
   const role = principal?.role ?? null;
-  const visiblePrimary = PRIMARY_NAV_ITEMS.filter((item) => !role || item.roles.includes(role));
-  const visibleSecondary = SECONDARY_NAV_ITEMS.filter((item) => !role || item.roles.includes(role));
+  const sections = visibleNavSections(role);
   const allowedCurrentRoute = !role || canAccessRoute(role, pathname);
 
   return (
@@ -134,56 +64,65 @@ export function AppShell({
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1 p-2">
-          {visiblePrimary.map((item) => {
-            const Icon = item.icon;
-            const active = pathname.startsWith(item.href);
+        <nav className="flex-1 space-y-2 overflow-y-auto p-2">
+          {sections.map((section) => {
+            const sectionCollapsed = Boolean(collapsedSections[section.id]);
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center justify-between rounded-md px-2.5 py-2 text-sm font-medium ${
-                  active
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <span className="flex items-center gap-2.5">
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {!collapsed && <span>{t(item.labelKey)}</span>}
-                </span>
-                {!collapsed && item.badgeKey === "proposals" && pendingProposalsCount > 0 && (
-                  <span
-                    data-testid="sidebar-pending-proposals-badge"
-                    className="rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white"
+              <div key={section.id} data-testid={`nav-section-${section.id}`}>
+                {!collapsed && (
+                  <button
+                    type="button"
+                    data-testid={`nav-section-toggle-${section.id}`}
+                    aria-expanded={!sectionCollapsed}
+                    onClick={() =>
+                      setCollapsedSections((prev) => ({
+                        ...prev,
+                        [section.id]: !prev[section.id],
+                      }))
+                    }
+                    className="flex w-full items-center gap-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600"
                   >
-                    {pendingProposalsCount}
-                  </span>
+                    {sectionCollapsed ? (
+                      <ChevronRight className="h-3 w-3" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" />
+                    )}
+                    {t(section.labelKey)}
+                  </button>
                 )}
-              </Link>
+                {!sectionCollapsed && (
+                  <div className="space-y-1">
+                    {section.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = pathname.startsWith(item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`flex items-center justify-between rounded-md px-2.5 py-2 text-sm font-medium ${
+                            active ? "bg-indigo-50 text-indigo-700" : "text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <Icon className="h-4 w-4 shrink-0" />
+                            {!collapsed && <span>{t(item.labelKey)}</span>}
+                          </span>
+                          {!collapsed && item.badgeKey === "proposals" && pendingProposalsCount > 0 && (
+                            <span
+                              data-testid="sidebar-pending-proposals-badge"
+                              className="rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white"
+                            >
+                              {pendingProposalsCount}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
-
-          <div className="my-2 border-t border-slate-200 pt-2">
-            {visibleSecondary.map((item) => {
-              const Icon = item.icon;
-              const active = pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium ${
-                    active
-                      ? "bg-indigo-50 text-indigo-700"
-                      : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {!collapsed && <span>{t(item.labelKey)}</span>}
-                </Link>
-              );
-            })}
-          </div>
         </nav>
 
         <div className="border-t border-slate-200 p-3 text-xs text-slate-600">
@@ -212,6 +151,18 @@ export function AppShell({
             {principal?.tenant_slug ?? "hybrid-factory-workspace"}
           </div>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              data-testid="open-command-palette-btn"
+              onClick={palette.toggle}
+              className="flex items-center gap-2 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+            >
+              <Search className="h-3.5 w-3.5" />
+              <span>{t("commandPaletteTitle")}</span>
+              <kbd className="rounded border border-slate-200 px-1 text-[10px] text-slate-400">
+                Ctrl+K
+              </kbd>
+            </button>
             <button
               type="button"
               data-testid="locale-toggle-btn"
@@ -243,6 +194,8 @@ export function AppShell({
           )}
         </main>
       </div>
+
+      <CommandPalette open={palette.open} onClose={() => palette.setOpen(false)} />
     </div>
   );
 }

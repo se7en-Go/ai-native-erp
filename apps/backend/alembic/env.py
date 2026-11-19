@@ -16,6 +16,7 @@ import erp_core.crm.models  # noqa: F401
 import erp_core.finance.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
+import erp_core.supply_chain.models  # noqa: F401
 from erp_core.shared.config import get_settings
 from erp_core.shared.db import Base
 from erp_core.tenancy import models as _tenancy_models  # noqa: F401
