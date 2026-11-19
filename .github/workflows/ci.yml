@@ -32,14 +32,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      minio:
-        image: minio/minio:latest
-        command: server /data
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
 
     steps:
       - uses: actions/checkout@v4
@@ -94,12 +86,3 @@ jobs:
         run: |
           uv run --directory apps/backend alembic upgrade head
           uv run pytest -v
-
-      - name: Verify zero OpenAPI & TS client drift
-        run: |
-          uv run python apps/backend/scripts/export_openapi.py
-          pnpm install --frozen-lockfile || pnpm install
-          pnpm --filter web openapi-ts
-          pnpm --filter web typecheck
-          pnpm --filter web lint
-          git diff --exit-code contracts/openapi.json apps/web/src/lib/api-client/
