@@ -18,6 +18,8 @@ from erp_core.shared.config import Settings, get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import create_runtime_engine, create_session_factory, tenant_session
 from erp_core.shared.enums import Incoterm, OnboardingStage, UserRole
+from erp_core.supply_chain import procurement
+from erp_core.supply_chain.schemas import ReceivePurchaseOrder
 from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.security import hash_password
 
@@ -345,6 +347,138 @@ async def seed_hybrid_factory(
     )
 
 
+async def _seed_phase3a_demo(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    warehouse_id: UUID,
+    variant_id: UUID,
+    buyer_id: UUID,
+    owner_id: UUID,
+) -> None:
+    """Add the Phase 3A procurement/CRM demo rows idempotently.
+
+    A received purchase order goes through the real receiving service so the demo
+    `wms_movements`, `inventory_ledger` and `inventory_balances` rows stay consistent;
+    the second order stays open so the UI can demo one-click receiving.
+    """
+
+    def row_id(key: str) -> UUID:
+        return uuid5(tenant_id, key)
+
+    supplier = row_id("supplier-led-driver")
+    open_po = row_id("po-open")
+    received_po = row_id("po-received")
+    for sql, params in (
+        (
+            """INSERT INTO suppliers (id, tenant_id, code, name, contact_name, contact_email,
+                country, lead_time_days, payment_terms, rating)
+               VALUES (:sid, :tid, 'SUP-LED-01', 'Ningbo Driver Components Co.', 'Li Wei',
+                'sales@driver-components.example.com', 'CN', 21, '30% T/T deposit', 4.50)
+               ON CONFLICT (tenant_id, code) DO NOTHING""",
+            {"sid": supplier, "tid": tenant_id},
+        ),
+        (
+            """INSERT INTO purchase_orders (id, tenant_id, po_no, supplier_id, warehouse_id,
+                currency, total_amount, status, expected_arrival_date, notes, created_by)
+               VALUES (:poid, :tid, :po_no, :sid, :wid, 'USD', :total, :status,
+                (now() + interval '14 days')::date, :notes, :owner)
+               ON CONFLICT (tenant_id, po_no) DO NOTHING""",
+            {
+                "poid": open_po,
+                "tid": tenant_id,
+                "po_no": "PO-DEMO-1001",
+                "sid": supplier,
+                "wid": warehouse_id,
+                "total": "5820.00",
+                "status": "ordered",
+                "notes": "COB strip reels, ship with next consolidated container.",
+                "owner": owner_id,
+            },
+        ),
+        (
+            """INSERT INTO purchase_order_items (tenant_id, purchase_order_id, variant_id,
+                sku, qty_ordered, qty_received, unit_cost)
+               VALUES (:tid, :poid, :vid, 'LED-COB-24V-5M', 1200, 0, 4.8500)
+               ON CONFLICT (tenant_id, purchase_order_id, variant_id) DO NOTHING""",
+            {"tid": tenant_id, "poid": open_po, "vid": variant_id},
+        ),
+        (
+            """INSERT INTO purchase_orders (id, tenant_id, po_no, supplier_id, warehouse_id,
+                currency, total_amount, status, expected_arrival_date, notes, created_by)
+               VALUES (:poid, :tid, :po_no, :sid, :wid, 'USD', :total, 'ordered',
+                (now() - interval '3 days')::date, 'Arrived and inspected.', :owner)
+               ON CONFLICT (tenant_id, po_no) DO NOTHING""",
+            {
+                "poid": received_po,
+                "tid": tenant_id,
+                "po_no": "PO-DEMO-1002",
+                "sid": supplier,
+                "wid": warehouse_id,
+                "total": "1455.00",
+                "owner": owner_id,
+            },
+        ),
+        (
+            """INSERT INTO purchase_order_items (tenant_id, purchase_order_id, variant_id,
+                sku, qty_ordered, qty_received, unit_cost)
+               VALUES (:tid, :poid, :vid, 'LED-COB-24V-5M', 300, 0, 4.8500)
+               ON CONFLICT (tenant_id, purchase_order_id, variant_id) DO NOTHING""",
+            {"tid": tenant_id, "poid": received_po, "vid": variant_id},
+        ),
+        (
+            """INSERT INTO customer_followups (id, tenant_id, customer_id, author_user_id,
+                followup_type, summary, next_action_at)
+               VALUES (:fid, :tid, :buyer, :owner, 'email',
+                'Sent COB strip samples and the IP65 test report to the buyer.',
+                now() + interval '2 days')
+               ON CONFLICT (id) DO NOTHING""",
+            {
+                "fid": row_id("followup-hans"),
+                "tid": tenant_id,
+                "buyer": buyer_id,
+                "owner": owner_id,
+            },
+        ),
+        (
+            """INSERT INTO task_reminders (id, tenant_id, title, due_at, priority, status,
+                linked_entity_type, linked_entity_id, assignee_user_id)
+               VALUES (:rid, :tid, :title, now() + interval '3 days', 'high',
+                'open', 'customer', :buyer, :owner)
+               ON CONFLICT (id) DO NOTHING""",
+            {
+                "rid": row_id("task-sample"),
+                "tid": tenant_id,
+                "title": "Confirm 3000K vs 4000K sample preference with Hans",
+                "due": "3 days",
+                "priority": "high",
+                "buyer": buyer_id,
+                "owner": owner_id,
+            },
+        ),
+        (
+            """INSERT INTO task_reminders (id, tenant_id, title, due_at, priority, status,
+                linked_entity_type, linked_entity_id, assignee_user_id)
+               VALUES (:rid, :tid, 'Chase Ningbo driver PMC for PO-DEMO-1001 ETD',
+                now() + interval '7 days', 'normal', 'open', 'purchase_order', :po, :owner)
+               ON CONFLICT (id) DO NOTHING""",
+            {"rid": row_id("task-po"), "tid": tenant_id, "po": open_po, "owner": owner_id},
+        ),
+    ):
+        await session.execute(text(sql), params)
+    if not await session.scalar(
+        text("SELECT 1 FROM wms_movements WHERE tenant_id = :tid LIMIT 1"),
+        {"tid": tenant_id},
+    ):
+        await procurement.receive_purchase_order(
+            session,
+            tenant_id,
+            owner_id,
+            received_po,
+            ReceivePurchaseOrder(receipt_id=row_id("receipt-demo-1002")),
+        )
+
+
 async def _seed_workspace_demo_data(
     session: AsyncSession,
     *,
@@ -556,6 +690,14 @@ async def _seed_workspace_demo_data(
                 }
             ),
         },
+    )
+    await _seed_phase3a_demo(
+        session,
+        tenant_id=tid,
+        warehouse_id=params["warehouse"],
+        variant_id=params["vid"],
+        buyer_id=params["buyer"],
+        owner_id=uuid5(NAMESPACE_DNS, "user:owner@quanzhou-led.example.com"),
     )
 
 
