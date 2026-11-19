@@ -14,7 +14,9 @@ from erp_core.shared.pagination import PaginatedResponse
 from erp_core.tenancy.schemas import AuditEventRead
 
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_TENANT_CHECK = "tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid"
+_TENANT_CHECK = (
+    "tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid"
+)
 
 
 def _normalize_ip(ip_address: str | None) -> str | None:

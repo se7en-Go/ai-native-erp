@@ -914,21 +914,17 @@ async def send_outbound_message(
 
     async with tenant_session(session_factory, request_payload.tenant_id) as t_sess:
         acct = (
-            (
-                await t_sess.execute(
-                    text(
-                        "SELECT channel_type, external_account_id, rate_limit_profile "
-                        "FROM channel_accounts WHERE tenant_id = :tid AND id = :aid"
-                    ),
-                    {
-                        "tid": request_payload.tenant_id,
-                        "aid": request_payload.channel_account_id,
-                    },
-                )
+            await t_sess.execute(
+                text(
+                    "SELECT channel_type, external_account_id, rate_limit_profile "
+                    "FROM channel_accounts WHERE tenant_id = :tid AND id = :aid"
+                ),
+                {
+                    "tid": request_payload.tenant_id,
+                    "aid": request_payload.channel_account_id,
+                },
             )
-            .mappings()
-            .first()
-        )
+        ).mappings().first()
         if acct is None:
             return "channel_account_missing"
 
@@ -955,23 +951,19 @@ async def send_outbound_message(
             return "rate_limited_requeued"
 
         cred_row = (
-            (
-                await t_sess.execute(
-                    text(
-                        "SELECT ciphertext, nonce, auth_tag, key_version, credential_type "
-                        "FROM channel_credentials "
-                        "WHERE tenant_id = :tid AND channel_account_id = :aid "
-                        "ORDER BY updated_at DESC LIMIT 1"
-                    ),
-                    {
-                        "tid": request_payload.tenant_id,
-                        "aid": request_payload.channel_account_id,
-                    },
-                )
+            await t_sess.execute(
+                text(
+                    "SELECT ciphertext, nonce, auth_tag, key_version, credential_type "
+                    "FROM channel_credentials "
+                    "WHERE tenant_id = :tid AND channel_account_id = :aid "
+                    "ORDER BY updated_at DESC LIMIT 1"
+                ),
+                {
+                    "tid": request_payload.tenant_id,
+                    "aid": request_payload.channel_account_id,
+                },
             )
-            .mappings()
-            .first()
-        )
+        ).mappings().first()
 
         credentials: dict[str, Any] = {}
         if cred_row is not None:
@@ -1091,18 +1083,14 @@ async def replay_dead_letter_event(
     redis = _get_redis(request)
     async with tenant_session(session_factory, principal.tenant_id) as t_sess:
         dlq_row = (
-            (
-                await t_sess.execute(
-                    text(
-                        "SELECT id, raw_webhook_event_id, channel_type, direction, payload, status "
-                        "FROM dead_letter_events WHERE tenant_id = :tid AND id = :id"
-                    ),
-                    {"tid": principal.tenant_id, "id": event_id},
-                )
+            await t_sess.execute(
+                text(
+                    "SELECT id, raw_webhook_event_id, channel_type, direction, payload, status "
+                    "FROM dead_letter_events WHERE tenant_id = :tid AND id = :id"
+                ),
+                {"tid": principal.tenant_id, "id": event_id},
             )
-            .mappings()
-            .first()
-        )
+        ).mappings().first()
         if dlq_row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

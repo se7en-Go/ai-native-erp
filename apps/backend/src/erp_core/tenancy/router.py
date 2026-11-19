@@ -101,7 +101,9 @@ async def list_my_tenants(
 
 @router.get("/tenants/memberships", response_model=PaginatedResponse[MembershipItem])
 async def list_memberships(
-    _principal: Annotated[CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))],
+    _principal: Annotated[
+        CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))
+    ],
     session: Annotated[AsyncSession, Depends(get_tenant_db)],
     service: Annotated[TenancyAuthService, Depends(_get_auth_service)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -117,7 +119,9 @@ async def list_memberships(
 )
 async def invite_member(
     payload: InviteMemberRequest,
-    principal: Annotated[CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))],
+    principal: Annotated[
+        CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))
+    ],
     session: Annotated[AsyncSession, Depends(get_tenant_db)],
     service: Annotated[TenancyAuthService, Depends(_get_auth_service)],
 ) -> MembershipItem:
@@ -128,7 +132,9 @@ async def invite_member(
 async def update_member_role(
     membership_id: UUID,
     payload: UpdateMemberRoleRequest,
-    principal: Annotated[CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))],
+    principal: Annotated[
+        CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))
+    ],
     session: Annotated[AsyncSession, Depends(get_tenant_db)],
     service: Annotated[TenancyAuthService, Depends(_get_auth_service)],
 ) -> MembershipItem:

@@ -33,7 +33,9 @@ _require_customer_reader = require_roles(
 _require_customer_editor = require_roles(
     UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.AGENT
 )
-_require_customer_splitter = require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
+_require_customer_splitter = require_roles(
+    UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER
+)
 
 
 def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -79,30 +81,22 @@ async def list_customers(
             await session.execute(select(func.count()).select_from(stmt.subquery()))
         ).scalar_one()
         customers = (
-            (
-                await session.execute(
-                    stmt.order_by(Customer.created_at.desc()).limit(limit).offset(offset)
-                )
+            await session.execute(
+                stmt.order_by(Customer.created_at.desc()).limit(limit).offset(offset)
             )
-            .scalars()
-            .all()
-        )
+        ).scalars().all()
 
         cids = [c.id for c in customers]
         identities_by_cid: dict[UUID, list[CustomerIdentityRead]] = {cid: [] for cid in cids}
         if cids:
             ident_rows = (
-                (
-                    await session.execute(
-                        select(CustomerIdentity).where(
-                            CustomerIdentity.tenant_id == principal.tenant_id,
-                            CustomerIdentity.customer_id.in_(cids),
-                        )
+                await session.execute(
+                    select(CustomerIdentity).where(
+                        CustomerIdentity.tenant_id == principal.tenant_id,
+                        CustomerIdentity.customer_id.in_(cids),
                     )
                 )
-                .scalars()
-                .all()
-            )
+            ).scalars().all()
             for ident in ident_rows:
                 identities_by_cid[ident.customer_id].append(
                     CustomerIdentityRead.model_validate(ident)
@@ -159,19 +153,17 @@ async def get_customer(
             )
         ).scalar_one_or_none()
         if cust is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found"
+            )
         ident_rows = (
-            (
-                await session.execute(
-                    select(CustomerIdentity).where(
-                        CustomerIdentity.tenant_id == principal.tenant_id,
-                        CustomerIdentity.customer_id == customer_id,
-                    )
+            await session.execute(
+                select(CustomerIdentity).where(
+                    CustomerIdentity.tenant_id == principal.tenant_id,
+                    CustomerIdentity.customer_id == customer_id,
                 )
             )
-            .scalars()
-            .all()
-        )
+        ).scalars().all()
         proposals = await service.list_merge_proposals(session, principal.tenant_id, customer_id)
         return CustomerRead(
             id=cust.id,
@@ -215,7 +207,9 @@ async def update_customer(
             )
         ).scalar_one_or_none()
         if cust is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found"
+            )
 
         if payload.display_name is not None:
             cust.display_name = payload.display_name.strip()
@@ -241,17 +235,13 @@ async def update_customer(
         await session.flush()
 
         ident_rows = (
-            (
-                await session.execute(
-                    select(CustomerIdentity).where(
-                        CustomerIdentity.tenant_id == principal.tenant_id,
-                        CustomerIdentity.customer_id == customer_id,
-                    )
+            await session.execute(
+                select(CustomerIdentity).where(
+                    CustomerIdentity.tenant_id == principal.tenant_id,
+                    CustomerIdentity.customer_id == customer_id,
                 )
             )
-            .scalars()
-            .all()
-        )
+        ).scalars().all()
         proposals = await service.list_merge_proposals(session, principal.tenant_id, customer_id)
         return CustomerRead(
             id=cust.id,
@@ -297,7 +287,9 @@ async def merge_customers_endpoint(
         except LookupError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from exc
 
     return MergeCustomersResponse(
         merge_event_id=merge_event_id,
@@ -326,7 +318,9 @@ async def split_customers_endpoint(
         except LookupError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from exc
 
     return SplitCustomerResponse(
         split_event_id=split_event_id,

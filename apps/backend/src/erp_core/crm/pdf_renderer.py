@@ -70,13 +70,11 @@ class S3PdfStorage:
     async def get_presigned_url(self, key: str, expires_seconds: int = 3600) -> str:
         def _presign() -> str:
             client = self._client()
-            return str(
-                client.generate_presigned_url(
-                    "get_object",
-                    Params={"Bucket": self.bucket, "Key": key},
-                    ExpiresIn=expires_seconds,
-                )
-            )
+            return str(client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": key},
+                ExpiresIn=expires_seconds,
+            ))
 
         return str(await asyncio.to_thread(_presign))
 
