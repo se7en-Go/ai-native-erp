@@ -1,1 +1,1 @@
-"""Billing domain: credit wallets, usage ledger, Stripe meter staging."""
+"""Billing module: atomic credit wallets, usage ledger, and Stripe Billing Meters."""
