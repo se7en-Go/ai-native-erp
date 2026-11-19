@@ -793,6 +793,203 @@
         "title": "CapabilityPolicyItem",
         "type": "object"
       },
+      "ChannelAccountRead": {
+        "properties": {
+          "channel_type": {
+            "$ref": "#/components/schemas/ChannelType"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "external_account_id": {
+            "title": "External Account Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "rate_limit_profile": {
+            "$ref": "#/components/schemas/ChannelRateLimitRead"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChannelStatus"
+          }
+        },
+        "required": [
+          "id",
+          "channel_type",
+          "external_account_id",
+          "display_name",
+          "status",
+          "rate_limit_profile"
+        ],
+        "title": "ChannelAccountRead",
+        "type": "object"
+      },
+      "ChannelConsentRead": {
+        "properties": {
+          "channel_type": {
+            "$ref": "#/components/schemas/ChannelType"
+          },
+          "consent_status": {
+            "enum": [
+              "opted_in",
+              "opted_out"
+            ],
+            "title": "Consent Status",
+            "type": "string"
+          },
+          "customer_name": {
+            "title": "Customer Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "proof_source": {
+            "title": "Proof Source",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "customer_name",
+          "channel_type",
+          "consent_status",
+          "proof_source",
+          "recorded_at"
+        ],
+        "title": "ChannelConsentRead",
+        "type": "object"
+      },
+      "ChannelDlqRead": {
+        "properties": {
+          "channel_type": {
+            "$ref": "#/components/schemas/ChannelType"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_message": {
+            "title": "Error Message",
+            "type": "string"
+          },
+          "external_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Event Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "retry_count": {
+            "title": "Retry Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "channel_type",
+          "external_event_id",
+          "error_message",
+          "retry_count",
+          "created_at"
+        ],
+        "title": "ChannelDlqRead",
+        "type": "object"
+      },
+      "ChannelRateLimitRead": {
+        "properties": {
+          "coexistence": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coexistence"
+          },
+          "mps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mps"
+          }
+        },
+        "title": "ChannelRateLimitRead",
+        "type": "object"
+      },
+      "ChannelStatus": {
+        "enum": [
+          "active",
+          "token_expired",
+          "rate_limited",
+          "disconnected"
+        ],
+        "title": "ChannelStatus",
+        "type": "string"
+      },
+      "ChannelSuppressionRead": {
+        "properties": {
+          "channel_type": {
+            "$ref": "#/components/schemas/ChannelType"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "normalized_address": {
+            "title": "Normalized Address",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "channel_type",
+          "normalized_address",
+          "reason",
+          "created_at"
+        ],
+        "title": "ChannelSuppressionRead",
+        "type": "object"
+      },
       "ChannelType": {
         "enum": [
           "whatsapp_cloud",
@@ -1770,6 +1967,29 @@
         ],
         "title": "DeliveryStatus",
         "type": "string"
+      },
+      "EmailDnsRead": {
+        "properties": {
+          "dkim_verified": {
+            "title": "Dkim Verified",
+            "type": "boolean"
+          },
+          "return_path_verified": {
+            "title": "Return Path Verified",
+            "type": "boolean"
+          },
+          "spf_verified": {
+            "title": "Spf Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "spf_verified",
+          "dkim_verified",
+          "return_path_verified"
+        ],
+        "title": "EmailDnsRead",
+        "type": "object"
       },
       "EmbeddedSignupRequest": {
         "properties": {
@@ -3788,6 +4008,150 @@
           "has_more"
         ],
         "title": "PaginatedResponse[AuditEventRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_ChannelAccountRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelAccountRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[ChannelAccountRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_ChannelConsentRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelConsentRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[ChannelConsentRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_ChannelDlqRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelDlqRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[ChannelDlqRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_ChannelSuppressionRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelSuppressionRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[ChannelSuppressionRead]",
         "type": "object"
       },
       "PaginatedResponse_ConversationRead_": {
@@ -5843,6 +6207,60 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "SandboxRequest": {
+        "properties": {
+          "message": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "scenario_id": {
+            "enum": [
+              "b2c_wismo",
+              "strict_rag_warranty",
+              "b2b_moq_quote"
+            ],
+            "title": "Scenario Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_id",
+          "message"
+        ],
+        "title": "SandboxRequest",
+        "type": "object"
+      },
+      "SandboxResult": {
+        "properties": {
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "reply_text": {
+            "default": "",
+            "title": "Reply Text",
+            "type": "string"
+          },
+          "source_tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Tool Call Id"
+          }
+        },
+        "required": [
+          "passed"
+        ],
+        "title": "SandboxResult",
+        "type": "object"
+      },
       "SendInboxMessageRequest": {
         "properties": {
           "body_html": {
@@ -7430,6 +7848,28 @@
           }
         },
         "title": "VariantUpdate",
+        "type": "object"
+      },
+      "VerifyEmailDnsRequest": {
+        "properties": {
+          "dkim_selector": {
+            "default": "resend",
+            "pattern": "^[a-zA-Z0-9_-]{1,63}$",
+            "title": "Dkim Selector",
+            "type": "string"
+          },
+          "domain": {
+            "maxLength": 200,
+            "minLength": 3,
+            "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+\\.?$",
+            "title": "Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "title": "VerifyEmailDnsRequest",
         "type": "object"
       },
       "WarehouseListRead": {
@@ -10712,6 +11152,222 @@
         ]
       }
     },
+    "/api/v1/channels/accounts": {
+      "get": {
+        "operationId": "list_channel_accounts_api_v1_channels_accounts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ChannelAccountRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Channel Accounts",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/consents": {
+      "get": {
+        "operationId": "list_channel_consents_api_v1_channels_consents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ChannelConsentRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Channel Consents",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/dlq": {
+      "get": {
+        "operationId": "list_channel_dlq_api_v1_channels_dlq_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ChannelDlqRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Channel Dlq",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
     "/api/v1/channels/dlq/{event_id}/replay": {
       "post": {
         "description": "Replay a failed inbound or outbound dead-letter event within the current tenant.",
@@ -10771,6 +11427,78 @@
         "summary": "Replay Dead Letter Event",
         "tags": [
           "channels-dlq"
+        ]
+      }
+    },
+    "/api/v1/channels/suppressions": {
+      "get": {
+        "operationId": "list_channel_suppressions_api_v1_channels_suppressions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ChannelSuppressionRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Channel Suppressions",
+        "tags": [
+          "channels"
         ]
       }
     },
@@ -12935,6 +13663,65 @@
         ]
       }
     },
+    "/api/v1/onboarding/email/verify-dns": {
+      "post": {
+        "operationId": "verify_email_dns_api_v1_onboarding_email_verify_dns_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailDnsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailDnsRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Email Dns",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
     "/api/v1/onboarding/preset": {
       "patch": {
         "operationId": "update_onboarding_preset_api_v1_onboarding_preset_patch",
@@ -12989,6 +13776,66 @@
           }
         },
         "summary": "Update Onboarding Preset",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/api/v1/onboarding/sandbox-test": {
+      "post": {
+        "description": "Run the normal policy runtime; never use generated prose alone as proof.",
+        "operationId": "run_sandbox_test_api_v1_onboarding_sandbox_test_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SandboxRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Sandbox Test",
         "tags": [
           "onboarding"
         ]

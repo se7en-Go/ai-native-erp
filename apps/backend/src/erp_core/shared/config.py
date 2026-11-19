@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379/0"
     OPENAI_API_KEY: str = Field(default="", repr=False)
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    ONBOARDING_DNS_NAMESERVER: str = ""
+    ONBOARDING_DNS_PORT: int = Field(default=53, ge=1, le=65535)
     ANTHROPIC_API_KEY: str = Field(default="", repr=False)
     GEMINI_API_KEY: str = Field(default="", repr=False)
     DEEPSEEK_API_KEY: str = Field(default="", repr=False)

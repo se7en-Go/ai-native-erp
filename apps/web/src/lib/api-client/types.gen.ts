@@ -150,6 +150,48 @@ export type CapabilityPolicyItem = {
     pending_proposals_7d: number;
 };
 
+export type ChannelAccountRead = {
+    channel_type: ChannelType;
+    display_name: string;
+    external_account_id: string;
+    id: string;
+    rate_limit_profile: ChannelRateLimitRead;
+    status: ChannelStatus;
+};
+
+export type ChannelConsentRead = {
+    channel_type: ChannelType;
+    consent_status: 'opted_in' | 'opted_out';
+    customer_name: string;
+    id: string;
+    proof_source: string;
+    recorded_at: string;
+};
+
+export type ChannelDlqRead = {
+    channel_type: ChannelType;
+    created_at: string;
+    error_message: string;
+    external_event_id: string | null;
+    id: string;
+    retry_count: number;
+};
+
+export type ChannelRateLimitRead = {
+    coexistence?: boolean | null;
+    mps?: number | null;
+};
+
+export type ChannelStatus = 'active' | 'token_expired' | 'rate_limited' | 'disconnected';
+
+export type ChannelSuppressionRead = {
+    channel_type: ChannelType;
+    created_at: string;
+    id: string;
+    normalized_address: string;
+    reason: string;
+};
+
 export type ChannelType = 'whatsapp_cloud' | 'whatsapp_coexistence' | 'email' | 'web_livechat' | 'shopify' | 'woocommerce' | 'shopline' | 'shoplazza' | 'tiktok_shop' | 'made_in_china_email' | 'alibaba_email' | 'messenger' | 'instagram_dm' | 'telegram' | 'amazon_sp' | 'ebay' | 'mercado_libre' | 'temu' | 'walmart' | 'shopee' | 'lazada';
 
 export type ConfidenceLevel = 'deterministic' | 'human_verified' | 'probabilistic';
@@ -309,6 +351,12 @@ export type CustomerUpdateRequest = {
 };
 
 export type DeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export type EmailDnsRead = {
+    dkim_verified: boolean;
+    return_path_verified: boolean;
+    spf_verified: boolean;
+};
 
 export type EmbeddedSignupRequest = {
     code: string;
@@ -711,6 +759,38 @@ export type PaginatedResponseAuditEventRead = {
     total: number;
 };
 
+export type PaginatedResponseChannelAccountRead = {
+    has_more: boolean;
+    items: Array<ChannelAccountRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseChannelConsentRead = {
+    has_more: boolean;
+    items: Array<ChannelConsentRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseChannelDlqRead = {
+    has_more: boolean;
+    items: Array<ChannelDlqRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseChannelSuppressionRead = {
+    has_more: boolean;
+    items: Array<ChannelSuppressionRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
 export type PaginatedResponseConversationRead = {
     has_more: boolean;
     items: Array<ConversationRead>;
@@ -1104,6 +1184,17 @@ export type RegisterRequest = {
     timezone?: string;
 };
 
+export type SandboxRequest = {
+    message: string;
+    scenario_id: 'b2c_wismo' | 'strict_rag_warranty' | 'b2b_moq_quote';
+};
+
+export type SandboxResult = {
+    passed: boolean;
+    reply_text?: string;
+    source_tool_call_id?: string | null;
+};
+
 export type SendInboxMessageRequest = {
     body_html?: string | null;
     body_text?: string | null;
@@ -1399,6 +1490,11 @@ export type VariantUpdate = {
     lead_time_days?: number | null;
     min_margin_floor_pct?: number | string | null;
     retail_price_usd?: number | string | null;
+};
+
+export type VerifyEmailDnsRequest = {
+    dkim_selector?: string;
+    domain: string;
 };
 
 export type WarehouseListRead = {
@@ -2791,6 +2887,99 @@ export type ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses
 
 export type ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponse = ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses[keyof ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses];
 
+export type ListChannelAccountsApiV1ChannelsAccountsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/channels/accounts';
+};
+
+export type ListChannelAccountsApiV1ChannelsAccountsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChannelAccountsApiV1ChannelsAccountsGetError = ListChannelAccountsApiV1ChannelsAccountsGetErrors[keyof ListChannelAccountsApiV1ChannelsAccountsGetErrors];
+
+export type ListChannelAccountsApiV1ChannelsAccountsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseChannelAccountRead;
+};
+
+export type ListChannelAccountsApiV1ChannelsAccountsGetResponse = ListChannelAccountsApiV1ChannelsAccountsGetResponses[keyof ListChannelAccountsApiV1ChannelsAccountsGetResponses];
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/channels/consents';
+};
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetError = ListChannelConsentsApiV1ChannelsConsentsGetErrors[keyof ListChannelConsentsApiV1ChannelsConsentsGetErrors];
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseChannelConsentRead;
+};
+
+export type ListChannelConsentsApiV1ChannelsConsentsGetResponse = ListChannelConsentsApiV1ChannelsConsentsGetResponses[keyof ListChannelConsentsApiV1ChannelsConsentsGetResponses];
+
+export type ListChannelDlqApiV1ChannelsDlqGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/channels/dlq';
+};
+
+export type ListChannelDlqApiV1ChannelsDlqGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChannelDlqApiV1ChannelsDlqGetError = ListChannelDlqApiV1ChannelsDlqGetErrors[keyof ListChannelDlqApiV1ChannelsDlqGetErrors];
+
+export type ListChannelDlqApiV1ChannelsDlqGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseChannelDlqRead;
+};
+
+export type ListChannelDlqApiV1ChannelsDlqGetResponse = ListChannelDlqApiV1ChannelsDlqGetResponses[keyof ListChannelDlqApiV1ChannelsDlqGetResponses];
+
 export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostData = {
     body?: never;
     headers?: {
@@ -2822,6 +3011,37 @@ export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses = {
 };
 
 export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponse = ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses[keyof ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses];
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/channels/suppressions';
+};
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetError = ListChannelSuppressionsApiV1ChannelsSuppressionsGetErrors[keyof ListChannelSuppressionsApiV1ChannelsSuppressionsGetErrors];
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseChannelSuppressionRead;
+};
+
+export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponse = ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses[keyof ListChannelSuppressionsApiV1ChannelsSuppressionsGetResponses];
 
 export type RecordWhatsappOptInApiV1ChannelsWhatsappConsentOptInPostData = {
     body: ConsentOptInRequest;
@@ -3723,6 +3943,34 @@ export type AdvanceOnboardingStageApiV1OnboardingAdvancePostResponses = {
 
 export type AdvanceOnboardingStageApiV1OnboardingAdvancePostResponse = AdvanceOnboardingStageApiV1OnboardingAdvancePostResponses[keyof AdvanceOnboardingStageApiV1OnboardingAdvancePostResponses];
 
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostData = {
+    body: VerifyEmailDnsRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/onboarding/email/verify-dns';
+};
+
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostError = VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostErrors[keyof VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostErrors];
+
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmailDnsRead;
+};
+
+export type VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostResponse = VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostResponses[keyof VerifyEmailDnsApiV1OnboardingEmailVerifyDnsPostResponses];
+
 export type UpdateOnboardingPresetApiV1OnboardingPresetPatchData = {
     body: UpdateOnboardingPresetRequest;
     headers?: {
@@ -3750,6 +3998,34 @@ export type UpdateOnboardingPresetApiV1OnboardingPresetPatchResponses = {
 };
 
 export type UpdateOnboardingPresetApiV1OnboardingPresetPatchResponse = UpdateOnboardingPresetApiV1OnboardingPresetPatchResponses[keyof UpdateOnboardingPresetApiV1OnboardingPresetPatchResponses];
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostData = {
+    body: SandboxRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/onboarding/sandbox-test';
+};
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostError = RunSandboxTestApiV1OnboardingSandboxTestPostErrors[keyof RunSandboxTestApiV1OnboardingSandboxTestPostErrors];
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SandboxResult;
+};
+
+export type RunSandboxTestApiV1OnboardingSandboxTestPostResponse = RunSandboxTestApiV1OnboardingSandboxTestPostResponses[keyof RunSandboxTestApiV1OnboardingSandboxTestPostResponses];
 
 export type GetOnboardingStateApiV1OnboardingStateGetData = {
     body?: never;

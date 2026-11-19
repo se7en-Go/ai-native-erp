@@ -23,6 +23,7 @@ from erp_core.ai_engine.kb_router import router as kb_router
 from erp_core.ai_engine.router import router as ai_router
 from erp_core.ai_engine.router_llm import TieredModelRouter
 from erp_core.ai_engine.runtime import PolicyRuntime
+from erp_core.ai_engine.sandbox import router as sandbox_router
 from erp_core.ai_engine.semantic_cache import SemanticCacheService
 from erp_core.billing.router import router as billing_router
 from erp_core.catalog.router import router as catalog_router
@@ -31,6 +32,7 @@ from erp_core.channels.ecommerce.connectors_router import router as connectors_r
 from erp_core.channels.ecommerce.shopify_router import router as shopify_router
 from erp_core.channels.inbox_router import inbox_router
 from erp_core.channels.ingress_worker import dlq_router
+from erp_core.channels.settings_router import router as channel_settings_router
 from erp_core.channels.webhook_router import webhook_router
 from erp_core.channels.widget_router import widget_router
 from erp_core.crm.router import router as b2b_router
@@ -51,6 +53,7 @@ from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
 from erp_core.tenancy.audit import ensure_audit_child_rls
 from erp_core.tenancy.onboarding import onboarding_router
+from erp_core.tenancy.onboarding_dns import router as onboarding_dns_router
 from erp_core.tenancy.router import router as tenancy_router
 
 
@@ -104,6 +107,9 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(tenancy_router)
     app.include_router(onboarding_router)
+    app.include_router(onboarding_dns_router)
+    app.include_router(sandbox_router)
+    app.include_router(channel_settings_router)
     app.include_router(tracking_router, prefix="/api/v1")
     app.include_router(shopify_router, prefix="/api/v1")
     app.include_router(connectors_router, prefix="/api/v1")
