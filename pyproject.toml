@@ -1,0 +1,33 @@
+[project]
+name = "erp-monorepo"
+version = "0.1.0"
+description = "Omnichannel Hybrid B2C+B2B AI Workbench & Lightweight ERP"
+requires-python = ">=3.12"
+dependencies = [
+    "erp-core[dev]",
+]
+
+[tool.uv.sources]
+erp-core = { workspace = true }
+
+[tool.uv.workspace]
+members = ["apps/backend"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["apps/backend/tests"]
+pythonpath = ["apps/backend/src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]

@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from erp_core.shared.config import get_settings
+from erp_core.shared.errors import register_exception_handlers
+from erp_core.shared.redis_client import create_redis_client
+from erp_core.shared.storage import ObjectStorageService
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    redis_client = create_redis_client(settings)
+    storage = ObjectStorageService(settings)
+    app.state.settings = settings
+    app.state.redis = redis_client
+    app.state.storage = storage
+    try:
+        yield
+    finally:
+        await redis_client.aclose()
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    app = FastAPI(
+        title="Omnichannel Hybrid ERP API",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    register_exception_handlers(app)
+
+    @app.get("/healthz", tags=["health"])
+    async def healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/readyz", tags=["health"])
+    async def readyz(request: Request) -> JSONResponse:
+        checks: dict[str, str] = {}
+        try:
+            pong = await request.app.state.redis.ping()
+            checks["redis"] = "ok" if pong else "error"
+        except Exception as exc:
+            checks["redis"] = f"error: {type(exc).__name__}"
+
+        is_ready = all(val == "ok" for val in checks.values())
+        return JSONResponse(
+            status_code=200 if is_ready else 503,
+            content={"status": "ready" if is_ready else "degraded", "checks": checks},
+        )
+
+    return app
+
+
+app = create_app()
