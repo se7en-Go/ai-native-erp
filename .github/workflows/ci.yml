@@ -1,0 +1,88 @@
+name: CI Gate
+
+on:
+  pull_request:
+    branches: ["main", "master"]
+  push:
+    branches: ["main", "master"]
+
+jobs:
+  backend-and-contracts:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_dev_pass
+          POSTGRES_DB: erp_saas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d erp_saas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Initialize PostgreSQL roles
+        env:
+          PGPASSWORD: postgres_dev_pass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client netcat-openbsd
+          psql -h 127.0.0.1 -U postgres -d erp_saas -f infra/postgres/init-roles.sql
+
+      - name: Start PgBouncer container
+        run: |
+          cp infra/pgbouncer/pgbouncer.ini /tmp/pgbouncer-ci.ini
+          sed -i 's/host=postgres/host=127.0.0.1/g' /tmp/pgbouncer-ci.ini
+          docker run -d --name erp_pgbouncer --network host \
+            -v "/tmp/pgbouncer-ci.ini:/etc/pgbouncer/pgbouncer.ini:ro" \
+            -v "$PWD/infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro" \
+            edoburu/pgbouncer:latest
+          for i in $(seq 1 15); do nc -z 127.0.0.1 6432 && break; sleep 1; done
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Lint, typecheck, and verify module boundaries
+        run: |
+          uv run ruff check apps/backend
+          uv run mypy apps/backend/src
+          uv run lint-imports --config infra/importlinter.ini
+
+      - name: Run Alembic migrations and pytest
+        env:
+          DATABASE_MIGRATOR_URL: postgresql+asyncpg://app_migrator:migrator_dev_pass@127.0.0.1:5432/erp_saas
+          DATABASE_RUNTIME_URL: postgresql+asyncpg://app_runtime:runtime_dev_pass@127.0.0.1:6432/erp_saas
+          REDIS_URL: redis://127.0.0.1:6379/0
+          S3_ENDPOINT_URL: http://127.0.0.1:9000
+          S3_BUCKET: erp-assets
+          S3_ACCESS_KEY: minioadmin
+          S3_SECRET_KEY: minioadmin
+          MASTER_KEK_HEX: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+          JWT_SECRET: ci-test-jwt-secret-must-be-at-least-32-bytes
+        run: |
+          uv run --directory apps/backend alembic upgrade head
+          uv run pytest -v
