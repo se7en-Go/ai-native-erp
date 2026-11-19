@@ -10,10 +10,16 @@ from sqlalchemy import text
 
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
-from erp_core.shared.db import create_runtime_engine, create_session_factory, system_session
+from erp_core.shared.db import (
+    create_migrator_engine,
+    create_runtime_engine,
+    create_session_factory,
+    system_session,
+)
 from erp_core.shared.errors import register_exception_handlers
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
+from erp_core.tenancy.audit import ensure_audit_child_rls
 from erp_core.tenancy.onboarding import onboarding_router
 from erp_core.tenancy.router import router as tenancy_router
 
@@ -25,7 +31,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     storage = ObjectStorageService(settings)
     crypto_service = EnvelopeCryptoService(settings)
     runtime_engine = create_runtime_engine(settings)
+    migrator_engine = create_migrator_engine(settings)
     session_factory = create_session_factory(runtime_engine)
+    migrator_sessions = create_session_factory(migrator_engine)
 
     app.state.settings = settings
     app.state.redis = redis_client
@@ -34,10 +42,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.runtime_engine = runtime_engine
     app.state.session_factory = session_factory
     try:
-        yield
+        async with migrator_sessions() as session, session.begin():
+            await ensure_audit_child_rls(session)
+        try:
+            yield
+        finally:
+            await runtime_engine.dispose()
+            await redis_client.aclose()
     finally:
-        await runtime_engine.dispose()
-        await redis_client.aclose()
+        await migrator_engine.dispose()
 
 
 def create_app() -> FastAPI:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -33,15 +34,41 @@ def _quote_ident(name: str) -> str:
     return f'"{name}"'
 
 
-async def ensure_audit_child_rls(session: AsyncSession) -> list[str]:
-    """Enable FORCE RLS and tenant policies on every audit_events child.
+def _shift_month(year: int, month: int, offset: int) -> tuple[int, int]:
+    index = year * 12 + (month - 1) + offset
+    return index // 12, index % 12 + 1
 
-    0001 creates monthly partitions without their own relrowsecurity flags.
-    Editing that migration is outside this batch's allowlist, so privileged
-    callers (app_migrator) apply the same isolation to existing children,
-    including audit_events_default. A later direct GRANT on a child then
+
+async def _ensure_rolling_monthly_partitions(session: AsyncSession) -> None:
+    """Create the current UTC month and the next three if they are missing.
+
+    New partitions are created in the same transaction that enables their RLS.
+    """
+    now = datetime.now(UTC)
+    for offset in range(4):
+        year, month = _shift_month(now.year, now.month, offset)
+        next_year, next_month = _shift_month(now.year, now.month, offset + 1)
+        name = f"audit_events_{year:04d}_{month:02d}"
+        start = datetime(year, month, 1, tzinfo=UTC).isoformat()
+        end = datetime(next_year, next_month, 1, tzinfo=UTC).isoformat()
+        await session.execute(
+            text(
+                f"CREATE TABLE IF NOT EXISTS {_quote_ident(name)} "
+                "PARTITION OF audit_events "
+                f"FOR VALUES FROM ('{start}') TO ('{end}')"
+            )
+        )
+
+
+async def ensure_audit_child_rls(session: AsyncSession) -> list[str]:
+    """Create the managed monthly partitions, then FORCE RLS on every child.
+
+    0001 creates partitions without child relrowsecurity. This runs as the table
+    owner (app_migrator) during application startup and whenever partitions are
+    managed. app_runtime is never granted DDL. A later direct GRANT on a child
     still cannot read another tenant.
     """
+    await _ensure_rolling_monthly_partitions(session)
     rows = (
         await session.execute(
             text(
