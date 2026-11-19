@@ -52,12 +52,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
 
       - name: Initialize PostgreSQL roles
         env:
           PGPASSWORD: postgres_dev_pass
         run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client netcat-openbsd
           psql -h 127.0.0.1 -U postgres -d erp_saas -f infra/postgres/init-roles.sql
 
       - name: Start PgBouncer container
