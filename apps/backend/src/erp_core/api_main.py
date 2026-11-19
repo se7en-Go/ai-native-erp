@@ -23,6 +23,7 @@ from erp_core.channels.webhook_router import webhook_router
 from erp_core.crm.router import router as b2b_router
 from erp_core.identity.router import customer_router
 from erp_core.orders.router import router as orders_router
+from erp_core.orders.tracking_router import router as tracking_router
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import (
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(tenancy_router)
     app.include_router(onboarding_router)
+    app.include_router(tracking_router, prefix="/api/v1")
     app.include_router(webhook_router)
     app.include_router(dlq_router)
     app.include_router(customer_router)
