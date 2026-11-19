@@ -20,7 +20,7 @@ from erp_core.channels.ecommerce.base import CredentialVaultHelper, resolve_rout
 from erp_core.channels.ingress_worker import _persist_inbound_event
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import ChannelType, IdentityType, UserRole
-from erp_core.shared.errors import register_exception_handlers
+from erp_core.shared.errors import AppError, register_exception_handlers
 from erp_core.tenancy.dependencies import CurrentPrincipal, get_current_principal
 
 RuntimeFactory = async_sessionmaker[AsyncSession]
@@ -161,16 +161,17 @@ async def make_account(session: AsyncSession, tenant: UUID, channel: str, extern
     return aid
 
 
-async def outbound_request(session, tenant, aid, channel, account, peer, cid):
+async def outbound_request(session, tenant, aid, channel, account, peer, cid, sent_at=None):
     message_id = uuid4()
     await session.execute(
         text(
             "INSERT INTO messages (id, tenant_id, conversation_id, customer_id, channel_type, "
             "direction, sender_type, sender_id, content_type, body_text, source_timestamp) "
             "SELECT :mid, tenant_id, id, customer_id, channel_type, 'outbound', 'human_agent', "
-            "'test-agent', 'text', 'Agent reply', now() FROM conversations WHERE id = :cid"
+            "'test-agent', 'text', 'Agent reply', COALESCE(:ts, now()) "
+            "FROM conversations WHERE id = :cid"
         ),
-        {"mid": message_id, "cid": cid},
+        {"mid": message_id, "cid": cid, "ts": sent_at},
     )
     return OutboundMessageRequest(
         tenant_id=tenant,
@@ -292,6 +293,92 @@ async def test_messenger_persists_psid_windows_and_enforces_human_and_stop(
             await adapter.send_message(session, tenant, credentials, request)
         ).error_message == "ERR_RECIPIENT_SUPPRESSED"
         assert len(calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_messenger_read_watermark_advances_only_earlier_thread_messages(
+    tenant: UUID, runtime_session_factory: RuntimeFactory,
+) -> None:
+    from erp_core.channels.adapters.messenger import MessengerAdapter
+    from erp_core.channels.ingress_worker import _apply_status_event
+
+    now = datetime.now(UTC).replace(microsecond=0)
+    page, psid = "30303", "40404"
+    async with tenant_session(runtime_session_factory, tenant) as session:
+        aid = await make_account(session, tenant, "messenger", page)
+        adapter = MessengerAdapter(clock=lambda: now)
+        payload = meta_payload(page, psid, "mid.seed", now, text="Hi")
+        [event] = (await adapter.parse_webhook(session, tenant, aid, payload, {})).inbound_events
+        cid, _ = await _persist_inbound_event(session, tenant, aid, "messenger", event)
+        before = await outbound_request(
+            session, tenant, aid, ChannelType.MESSENGER, page, psid, cid, now - timedelta(hours=1)
+        )
+        after = await outbound_request(
+            session, tenant, aid, ChannelType.MESSENGER, page, psid, cid, now + timedelta(hours=1)
+        )
+        read = meta_payload(page, psid, "unused", now)
+        receipt = read["entry"][0]["messaging"][0]
+        del receipt["message"]
+        receipt["read"] = {"watermark": int(now.timestamp() * 1000)}
+        [status_event] = (await adapter.parse_webhook(session, tenant, aid, read, {})).status_events
+        await _apply_status_event(
+            session=session, tenant_id=tenant, status_event=status_event, channel_type="messenger"
+        )
+        statuses = dict(
+            (
+                await session.execute(
+                    text(
+                        "SELECT id, delivery_status FROM messages "
+                        "WHERE tenant_id = :tid AND id = ANY(:ids)"
+                    ),
+                    {"tid": tenant, "ids": [before.message_id, after.message_id]},
+                )
+            ).all()
+        )
+        assert statuses[before.message_id] == "read"
+        assert statuses[after.message_id] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_connect_cannot_hijack_existing_routing(
+    tenant: UUID, runtime_session_factory: RuntimeFactory,
+) -> None:
+    from erp_core.channels.messaging_accounts import register_messaging_account
+
+    page = str(uuid4().int)[:18]
+    other_tenant = uuid4()
+    async with tenant_session(runtime_session_factory, other_tenant) as session:
+        await session.execute(
+            text("INSERT INTO tenants (id, slug, name) VALUES (:id, :slug, 'Second Tenant')"),
+            {"id": other_tenant, "slug": f"second-{other_tenant.hex}"},
+        )
+    try:
+        async with tenant_session(runtime_session_factory, other_tenant) as session:
+            foreign_aid = await register_messaging_account(
+                session, other_tenant, ChannelType.MESSENGER, page, "Foreign Page"
+            )
+        with pytest.raises(AppError) as raised:
+            async with tenant_session(runtime_session_factory, tenant) as session:
+                await register_messaging_account(
+                    session, tenant, ChannelType.MESSENGER, page, "Hijack Attempt"
+                )
+        assert raised.value.code == "ERR_CHANNEL_ROUTING_CONFLICT"
+        async with tenant_session(runtime_session_factory, other_tenant) as session:
+            assert await resolve_routing_tenant(session, "messenger", page) == (
+                other_tenant, foreign_aid,
+            )
+    finally:
+        admin = create_async_engine(os.environ.get(
+            "DATABASE_ADMIN_URL",
+            "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas",
+        ))
+        try:
+            async with admin.begin() as connection:
+                await connection.execute(
+                    text("DELETE FROM tenants WHERE id = :id"), {"id": other_tenant}
+                )
+        finally:
+            await admin.dispose()
 
 
 @pytest.mark.asyncio

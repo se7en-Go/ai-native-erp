@@ -85,6 +85,9 @@ import {
   uploadKbDocumentApiV1AiKbDocumentsPost,
   advanceOnboardingStageApiV1OnboardingAdvancePost,
   completeWhatsappEmbeddedSignupApiV1ChannelsWhatsappEmbeddedSignupPost,
+  connectInstagramApiV1ChannelsInstagramConnectPost,
+  connectMessengerApiV1ChannelsMessengerConnectPost,
+  connectTelegramApiV1ChannelsTelegramConnectPost,
   convertQuoteToOrderApiV1B2bQuotesQuoteIdConvertToOrderPost,
   generateQuotePdfApiV1B2bQuotesQuoteIdPdfPost,
   getCustomerApiV1CustomersCustomerIdGet,
@@ -1292,6 +1295,62 @@ export async function completeWhatsappEmbeddedSignup(body: {
         is_coexistence: body.is_coexistence,
         display_name: body.display_name,
       },
+    }),
+  );
+}
+
+export type MessagingProviderKind = "messenger" | "instagram_dm" | "telegram";
+
+export type MessengerConnectPayload = {
+  page_id: string;
+  page_access_token: string;
+  display_name: string;
+};
+
+export type InstagramConnectPayload = {
+  ig_account_id: string;
+  access_token: string;
+  display_name: string;
+};
+
+export type TelegramConnectPayload = {
+  bot_token: string;
+  display_name: string;
+};
+
+export type MessagingConnectPayload =
+  | MessengerConnectPayload
+  | InstagramConnectPayload
+  | TelegramConnectPayload;
+
+export type MessagingConnectResult = {
+  channel_account_id: string;
+  external_account_id: string;
+};
+
+export async function connectMessengerChannel(body: MessengerConnectPayload) {
+  return unwrap(
+    await connectMessengerApiV1ChannelsMessengerConnectPost({
+      client: getBffClient(),
+      body,
+    }),
+  );
+}
+
+export async function connectInstagramChannel(body: InstagramConnectPayload) {
+  return unwrap(
+    await connectInstagramApiV1ChannelsInstagramConnectPost({
+      client: getBffClient(),
+      body,
+    }),
+  );
+}
+
+export async function connectTelegramChannel(body: TelegramConnectPayload) {
+  return unwrap(
+    await connectTelegramApiV1ChannelsTelegramConnectPost({
+      client: getBffClient(),
+      body,
     }),
   );
 }

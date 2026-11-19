@@ -52,6 +52,9 @@ _WORKER_CHANNELS: tuple[ChannelType, ...] = (
     ChannelType.WHATSAPP_COEXISTENCE,
     ChannelType.EMAIL,
     ChannelType.WEB_LIVECHAT,
+    ChannelType.MESSENGER,
+    ChannelType.INSTAGRAM_DM,
+    ChannelType.TELEGRAM,
 )
 
 
@@ -468,7 +471,28 @@ async def _apply_status_event(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     status_event: NormalizedStatusEvent,
+    channel_type: str | None = None,
 ) -> uuid.UUID | None:
+    if status_event.read_through_recipient_id and channel_type:
+        # Messenger/IG receipts may carry only a watermark for the thread. Advance every
+        # outbound message at or before it in this customer's conversation, never later ones.
+        await session.execute(
+            text(
+                "UPDATE messages m SET delivery_status = :dstat FROM conversations c "
+                "WHERE m.tenant_id = :tid AND c.tenant_id = m.tenant_id "
+                "AND c.id = m.conversation_id AND m.channel_type = :channel "
+                "AND m.direction = 'outbound' AND c.external_thread_id = :thread "
+                "AND m.source_timestamp <= :ts "
+                "AND m.delivery_status IN ('queued', 'sent', 'delivered')"
+            ),
+            {
+                "dstat": status_event.delivery_status.value,
+                "tid": tenant_id,
+                "channel": channel_type,
+                "thread": status_event.read_through_recipient_id,
+                "ts": status_event.timestamp,
+            },
+        )
     updated_id = (
         await session.execute(
             text(
@@ -667,6 +691,7 @@ async def process_raw_webhook_event(
                     session=t_sess,
                     tenant_id=tenant_id,
                     status_event=status_ev,
+                    channel_type=channel_type,
                 )
                 if updated_msg_id is not None:
                     published_events.append(

@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import uuid
 from typing import Any, cast
 
@@ -14,14 +15,18 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from erp_core.channels.adapters.base import AdapterRegistry
+from erp_core.channels.adapters.base import AdapterRegistry, MessagingChannelAdapter
 from erp_core.channels.adapters.gateway import GatewayIngressAdapter
+from erp_core.channels.adapters.telegram import TELEGRAM_ROUTING_HEADER
+from erp_core.channels.ecommerce.base import CredentialVaultHelper
+from erp_core.channels.messaging_accounts import MESSAGING_CREDENTIAL
 from erp_core.channels.webhook_store import (
     accept_raw_webhook_event,
     set_raw_webhook_processing_state,
 )
-from erp_core.shared.db import system_session
+from erp_core.shared.db import system_session, tenant_session
 from erp_core.shared.enums import ChannelType
+from erp_core.shared.errors import AppError
 
 logger = logging.getLogger(__name__)
 webhook_router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
@@ -34,7 +39,19 @@ _CHANNEL_ALIASES: dict[str, ChannelType] = {
     "resend": ChannelType.EMAIL,
     "postmark": ChannelType.EMAIL,
     "web_livechat": ChannelType.WEB_LIVECHAT,
+    "messenger": ChannelType.MESSENGER,
+    "instagram": ChannelType.INSTAGRAM_DM,
+    "instagram_dm": ChannelType.INSTAGRAM_DM,
+    "telegram": ChannelType.TELEGRAM,
 }
+_META_CHANNELS = (
+    ChannelType.MESSENGER,
+    ChannelType.INSTAGRAM_DM,
+    "messenger",
+    "instagram",
+    "instagram_dm",
+)
+TELEGRAM_BOT_KEY = re.compile(r"[1-9][0-9]{0,19}")
 
 
 def build_default_adapter_registry() -> AdapterRegistry:
@@ -76,6 +93,24 @@ def build_default_adapter_registry() -> AdapterRegistry:
         registry.register(ChannelType.EMAIL.value, email_adapter)
     except ImportError:
         logger.debug("EmailAdapter not yet installed; skipping registration")
+
+    try:
+        from erp_core.channels.adapters.instagram_dm import InstagramDMAdapter
+        from erp_core.channels.adapters.messenger import MessengerAdapter
+        from erp_core.channels.adapters.telegram import TelegramAdapter
+
+        messenger = MessengerAdapter()
+        instagram = InstagramDMAdapter()
+        telegram = TelegramAdapter()
+        registry.register("messenger", messenger)
+        registry.register(ChannelType.MESSENGER.value, messenger)
+        registry.register("instagram", instagram)
+        registry.register("instagram_dm", instagram)
+        registry.register(ChannelType.INSTAGRAM_DM.value, instagram)
+        registry.register("telegram", telegram)
+        registry.register(ChannelType.TELEGRAM.value, telegram)
+    except ImportError:
+        logger.debug("Meta/Telegram adapters not yet installed; skipping registration")
     return registry
 
 
@@ -120,7 +155,99 @@ def _webhook_secret_for_channel(channel: str) -> str:
         return os.environ.get("WHATSAPP_APP_SECRET", "")
     if key in ("email", "resend", "postmark"):
         return os.environ.get("RESEND_WEBHOOK_SECRET", os.environ.get("EMAIL_WEBHOOK_SECRET", ""))
+    if key in ("messenger", "instagram", "instagram_dm"):
+        return os.environ.get("META_APP_SECRET", "")
     return os.environ.get("WEBHOOK_SHARED_SECRET", "")
+
+
+def _telegram_bot_key(channel: str) -> str | None:
+    """Bot numeric id selects the tenant; it is never a usable credential by itself."""
+    if channel.lower() == "telegram":
+        return ""
+    prefix, _, bot_key = channel.partition("/")
+    if prefix.lower() == "telegram" and TELEGRAM_BOT_KEY.fullmatch(bot_key):
+        return bot_key
+    return None
+
+
+async def _telegram_expected_secret(request: Request, bot_key: str) -> str:
+    """Bot id only selects the tenant; none of it is a usable credential by itself."""
+    if not bot_key:
+        return os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+    factory = _get_session_factory(request)
+    async with system_session(factory) as lookup:
+        route = (
+            await lookup.execute(
+                text(
+                    "SELECT tenant_id, channel_account_id "
+                    "FROM resolve_tenant_by_channel_external_id('telegram', :bot)"
+                ),
+                {"bot": bot_key},
+            )
+        ).first()
+    if route is None or route[1] is None:
+        return ""
+    async with tenant_session(factory, route[0]) as session:
+        try:
+            payload, _ = await CredentialVaultHelper().load_secret_json(
+                session, route[0], route[1], MESSAGING_CREDENTIAL
+            )
+        except AppError as exc:
+            if exc.code == "ERR_CREDENTIAL_NOT_FOUND":
+                return ""
+            raise
+    secret = payload.get("webhook_secret")
+    return secret if isinstance(secret, str) else ""
+
+
+async def _receive_telegram_webhook(request: Request, bot_key: str) -> JSONResponse:
+    adapter = _get_adapter_registry(request).get(ChannelType.TELEGRAM.value)
+    if adapter is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No adapter registered for channel: telegram",
+        )
+    raw_body = await request.body()
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    try:
+        secret = await _telegram_expected_secret(request, bot_key)
+    except AppError as exc:
+        if exc.code != "ERR_CREDENTIAL_NOT_FOUND":
+            raise
+        secret = ""
+    if not secret or not adapter.verify_webhook_signature(raw_body, headers, secret):
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            media_type="application/problem+json",
+            content={
+                "type": "https://erp.local/errors/webhook-signature-invalid",
+                "title": "Invalid Webhook Signature",
+                "status": 401,
+                "detail": "Secret token verification failed for webhook request.",
+                "instance": str(request.url.path),
+                "code": "ERR_WEBHOOK_SIGNATURE_INVALID",
+            },
+        )
+    try:
+        payload: dict[str, Any] = json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Malformed JSON webhook body: {exc}",
+        ) from exc
+    if not bot_key:
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "accepted"})
+    # Force the validated path bot id so a payload cannot pick a different tenant route.
+    headers[TELEGRAM_ROUTING_HEADER] = bot_key
+    return await _accept_events(
+        request,
+        source_channel=ChannelType.TELEGRAM,
+        canonical_type=ChannelType.TELEGRAM,
+        adapter=adapter,
+        raw_body=raw_body,
+        headers=headers,
+        payload=payload,
+    )
 
 
 @webhook_router.get("/{channel}")
@@ -131,9 +258,22 @@ async def verify_webhook_subscription(
     hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
 ) -> Response:
     """Handle Meta webhook subscription verification handshake."""
-    expected_token = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
+    key = channel.lower()
+    expected_token = (
+        os.environ.get("META_VERIFY_TOKEN", "")
+        if key in ("messenger", "instagram", "instagram_dm")
+        else os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
+    )
+    verify_channels = (
+        "whatsapp",
+        "whatsapp_cloud",
+        "whatsapp_coexistence",
+        "messenger",
+        "instagram",
+        "instagram_dm",
+    )
     if (
-        channel.lower() in ("whatsapp", "whatsapp_cloud", "whatsapp_coexistence")
+        key in verify_channels
         and hub_mode == "subscribe"
         and hub_verify_token is not None
         and expected_token
@@ -150,6 +290,10 @@ async def verify_webhook_subscription(
 @webhook_router.post("/{channel}")
 async def receive_webhook(channel: str, request: Request) -> JSONResponse:
     """Verify raw HMAC signature, deduplicate into PostgreSQL, and stream to Taskiq in <100ms."""
+    bot_key = _telegram_bot_key(channel)
+    if bot_key is not None:
+        return await _receive_telegram_webhook(request, bot_key)
+
     canonical_type = _CHANNEL_ALIASES.get(channel.lower())
     if canonical_type is None:
         raise HTTPException(
@@ -190,6 +334,27 @@ async def receive_webhook(channel: str, request: Request) -> JSONResponse:
             detail=f"Malformed JSON webhook body: {exc}",
         ) from exc
 
+    return await _accept_events(
+        request,
+        source_channel=canonical_type,
+        canonical_type=canonical_type,
+        adapter=adapter,
+        raw_body=raw_body,
+        headers=headers,
+        payload=payload,
+    )
+
+
+async def _accept_events(
+    request: Request,
+    *,
+    source_channel: ChannelType,
+    canonical_type: ChannelType,
+    adapter: MessagingChannelAdapter,
+    raw_body: bytes,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+) -> JSONResponse:
     extracted_events = adapter.extract_external_event_ids(payload, raw_body, headers)
     if not extracted_events:
         extracted_events = [(hashlib.sha256(raw_body).hexdigest(), None)]
@@ -211,8 +376,8 @@ async def receive_webhook(channel: str, request: Request) -> JSONResponse:
             found_type = canonical_type
             candidate_types = (
                 [ChannelType.WHATSAPP_CLOUD, ChannelType.WHATSAPP_COEXISTENCE]
-                if canonical_type == ChannelType.WHATSAPP_CLOUD
-                else [canonical_type]
+                if source_channel == ChannelType.WHATSAPP_CLOUD
+                else [source_channel]
             )
             for candidate in candidate_types:
                 row = (

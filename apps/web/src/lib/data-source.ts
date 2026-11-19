@@ -29,6 +29,9 @@ import {
 import {
   fetchCapabilities as liveFetchCapabilities,
   fetchKbDocuments as liveFetchKbDocuments,
+  connectInstagramChannel as liveConnectInstagramChannel,
+  connectMessengerChannel as liveConnectMessengerChannel,
+  connectTelegramChannel as liveConnectTelegramChannel,
   fetchChannelAccounts as liveFetchChannelAccounts,
   fetchChannelConsents as liveFetchChannelConsents,
   fetchChannelDlq as liveFetchChannelDlq,
@@ -70,6 +73,14 @@ import {
   mockVariantsPage,
   mockWallet,
 } from "@/lib/mock-fixtures";
+import type {
+  InstagramConnectPayload,
+  MessengerConnectPayload,
+  MessagingConnectPayload,
+  MessagingConnectResult,
+  MessagingProviderKind,
+  TelegramConnectPayload,
+} from "@/lib/api-client/live-client";
 import type { AiProposalItem } from "@/components/ai/proposal-review-card";
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
 import type { InboxMessage } from "@/components/inbox/message-thread";
@@ -274,6 +285,31 @@ export function fetchChannelAccounts(): Promise<
     );
   }
   return liveFetchChannelAccounts();
+}
+
+export async function connectMessagingChannel(
+  kind: MessagingProviderKind,
+  payload: MessagingConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    const external =
+      "page_id" in payload
+        ? payload.page_id
+        : "ig_account_id" in payload
+          ? payload.ig_account_id
+          : payload.bot_token.split(":")[0];
+    return {
+      channel_account_id: `mock-${kind}-account`,
+      external_account_id: external,
+    };
+  }
+  if (kind === "messenger") {
+    return liveConnectMessengerChannel(payload as MessengerConnectPayload);
+  }
+  if (kind === "instagram_dm") {
+    return liveConnectInstagramChannel(payload as InstagramConnectPayload);
+  }
+  return liveConnectTelegramChannel(payload as TelegramConnectPayload);
 }
 
 export function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
