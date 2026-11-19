@@ -100,10 +100,15 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
       );
     }
 
-    // Assert CVP net margin waterfall renders cleanly with zero [object Object]
-    await page.reload();
+    // Assert CVP net margin waterfall renders cleanly with zero [object Object].
+    // Reload with domcontentloaded (not the default load event): the page
+    // holds an open SSE stream and the dev server can be slow to settle
+    // the load event on small runners, which flaked this reload at the
+    // 30 s test timeout. The cvpCard expectation below is the real gate
+    // and auto-waits for the refetched data.
+    await page.reload({ waitUntil: "domcontentloaded" });
     const cvpCard = page.locator('[data-testid^="cvp-waterfall-"]').first();
-    await expect(cvpCard).toBeVisible();
+    await expect(cvpCard).toBeVisible({ timeout: 15_000 });
     const text = await cvpCard.textContent();
     expect(text).toContain("Net Margin:");
     expect(text).not.toContain("[object Object]");
