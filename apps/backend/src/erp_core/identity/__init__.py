@@ -1,1 +1,1 @@
-"""Identity domain: unified customer graph, merge/split, local timezone."""
+"""Unified customer identity graph, timezone resolution, and reversible merge/split."""
