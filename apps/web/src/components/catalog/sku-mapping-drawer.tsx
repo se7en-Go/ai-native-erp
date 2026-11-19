@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, X, Lock } from "lucide-react";
-import { bffFetch } from "@/lib/api";
+import { updateSkuMapping, updateVariant } from "@/lib/api-client/live-client";
 import { fetchVariantDetail } from "@/lib/data-source";
 import { isPrivilegedCostViewer } from "@/lib/auth-cookie";
 import { formatMoney, type UserRole } from "@/lib/contracts";
@@ -73,11 +73,7 @@ export function SkuMappingDrawer({
   }, [detailQuery.data]);
 
   const saveTiersMutation = useMutation({
-    mutationFn: () =>
-      bffFetch(`/v1/catalog/variants/${variantId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ b2b_moq_tiers: tiers }),
-      }),
+    mutationFn: () => updateVariant(variantId, { b2b_moq_tiers: tiers }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["catalog", "variants"] });
       void queryClient.invalidateQueries({
@@ -88,13 +84,10 @@ export function SkuMappingDrawer({
 
   const saveMappingMutation = useMutation({
     mutationFn: (mapping: PlatformSkuMappingItem) =>
-      bffFetch(`/v1/catalog/mappings/${mapping.id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          external_sku: mapping.external_sku,
-          bundle_multiplier: multipliers[mapping.id] ?? mapping.bundle_multiplier,
-          sync_inventory_enabled: mapping.sync_inventory_enabled,
-        }),
+      updateSkuMapping(mapping.id, {
+        external_sku: mapping.external_sku,
+        bundle_multiplier: multipliers[mapping.id] ?? mapping.bundle_multiplier,
+        sync_inventory_enabled: mapping.sync_inventory_enabled,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({

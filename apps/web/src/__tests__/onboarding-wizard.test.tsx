@@ -6,6 +6,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { AuthSessionContext } from "@/components/providers";
 import OnboardingPage from "@/app/onboarding/page";
 import ChannelsSettingsPage from "@/app/settings/channels/page";
+import { fetchCallUrl, normalizeFetchInput } from "@/__tests__/fetch-stub";
 
 function wrap(ui: React.ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -41,7 +42,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
 
   it("pre-selects Hybrid Factory preset, enforces Coexistence 20 mps ack, and passes 3-message AI sandbox", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/ai/proposals")) {
         return new Response(JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }), {
           status: 200,
@@ -66,13 +67,13 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (url.includes("/onboarding/workspace") && init?.method === "POST") {
+      if (url.includes("/onboarding/workspace") && method === "POST") {
         return new Response(JSON.stringify({ stage: "ChannelConnecting" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
       }
-      if (url.includes("/onboarding/email/verify-dns") && init?.method === "POST") {
+      if (url.includes("/onboarding/email/verify-dns") && method === "POST") {
         return new Response(
           JSON.stringify({
             spf_verified: true,
@@ -82,7 +83,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (url.includes("/onboarding/sandbox-test") && init?.method === "POST") {
+      if (url.includes("/onboarding/sandbox-test") && method === "POST") {
         return new Response(
           JSON.stringify({
             passed: true,
@@ -94,7 +95,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (url.includes("/onboarding/complete") && init?.method === "POST") {
+      if (url.includes("/onboarding/complete") && method === "POST") {
         return new Response(JSON.stringify({ stage: "LiveProduction" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -169,7 +170,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
 
   it("renders DLQ replay button and consent/suppression viewer in /settings/channels", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/ai/proposals")) {
         return new Response(JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }), {
           status: 200,
@@ -197,7 +198,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (url.includes("/channels/dlq/dlq-1/replay") && init?.method === "POST") {
+      if (url.includes("/channels/dlq/dlq-1/replay") && method === "POST") {
         return new Response(JSON.stringify({ ok: true, event_id: "dlq-1" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -280,7 +281,7 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
     fireEvent.click(screen.getByTestId("dlq-replay-btn-dlq-1"));
     await waitFor(() => {
       const replayCall = fetchMock.mock.calls.find((c) =>
-        String(c[0]).includes("/channels/dlq/dlq-1/replay")
+        fetchCallUrl(c).includes("/channels/dlq/dlq-1/replay"),
       );
       expect(replayCall).toBeDefined();
     });

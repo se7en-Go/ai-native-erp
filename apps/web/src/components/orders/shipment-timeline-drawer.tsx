@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw, Truck, X, Database } from "lucide-react";
-import { bffFetch } from "@/lib/api";
+import { refreshShipmentTracking } from "@/lib/api-client/live-client";
 import {
   fetchInventoryBalances,
   fetchInventoryLedger,
@@ -38,11 +38,7 @@ export function ShipmentTimelineDrawer({
   });
 
   const refreshTrackingMutation = useMutation({
-    mutationFn: (shipmentId: string) =>
-      bffFetch(`/v1/orders/${orderId}/shipments/${shipmentId}/refresh-tracking`, {
-        method: "POST",
-        body: JSON.stringify({ cache_level: 0 }),
-      }),
+    mutationFn: (shipmentId: string) => refreshShipmentTracking(orderId, shipmentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
     },

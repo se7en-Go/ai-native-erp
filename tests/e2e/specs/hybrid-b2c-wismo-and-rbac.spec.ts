@@ -43,8 +43,24 @@ test.describe("Hybrid B2C WISMO, Strict RAG Abstention & Agent RBAC", () => {
       timeout: 15_000,
     });
     await page.getByTestId("conversation-item-conv-1").click();
+    // Buyer local time + quiet-hours context switches per conversation.
+    // The pill renders iff the buyer's local hour is in quiet hours
+    // (21:00-08:00), so assert it against the displayed badge time
+    // instead of assuming a fixed time of day: conv-1 is Europe/Berlin,
+    // which is only in quiet hours 04:00-15:00 CST, so a hard
+    // toBeVisible() here fails every afternoon (pre-existing flake).
     await expect(page.getByTestId("buyer-local-time-badge")).toBeVisible();
-    await expect(page.getByTestId("quiet-hours-pill")).toBeVisible();
+    const badgeText =
+      (await page.getByTestId("buyer-local-time-badge").textContent()) ?? "";
+    const timeMatch = badgeText.match(/(\d{1,2}):(\d{2})\s*([AP]M)/i);
+    expect(timeMatch).not.toBeNull();
+    const hour12 = Number(timeMatch![1]);
+    const hour24 = timeMatch![3].toUpperCase() === "PM" ? (hour12 % 12) + 12 : hour12 % 12;
+    if (hour24 >= 21 || hour24 < 8) {
+      await expect(page.getByTestId("quiet-hours-pill")).toBeVisible();
+    } else {
+      await expect(page.getByTestId("quiet-hours-pill")).toHaveCount(0);
+    }
     const berlinBadge = await page.getByTestId("buyer-local-time-badge").textContent();
     await page.getByTestId("conversation-item-conv-2").click();
     await expect(page.getByTestId("buyer-local-time-badge")).toBeVisible();

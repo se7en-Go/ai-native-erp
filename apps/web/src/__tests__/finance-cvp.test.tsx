@@ -7,6 +7,7 @@ import { AuthSessionContext } from "@/components/providers";
 import FinancePage from "@/app/finance/page";
 import OrdersPage from "@/app/orders/page";
 import type { Principal } from "@/lib/contracts";
+import { fetchCallUrl, normalizeFetchInput } from "@/__tests__/fetch-stub";
 
 function wrap(ui: React.ReactNode, role: Principal["role"]) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -38,14 +39,14 @@ describe("Task 5.6 Orders 17TRACK + Inventory Ledger & Finance CVP Margin", () =
 
   it("shows 70% unpaid warning, enforces finance/owner verification, and renders CVP waterfall", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/ai/proposals")) {
         return new Response(JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
       }
-      if (url.includes("/finance/payments/pay-30/verify") && init?.method === "POST") {
+      if (url.includes("/finance/payments/pay-30/verify") && method === "POST") {
         return new Response(
           JSON.stringify({ ok: true, order_fulfillment_status: "in_production" }),
           { status: 200, headers: { "Content-Type": "application/json" } }
@@ -127,7 +128,7 @@ describe("Task 5.6 Orders 17TRACK + Inventory Ledger & Finance CVP Margin", () =
 
     await waitFor(() => {
       const verifyCall = fetchMock.mock.calls.find((c) =>
-        String(c[0]).includes("/finance/payments/pay-30/verify")
+        fetchCallUrl(c).includes("/finance/payments/pay-30/verify"),
       );
       expect(verifyCall).toBeDefined();
     });
@@ -135,7 +136,7 @@ describe("Task 5.6 Orders 17TRACK + Inventory Ledger & Finance CVP Margin", () =
 
   it("blocks agent on /finance and renders 17TRACK 72h stagnation alert + inventory ledger on /orders", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
+      const { url } = normalizeFetchInput(input);
       if (url.includes("/ai/proposals")) {
         return new Response(JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }), {
           status: 200,

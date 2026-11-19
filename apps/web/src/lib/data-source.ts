@@ -1,12 +1,7 @@
-import { bffFetch } from "@/lib/api";
 import {
   getB2bOpportunities,
   getB2bQuotes,
   getCatalogVariants,
-  getChannelAccounts,
-  getChannelConsents,
-  getChannelDlq,
-  getChannelSuppressions,
   getFinanceOverview,
   getInventoryBalances,
   getInventoryLedger,
@@ -14,6 +9,8 @@ import {
   getOrderDetail,
   getOrders,
   getVariantMappings,
+  getConversations,
+  getConversationMessages,
   type B2bOpportunityApiItem,
   type B2bQuoteApiItem,
   type CatalogVariantApiItem,
@@ -28,7 +25,21 @@ import {
   type OrderSummaryApiItem,
   type PlatformSkuMappingApiItem,
   type SuppressionLogApiItem,
-} from "@/lib/api-client/client.gen";
+} from "@/lib/api-client/live-client";
+import {
+  fetchCapabilities as bridgeFetchCapabilities,
+  fetchChannelAccounts as bridgeFetchChannelAccounts,
+  fetchChannelConsents as bridgeFetchChannelConsents,
+  fetchChannelDlq as bridgeFetchChannelDlq,
+  fetchChannelSuppressions as bridgeFetchChannelSuppressions,
+  fetchKbDocuments as bridgeFetchKbDocuments,
+  fetchPendingProposalsCount as bridgeFetchPendingProposalsCount,
+  fetchWallet as bridgeFetchWallet,
+  listProposals as bridgeListProposals,
+  type BillingWalletResponse,
+  type CapabilityConfigItem,
+  type KbDocumentItem,
+} from "@/lib/api-client/plan04-bridge";
 import type {
   AiCapability,
   AutonomyLevel,
@@ -61,6 +72,8 @@ import {
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
 import type { InboxMessage } from "@/components/inbox/message-thread";
 
+export type { CapabilityConfigItem, KbDocumentItem };
+
 // Mock mode is opt-in only: set NEXT_PUBLIC_USE_MOCK_API=true to run the
 // workbench with zero backend. The default (unset/false) always calls the
 // real BFF, so plan tests that stub global fetch keep exercising that path.
@@ -76,16 +89,7 @@ export function fetchConversations(
   if (shouldUseMockApi()) {
     return Promise.resolve(mockConversationsPage(channel, filter, query));
   }
-  const params = new URLSearchParams({
-    channel,
-    filter,
-    q: query,
-    limit: "25",
-    offset: "0",
-  });
-  return bffFetch<PaginatedResponse<ConversationSummary>>(
-    `/v1/inbox/conversations?${params.toString()}`,
-  );
+  return getConversations(channel, filter, query);
 }
 
 export function fetchConversationMessages(
@@ -94,23 +98,7 @@ export function fetchConversationMessages(
   if (shouldUseMockApi()) {
     return Promise.resolve(mockMessagesPage(conversationId));
   }
-  return bffFetch<PaginatedResponse<InboxMessage>>(
-    `/v1/inbox/conversations/${conversationId}/messages?limit=50&offset=0`,
-  );
-}
-
-export interface CapabilityConfigItem {
-  capability: AiCapability;
-  configured_autonomy: AutonomyLevel;
-  max_allowed_autonomy: AutonomyLevel;
-}
-
-export interface KbDocumentItem {
-  id: string;
-  title: string;
-  chunk_count: number;
-  status: "pending" | "indexed" | "failed";
-  created_at: string;
+  return getConversationMessages(conversationId);
 }
 
 export function fetchProposals<T>(
@@ -129,9 +117,7 @@ export function fetchProposals<T>(
       has_more: false,
     });
   }
-  const params = new URLSearchParams({ status, limit: "20", offset: "0" });
-  if (typeFilter) params.set("proposal_type", typeFilter);
-  return bffFetch<PaginatedResponse<T>>(`/v1/ai/proposals?${params.toString()}`);
+  return bridgeListProposals<T>(status, typeFilter);
 }
 
 export function fetchCapabilities(): Promise<{
@@ -146,14 +132,14 @@ export function fetchCapabilities(): Promise<{
       })),
     });
   }
-  return bffFetch<{ capabilities: CapabilityConfigItem[] }>("/v1/ai/capabilities");
+  return bridgeFetchCapabilities();
 }
 
-export function fetchWallet(): Promise<typeof mockWallet> {
+export function fetchWallet(): Promise<BillingWalletResponse> {
   if (shouldUseMockApi()) {
     return Promise.resolve(mockWallet);
   }
-  return bffFetch<typeof mockWallet>("/v1/billing/wallet");
+  return bridgeFetchWallet();
 }
 
 export function fetchKbDocuments(): Promise<PaginatedResponse<KbDocumentItem>> {
@@ -166,7 +152,7 @@ export function fetchKbDocuments(): Promise<PaginatedResponse<KbDocumentItem>> {
       has_more: false,
     });
   }
-  return bffFetch<PaginatedResponse<KbDocumentItem>>("/v1/ai/kb/documents");
+  return bridgeFetchKbDocuments();
 }
 
 export function fetchCatalogVariants(
@@ -285,7 +271,7 @@ export function fetchChannelAccounts(): Promise<
       mockChannelAccounts as unknown as PaginatedResponse<ChannelAccountApiItem>,
     );
   }
-  return getChannelAccounts();
+  return bridgeFetchChannelAccounts();
 }
 
 export function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
@@ -294,7 +280,7 @@ export function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {
       mockChannelDlq as unknown as PaginatedResponse<DlqEventApiItem>,
     );
   }
-  return getChannelDlq();
+  return bridgeFetchChannelDlq();
 }
 
 export function fetchChannelConsents(): Promise<
@@ -305,7 +291,7 @@ export function fetchChannelConsents(): Promise<
       mockChannelConsents as unknown as PaginatedResponse<ConsentLogApiItem>,
     );
   }
-  return getChannelConsents();
+  return bridgeFetchChannelConsents();
 }
 
 export function fetchChannelSuppressions(): Promise<
@@ -316,7 +302,7 @@ export function fetchChannelSuppressions(): Promise<
       mockChannelSuppressions as unknown as PaginatedResponse<SuppressionLogApiItem>,
     );
   }
-  return getChannelSuppressions();
+  return bridgeFetchChannelSuppressions();
 }
 
 export function fetchPendingProposalsCount(): Promise<{ total: number }> {
@@ -325,7 +311,5 @@ export function fetchPendingProposalsCount(): Promise<{ total: number }> {
       total: mockProposals.filter((p) => p.status === "pending").length,
     });
   }
-  return bffFetch<{ total: number }>(
-    "/v1/ai/proposals?status=pending&limit=1&offset=0",
-  );
+  return bridgeFetchPendingProposalsCount();
 }

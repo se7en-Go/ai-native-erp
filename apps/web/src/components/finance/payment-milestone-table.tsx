@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Upload } from "lucide-react";
-import { bffFetch } from "@/lib/api";
+import { submitReceivablePayment, verifyPayment } from "@/lib/api-client/live-client";
 import { canVerifyFinanceSettlement } from "@/lib/auth-cookie";
 import { formatMoney, type UserRole } from "@/lib/contracts";
 
@@ -64,10 +64,7 @@ export function PaymentMilestoneTable({
       if (slips[rp.id]) {
         form.append("receipt_file", slips[rp.id]!);
       }
-      return bffFetch(`/v1/finance/receivables/${rp.id}/payments`, {
-        method: "POST",
-        body: form,
-      });
+      return submitReceivablePayment(rp.id, form);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["finance", "overview"] });
@@ -75,8 +72,7 @@ export function PaymentMilestoneTable({
   });
 
   const verifyMutation = useMutation({
-    mutationFn: (paymentId: string) =>
-      bffFetch(`/v1/finance/payments/${paymentId}/verify`, { method: "POST" }),
+    mutationFn: (paymentId: string) => verifyPayment(paymentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["finance", "overview"] });
       void queryClient.invalidateQueries({ queryKey: ["orders"] });

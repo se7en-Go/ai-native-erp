@@ -4,7 +4,18 @@ import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, ShieldAlert, Sparkles, Rocket } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { bffFetch } from "@/lib/api";
+import {
+  advanceOnboarding,
+  completeWhatsappEmbeddedSignup,
+  updateOnboardingPreset,
+  updateTenantSettings,
+} from "@/lib/api-client/live-client";
+import {
+  connectStorefront,
+  runSandboxTest,
+  saveWebchat,
+  verifyEmailDns,
+} from "@/lib/api-client/plan04-bridge";
 import { fetchOnboardingState, fetchPendingProposalsCount } from "@/lib/data-source";
 
 type StorefrontTab = "Shopify" | "WooCommerce" | "SHOPLINE" | "Shoplazza" | "TikTok Shop";
@@ -80,25 +91,13 @@ export default function OnboardingPage() {
 
   const saveWorkspaceMutation = useMutation({
     mutationFn: async () => {
-      await bffFetch("/v1/onboarding/preset", {
-        method: "PATCH",
-        body: JSON.stringify({ preset_type: preset }),
+      await updateOnboardingPreset(preset);
+      await updateTenantSettings({
+        name: companyName,
+        base_currency: baseCurrency,
+        timezone: ianaTimezone,
       });
-      await bffFetch("/v1/tenants/settings", {
-        method: "PATCH",
-        body: JSON.stringify({
-          name: companyName,
-          base_currency: baseCurrency,
-          timezone: ianaTimezone,
-        }),
-      });
-      return bffFetch("/v1/onboarding/advance", {
-        method: "POST",
-        body: JSON.stringify({
-          target_stage: "ChannelConnecting",
-          step_metadata: { preset_type: preset },
-        }),
-      });
+      return advanceOnboarding("ChannelConnecting", { preset_type: preset });
     },
     onSuccess: () => {
       setStep(2);
@@ -107,15 +106,15 @@ export default function OnboardingPage() {
 
   const metaSignupMutation = useMutation({
     mutationFn: () =>
-      bffFetch("/v1/onboarding/whatsapp/embedded-signup", {
-        method: "POST",
-        body: JSON.stringify({
-          code: "meta_v4_auth_code_demo",
-          waba_id: "waba_qz_001",
-          phone_number_id: "phone_qz_001",
-          is_coexistence: isCoexistence,
-          coexistence_checklist_ack: coexistenceAck,
-        }),
+      // Contract route is /v1/channels/whatsapp/embedded-signup (not
+      // /v1/onboarding/whatsapp/embedded-signup), and EmbeddedSignupRequest
+      // has no coexistence_checklist_ack field — the checkbox only gates
+      // the button in the UI.
+      completeWhatsappEmbeddedSignup({
+        code: "meta_v4_auth_code_demo",
+        waba_id: "waba_qz_001",
+        phone_number_id: "phone_qz_001",
+        is_coexistence: isCoexistence,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["onboarding", "state"] });
@@ -123,14 +122,7 @@ export default function OnboardingPage() {
   });
 
   const verifyDnsMutation = useMutation({
-    mutationFn: () =>
-      bffFetch<{ spf_verified: boolean; dkim_verified: boolean; return_path_verified: boolean }>(
-        "/v1/onboarding/email/verify-dns",
-        {
-          method: "POST",
-          body: JSON.stringify({ domain: emailDomain }),
-        }
-      ),
+    mutationFn: () => verifyEmailDns(emailDomain),
     onSuccess: (res) => {
       setDnsVerified(res.spf_verified && res.dkim_verified);
     },
@@ -138,36 +130,27 @@ export default function OnboardingPage() {
 
   const connectStorefrontMutation = useMutation({
     mutationFn: () =>
-      bffFetch("/v1/onboarding/storefront/connect", {
-        method: "POST",
-        body: JSON.stringify({
-          platform: storefrontTab.toLowerCase().replace(" ", "_"),
-          shop_domain: shopDomain,
-          auth_mode: storefrontTab === "TikTok Shop" ? tiktokMode : "oauth",
-          credentials: byokKey ? { key: byokKey, secret: byokSecret } : {},
-        }),
+      connectStorefront({
+        platform: storefrontTab.toLowerCase().replace(" ", "_"),
+        shop_domain: shopDomain,
+        auth_mode: storefrontTab === "TikTok Shop" ? tiktokMode : "oauth",
+        credentials: byokKey ? { key: byokKey, secret: byokSecret } : {},
       }),
   });
 
   const saveWebchatMutation = useMutation({
     mutationFn: () =>
-      bffFetch("/v1/onboarding/webchat", {
-        method: "PUT",
-        body: JSON.stringify({
-          allowed_origins: allowedOriginsText
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-        }),
-      }),
+      saveWebchat(
+        allowedOriginsText
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
   });
 
   const sandboxTestMutation = useMutation({
     mutationFn: ({ scenarioId, message }: { scenarioId: string; message: string }) =>
-      bffFetch<{ passed: boolean; reply_text: string }>("/v1/onboarding/sandbox-test", {
-        method: "POST",
-        body: JSON.stringify({ scenario_id: scenarioId, message }),
-      }),
+      runSandboxTest(scenarioId, message),
     onSuccess: (res, vars) => {
       if (res.passed) {
         setSandboxPassed((prev) => ({ ...prev, [vars.scenarioId]: res.reply_text }));
@@ -176,14 +159,7 @@ export default function OnboardingPage() {
   });
 
   const completeMutation = useMutation({
-    mutationFn: () =>
-      bffFetch("/v1/onboarding/advance", {
-        method: "POST",
-        body: JSON.stringify({
-          target_stage: "LiveProduction",
-          step_metadata: { sandbox_passed: 3 },
-        }),
-      }),
+    mutationFn: () => advanceOnboarding("LiveProduction", { sandbox_passed: 3 }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["onboarding", "state"] });
     },

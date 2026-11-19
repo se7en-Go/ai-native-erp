@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { bffFetch } from "@/lib/api";
+import { fetchOnboardingState } from "@/lib/data-source";
 import { useAuthSession } from "@/components/providers";
 import { BffApiError, type Principal } from "@/lib/contracts";
 
@@ -29,10 +30,26 @@ export default function LoginPage() {
         }),
       });
       await refreshSession();
-      if (res.principal.onboarding_stage && res.principal.onboarding_stage !== "LiveProduction") {
-        router.push("/onboarding");
+      if (res.principal.onboarding_stage) {
+        // Mock mode (and any future backend that returns it): the principal
+        // carries the stage directly.
+        if (res.principal.onboarding_stage !== "LiveProduction") {
+          router.push("/onboarding");
+        } else {
+          router.push("/inbox");
+        }
       } else {
-        router.push("/inbox");
+        // Live mode: PrincipalResponse has no onboarding_stage, so ask the
+        // onboarding state endpoint instead of assuming LiveProduction.
+        // A failed lookup must not block a successful login: fall back to
+        // the onboarding wizard, which is the safe side.
+        let stage: string | undefined;
+        try {
+          stage = (await fetchOnboardingState()).current_stage;
+        } catch {
+          stage = undefined;
+        }
+        router.push(stage === "LiveProduction" ? "/inbox" : "/onboarding");
       }
     } catch (err) {
       if (err instanceof BffApiError) {

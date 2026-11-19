@@ -25,7 +25,10 @@ export function useRealtimeInbox(enabled: boolean = true) {
       return;
     }
 
-    const source = new EventSource("/api/bff/v1/inbox/events", {
+    // Contract SSE endpoint is /api/v1/inbox/stream (there is no
+    // /api/v1/inbox/events in contracts/openapi.json); the BFF proxies it
+    // and serves a mock heartbeat on the same path in mock mode.
+    const source = new EventSource("/api/bff/v1/inbox/stream", {
       withCredentials: true,
     });
 

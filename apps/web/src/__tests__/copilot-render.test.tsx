@@ -4,8 +4,15 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@/lib/i18n";
 import { AuthSessionContext } from "@/components/providers";
-import { ContextDrawer, type CustomerContextPayload } from "@/components/inbox/context-drawer";
+import { ContextDrawer } from "@/components/inbox/context-drawer";
+import type { CustomerContextPayload } from "@/lib/api-client/plan04-bridge";
 import { FloatingCopilot, sanitizeCopilotCards } from "@/components/ai/floating-copilot";
+import {
+  fetchCallBody,
+  fetchCallMethod,
+  fetchCallUrl,
+  normalizeFetchInput,
+} from "@/__tests__/fetch-stub";
 
 const MOCK_CUSTOMER_CONTEXT: CustomerContextPayload = {
   customer: {
@@ -266,14 +273,14 @@ describe("Task 5.3 ContextDrawer & FloatingCopilot", () => {
 
   it("renders BSUID badge, switches ContextDrawer tabs, and executes probable duplicate merge", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const { url, method } = normalizeFetchInput(input, init);
       if (url.includes("/identity/customers/cust-target/context")) {
         return new Response(JSON.stringify(MOCK_CUSTOMER_CONTEXT), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
       }
-      if (url.includes("/identity/merge") && init?.method === "POST") {
+      if (url.includes("/customers/merge") && method === "POST") {
         return new Response(
           JSON.stringify({ merge_event_id: "me-1", target_customer_id: "cust-target" }),
           { status: 200, headers: { "Content-Type": "application/json" } }
@@ -321,10 +328,13 @@ describe("Task 5.3 ContextDrawer & FloatingCopilot", () => {
     fireEvent.click(screen.getByTestId("open-merge-dialog-btn"));
     fireEvent.click(screen.getByTestId("confirm-merge-cust-dup-9"));
 
-    await waitFor(() => {
-      const mergeCall = fetchMock.mock.calls.find((c) => String(c[0]).includes("/identity/merge"));
+    await waitFor(async () => {
+      const mergeCall = fetchMock.mock.calls.find((c) =>
+        fetchCallUrl(c).includes("/customers/merge"),
+      );
       expect(mergeCall).toBeDefined();
-      expect(JSON.parse(String(mergeCall?.[1]?.body))).toMatchObject({
+      expect(fetchCallMethod(mergeCall!)).toBe("POST");
+      expect(JSON.parse(await fetchCallBody(mergeCall!))).toMatchObject({
         source_customer_id: "cust-dup-9",
         target_customer_id: "cust-target",
       });
