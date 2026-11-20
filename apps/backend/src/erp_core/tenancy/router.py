@@ -30,6 +30,7 @@ from erp_core.tenancy.schemas import (
     InviteMemberRequest,
     LoginRequest,
     MembershipItem,
+    PiTemplateSettings,
     PrincipalResponse,
     RefreshRequest,
     RegisterRequest,
@@ -149,6 +150,36 @@ async def update_tenant_settings(
     service: Annotated[TenancyAuthService, Depends(_get_auth_service)],
 ) -> TenantSettingsResponse:
     return await service.update_tenant_settings(session, principal.tenant_id, payload)
+
+
+@router.get("/tenants/pi-template", response_model=PiTemplateSettings)
+async def get_pi_template(
+    principal: Annotated[
+        CurrentPrincipal,
+        Depends(
+            require_roles(
+                UserRole.OWNER,
+                UserRole.ADMIN,
+                UserRole.MANAGER,
+                UserRole.AGENT,
+                UserRole.FINANCE,
+            )
+        ),
+    ],
+    session: Annotated[AsyncSession, Depends(get_tenant_db)],
+    service: Annotated[TenancyAuthService, Depends(_get_auth_service)],
+) -> PiTemplateSettings:
+    return await service.get_pi_template(session, principal.tenant_id)
+
+
+@router.patch("/tenants/pi-template", response_model=PiTemplateSettings)
+async def update_pi_template(
+    payload: PiTemplateSettings,
+    principal: Annotated[CurrentPrincipal, Depends(require_roles(UserRole.OWNER, UserRole.ADMIN))],
+    session: Annotated[AsyncSession, Depends(get_tenant_db)],
+    service: Annotated[TenancyAuthService, Depends(_get_auth_service)],
+) -> PiTemplateSettings:
+    return await service.update_pi_template(session, principal, payload)
 
 
 @router.get("/tenants/cost-visibility-sample", response_model=CostVisibilitySampleResponse)

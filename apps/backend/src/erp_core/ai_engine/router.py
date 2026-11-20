@@ -16,6 +16,7 @@ from erp_core.ai_engine.proposal_executor import (
     proposal_error,
     visible_proposal_types,
 )
+from erp_core.ai_engine.proposal_generator import AiProposalGeneratorService
 from erp_core.ai_engine.runtime import PolicyRuntime, load_ai_policy
 from erp_core.ai_engine.schemas import (
     AiProposalRead,
@@ -80,6 +81,42 @@ def _runtime(request: Request) -> PolicyRuntime:
 
 Executor = Annotated[ProposalExecutorService, Depends(_executor)]
 Runtime = Annotated[PolicyRuntime, Depends(_runtime)]
+
+
+def _proposal_generator(request: Request) -> AiProposalGeneratorService:
+    """Factory seam so tests can inject a deterministic offline LLM client."""
+    return AiProposalGeneratorService()
+
+
+@router.post("/conversations/{conversation_id}/propose-reply")
+async def propose_conversation_reply(
+    conversation_id: UUID,
+    request: Request,
+    session: Db,
+    principal: Annotated[
+        CurrentPrincipal,
+        Depends(
+            require_roles(
+                UserRole.OWNER,
+                UserRole.ADMIN,
+                UserRole.MANAGER,
+                UserRole.AGENT,
+            )
+        ),
+    ],
+) -> AiProposalRead:
+    """On-demand grounded reply draft backed by live ERP SQL tools."""
+    service = _proposal_generator(request)
+    conversation = await service.load_conversation(
+        session, principal.tenant_id, conversation_id
+    )
+    service.assert_visibility(principal, conversation)
+    return await service.generate_reply_proposal(
+        session,
+        principal.tenant_id,
+        conversation_id,
+        redis=getattr(request.app.state, "redis", None),
+    )
 
 
 @router.get("/proposals")

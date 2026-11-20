@@ -580,9 +580,14 @@ async def test_email_quick_connect_encrypts_secrets_and_scopes_agent(
         smtp_creds, _ = await vault.load_secret_json(
             session, tenant_id, by_email[f"b2b@{domain}"].id, "messaging_provider"
         )
+        # The SMTP envelope carries the full MTA tuple so an outbound send never has to
+        # re-resolve the account config before talking to the server.
         assert smtp_creds == {
-            "smtp_password": "smtp-secret-value",
+            "provider": "smtp_imap",
+            "smtp_host": "smtp.factory.example.com",
+            "smtp_port": 587,
             "smtp_username": f"b2b@{domain}",
+            "smtp_password": "smtp-secret-value",
         }
         smtp_config = by_email[f"b2b@{domain}"].config
         assert smtp_config["provider"] == "smtp_imap"

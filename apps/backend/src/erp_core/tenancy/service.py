@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from uuid import UUID, uuid4
 
@@ -13,12 +14,14 @@ from erp_core.shared.db import system_session, tenant_session
 from erp_core.shared.enums import OnboardingStage, UserRole
 from erp_core.shared.errors import AppError
 from erp_core.shared.pagination import PaginatedResponse
+from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.cost_visibility import can_view_cost_and_profit
 from erp_core.tenancy.dependencies import CurrentPrincipal
 from erp_core.tenancy.schemas import (
     InviteMemberRequest,
     LoginRequest,
     MembershipItem,
+    PiTemplateSettings,
     PrincipalResponse,
     RegisterRequest,
     TenantMembershipOption,
@@ -26,6 +29,7 @@ from erp_core.tenancy.schemas import (
     TokenResponse,
     UpdateMemberRoleRequest,
     UpdateTenantSettingsRequest,
+    parse_pi_template,
 )
 from erp_core.tenancy.security import (
     create_access_token,
@@ -532,3 +536,60 @@ class TenancyAuthService:
             base_currency=str(row.base_currency),
             timezone=str(row.timezone),
         )
+
+    async def get_pi_template(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+    ) -> PiTemplateSettings:
+        row = (
+            await session.execute(
+                text(
+                    "SELECT name, ai_policy_settings -> 'pi_template' AS pi_template "
+                    "FROM tenants WHERE id = :tid"
+                ),
+                {"tid": str(tenant_id)},
+            )
+        ).one_or_none()
+        if row is None:
+            raise AppError(
+                slug="tenant-not-found",
+                title="Tenant Not Found",
+                status_code=404,
+                detail="Tenant workspace does not exist",
+                code="ERR_TENANT_NOT_FOUND",
+            )
+        return parse_pi_template(str(row.name), row.pi_template)
+
+    async def update_pi_template(
+        self,
+        session: AsyncSession,
+        principal: CurrentPrincipal,
+        payload: PiTemplateSettings,
+    ) -> PiTemplateSettings:
+        before = await self.get_pi_template(session, principal.tenant_id)
+        await session.execute(
+            text(
+                "UPDATE tenants SET "
+                "ai_policy_settings = jsonb_set("
+                "COALESCE(ai_policy_settings, '{}'::jsonb), '{pi_template}', "
+                "CAST(:tpl AS jsonb), true), updated_at = now() "
+                "WHERE id = :tid"
+            ),
+            {
+                "tpl": json.dumps(payload.model_dump(), ensure_ascii=False),
+                "tid": str(principal.tenant_id),
+            },
+        )
+        await record_audit_event(
+            session,
+            principal.tenant_id,
+            "human_user",
+            str(principal.user_id),
+            "tenant.pi_template_updated",
+            "tenant",
+            principal.tenant_id,
+            before_state=before.model_dump(),
+            after_state=payload.model_dump(),
+        )
+        return payload

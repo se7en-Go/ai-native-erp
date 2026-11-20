@@ -598,6 +598,40 @@ async def _move_to_dlq(
             )
 
 
+def _auto_ai_proposal_enabled() -> bool:
+    """Auto-drafting is opt-out via AUTO_AI_PROPOSAL_ENABLED and needs a real LLM key."""
+    if os.environ.get("AUTO_AI_PROPOSAL_ENABLED", "true").strip().lower() != "true":
+        return False
+    return bool(os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+
+
+def _auto_proposal_service() -> Any:
+    """Factory seam so tests can inject a deterministic offline LLM client."""
+    from erp_core.ai_engine.proposal_generator import AiProposalGeneratorService
+
+    return AiProposalGeneratorService()
+
+
+async def _maybe_generate_auto_proposal(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+    tenant_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+) -> None:
+    """Best-effort grounded draft; AI failures must never fail or DLQ the webhook."""
+    try:
+        async with tenant_session(session_factory, tenant_id) as ai_sess:
+            await _auto_proposal_service().generate_reply_proposal(
+                ai_sess, tenant_id, conversation_id, redis=redis
+            )
+    except Exception:  # noqa: BLE001 - webhook durability outranks drafting
+        logger.warning(
+            "auto AI proposal generation failed for conversation %s",
+            conversation_id,
+            exc_info=True,
+        )
+
+
 async def process_raw_webhook_event(
     session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
@@ -676,6 +710,7 @@ async def process_raw_webhook_event(
         return "dead_letter"
 
     published_events: list[dict[str, Any]] = []
+    auto_proposal_conversations: list[uuid.UUID] = []
     try:
         async with tenant_session(session_factory, tenant_id) as t_sess:
             batch = await adapter.parse_webhook(
@@ -711,6 +746,12 @@ async def process_raw_webhook_event(
                         .one_or_none()
                     )
                     assigned = scope_row["assigned_user_id"] if scope_row else None
+                    if (
+                        inbound.direction == MessageDirection.INBOUND
+                        and not inbound.is_stop_command
+                        and conv_id not in auto_proposal_conversations
+                    ):
+                        auto_proposal_conversations.append(conv_id)
                     published_events.append(
                         {
                             "event": "message.created",
@@ -756,6 +797,12 @@ async def process_raw_webhook_event(
 
         for ev in published_events:
             await redis.publish(f"inbox:events:{tenant_id}", json.dumps(ev))
+
+        if auto_proposal_conversations and _auto_ai_proposal_enabled():
+            for conv_id in auto_proposal_conversations:
+                await _maybe_generate_auto_proposal(
+                    session_factory, redis, tenant_id, conv_id
+                )
         return "processed"
 
     except OutOfOrderParentError as exc:

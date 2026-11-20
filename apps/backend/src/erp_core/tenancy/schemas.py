@@ -96,6 +96,70 @@ class TenantSettingsResponse(BaseModel):
     timezone: str
 
 
+class PiTemplateSettings(BaseModel):
+    """Tenant-configurable export Proforma Invoice letterhead, bank wire and terms."""
+
+    company_legal_name: str = Field(default="", max_length=200)
+    company_address: str = Field(default="", max_length=400)
+    contact_phone: str = Field(default="", max_length=80)
+    contact_email: str = Field(default="", max_length=160)
+    website: str = Field(default="", max_length=200)
+    tax_or_reg_no: str = Field(default="", max_length=100)
+    bank_beneficiary_name: str = Field(default="", max_length=200)
+    bank_name: str = Field(default="", max_length=200)
+    bank_account_no: str = Field(default="", max_length=120)
+    bank_swift_code: str = Field(default="", max_length=60)
+    bank_address: str = Field(default="", max_length=300)
+    default_terms_notes: str = Field(default="", max_length=2000)
+    footer_signature_title: str = Field(
+        default="Authorized Signature & Company Stamp", max_length=160
+    )
+
+
+def parse_pi_template(tenant_name: str, raw: object) -> PiTemplateSettings:
+    """Layer stored overrides on top of export-ready defaults; bad input falls back."""
+    defaults = default_pi_template(tenant_name)
+    if not isinstance(raw, dict):
+        return defaults
+    merged = defaults.model_dump()
+    for key in PiTemplateSettings.model_fields:
+        value = raw.get(key)
+        if isinstance(value, str):
+            merged[key] = value
+    try:
+        return PiTemplateSettings.model_validate(merged)
+    except ValueError:
+        return defaults
+
+
+def default_pi_template(tenant_name: str) -> PiTemplateSettings:
+    """Generic, export-ready defaults. Never embeds tenant-private or user-specific data."""
+    company = tenant_name.strip()
+    return PiTemplateSettings(
+        company_legal_name=company,
+        company_address="Industrial Park, Export Processing Zone",
+        contact_phone="+00 000 0000 0000",
+        contact_email="",
+        website="",
+        tax_or_reg_no="",
+        bank_beneficiary_name=company,
+        bank_name="Bank of China (Configure in Settings)",
+        bank_account_no="",
+        bank_swift_code="BKCHCNBJ",
+        bank_address="Configure the receiving bank address in Settings",
+        default_terms_notes=(
+            "1. Validity: 15 days from the issue date unless otherwise agreed in writing.\n"
+            "2. Payment: 30% T/T deposit, balance before shipment, bank charges at buyer's "
+            "account.\n"
+            "3. Lead time: confirmed on order acknowledgement after deposit receipt.\n"
+            "4. Packaging: export carton with buyer-approved marks; pallets on request.\n"
+            "5. Quality: manufacturer standard warranty applies; certificates per quotation.\n"
+            "6. Force majeure: delivery dates extend for events beyond reasonable control."
+        ),
+        footer_signature_title="Authorized Signature & Company Stamp",
+    )
+
+
 class CostVisibilitySampleResponse(BaseModel):
     sku: str
     currency: str

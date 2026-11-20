@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from erp_core.shared.enums import (
     FulfillmentStatus,
@@ -162,6 +162,26 @@ class QuotePdfResponse(BaseModel):
     version: int
     pdf_r2_key: str
     download_url: str
+
+
+class SendQuoteEmailRequest(BaseModel):
+    recipient_email: EmailStr
+    channel_account_id: UUID | None = None
+    subject: str | None = Field(default=None, max_length=240)
+    message_body: str | None = Field(default=None, max_length=5000)
+    language: Literal["en", "zh"] = "en"
+
+
+class SendQuoteEmailResponse(BaseModel):
+    quote_id: UUID
+    quote_no: str
+    recipient_email: str
+    from_email: str
+    provider: Literal["resend", "smtp_imap"]
+    external_message_id: str | None = None
+    pdf_filename: str
+    pdf_size_bytes: int
+    quote_status: str
 
 
 class ConvertedOrderSummary(BaseModel):

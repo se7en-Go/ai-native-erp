@@ -338,7 +338,11 @@ class ProposalExecutorService:
                     "ERR_PROPOSAL_COMPLIANCE_CHANGED",
                     decision.blocked_reason or "Outbound policy blocked the draft.",
                 )
-            if kind == ProposalType.REPLY_DRAFT and _LIVE_REPLY.search(body):
+            if (
+                kind == ProposalType.REPLY_DRAFT
+                and _LIVE_REPLY.search(body)
+                and row.source_tool_call_id is None
+            ):
                 raise proposal_error(
                     409,
                     "ERR_PROPOSAL_STALE",
