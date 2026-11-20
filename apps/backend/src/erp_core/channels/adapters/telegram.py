@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import hmac
 import os
 import re
 import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 import httpx
@@ -38,15 +40,28 @@ from erp_core.channels.messaging_accounts import (
     resolve_connect_ownership,
     save_messaging_credentials,
 )
+from erp_core.shared.config import get_settings
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import ChannelType, MessageContentType, UserRole
 from erp_core.shared.errors import AppError
+from erp_core.shared.storage import ObjectStorageService
 
 TELEGRAM_SECRET_HEADER = "x-telegram-bot-api-secret-token"
 # Internal header written by the ingress router from the validated URL path.
 TELEGRAM_ROUTING_HEADER = "x-erp-telegram-bot-key"
 TELEGRAM_BOT_KEY = re.compile(r"[1-9][0-9]{0,19}")
 _BOT_TOKEN = re.compile(r"([1-9][0-9]{0,19}):[A-Za-z0-9_-]{10,200}")
+# `ck_messages_content_type` has no separate DOCUMENT token, but a future revision may add
+# it, so the outbound media branch accepts the canonical value as well as MEDIA.
+_ATTACHMENT_CONTENT_TYPES = frozenset({MessageContentType.MEDIA.value, "document"})
+_TELEGRAM_CAPTION_LIMIT = 1024
+
+
+class AttachmentStorage(Protocol):
+    """Subset of ObjectStorageService needed to fetch outbound attachment bytes."""
+
+    async def download_bytes(self, key: str) -> bytes:
+        raise NotImplementedError
 
 
 def _object(value: Any) -> dict[str, Any]:
@@ -83,8 +98,14 @@ class TelegramAPIError(Exception):
 class TelegramAdapter(MessagingChannelAdapter):
     channel_types = (ChannelType.TELEGRAM,)
 
-    def __init__(self, *, http_transport: httpx.AsyncBaseTransport | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        http_transport: httpx.AsyncBaseTransport | None = None,
+        attachment_storage: AttachmentStorage | None = None,
+    ) -> None:
         self.http_transport = http_transport
+        self._attachment_storage = attachment_storage
 
     def verify_webhook_signature(
         self,
@@ -138,8 +159,10 @@ class TelegramAdapter(MessagingChannelAdapter):
         if document := _attachment(_object(msg.get("document")), photo=False):
             attachments.append(document)
         photos = msg.get("photo")
-        if isinstance(photos, list) and photos and (
-            photo := _attachment(_object(photos[-1]), photo=True)
+        if (
+            isinstance(photos, list)
+            and photos
+            and (photo := _attachment(_object(photos[-1]), photo=True))
         ):
             attachments.append(photo)
         body_text = _string(msg.get("text")) or _string(msg.get("caption"))
@@ -190,14 +213,23 @@ class TelegramAdapter(MessagingChannelAdapter):
         event = self._normalize(payload, headers)
         return NormalizedWebhookBatch(inbound_events=[event] if event else [])
 
-    async def _bot_api(self, token: str, method: str, data: dict[str, Any]) -> Any:
+    async def _bot_api(
+        self,
+        token: str,
+        method: str,
+        data: dict[str, Any],
+        *,
+        form: dict[str, str] | None = None,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+    ) -> Any:
         # The Bot API embeds the token in its URL. Use the HTTP transport directly
         # to avoid httpx.AsyncClient's default INFO log of the full request URL.
-        request = httpx.Request(
-            "POST",
-            f"https://api.telegram.org/bot{token}/{method}",
-            json=data,
-            extensions={"timeout": httpx.Timeout(10).as_dict()},
+        url = f"https://api.telegram.org/bot{token}/{method}"
+        extensions = {"timeout": httpx.Timeout(10).as_dict()}
+        request = (
+            httpx.Request("POST", url, data=form or {}, files=files, extensions=extensions)
+            if files
+            else httpx.Request("POST", url, json=data, extensions=extensions)
         )
         transport = self.http_transport or httpx.AsyncHTTPTransport(trust_env=False)
         try:
@@ -216,9 +248,7 @@ class TelegramAdapter(MessagingChannelAdapter):
             raise TelegramAPIError(_positive_id(payload.get("error_code")) or 502)
         return payload.get("result")
 
-    async def identify_bot_profile(
-        self, token: str
-    ) -> tuple[str, str | None, str | None]:
+    async def identify_bot_profile(self, token: str) -> tuple[str, str | None, str | None]:
         """Return ``(bot_id, username, first_name)`` for a single-paste connect flow."""
         match = _BOT_TOKEN.fullmatch(token)
         if not match:
@@ -276,7 +306,14 @@ class TelegramAdapter(MessagingChannelAdapter):
             return OutboundSendResult(success=False, error_message="ERR_INVALID_OUTBOUND_CONTEXT")
         if await ConsentAndSuppressionService().is_suppressed(session, tenant_id, "telegram", peer):
             return OutboundSendResult(success=False, error_message="ERR_RECIPIENT_SUPPRESSED")
-        if context["content_type"] != MessageContentType.TEXT or not context["body_text"]:
+        content_type = context["content_type"]
+        if content_type != MessageContentType.TEXT and content_type not in (
+            _ATTACHMENT_CONTENT_TYPES
+        ):
+            return OutboundSendResult(
+                success=False, error_message="ERR_UNSUPPORTED_MESSAGE_CONTENT"
+            )
+        if content_type == MessageContentType.TEXT and not context["body_text"]:
             return OutboundSendResult(
                 success=False, error_message="ERR_UNSUPPORTED_MESSAGE_CONTENT"
             )
@@ -285,11 +322,83 @@ class TelegramAdapter(MessagingChannelAdapter):
         match = _BOT_TOKEN.fullmatch(token)
         if not match or match[1] != request.external_account_id:
             return OutboundSendResult(success=False, error_message="ERR_CREDENTIAL_NOT_FOUND")
-        data: dict[str, Any] = {"chat_id": int(peer), "text": context["body_text"]}
+        if content_type == MessageContentType.TEXT:
+            data: dict[str, Any] = {"chat_id": int(peer), "text": context["body_text"]}
+            if business_id:
+                data["business_connection_id"] = business_id
+            try:
+                result = _object(await self._bot_api(token, "sendMessage", data))
+            except TelegramAPIError as exc:
+                return OutboundSendResult(
+                    success=False,
+                    error_code=exc.status,
+                    error_message="ERR_TELEGRAM_SEND_FAILED",
+                    retryable=exc.status >= 500 or exc.status == 429,
+                )
+        else:
+            sent = await self._send_attachment(
+                token=token,
+                peer=peer,
+                business_id=business_id,
+                request=request,
+                caption=context["body_text"],
+            )
+            if isinstance(sent, OutboundSendResult):
+                return sent
+            result = sent
+        msg_id = _positive_id(result.get("message_id"))
+        if not msg_id:
+            return OutboundSendResult(success=False, error_message="ERR_TELEGRAM_SEND_FAILED")
+        return OutboundSendResult(
+            success=True, external_message_id=f"{request.external_account_id}:{thread}:{msg_id}"
+        )
+
+    async def _send_attachment(
+        self,
+        *,
+        token: str,
+        peer: str,
+        business_id: str | None,
+        request: OutboundMessageRequest,
+        caption: str | None,
+    ) -> dict[str, Any] | OutboundSendResult:
+        """Dispatch the first queued attachment through sendPhoto or sendDocument."""
+        raw_attachments = request.metadata.get("attachments")
+        if not isinstance(raw_attachments, list) or not raw_attachments:
+            return OutboundSendResult(
+                success=False, error_message="ERR_UNSUPPORTED_MESSAGE_CONTENT"
+            )
+        attachment = raw_attachments[0]
+        if not isinstance(attachment, dict):
+            return OutboundSendResult(
+                success=False, error_message="ERR_UNSUPPORTED_MESSAGE_CONTENT"
+            )
+        data = await self._attachment_bytes(attachment)
+        if data is None:
+            return OutboundSendResult(success=False, error_message="ERR_ATTACHMENT_UNAVAILABLE")
+        mime_type = _string(attachment.get("mime_type")) or "application/octet-stream"
+        filename = _string(attachment.get("filename")) or "attachment"
+        method, field = (
+            ("sendPhoto", "photo")
+            if mime_type.startswith("image/")
+            else ("sendDocument", "document")
+        )
+        form: dict[str, str] = {"chat_id": peer}
+        effective_caption = _string(caption)
+        if effective_caption:
+            form["caption"] = effective_caption[:_TELEGRAM_CAPTION_LIMIT]
         if business_id:
-            data["business_connection_id"] = business_id
+            form["business_connection_id"] = business_id
         try:
-            result = _object(await self._bot_api(token, "sendMessage", data))
+            return _object(
+                await self._bot_api(
+                    token,
+                    method,
+                    {},
+                    form=form,
+                    files={field: (filename, data, mime_type)},
+                )
+            )
         except TelegramAPIError as exc:
             return OutboundSendResult(
                 success=False,
@@ -297,12 +406,36 @@ class TelegramAdapter(MessagingChannelAdapter):
                 error_message="ERR_TELEGRAM_SEND_FAILED",
                 retryable=exc.status >= 500 or exc.status == 429,
             )
-        msg_id = _positive_id(result.get("message_id"))
-        if not msg_id:
-            return OutboundSendResult(success=False, error_message="ERR_TELEGRAM_SEND_FAILED")
-        return OutboundSendResult(
-            success=True, external_message_id=f"{request.external_account_id}:{thread}:{msg_id}"
-        )
+
+    async def _attachment_bytes(self, attachment: dict[str, Any]) -> bytes | None:
+        """Inline bytes win (unit tests / storage fallback), otherwise read object storage."""
+        raw = attachment.get("data")
+        if isinstance(raw, (bytes, bytearray)):
+            return bytes(raw)
+        encoded = attachment.get("inline_bytes_b64")
+        if isinstance(encoded, str) and encoded:
+            try:
+                return base64.b64decode(encoded.encode("ascii"), validate=True)
+            except (binascii.Error, ValueError):
+                return None
+        key = attachment.get("storage_key")
+        if not isinstance(key, str) or not key:
+            return None
+        storage = self._storage()
+        if storage is None:
+            return None
+        try:
+            return await storage.download_bytes(key)
+        except Exception:
+            return None
+
+    def _storage(self) -> AttachmentStorage | None:
+        if self._attachment_storage is None:
+            try:
+                self._attachment_storage = ObjectStorageService(get_settings())
+            except Exception:  # pragma: no cover - settings/boto3 unavailable
+                return None
+        return self._attachment_storage
 
 
 def _provider_unavailable() -> AppError:
@@ -350,8 +483,9 @@ telegram_router = APIRouter(
 )
 
 
-def _display_name(payload: TelegramConnectRequest, username: str | None, first: str | None,
-                  bot_id: str) -> str:
+def _display_name(
+    payload: TelegramConnectRequest, username: str | None, first: str | None, bot_id: str
+) -> str:
     """One-paste connect: never force a human to type a name Telegram already knows."""
     requested = (payload.display_name or "").strip()
     if requested:

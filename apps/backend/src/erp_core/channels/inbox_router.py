@@ -4,11 +4,23 @@ import asyncio
 import json
 import os
 from collections.abc import AsyncIterator
-from typing import Annotated
+from typing import Annotated, cast
+from urllib.parse import quote
 from uuid import UUID
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -21,13 +33,20 @@ from erp_core.channels.inbox_schemas import (
     UpdateConversationRequest,
 )
 from erp_core.channels.inbox_service import (
+    ALLOWED_INBOX_ATTACHMENT_MIME_TYPES,
+    MAX_INBOX_ATTACHMENT_BYTES,
+    AttachmentStore,
+    AttachmentUnavailableError,
+    AttachmentValidationError,
     ConversationAccessDeniedError,
     InboxService,
     event_visible_to_agent,
 )
+from erp_core.shared.config import get_settings
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import ChannelType, UserRole
 from erp_core.shared.pagination import PaginatedResponse
+from erp_core.shared.storage import ObjectStorageService
 from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
 
 inbox_router = APIRouter(prefix="/api/v1/inbox", tags=["inbox"])
@@ -53,6 +72,38 @@ def _get_redis(request: Request) -> aioredis.Redis:
     return client
 
 
+def _get_storage(request: Request) -> AttachmentStore | None:
+    """Reuse the app-wide object storage, or degrade gracefully when S3 is absent."""
+    storage = getattr(request.app.state, "storage", None)
+    if storage is not None:
+        return cast(AttachmentStore, storage)
+    try:
+        return ObjectStorageService(get_settings())
+    except Exception:  # pragma: no cover - only when settings/boto3 are unavailable
+        return None
+
+
+async def _read_attachment_upload(file: UploadFile) -> tuple[str, bytes]:
+    """Read the multipart body while refusing to buffer more than the 10 MB ceiling."""
+    mime_type = (file.content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
+    if mime_type not in ALLOWED_INBOX_ATTACHMENT_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="ERR_ATTACHMENT_TYPE_NOT_ALLOWED",
+        )
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(1024 * 1024):
+        total += len(chunk)
+        if total > MAX_INBOX_ATTACHMENT_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="ERR_ATTACHMENT_TOO_LARGE",
+            )
+        chunks.append(chunk)
+    return mime_type, b"".join(chunks)
+
+
 @inbox_router.get("/conversations", response_model=PaginatedResponse[ConversationRead])
 async def list_inbox_conversations(
     request: Request,
@@ -61,7 +112,10 @@ async def list_inbox_conversations(
     filter: Annotated[InboxTabFilter | None, Query()] = None,
     channel_type: Annotated[ChannelType | None, Query()] = None,
     channel: Annotated[ChannelType | None, Query()] = None,
+    channel_account_id: Annotated[UUID | None, Query()] = None,
     assigned_user_id: Annotated[UUID | None, Query()] = None,
+    tag: Annotated[str | None, Query(max_length=32)] = None,
+    pinned_only: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -76,7 +130,10 @@ async def list_inbox_conversations(
             tenant_id=principal.tenant_id,
             tab=effective_tab,
             channel_type=effective_channel,
+            channel_account_id=channel_account_id,
             assigned_user_id=assigned_user_id,
+            tag=tag,
+            pinned_only=pinned_only,
             q=q,
             limit=limit,
             offset=offset,
@@ -157,6 +214,101 @@ async def post_conversation_message(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
             ) from exc
+
+
+@inbox_router.post(
+    "/conversations/{conversation_id}/attachments",
+    response_model=SendInboxMessageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_conversation_attachment(
+    conversation_id: UUID,
+    request: Request,
+    file: Annotated[UploadFile, File()],
+    principal: Annotated[CurrentPrincipal, Depends(_require_inbox_access)],
+    caption: Annotated[str | None, Form(max_length=1024)] = None,
+) -> SendInboxMessageResponse:
+    """Upload an image/PDF/CSV attachment and deliver it on the conversation's channel."""
+    mime_type, content = await _read_attachment_upload(file)
+    session_factory = _get_session_factory(request)
+    redis = _get_redis(request)
+    enqueue_fn = getattr(request.app.state, "outbound_enqueue_fn", None)
+    service = InboxService()
+    async with tenant_session(session_factory, principal.tenant_id) as session:
+        try:
+            return await service.upload_attachment(
+                session=session,
+                redis=redis,
+                tenant_id=principal.tenant_id,
+                principal=principal,
+                conversation_id=conversation_id,
+                filename=file.filename or "attachment",
+                mime_type=mime_type,
+                content=content,
+                caption=caption,
+                storage=_get_storage(request),
+                outbound_enqueue_fn=enqueue_fn,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except ConversationAccessDeniedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ERR_CONVERSATION_ACCESS_DENIED",
+            ) from exc
+        except AttachmentValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+        except AttachmentUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from exc
+
+
+@inbox_router.get("/attachments/{message_id}/{attachment_index}")
+async def get_inbox_attachment(
+    message_id: UUID,
+    attachment_index: int,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(_require_inbox_access)],
+) -> Response:
+    """Stream one stored attachment back through the tenant/agent isolation gate."""
+    session_factory = _get_session_factory(request)
+    service = InboxService()
+    async with tenant_session(session_factory, principal.tenant_id) as session:
+        try:
+            data, mime_type, filename = await service.download_attachment(
+                session=session,
+                tenant_id=principal.tenant_id,
+                principal=principal,
+                message_id=message_id,
+                attachment_index=attachment_index,
+                storage=_get_storage(request),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except ConversationAccessDeniedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ERR_CONVERSATION_ACCESS_DENIED",
+            ) from exc
+        except AttachmentUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from exc
+    ascii_name = filename.encode("ascii", "replace").decode("ascii").replace('"', "_")
+    headers = {
+        "Content-Disposition": (
+            f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+        ),
+        "X-Content-Type-Options": "nosniff",
+    }
+    return Response(content=data, media_type=mime_type, headers=headers)
 
 
 @inbox_router.patch(
