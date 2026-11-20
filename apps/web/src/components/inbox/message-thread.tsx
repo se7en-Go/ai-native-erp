@@ -1,7 +1,20 @@
 "use client";
 
 import React, { useState } from "react";
-import { Clock, Eye, EyeOff, Globe, Lock, PanelRight, StickyNote } from "lucide-react";
+import {
+  Clock,
+  Download,
+  Eye,
+  EyeOff,
+  Globe,
+  Languages,
+  Loader2,
+  Lock,
+  PanelRight,
+  Pin,
+  StickyNote,
+  Tag,
+} from "lucide-react";
 import {
   initialsOf,
   type ConversationSummary,
@@ -14,7 +27,21 @@ import {
   type MessageDirection,
   type MessageSenderType,
 } from "@/lib/contracts";
+import {
+  formatAttachmentSize,
+  inboxAttachmentUrl,
+  translateBubbleText,
+} from "@/lib/api-client/pack-b-inbox";
 import { useI18n } from "@/lib/i18n";
+
+/** 附件投影（契约 attachments 为自由 JSON，后端实际下发这四个字段）。 */
+export interface InboxAttachment {
+  filename?: string;
+  mime_type?: string;
+  size_bytes?: number;
+  download_url?: string;
+  storage_key?: string | null;
+}
 
 export interface InboxMessage {
   id: string;
@@ -30,19 +57,36 @@ export interface InboxMessage {
   translated_text_en?: string | null;
   delivery_status: DeliveryStatus;
   source_timestamp: string;
+  /** Pack B：图片 / PDF / 表格附件（缺省即纯文本消息）。 */
+  attachments?: InboxAttachment[];
+}
+
+function isImageAttachment(attachment: InboxAttachment): boolean {
+  if (attachment.mime_type?.startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|bmp|svg|heic)$/i.test(attachment.filename ?? "");
 }
 
 export function MessageThread({
   conversation,
   messages,
   onToggleDrawer,
+  headerActions,
 }: {
   conversation: ConversationSummary | null;
   messages: InboxMessage[];
   onToggleDrawer: () => void;
+  /** 会话级操作槽（置顶 / 标签管理），由 /inbox 页面注入。 */
+  headerActions?: React.ReactNode;
 }) {
   const { locale, t, bi } = useI18n();
   const [expandedTranslations, setExpandedTranslations] = useState<Record<string, boolean>>({});
+  // Pack B：一键气泡翻译的结果缓存（按 message.id），以及每条的加载/隐藏状态。
+  const [bubbleTranslations, setBubbleTranslations] = useState<Record<string, string>>({});
+  const [hiddenBubbleTranslations, setHiddenBubbleTranslations] = useState<
+    Record<string, boolean>
+  >({});
+  const [translatingId, setTranslatingId] = useState<string | null>(null);
+  const [translateError, setTranslateError] = useState<Record<string, string>>({});
 
   if (!conversation) {
     return (
@@ -61,38 +105,86 @@ export function MessageThread({
     setExpandedTranslations((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
   }
 
+  async function runBubbleTranslation(msg: InboxMessage) {
+    if (!msg.body_text.trim()) return;
+    setTranslatingId(msg.id);
+    setTranslateError((prev) => {
+      const next = { ...prev };
+      delete next[msg.id];
+      return next;
+    });
+    try {
+      const translated = await translateBubbleText(msg.body_text, "zh");
+      setBubbleTranslations((prev) => ({ ...prev, [msg.id]: translated }));
+      setHiddenBubbleTranslations((prev) => ({ ...prev, [msg.id]: false }));
+    } catch (error) {
+      setTranslateError((prev) => ({
+        ...prev,
+        [msg.id]:
+          error instanceof Error && error.message
+            ? error.message
+            : bi("翻译失败，请重试。", "Translation failed. Please retry."),
+      }));
+    } finally {
+      setTranslatingId(null);
+    }
+  }
+
+  const conversationTags = conversation.tags ?? [];
+
   return (
     <div
       data-testid="inbox-message-thread"
       className="flex min-h-0 flex-1 flex-col bg-slate-50/60"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/90 bg-white px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5E2DC] bg-white px-4 py-2.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span
             aria-hidden="true"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-100 text-[11.5px] font-bold text-blue-700 ring-1 ring-blue-200"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-[11.5px] font-bold text-emerald-800 ring-1 ring-emerald-200"
           >
             {initialsOf(conversation.customer_name)}
           </span>
-          <h2 className="truncate text-[14px] font-bold text-slate-900">
+          <h2 className="truncate text-[14px] font-bold text-stone-900">
             {conversation.customer_name}
           </h2>
+          {conversation.is_pinned && (
+            <Pin
+              aria-hidden="true"
+              data-testid="conversation-header-pin"
+              className="h-3.5 w-3.5 shrink-0 rotate-45 text-emerald-700"
+            />
+          )}
           {conversation.country_code && (
-            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-slate-700 ring-1 ring-slate-200/70">
+            <span className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-stone-700 ring-1 ring-stone-200/70">
               {conversation.country_code}
             </span>
           )}
           {conversation.channel_type && (
-            <span className="rounded-md bg-white px-1.5 py-0.5 text-[10.5px] font-medium text-slate-600 ring-1 ring-slate-200">
+            <span className="rounded-md bg-white px-1.5 py-0.5 text-[10.5px] font-medium text-stone-600 ring-1 ring-stone-200">
               {conversation.channel_type}
+            </span>
+          )}
+          {conversationTags.length > 0 && (
+            <span className="flex flex-wrap items-center gap-1">
+              {conversationTags.map((tag) => (
+                <span
+                  key={tag}
+                  data-testid={`conversation-header-tag-${tag}`}
+                  className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
+                >
+                  <Tag className="h-2.5 w-2.5" />
+                  {tag}
+                </span>
+              ))}
             </span>
           )}
           {localTimeInfo && (
             <span
               data-testid="buyer-local-time-badge"
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium tabular-nums text-slate-700"
+              className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-medium tabular-nums text-stone-700"
             >
-              <Clock className="h-3 w-3 text-slate-500" />
+              <Clock className="h-3 w-3 text-stone-500" />
               <span>
                 {t("localTime")} {localTimeInfo.formattedTime} ({localTimeInfo.ianaTimezone})
               </span>
@@ -108,23 +200,30 @@ export function MessageThread({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={onToggleDrawer}
-          className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
-        >
-          <PanelRight className="h-3.5 w-3.5" />
-          <span>{bi("客户上下文", "Context")}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {headerActions}
+          <button
+            type="button"
+            onClick={onToggleDrawer}
+            className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
+          >
+            <PanelRight className="h-3.5 w-3.5" />
+            <span>{bi("客户上下文", "Context")}</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 space-y-3.5 overflow-y-auto px-4 py-4">
         {messages.map((msg) => {
           const isInternalNote = msg.direction === "internal_note";
           const isOutbound = msg.direction === "outbound";
+          const isInboundCustomer = msg.direction === "inbound";
           const translationText =
             locale === "zh" ? msg.translated_text_zh : msg.translated_text_en;
           const isExpanded = Boolean(expandedTranslations[msg.id]);
+          const bubbleTranslation = bubbleTranslations[msg.id];
+          const bubbleTranslationHidden = Boolean(hiddenBubbleTranslations[msg.id]);
+          const attachments = msg.attachments ?? [];
 
           return (
             <div
@@ -138,7 +237,7 @@ export function MessageThread({
                     ? "border-amber-200 bg-amber-50/90 text-amber-950 shadow-[0_1px_2px_rgba(180,83,9,0.08)]"
                     : isOutbound
                       ? "rounded-br-md border-[#18181B] bg-[#18181B] text-[#FAFAF9] shadow-[0_6px_18px_-8px_rgba(24,24,27,0.55)]"
-                      : "rounded-bl-md border-slate-200 bg-white text-slate-900 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.18)]"
+                      : "rounded-bl-md border-stone-200 bg-white text-stone-900 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.18)]"
                 }`}
               >
                 <div
@@ -146,8 +245,8 @@ export function MessageThread({
                     isInternalNote
                       ? "text-amber-800"
                       : isOutbound
-                        ? "text-blue-100"
-                        : "text-slate-500"
+                        ? "text-emerald-100"
+                        : "text-stone-500"
                   }`}
                 >
                   {isInternalNote && <StickyNote className="h-3 w-3" />}
@@ -156,8 +255,8 @@ export function MessageThread({
                     <span
                       className={`inline-flex items-center gap-0.5 rounded px-1 py-px ring-1 ${
                         isOutbound
-                          ? "bg-white/15 text-blue-50 ring-white/25"
-                          : "bg-slate-100 text-slate-700 ring-slate-200"
+                          ? "bg-white/15 text-emerald-50 ring-white/25"
+                          : "bg-stone-100 text-stone-700 ring-stone-200"
                       }`}
                     >
                       <Globe className="h-2.5 w-2.5" />
@@ -171,10 +270,68 @@ export function MessageThread({
 
                 <p className="whitespace-pre-wrap">{msg.body_text}</p>
 
+                {attachments.length > 0 && (
+                  <div
+                    data-testid={`message-attachments-${msg.id}`}
+                    className="mt-2 flex flex-col gap-1.5"
+                  >
+                    {attachments.map((attachment, index) => {
+                      const href = inboxAttachmentUrl(attachment.download_url);
+                      const label =
+                        attachment.filename ||
+                        bi(`附件 ${index + 1}`, `Attachment ${index + 1}`);
+                      if (isImageAttachment(attachment) && href) {
+                        return (
+                          <a
+                            key={`${msg.id}-attachment-${index}`}
+                            data-testid={`message-attachment-image-${msg.id}-${index}`}
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            title={bi("点击查看原图", "Open full image")}
+                            className="block w-fit overflow-hidden rounded-xl border border-stone-200/90 bg-stone-50 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.25)] transition-transform duration-150 hover:scale-[1.01]"
+                          >
+                            {/* 契约附件地址需带 Cookie 走 BFF，故不用 next/image 优化器。 */}
+                            <img
+                              src={href}
+                              alt={label}
+                              className="max-h-52 max-w-[260px] object-cover"
+                            />
+                          </a>
+                        );
+                      }
+                      const sizeLabel = formatAttachmentSize(attachment.size_bytes);
+                      return (
+                        <a
+                          key={`${msg.id}-attachment-${index}`}
+                          data-testid={`message-attachment-file-${msg.id}-${index}`}
+                          href={href || undefined}
+                          download={attachment.filename || undefined}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className={`inline-flex w-fit max-w-full items-center gap-1.5 rounded-xl border px-2 py-1 text-[11.5px] font-semibold transition-colors ${
+                            isOutbound
+                              ? "border-white/25 bg-white/10 text-emerald-50 hover:bg-white/15"
+                              : "border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100"
+                          }`}
+                        >
+                          <Download className="h-3 w-3 shrink-0" />
+                          <span className="max-w-[200px] truncate">{label}</span>
+                          {sizeLabel && (
+                            <span className="shrink-0 tabular-nums opacity-70">
+                              {sizeLabel}
+                            </span>
+                          )}
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {translationText && (
                   <div
                     className={`mt-2 border-t pt-1.5 ${
-                      isOutbound ? "border-white/25" : "border-slate-200"
+                      isOutbound ? "border-white/25" : "border-stone-200"
                     }`}
                   >
                     <button
@@ -189,7 +346,7 @@ export function MessageThread({
                     {isExpanded && (
                       <p
                         className={`mt-1 rounded-lg px-2 py-1.5 text-[12px] ${
-                          isOutbound ? "bg-white/12" : "bg-slate-50 text-slate-800"
+                          isOutbound ? "bg-white/12" : "bg-stone-50 text-stone-800"
                         }`}
                       >
                         {translationText}
@@ -199,17 +356,91 @@ export function MessageThread({
                 )}
 
                 {isOutbound && (
-                  <div className="mt-1 flex items-center justify-end gap-1 text-[10px] font-medium text-blue-100">
+                  <div className="mt-1 flex items-center justify-end gap-1 text-[10px] font-medium text-emerald-100">
                     <Lock className="h-2.5 w-2.5" />
                     <span>{msg.delivery_status}</span>
                   </div>
                 )}
               </div>
+
+              {isInboundCustomer && msg.body_text.trim().length > 0 && (
+                <div className="mt-1 flex flex-col items-start gap-1">
+                  <button
+                    type="button"
+                    data-testid={`translate-msg-${msg.id}`}
+                    aria-label={bi("把这条买家消息译成中文", "Translate this buyer message to Chinese")}
+                    disabled={translatingId === msg.id}
+                    onClick={() => void runBubbleTranslation(msg)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-60"
+                  >
+                    {translatingId === msg.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Languages className="h-3 w-3" />
+                    )}
+                    <span>{bi("译成中文", "Translate to ZH")}</span>
+                  </button>
+
+                  {translateError[msg.id] && (
+                    <p
+                      role="alert"
+                      data-testid={`translate-msg-error-${msg.id}`}
+                      className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700"
+                    >
+                      {translateError[msg.id]}
+                    </p>
+                  )}
+
+                  {bubbleTranslation && !bubbleTranslationHidden && (
+                    <div
+                      data-testid={`translated-bubble-${msg.id}`}
+                      className="max-w-2xl rounded-2xl rounded-tl-md border border-emerald-200 bg-emerald-50/85 px-3 py-1.5 text-[12.5px] leading-6 text-emerald-950 shadow-[0_2px_8px_-4px_rgba(6,95,70,0.28)]"
+                    >
+                      <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700">
+                        <Languages className="h-2.5 w-2.5" />
+                        <span>{bi("中文译文", "Chinese translation")}</span>
+                        <button
+                          type="button"
+                          data-testid={`hide-translated-bubble-${msg.id}`}
+                          onClick={() =>
+                            setHiddenBubbleTranslations((prev) => ({
+                              ...prev,
+                              [msg.id]: true,
+                            }))
+                          }
+                          className="ml-auto inline-flex items-center gap-0.5 rounded px-1 py-px font-semibold text-emerald-700/80 hover:bg-emerald-100 hover:text-emerald-900"
+                        >
+                          <EyeOff className="h-2.5 w-2.5" />
+                          {bi("隐藏", "Hide")}
+                        </button>
+                      </div>
+                      <p className="whitespace-pre-wrap">{bubbleTranslation}</p>
+                    </div>
+                  )}
+
+                  {bubbleTranslation && bubbleTranslationHidden && (
+                    <button
+                      type="button"
+                      data-testid={`show-translated-bubble-${msg.id}`}
+                      onClick={() =>
+                        setHiddenBubbleTranslations((prev) => ({
+                          ...prev,
+                          [msg.id]: false,
+                        }))
+                      }
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 underline decoration-dotted underline-offset-2"
+                    >
+                      <Eye className="h-3 w-3" />
+                      {bi("显示译文", "Show translation")}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
         {messages.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-slate-300 bg-white/70 py-8 text-center text-[12px] font-medium text-slate-600">
+          <p className="rounded-2xl border border-dashed border-stone-300 bg-white/70 py-8 text-center text-[12px] font-medium text-stone-600">
             {bi("该会话还没有消息。", "No messages in this conversation yet.")}
           </p>
         )}

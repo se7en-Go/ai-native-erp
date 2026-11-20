@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { AlertTriangle, Clock, LockKeyhole, Search } from "lucide-react";
+import { AlertTriangle, Clock, LockKeyhole, Pin, Search, Tag } from "lucide-react";
 import type { ChannelType, ConversationMode, ConversationStatus } from "@/lib/contracts";
 import { useI18n } from "@/lib/i18n";
 
@@ -29,6 +29,15 @@ export interface ConversationSummary {
   assigned_user_name?: string | null;
   channel_account_display_name?: string | null;
   channel_visibility_scope?: "shared" | "personal" | null;
+  /** Pack B 增量字段：会话置顶与服务端标签集合（缺省即未置顶 / 无标签）。 */
+  is_pinned?: boolean;
+  tags?: string[];
+}
+
+/** 「按绑定账号筛选」下拉里的一个渠道账号。 */
+export interface ConversationAccountOption {
+  id: string;
+  display_name: string;
 }
 
 /**
@@ -132,6 +141,11 @@ export function ConversationList({
   headerSlot,
   quickConnectHref = "/settings/channels",
   quickConnectLabel,
+  channelAccounts = [],
+  channelAccountFilter = "all",
+  onChannelAccountFilterChange,
+  pinnedOnly = false,
+  onTogglePinnedOnly,
 }: {
   conversations: ConversationSummary[];
   selectedConversationId: string | null;
@@ -145,6 +159,14 @@ export function ConversationList({
   /** 当前渠道筛选对应的渠道中心深链（`?connect=<channel>` 直达抽屉）。 */
   quickConnectHref?: string;
   quickConnectLabel?: string;
+  /** Pack B：已绑定渠道账号列表，用于「按绑定账号筛选」下拉。 */
+  channelAccounts?: ConversationAccountOption[];
+  /** 当前选中的渠道账号 id；`all` 表示全部账号。 */
+  channelAccountFilter?: string;
+  onChannelAccountFilterChange?: (channelAccountId: string) => void;
+  /** 仅看置顶开关。 */
+  pinnedOnly?: boolean;
+  onTogglePinnedOnly?: () => void;
 }) {
   const { bi } = useI18n();
   const unreadTotal = conversations.reduce((total, conv) => total + conv.unread_count, 0);
@@ -176,6 +198,39 @@ export function ConversationList({
             aria-label={bi("搜索会话", "Search conversations")}
             className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-1.5 pr-2.5 pl-8 text-[12px] text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/12"
           />
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <select
+            data-testid="inbox-account-filter"
+            aria-label={bi("按绑定账号筛选", "Filter by connected account")}
+            value={channelAccountFilter}
+            onChange={(e) => onChannelAccountFilterChange?.(e.target.value)}
+            className="min-w-0 flex-1 truncate rounded-lg border border-[#E5E2DC] bg-[#FAF8F5] px-2 py-1 text-[11.5px] font-semibold text-stone-700 transition-colors hover:border-emerald-200 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-emerald-500/12"
+          >
+            <option value="all">{bi("全部账号", "All accounts")}</option>
+            {channelAccounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.display_name}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            data-testid="inbox-pinned-only-btn"
+            aria-pressed={pinnedOnly}
+            title={bi("仅看置顶会话", "Pinned conversations only")}
+            onClick={() => onTogglePinnedOnly?.()}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11.5px] font-semibold transition-colors ${
+              pinnedOnly
+                ? "border-emerald-300 bg-emerald-600 text-white shadow-[0_1px_6px_-2px_rgba(5,150,105,0.7)]"
+                : "border-[#E5E2DC] bg-white text-stone-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+            }`}
+          >
+            <Pin className="h-3 w-3" />
+            <span>{bi("仅看置顶", "Pinned")}</span>
+          </button>
         </div>
 
         <div className="grid grid-cols-4 gap-1">
@@ -256,9 +311,18 @@ export function ConversationList({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-[13px] font-semibold text-slate-900">
-                        {conv.customer_name}
-                        {conv.country_code ? ` (${conv.country_code})` : ""}
+                      <span className="flex min-w-0 items-center gap-1 truncate text-[13px] font-semibold text-slate-900">
+                        {conv.is_pinned && (
+                          <Pin
+                            aria-hidden="true"
+                            data-testid={`conversation-pin-${conv.id}`}
+                            className="h-3 w-3 shrink-0 rotate-45 text-emerald-600"
+                          />
+                        )}
+                        <span className="truncate">
+                          {conv.customer_name}
+                          {conv.country_code ? ` (${conv.country_code})` : ""}
+                        </span>
                       </span>
                       {conv.unread_count > 0 && (
                         <span className="shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
@@ -270,6 +334,21 @@ export function ConversationList({
                     <p className="mt-0.5 line-clamp-2 text-[12px] leading-5 text-slate-600">
                       {conv.last_message_preview}
                     </p>
+
+                    {(conv.tags ?? []).length > 0 && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {(conv.tags ?? []).map((tag) => (
+                          <span
+                            key={tag}
+                            data-testid={`conversation-tag-${conv.id}-${tag}`}
+                            className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
+                          >
+                            <Tag className="h-2.5 w-2.5" />
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] font-medium">
                       <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-700 ring-1 ring-slate-200/70">

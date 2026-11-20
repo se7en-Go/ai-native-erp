@@ -46,6 +46,7 @@ export type AiCapability = 'cs_support' | 'sales_quoting' | 'order_logistics' | 
  * Operator-supplied digital employee definition.
  */
 export type AiEmployeeCreate = {
+    allowed_tools?: Array<string> | null;
     autonomy_level?: AutonomyLevel;
     avatar_emoji?: string | null;
     capability_codes?: Array<AiCapability>;
@@ -61,6 +62,7 @@ export type AiEmployeeCreate = {
 
 export type AiEmployeeRead = {
     actions_7d?: number;
+    allowed_tools?: Array<string>;
     autonomy_level: AutonomyLevel;
     avatar_emoji: string | null;
     capability_codes: Array<AiCapability>;
@@ -194,6 +196,11 @@ export type AutonomySummary = {
     l0_copilot: number;
     l1_proposal: number;
     l2_auto: number;
+};
+
+export type BodyPostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPost = {
+    caption?: string | null;
+    file: string;
 };
 
 export type BodySubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPost = {
@@ -331,6 +338,20 @@ export type CaptionRead = {
     text: string;
 };
 
+/**
+ * Bulk catalog upload. Headers are matched case-insensitively by the service.
+ */
+export type CatalogCsvImportRequest = {
+    csv_text: string;
+};
+
+export type CatalogCsvImportResponse = {
+    created_products?: number;
+    created_variants?: number;
+    errors?: Array<string>;
+    updated_variants?: number;
+};
+
 export type ChannelAccountRead = {
     bot_username?: string | null;
     channel_type: ChannelType;
@@ -441,12 +462,14 @@ export type ConversationRead = {
     human_agent_window_expires_at?: string | null;
     iana_timezone?: string | null;
     id: string;
+    is_pinned?: boolean;
     last_inbound_at?: string | null;
     last_message_preview?: string | null;
     last_outbound_at?: string | null;
     sla_due_at?: string | null;
     status: ConversationStatus;
     subject?: string | null;
+    tags?: Array<string>;
     tenant_id: string;
     unread_count: number;
     updated_at: string;
@@ -625,6 +648,17 @@ export type CustomerUpdateRequest = {
     preferred_language?: string | null;
 };
 
+export type DailyPatrolBriefRead = {
+    alerts: Array<PatrolAlertItem>;
+    generated_at: string;
+    health_score: number;
+    metrics: {
+        [key: string]: number;
+    };
+    summary_en: string;
+    summary_zh: string;
+};
+
 export type DashboardRead = {
     b2c_orders: number;
     channels: Array<ChannelVolume>;
@@ -680,6 +714,30 @@ export type EmbeddedSignupResponse = {
     channel_account_id: string;
     channel_type: ChannelType;
     mps_cap: number;
+};
+
+/**
+ * Enrich selected prospects from the e-mail addresses their website publishes.
+ */
+export type EnrichProspectEmailsRequest = {
+    force?: boolean;
+    prospect_ids: Array<string>;
+};
+
+export type EnrichProspectEmailsResponse = {
+    checked_count: number;
+    enriched_count: number;
+    items: Array<EnrichedProspectItem>;
+};
+
+export type EnrichedProspectItem = {
+    company_name: string;
+    email: string | null;
+    grade: 'A' | 'B' | 'C';
+    previous_email: string | null;
+    prospect_id: string;
+    status: 'enriched' | 'no_email_found' | 'blocked' | 'invalid_website' | 'skipped_no_website' | 'already_has_email' | 'not_found';
+    website: string | null;
 };
 
 export type FinanceOverviewRead = {
@@ -887,13 +945,27 @@ export type KbSearchRequest = {
     top_k?: number;
 };
 
+/**
+ * Create a collection job.
+ *
+ * Two shapes are accepted and they stay fully backwards compatible:
+ *
+ * * legacy — `source_provider` pinned, e.g. `overpass_osm` + `target_region`; the
+ * job stays `pending` until `POST /jobs/{id}/run` (unchanged behaviour);
+ * * batch — `cities`/`city` (one or many), `keywords`/`keyword`, and
+ * `provider_mode`; the recipe is request-scoped, so it executes immediately.
+ */
 export type LeadCollectionJobCreate = {
+    cities?: Array<string> | null;
+    city?: string | null;
     csv_content?: string | null;
+    keyword?: string | null;
     keywords?: Array<string>;
     max_results?: number;
     min_rating?: number | string | null;
+    provider_mode?: 'auto' | 'overpass' | 'google_places' | 'synthetic';
     require_phone?: boolean;
-    source_provider: 'google_places' | 'overpass_osm' | 'overture_poi' | 'csv_import';
+    source_provider?: ('google_places' | 'overpass_osm' | 'overture_poi' | 'csv_import') | null;
     target_region?: string | null;
 };
 
@@ -910,6 +982,9 @@ export type LeadCollectionJobRead = {
     min_rating: string | null;
     require_phone: boolean;
     source_provider: 'google_places' | 'overpass_osm' | 'overture_poi' | 'csv_import';
+    sources?: {
+        [key: string]: number;
+    };
     status: 'pending' | 'running' | 'completed' | 'failed';
     synced_count: number;
     target_region: string | null;
@@ -969,6 +1044,39 @@ export type LoginRequest = {
     email: string;
     password: string;
     tenant_slug?: string | null;
+};
+
+/**
+ * One-click replenishment: convert a low-stock SKU into a real purchase order.
+ */
+export type LowStockCreatePoRequest = {
+    currency?: string;
+    notes?: string | null;
+    quantity: number;
+    supplier_id: string;
+    unit_cost: number | string;
+    variant_id: string;
+};
+
+/**
+ * One SKU/warehouse pair sitting below its configured safety stock.
+ */
+export type LowStockItemRead = {
+    available_qty: number;
+    on_hand_qty: number;
+    product_name: string;
+    reserved_qty: number;
+    safety_stock_qty: number;
+    sku: string;
+    suggested_reorder_qty: number;
+    variant_id: string;
+    warehouse_id: string;
+    warehouse_name: string;
+};
+
+export type LowStockListRead = {
+    items: Array<LowStockItemRead>;
+    total?: number;
 };
 
 export type MembershipItem = {
@@ -1521,6 +1629,53 @@ export type PaginatedResponseVariantRead = {
     total: number;
 };
 
+/**
+ * One live, tenant-scoped patrol finding with the employee who owns the follow-up.
+ */
+export type PatrolAlertItem = {
+    action_href: string;
+    code: string;
+    count: number;
+    detail_en: string;
+    detail_zh: string;
+    employee_code: string;
+    employee_name: string;
+    severity: 'high' | 'medium' | 'info';
+    title_en: string;
+    title_zh: string;
+};
+
+export type PatrolDispatchRead = {
+    action_summary_en: string;
+    action_summary_zh: string;
+    created_task_id?: string | null;
+    employee_code: string;
+    employee_name: string;
+    employee_role_title: string;
+    findings: Array<PatrolFindingItem>;
+    generated_at: string;
+    metrics: {
+        [key: string]: number;
+    };
+    recommended_href: string;
+};
+
+/**
+ * A single live SQL finding returned by a dispatcher run.
+ */
+export type PatrolFindingItem = {
+    action_href: string;
+    code: string;
+    count: number;
+    detail_en: string;
+    detail_zh: string;
+    samples?: Array<{
+        [key: string]: unknown;
+    }>;
+    title_en: string;
+    title_zh: string;
+};
+
 export type PaymentCreate = {
     actual_fx_rate: number | string;
     amount_received: number | string;
@@ -2070,6 +2225,31 @@ export type SendQuoteEmailResponse = {
     recipient_email: string;
 };
 
+/**
+ * Really deliver a queued email campaign through the tenant's own mailbox.
+ */
+export type SendRealCampaignRequest = {
+    channel_account_id?: string | null;
+    dry_run?: boolean;
+    max_send?: number;
+};
+
+/**
+ * Counts of one real delivery run.
+ *
+ * On a `dry_run` nothing is persisted and `sent_count` reports how many messages
+ * *would* have been delivered.
+ */
+export type SendRealCampaignResponse = {
+    campaign_id: string;
+    dry_run: boolean;
+    failed_count: number;
+    from_email: string;
+    provider: string;
+    sent_count: number;
+    suppressed_count: number;
+};
+
 export type ShipOrderRequest = {
     actual_shipping_cost_base?: number | string;
     carrier_code?: string | null;
@@ -2166,6 +2346,27 @@ export type SkuMargin = {
     sku: string;
     units: number;
     variant_id: string;
+};
+
+/**
+ * Bilingual operating card for one platform: audience, funnel, practices, compliance.
+ */
+export type SocialPlaybookItem = {
+    audience_en: string;
+    audience_zh: string;
+    best_practices_en: Array<string>;
+    best_practices_zh: Array<string>;
+    category_en: string;
+    category_zh: string;
+    compliance_note_en: string;
+    compliance_note_zh: string;
+    lead_funnel_en: string;
+    lead_funnel_zh: string;
+    name_en: string;
+    name_zh: string;
+    official_api_supported: boolean;
+    platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'linkedin' | 'pinterest' | 'x' | 'xiaohongshu' | 'douyin' | 'kuaishou' | 'bilibili' | 'wechat_video' | 'wechat_oa' | 'weibo';
+    region: 'overseas' | 'domestic';
 };
 
 export type SocialSummary = {
@@ -2370,8 +2571,10 @@ export type UpdateConversationRequest = {
     ai_autonomy_override?: AutonomyLevel | null;
     assigned_user_id?: string | null;
     conversation_mode?: ConversationMode | null;
+    is_pinned?: boolean | null;
     mark_read?: boolean | null;
     status?: ConversationStatus | null;
+    tags?: Array<string> | null;
 };
 
 export type UpdateMemberRoleRequest = {
@@ -2484,6 +2687,13 @@ export type VerifyEmailDnsRequest = {
     domain: string;
 };
 
+export type WarehouseCreateRequest = {
+    city?: string;
+    code: string;
+    country_code?: string;
+    name: string;
+};
+
 export type WarehouseListRead = {
     default_warehouse_id: string | null;
     items: Array<WarehouseRead>;
@@ -2560,6 +2770,14 @@ export type WidgetSessionResponse = {
     messages: Array<WidgetMessageItem>;
     session_token: string;
     visitor_id: string;
+};
+
+export type WmsWarehouseRead = {
+    city: string;
+    code: string;
+    country_code: string;
+    id: string;
+    name: string;
 };
 
 export type WooAuthCallbackPayload = {
@@ -2996,6 +3214,64 @@ export type SearchKbHybridApiV1AiKbSearchPostResponses = {
 };
 
 export type SearchKbHybridApiV1AiKbSearchPostResponse = SearchKbHybridApiV1AiKbSearchPostResponses[keyof SearchKbHybridApiV1AiKbSearchPostResponses];
+
+export type DailyPatrolBriefApiV1AiPatrolDailyBriefGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/patrol/daily-brief';
+};
+
+export type DailyPatrolBriefApiV1AiPatrolDailyBriefGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DailyPatrolBriefApiV1AiPatrolDailyBriefGetError = DailyPatrolBriefApiV1AiPatrolDailyBriefGetErrors[keyof DailyPatrolBriefApiV1AiPatrolDailyBriefGetErrors];
+
+export type DailyPatrolBriefApiV1AiPatrolDailyBriefGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DailyPatrolBriefRead;
+};
+
+export type DailyPatrolBriefApiV1AiPatrolDailyBriefGetResponse = DailyPatrolBriefApiV1AiPatrolDailyBriefGetResponses[keyof DailyPatrolBriefApiV1AiPatrolDailyBriefGetResponses];
+
+export type DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        employee_code: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/patrol/dispatch/{employee_code}';
+};
+
+export type DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostError = DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostErrors[keyof DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostErrors];
+
+export type DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatrolDispatchRead;
+};
+
+export type DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostResponse = DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostResponses[keyof DispatchPatrolEmployeeApiV1AiPatrolDispatchEmployeeCodePostResponses];
 
 export type ListProposalsApiV1AiProposalsGetData = {
     body?: never;
@@ -4539,6 +4815,34 @@ export type CreateVariantApiV1CatalogVariantsPostResponses = {
 
 export type CreateVariantApiV1CatalogVariantsPostResponse = CreateVariantApiV1CatalogVariantsPostResponses[keyof CreateVariantApiV1CatalogVariantsPostResponses];
 
+export type ImportVariantsCsvApiV1CatalogVariantsImportCsvPostData = {
+    body: CatalogCsvImportRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/variants/import-csv';
+};
+
+export type ImportVariantsCsvApiV1CatalogVariantsImportCsvPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportVariantsCsvApiV1CatalogVariantsImportCsvPostError = ImportVariantsCsvApiV1CatalogVariantsImportCsvPostErrors[keyof ImportVariantsCsvApiV1CatalogVariantsImportCsvPostErrors];
+
+export type ImportVariantsCsvApiV1CatalogVariantsImportCsvPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CatalogCsvImportResponse;
+};
+
+export type ImportVariantsCsvApiV1CatalogVariantsImportCsvPostResponse = ImportVariantsCsvApiV1CatalogVariantsImportCsvPostResponses[keyof ImportVariantsCsvApiV1CatalogVariantsImportCsvPostResponses];
+
 export type UpdateVariantApiV1CatalogVariantsVariantIdPatchData = {
     body: VariantUpdate;
     headers?: {
@@ -5880,6 +6184,36 @@ export type ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetRes
 
 export type ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetResponse = ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetResponses[keyof ListCampaignRecipientsApiV1GrowthCampaignsCampaignIdRecipientsGetResponses];
 
+export type SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostData = {
+    body: SendRealCampaignRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        campaign_id: string;
+    };
+    query?: never;
+    url: '/api/v1/growth/campaigns/{campaign_id}/send-real';
+};
+
+export type SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostError = SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostErrors[keyof SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostErrors];
+
+export type SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SendRealCampaignResponse;
+};
+
+export type SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostResponse = SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostResponses[keyof SendCampaignRealApiV1GrowthCampaignsCampaignIdSendRealPostResponses];
+
 export type ListJobsApiV1GrowthJobsGetData = {
     body?: never;
     headers?: {
@@ -6032,6 +6366,34 @@ export type CleanProspectsApiV1GrowthProspectsCleanPostResponses = {
 
 export type CleanProspectsApiV1GrowthProspectsCleanPostResponse = CleanProspectsApiV1GrowthProspectsCleanPostResponses[keyof CleanProspectsApiV1GrowthProspectsCleanPostResponses];
 
+export type EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostData = {
+    body: EnrichProspectEmailsRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/growth/prospects/enrich-emails';
+};
+
+export type EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostError = EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostErrors[keyof EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostErrors];
+
+export type EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnrichProspectEmailsResponse;
+};
+
+export type EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostResponse = EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostResponses[keyof EnrichProspectEmailsApiV1GrowthProspectsEnrichEmailsPostResponses];
+
 export type ExportProspectsApiV1GrowthProspectsExportCsvGetData = {
     body?: never;
     headers?: {
@@ -6116,6 +6478,35 @@ export type CollectionSummaryApiV1GrowthSummaryGetResponses = {
 
 export type CollectionSummaryApiV1GrowthSummaryGetResponse = CollectionSummaryApiV1GrowthSummaryGetResponses[keyof CollectionSummaryApiV1GrowthSummaryGetResponses];
 
+export type GetInboxAttachmentApiV1InboxAttachmentsMessageIdAttachmentIndexGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        message_id: string;
+        attachment_index: number;
+    };
+    query?: never;
+    url: '/api/v1/inbox/attachments/{message_id}/{attachment_index}';
+};
+
+export type GetInboxAttachmentApiV1InboxAttachmentsMessageIdAttachmentIndexGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetInboxAttachmentApiV1InboxAttachmentsMessageIdAttachmentIndexGetError = GetInboxAttachmentApiV1InboxAttachmentsMessageIdAttachmentIndexGetErrors[keyof GetInboxAttachmentApiV1InboxAttachmentsMessageIdAttachmentIndexGetErrors];
+
+export type GetInboxAttachmentApiV1InboxAttachmentsMessageIdAttachmentIndexGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type ListInboxConversationsApiV1InboxConversationsGetData = {
     body?: never;
     headers?: {
@@ -6127,7 +6518,10 @@ export type ListInboxConversationsApiV1InboxConversationsGetData = {
         filter?: ('all' | 'unread' | 'pending_human' | 'sla_urgent') | null;
         channel_type?: ChannelType | null;
         channel?: ChannelType | null;
+        channel_account_id?: string | null;
         assigned_user_id?: string | null;
+        tag?: string | null;
+        pinned_only?: boolean;
         q?: string | null;
         limit?: number;
         offset?: number;
@@ -6182,6 +6576,36 @@ export type PatchConversationApiV1InboxConversationsConversationIdPatchResponses
 };
 
 export type PatchConversationApiV1InboxConversationsConversationIdPatchResponse = PatchConversationApiV1InboxConversationsConversationIdPatchResponses[keyof PatchConversationApiV1InboxConversationsConversationIdPatchResponses];
+
+export type PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostData = {
+    body: BodyPostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPost;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/inbox/conversations/{conversation_id}/attachments';
+};
+
+export type PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostError = PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostErrors[keyof PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostErrors];
+
+export type PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: SendInboxMessageResponse;
+};
+
+export type PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostResponse = PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostResponses[keyof PostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPostResponses];
 
 export type ListConversationMessagesApiV1InboxConversationsConversationIdMessagesGetData = {
     body?: never;
@@ -6631,6 +7055,66 @@ export type CancelOrderApiV1OrdersOrderIdCancelPostResponses = {
 
 export type CancelOrderApiV1OrdersOrderIdCancelPostResponse = CancelOrderApiV1OrdersOrderIdCancelPostResponses[keyof CancelOrderApiV1OrdersOrderIdCancelPostResponses];
 
+export type DownloadCommercialInvoicePdfApiV1OrdersOrderIdDocumentsCommercialInvoicePdfGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+    };
+    query?: {
+        language?: 'en' | 'zh';
+    };
+    url: '/api/v1/orders/{order_id}/documents/commercial-invoice.pdf';
+};
+
+export type DownloadCommercialInvoicePdfApiV1OrdersOrderIdDocumentsCommercialInvoicePdfGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DownloadCommercialInvoicePdfApiV1OrdersOrderIdDocumentsCommercialInvoicePdfGetError = DownloadCommercialInvoicePdfApiV1OrdersOrderIdDocumentsCommercialInvoicePdfGetErrors[keyof DownloadCommercialInvoicePdfApiV1OrdersOrderIdDocumentsCommercialInvoicePdfGetErrors];
+
+export type DownloadCommercialInvoicePdfApiV1OrdersOrderIdDocumentsCommercialInvoicePdfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DownloadPackingListPdfApiV1OrdersOrderIdDocumentsPackingListPdfGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+    };
+    query?: {
+        language?: 'en' | 'zh';
+    };
+    url: '/api/v1/orders/{order_id}/documents/packing-list.pdf';
+};
+
+export type DownloadPackingListPdfApiV1OrdersOrderIdDocumentsPackingListPdfGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DownloadPackingListPdfApiV1OrdersOrderIdDocumentsPackingListPdfGetError = DownloadPackingListPdfApiV1OrdersOrderIdDocumentsPackingListPdfGetErrors[keyof DownloadPackingListPdfApiV1OrdersOrderIdDocumentsPackingListPdfGetErrors];
+
+export type DownloadPackingListPdfApiV1OrdersOrderIdDocumentsPackingListPdfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type ShipOrderApiV1OrdersOrderIdShipPostData = {
     body: ShipOrderRequest;
     headers?: {
@@ -7051,6 +7535,36 @@ export type ListPlatformsApiV1SocialPlatformsGetResponses = {
 };
 
 export type ListPlatformsApiV1SocialPlatformsGetResponse = ListPlatformsApiV1SocialPlatformsGetResponses[keyof ListPlatformsApiV1SocialPlatformsGetResponses];
+
+export type ListPlaybooksApiV1SocialPlaybooksGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        region?: 'all' | 'overseas' | 'domestic';
+    };
+    url: '/api/v1/social/playbooks';
+};
+
+export type ListPlaybooksApiV1SocialPlaybooksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPlaybooksApiV1SocialPlaybooksGetError = ListPlaybooksApiV1SocialPlaybooksGetErrors[keyof ListPlaybooksApiV1SocialPlaybooksGetErrors];
+
+export type ListPlaybooksApiV1SocialPlaybooksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<SocialPlaybookItem>;
+};
+
+export type ListPlaybooksApiV1SocialPlaybooksGetResponse = ListPlaybooksApiV1SocialPlaybooksGetResponses[keyof ListPlaybooksApiV1SocialPlaybooksGetResponses];
 
 export type ListPostsApiV1SocialPostsGetData = {
     body?: never;
@@ -8172,6 +8686,62 @@ export type WidgetCorsPreflightApiV1WidgetPathOptionsResponses = {
     200: unknown;
 };
 
+export type ListLowStockApiV1WmsLowStockGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/wms/low-stock';
+};
+
+export type ListLowStockApiV1WmsLowStockGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListLowStockApiV1WmsLowStockGetError = ListLowStockApiV1WmsLowStockGetErrors[keyof ListLowStockApiV1WmsLowStockGetErrors];
+
+export type ListLowStockApiV1WmsLowStockGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LowStockListRead;
+};
+
+export type ListLowStockApiV1WmsLowStockGetResponse = ListLowStockApiV1WmsLowStockGetResponses[keyof ListLowStockApiV1WmsLowStockGetResponses];
+
+export type CreatePoFromLowStockApiV1WmsLowStockCreatePoPostData = {
+    body: LowStockCreatePoRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/wms/low-stock/create-po';
+};
+
+export type CreatePoFromLowStockApiV1WmsLowStockCreatePoPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreatePoFromLowStockApiV1WmsLowStockCreatePoPostError = CreatePoFromLowStockApiV1WmsLowStockCreatePoPostErrors[keyof CreatePoFromLowStockApiV1WmsLowStockCreatePoPostErrors];
+
+export type CreatePoFromLowStockApiV1WmsLowStockCreatePoPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: PurchaseOrderRead;
+};
+
+export type CreatePoFromLowStockApiV1WmsLowStockCreatePoPostResponse = CreatePoFromLowStockApiV1WmsLowStockCreatePoPostResponses[keyof CreatePoFromLowStockApiV1WmsLowStockCreatePoPostResponses];
+
 export type ListMovementsApiV1WmsMovementsGetData = {
     body?: never;
     headers?: {
@@ -8261,6 +8831,34 @@ export type ListStockApiV1WmsStockGetResponses = {
 };
 
 export type ListStockApiV1WmsStockGetResponse = ListStockApiV1WmsStockGetResponses[keyof ListStockApiV1WmsStockGetResponses];
+
+export type CreateWarehouseApiV1WmsWarehousesPostData = {
+    body: WarehouseCreateRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/wms/warehouses';
+};
+
+export type CreateWarehouseApiV1WmsWarehousesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateWarehouseApiV1WmsWarehousesPostError = CreateWarehouseApiV1WmsWarehousesPostErrors[keyof CreateWarehouseApiV1WmsWarehousesPostErrors];
+
+export type CreateWarehouseApiV1WmsWarehousesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: WmsWarehouseRead;
+};
+
+export type CreateWarehouseApiV1WmsWarehousesPostResponse = CreateWarehouseApiV1WmsWarehousesPostResponses[keyof CreateWarehouseApiV1WmsWarehousesPostResponses];
 
 export type HealthzHealthzGetData = {
     body?: never;

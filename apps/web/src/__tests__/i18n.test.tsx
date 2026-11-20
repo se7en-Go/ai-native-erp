@@ -55,7 +55,7 @@ describe("Stage 1 i18n single-language contract", () => {
     );
     expect(screen.getByTestId("locale").textContent).toBe("zh");
     expect(screen.getByTestId("bi").textContent).toBe("收款里程碑");
-    expect(screen.getByTestId("nav").textContent).toBe("财务与 CVP 毛利");
+    expect(screen.getByTestId("nav").textContent).toBe("财务与毛利");
   });
 
   it("persists the preference to localStorage#erp_locale and switches to pure English", () => {

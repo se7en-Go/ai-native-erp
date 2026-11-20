@@ -31,6 +31,27 @@ class PlatformRead(BaseModel):
     compliance_note: str
 
 
+class SocialPlaybookItem(BaseModel):
+    """Bilingual operating card for one platform: audience, funnel, practices, compliance."""
+
+    platform: SocialPlatform
+    region: SocialRegion
+    name_zh: str
+    name_en: str
+    category_zh: str
+    category_en: str
+    audience_zh: str
+    audience_en: str
+    lead_funnel_zh: str
+    lead_funnel_en: str
+    best_practices_zh: list[str]
+    best_practices_en: list[str]
+    # Derived from the locked publish_mode: no honest route exists without an official API.
+    official_api_supported: bool
+    compliance_note_zh: str
+    compliance_note_en: str
+
+
 class SocialSummary(BaseModel):
     total_posts: int
     published_posts: int

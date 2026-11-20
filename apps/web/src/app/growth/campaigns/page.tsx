@@ -4,13 +4,20 @@ import { useI18n } from "@/lib/i18n";
 
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Megaphone, Play, ShieldCheck } from "lucide-react";
+import { LoaderCircle, MailCheck, Mails, Megaphone, Play, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Page, PageHeader } from "@/components/ui/page";
 import { CampaignBuilderPanel } from "@/components/growth/campaign-builder-panel";
-import { button, count, panel, primary } from "@/components/growth/presentation";
+import { button, count, field, panel, primary } from "@/components/growth/presentation";
 import type { CampaignDraft, MarketingCampaign, SuppressionPreview } from "@/components/growth/types";
+import {
+  type EmailSenderAccount,
+  type SendRealCampaignResponse,
+  emailEngineLabel,
+  fetchEmailSenderAccounts,
+  sendCampaignReal,
+} from "@/lib/api-client/pack-c-growth";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
 import {
   campaignTargetIds,
@@ -29,11 +36,153 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "已完成",
 };
 
+const emeraldPrimary =
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-[13px] font-semibold text-white shadow-[0_2px_8px_-2px_rgba(5,150,105,0.55)] transition-colors hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-emerald-700 focus-visible:outline-offset-2 disabled:shadow-none disabled:opacity-50";
+const emeraldSoft =
+  "inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 transition-colors hover:border-emerald-300 hover:bg-emerald-100 focus-visible:outline-2 focus-visible:outline-emerald-700 disabled:opacity-50";
+
+/** Real email delivery (Resend / SMTP) for one queued email campaign. */
+function RealSendPanel({
+  campaign,
+  mailboxes,
+  mailboxesLoading,
+  selectedMailbox,
+  onSelectMailbox,
+  result,
+  pending,
+  pendingKind,
+  onSend,
+}: {
+  campaign: MarketingCampaign;
+  mailboxes: readonly EmailSenderAccount[];
+  mailboxesLoading: boolean;
+  selectedMailbox: string;
+  onSelectMailbox: (mailboxId: string) => void;
+  result: SendRealCampaignResponse | null;
+  pending: boolean;
+  pendingKind: "dry_run" | "real" | null;
+  onSend: (kind: "dry_run" | "real") => void;
+}) {
+  const { bi } = useI18n();
+  const busy = pending;
+
+  return (
+    <section
+      aria-label={bi(`真实邮件发信 ${campaign.name}`, `Real email delivery ${campaign.name}`)}
+      data-testid="campaign-real-send-panel"
+      data-campaign-id={campaign.id}
+      className="mt-3 rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3"
+    >
+      <header className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h4 className="flex items-center gap-2 text-[13px] font-bold text-emerald-950">
+            <Mails aria-hidden="true" size={15} />
+            {bi("真实邮件发信（Resend / SMTP）", "Real email delivery (Resend / SMTP)")}
+          </h4>
+          <p className="mt-1 text-[12px] leading-5 text-emerald-900/85">
+            {bi(
+              "用你自己的发件邮箱真实投递：逐封复核退订/抑制名单与地址有效性，随信带 RFC 8058 一键退订头。试算只看数字，不发信、不落库。",
+              "Delivered through your own mailbox: every recipient is re-checked against suppression and address validity, and each message carries the RFC 8058 unsubscribe header. A dry run only reports numbers — nothing is sent or persisted."
+            )}
+          </p>
+        </div>
+        {result ? (
+          <span className="rounded-full border border-emerald-300 bg-white px-2 py-0.5 text-[10.5px] font-semibold text-emerald-800">
+            {result.dry_run ? bi("试算结果", "Dry-run result") : bi("真实发送结果", "Live delivery result")}
+          </span>
+        ) : null}
+      </header>
+
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label htmlFor={`mailbox-${campaign.id}`} className="block text-[12px] font-semibold text-emerald-950">
+          {bi("发件邮箱", "Sending mailbox")}
+          <select
+            id={`mailbox-${campaign.id}`}
+            data-testid="campaign-mailbox-select"
+            value={selectedMailbox}
+            disabled={busy}
+            onChange={(event) => onSelectMailbox(event.target.value)}
+            className={field}
+          >
+            <option value="">{bi("自动选择默认发件邮箱", "Auto-select the default mailbox")}</option>
+            {mailboxes.map((mailbox) => (
+              <option key={mailbox.id} value={mailbox.id}>
+                {mailbox.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          data-testid="campaign-dry-run-btn"
+          className={emeraldSoft}
+          disabled={busy}
+          onClick={() => onSend("dry_run")}
+        >
+          {pendingKind === "dry_run" ? (
+            <LoaderCircle aria-hidden="true" size={15} className="animate-spin" />
+          ) : (
+            <MailCheck aria-hidden="true" size={15} />
+          )}
+          {bi("试算预览（Dry Run）", "Dry run preview")}
+        </button>
+        <button
+          type="button"
+          data-testid="campaign-real-send-btn"
+          className={emeraldPrimary}
+          disabled={busy}
+          onClick={() => onSend("real")}
+        >
+          {pendingKind === "real" ? (
+            <LoaderCircle aria-hidden="true" size={15} className="animate-spin" />
+          ) : (
+            <Mails aria-hidden="true" size={15} />
+          )}
+          {bi("真实合规发送", "Send for real")}
+        </button>
+      </div>
+
+      {!mailboxesLoading && !mailboxes.length ? (
+        <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] font-medium text-amber-900">
+          {bi(
+            "尚未连接可用的邮箱账号。请先在渠道中心连接 Resend 或 SMTP 邮箱。",
+            "No active mailbox connected yet. Connect a Resend or SMTP mailbox in the channel centre first."
+          )}
+        </p>
+      ) : null}
+
+      {result ? (
+        <div
+          data-testid="campaign-real-send-result"
+          className="mt-3 rounded-xl border border-emerald-200 bg-white/85 p-3"
+        >
+          <p className="text-[13px] font-bold tabular-nums text-emerald-950">
+            已发送 {count(result.sent_count)} · 退订拦截 {count(result.suppressed_count)} · 失败{" "}
+            {count(result.failed_count)}
+          </p>
+          <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] font-medium text-emerald-900/85">
+            <div className="flex gap-1">
+              <dt>发件邮箱</dt>
+              <dd className="break-all font-semibold text-emerald-950">{result.from_email}</dd>
+            </div>
+            <div className="flex gap-1">
+              <dt>引擎</dt>
+              <dd className="font-semibold text-emerald-950">{emailEngineLabel(result.provider)}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function GrowthCampaignsPage() {
   const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [previews, setPreviews] = useState<Record<string, SuppressionPreview>>({});
   const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
+  const [mailboxByCampaign, setMailboxByCampaign] = useState<Record<string, string>>({});
+  const [sendResults, setSendResults] = useState<Record<string, SendRealCampaignResponse>>({});
 
   const proposalsQuery = useQuery({
     queryKey: ["ai", "proposals", "pending-count"],
@@ -46,6 +195,10 @@ export default function GrowthCampaignsPage() {
   const prospectsQuery = useQuery({
     queryKey: ["growth", "prospects"],
     queryFn: () => fetchGrowthProspects(),
+  });
+  const mailboxesQuery = useQuery({
+    queryKey: ["growth", "email-mailboxes"],
+    queryFn: fetchEmailSenderAccounts,
   });
 
   const save = useMutation({
@@ -81,10 +234,41 @@ export default function GrowthCampaignsPage() {
     onError: () => setFeedback({ error: true, text: "启动战役失败：战役可能已完成或状态不允许发送。" }),
   });
 
+  const sendReal = useMutation({
+    mutationFn: async ({
+      campaign,
+      kind,
+    }: {
+      campaign: MarketingCampaign;
+      kind: "dry_run" | "real";
+    }) =>
+      await sendCampaignReal(campaign.id, {
+        channel_account_id: mailboxByCampaign[campaign.id] || null,
+        dry_run: kind === "dry_run",
+      }),
+    onSuccess: (result) => {
+      setSendResults((prev) => ({ ...prev, [result.campaign_id]: result }));
+      setFeedback({
+        error: false,
+        text: result.dry_run
+          ? `试算完成：将发送 ${result.sent_count} 封，退订拦截 ${result.suppressed_count} 封，失败 ${result.failed_count} 封（发件邮箱 ${result.from_email}）。`
+          : `真实发信完成：已发送 ${result.sent_count} 封，退订拦截 ${result.suppressed_count} 封，失败 ${result.failed_count} 封（发件邮箱 ${result.from_email}）。`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["growth", "campaigns"] });
+    },
+    onError: () => {
+      setFeedback({
+        error: true,
+        text: "真实发信失败：请确认邮箱账号凭据、渠道归属与战役收件人状态后重试。",
+      });
+    },
+  });
+
   const campaigns = campaignsQuery.data ?? [];
   const prospects = useMemo(() => prospectsQuery.data ?? [], [prospectsQuery.data]);
   const targetIds = useMemo(() => campaignTargetIds(prospects), [prospects]);
-  const busy = save.isPending || preview.isPending || launch.isPending;
+  const mailboxes = mailboxesQuery.data ?? [];
+  const busy = save.isPending || preview.isPending || launch.isPending || sendReal.isPending;
   const error = campaignsQuery.error ?? prospectsQuery.error;
 
   return (
@@ -96,8 +280,8 @@ export default function GrowthCampaignsPage() {
         <PageHeader
           title={bi("合规营销战役", "Compliant campaigns")}
           description={bi(
-            "邮件战役强制应用全局退订拦截并随信发送 RFC 8058 List-Unsubscribe；WhatsApp 战役要求有效 Opt-In、拦截美国 +1 营销号码，并由双令牌桶限速。预检结果只是快照，启动时服务端会重新校验。",
-            "Email campaigns always apply global suppression plus RFC 8058 List-Unsubscribe; WhatsApp campaigns require valid opt-in, block US +1 marketing numbers and are rate-limited by dual token buckets. Previews are snapshots; the server re-validates on launch."
+            "邮件战役强制应用全局退订拦截并随信发送 RFC 8058 List-Unsubscribe，可直接用真实发件邮箱（Resend / SMTP）投递；WhatsApp 战役要求有效 Opt-In、拦截美国 +1 营销号码，并由双令牌桶限速。预检结果只是快照，启动时服务端会重新校验。",
+            "Email campaigns always apply global suppression plus RFC 8058 List-Unsubscribe and can be delivered through your own real mailbox (Resend / SMTP); WhatsApp campaigns require valid opt-in, block US +1 marketing numbers and are rate-limited by dual token buckets. Previews are snapshots; the server re-validates on launch."
           )}
           badge={
             <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">
@@ -230,6 +414,29 @@ export default function GrowthCampaignsPage() {
                           <p className="mt-2 text-sm text-slate-700">没有线索被合规规则拦截。</p>
                         )}
                       </div>
+                    ) : null}
+
+                    {campaign.channel_type === "email" ? (
+                      <RealSendPanel
+                        campaign={campaign}
+                        mailboxes={mailboxes}
+                        mailboxesLoading={mailboxesQuery.isPending}
+                        selectedMailbox={mailboxByCampaign[campaign.id] ?? ""}
+                        onSelectMailbox={(mailboxId) =>
+                          setMailboxByCampaign((prev) => ({ ...prev, [campaign.id]: mailboxId }))
+                        }
+                        result={sendResults[campaign.id] ?? null}
+                        pending={
+                          sendReal.isPending &&
+                          sendReal.variables?.campaign.id === campaign.id
+                        }
+                        pendingKind={
+                          sendReal.isPending && sendReal.variables?.campaign.id === campaign.id
+                            ? sendReal.variables.kind
+                            : null
+                        }
+                        onSend={(kind) => sendReal.mutate({ campaign, kind })}
+                      />
                     ) : null}
                   </li>
                 );

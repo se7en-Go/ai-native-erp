@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from erp_core.identity.schemas import CustomerSummaryRead
 from erp_core.shared.enums import (
@@ -20,6 +21,31 @@ from erp_core.shared.enums import (
 )
 
 InboxTabFilter = Literal["all", "unread", "pending_human", "sla_urgent"]
+
+# Conversation pinning/tagging lives inside `conversations.channel_policy_state`
+# (JSONB), so the frozen Phase 1–2 schema needs no Alembic revision for it.
+CONVERSATION_PINNED_STATE_KEY = "is_pinned"
+CONVERSATION_TAGS_STATE_KEY = "tags"
+MAX_CONVERSATION_TAGS = 10
+MAX_CONVERSATION_TAG_LENGTH = 32
+
+
+def normalize_conversation_tags(values: Iterable[str]) -> list[str]:
+    """Strip, drop blanks, deduplicate case-insensitively, then cap count and length."""
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for raw in values:
+        tag = str(raw).strip()[:MAX_CONVERSATION_TAG_LENGTH].strip()
+        if not tag:
+            continue
+        fingerprint = tag.casefold()
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        normalized.append(tag)
+        if len(normalized) == MAX_CONVERSATION_TAGS:
+            break
+    return normalized
 
 
 class ConversationRead(BaseModel):
@@ -53,6 +79,8 @@ class ConversationRead(BaseModel):
     channel_account_display_name: str | None = None
     channel_visibility_scope: Literal["shared", "personal"] | None = None
     channel_owner_user_id: UUID | None = None
+    is_pinned: bool = False
+    tags: list[str] = Field(default_factory=list)
 
 
 class MessageRead(BaseModel):
@@ -103,3 +131,10 @@ class UpdateConversationRequest(BaseModel):
     conversation_mode: ConversationMode | None = None
     ai_autonomy_override: AutonomyLevel | None = None
     mark_read: bool | None = None
+    is_pinned: bool | None = None
+    tags: list[str] | None = None
+
+    @field_validator("tags")
+    @classmethod
+    def _normalize_tags(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else normalize_conversation_tags(value)

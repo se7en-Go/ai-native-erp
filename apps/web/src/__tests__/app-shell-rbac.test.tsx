@@ -68,13 +68,22 @@ describe("Task 5.1 AppShell RBAC, i18n, SSE & ESLint Zero-DB Guard", () => {
       "en"
     );
 
+    // /finance 所在分组被当前路由自动展开，但 agent 依然看不到这一条。
+    expect(screen.getByTestId("nav-section-toggle-growth_finance")).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
     expect(screen.queryByRole("link", { name: /Finance & CVP/i })).toBeNull();
     expect(screen.getByRole("link", { name: /Inbox/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /AI Proposals/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /B2B CRM & Quotes/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Catalog/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Orders & Tracking/i })).toBeInTheDocument();
+
+    // AI 与设置默认折叠，先展开再看 RBAC 结果：提案可见、入驻向导仅 owner/admin。
+    fireEvent.click(screen.getByTestId("nav-section-toggle-ai_system"));
+    expect(screen.getByRole("link", { name: /AI Proposals/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Channels & Settings/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Onboarding/i })).toBeNull();
 
     expect(screen.queryByTestId("finance-secret")).toBeNull();
     expect(screen.getByText(/ERR_INSUFFICIENT_ROLE/i)).toBeInTheDocument();
@@ -100,9 +109,15 @@ describe("Task 5.1 AppShell RBAC, i18n, SSE & ESLint Zero-DB Guard", () => {
 
     expect(screen.getByTestId("channels-settings-body")).toBeInTheDocument();
     expect(screen.queryByText(/ERR_INSUFFICIENT_ROLE/i)).toBeNull();
+    // 当前路由在 AI 与设置内，所以该分组自动展开，业务员能直接看到自己所在的条目。
+    expect(screen.getByTestId("nav-section-toggle-ai_system")).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
   });
 
-  it("shows Finance & CVP to finance role and supports 中/EN toggle + sidebar collapse", () => {    renderWithProviders(
+  it("shows Finance & CVP to finance role and supports 中/EN toggle + sidebar collapse", () => {
+    renderWithProviders(
       <AppShell currentPath="/finance" pendingProposalsCount={6}>
         <div data-testid="finance-secret">COGS Margin Waterfall</div>
       </AppShell>,
@@ -110,12 +125,17 @@ describe("Task 5.1 AppShell RBAC, i18n, SSE & ESLint Zero-DB Guard", () => {
       "en"
     );
 
+    // 默认折叠的财务与增长分组因当前路由而被自动展开，所在页面永远不会被藏起来。
+    expect(screen.getByTestId("nav-section-toggle-growth_finance")).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
     expect(screen.getByRole("link", { name: /Finance & CVP/i })).toBeInTheDocument();
     expect(screen.getByTestId("finance-secret")).toBeInTheDocument();
 
     const langBtn = screen.getByTestId("locale-toggle-btn");
     fireEvent.click(langBtn);
-    expect(screen.getByRole("link", { name: /财务与 CVP/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /财务与毛利/i })).toBeInTheDocument();
 
     const collapseBtn = screen.getByTestId("sidebar-collapse-btn");
     fireEvent.click(collapseBtn);

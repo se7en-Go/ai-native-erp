@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.catalog.models import ProductVariant
@@ -11,8 +12,23 @@ from erp_core.orders.inventory_service import InventoryLedgerService
 from erp_core.orders.order_service import OrderService
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.shared.query import conflicting_change, record_not_found
-from erp_core.supply_chain.models import WmsMovement
-from erp_core.supply_chain.schemas import CreateStocktake, MovementRead, StockRead
+from erp_core.supply_chain import procurement
+from erp_core.supply_chain.models import Warehouse, WmsMovement
+from erp_core.supply_chain.schemas import (
+    CreateStocktake,
+    LowStockCreatePoRequest,
+    LowStockItemRead,
+    LowStockListRead,
+    MovementRead,
+    PurchaseOrderCreate,
+    PurchaseOrderItemInput,
+    PurchaseOrderRead,
+    StockRead,
+    WarehouseCreateRequest,
+    WmsWarehouseRead,
+)
+
+_SAFETY_STOCK_EXPR = "COALESCE((pv.attributes->>'safety_stock_qty')::int, 50)"
 
 
 async def record_stocktake(
@@ -146,3 +162,140 @@ async def list_stock(
         limit=limit,
         offset=offset,
     )
+
+
+async def list_low_stock(
+    session: AsyncSession,
+    tenant_id: UUID,
+) -> LowStockListRead:
+    """Warehouse-level safety-stock breaches with a restock suggestion per row."""
+    rows = (
+        await session.execute(
+            sa.text(f"""
+        SELECT ib.variant_id,
+               pv.sku AS sku,
+               COALESCE(
+                   p.i18n_specs->'en'->>'title',
+                   p.i18n_specs->'zh'->>'title',
+                   p.spu_code
+               ) AS product_name,
+               ib.warehouse_id,
+               COALESCE(w.name, 'Warehouse ' || left(ib.warehouse_id::text, 8)) AS warehouse_name,
+               ib.on_hand_qty,
+               ib.reserved_qty,
+               (ib.on_hand_qty - ib.reserved_qty) AS available_qty,
+               {_SAFETY_STOCK_EXPR} AS safety_stock_qty
+        FROM inventory_balances ib
+        JOIN product_variants pv
+            ON pv.tenant_id = ib.tenant_id AND pv.id = ib.variant_id
+        JOIN products p
+            ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
+        LEFT JOIN warehouses w
+            ON w.tenant_id = ib.tenant_id AND w.id = ib.warehouse_id
+        WHERE ib.tenant_id = :tid
+          AND (ib.on_hand_qty - ib.reserved_qty) < {_SAFETY_STOCK_EXPR}
+        ORDER BY available_qty ASC, pv.sku, ib.warehouse_id
+    """),
+            {"tid": tenant_id},
+        )
+    ).mappings().all()
+
+    items: list[LowStockItemRead] = []
+    for row in rows:
+        safety_stock = int(row["safety_stock_qty"])
+        available = int(row["available_qty"])
+        items.append(
+            LowStockItemRead(
+                variant_id=row["variant_id"],
+                sku=row["sku"],
+                product_name=row["product_name"],
+                warehouse_id=row["warehouse_id"],
+                warehouse_name=row["warehouse_name"],
+                on_hand_qty=int(row["on_hand_qty"]),
+                reserved_qty=int(row["reserved_qty"]),
+                available_qty=available,
+                safety_stock_qty=safety_stock,
+                suggested_reorder_qty=max(safety_stock * 2 - available, safety_stock),
+            )
+        )
+    return LowStockListRead(items=items, total=len(items))
+
+
+async def _replenishment_warehouse(
+    session: AsyncSession,
+    tenant_id: UUID,
+    variant_id: UUID,
+) -> UUID:
+    """Pick the warehouse that actually needs the stock, else the tenant's first warehouse."""
+    balance_id = await session.scalar(
+        sa.text(
+            """
+            SELECT warehouse_id FROM inventory_balances
+            WHERE tenant_id = :tid AND variant_id = :vid
+            ORDER BY (on_hand_qty - reserved_qty) ASC, warehouse_id
+            LIMIT 1
+            """
+        ),
+        {"tid": tenant_id, "vid": variant_id},
+    )
+    if balance_id is not None:
+        return UUID(str(balance_id))
+    known = (
+        await session.scalars(
+            sa.select(Warehouse.id)
+            .where(Warehouse.tenant_id == tenant_id)
+            .order_by(Warehouse.created_at, Warehouse.id)
+            .limit(1)
+        )
+    ).first()
+    if known is None:
+        raise conflicting_change(
+            "Create a warehouse before converting low stock into a purchase order."
+        )
+    return UUID(str(known))
+
+
+async def create_purchase_order_from_low_stock(
+    session: AsyncSession,
+    tenant_id: UUID,
+    user_id: UUID,
+    payload: LowStockCreatePoRequest,
+) -> PurchaseOrderRead:
+    """One-click low-stock restock: a single-line draft purchase order."""
+    warehouse_id = await _replenishment_warehouse(session, tenant_id, payload.variant_id)
+    request = PurchaseOrderCreate(
+        supplier_id=payload.supplier_id,
+        warehouse_id=warehouse_id,
+        currency=payload.currency,
+        status="draft",
+        notes=payload.notes,
+        items=[
+            PurchaseOrderItemInput(
+                variant_id=payload.variant_id,
+                qty_ordered=payload.quantity,
+                unit_cost=payload.unit_cost,
+            )
+        ],
+    )
+    return await procurement.create_purchase_order(session, tenant_id, user_id, request)
+
+
+async def create_warehouse(
+    session: AsyncSession,
+    tenant_id: UUID,
+    payload: WarehouseCreateRequest,
+) -> WmsWarehouseRead:
+    warehouse = Warehouse(
+        tenant_id=tenant_id,
+        code=payload.code,
+        name=payload.name,
+        country_code=payload.country_code,
+        city=payload.city,
+        is_active=True,
+    )
+    session.add(warehouse)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise conflicting_change("This warehouse code is already in use.") from exc
+    return WmsWarehouseRead.model_validate(warehouse)

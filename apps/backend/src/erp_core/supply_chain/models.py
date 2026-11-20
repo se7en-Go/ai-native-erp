@@ -90,6 +90,26 @@ class PurchaseOrderItem(_TenantRow, Base):
     unit_cost: Mapped[Decimal] = mapped_column(sa.Numeric(14, 4))
 
 
+class Warehouse(_TenantRow, Base):
+    __tablename__ = "warehouses"
+    __table_args__ = (
+        sa.UniqueConstraint("tenant_id", "id"),
+        sa.UniqueConstraint("tenant_id", "code"),
+    )
+
+    code: Mapped[str] = mapped_column(sa.Text)
+    name: Mapped[str] = mapped_column(sa.Text)
+    country_code: Mapped[str] = mapped_column(sa.CHAR(2), server_default="CN")
+    city: Mapped[str] = mapped_column(sa.Text, server_default="")
+    is_active: Mapped[bool] = mapped_column(server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now()
+    )
+
+
 class WmsMovement(_TenantRow, Base):
     __tablename__ = "wms_movements"
     __table_args__ = (

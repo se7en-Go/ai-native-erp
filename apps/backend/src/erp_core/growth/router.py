@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,15 +23,19 @@ from erp_core.growth.schemas import (
     CampaignRecipientRead,
     CampaignUpdate,
     CollectionSummary,
+    EnrichProspectEmailsRequest,
+    EnrichProspectEmailsResponse,
     LeadCollectionJobCreate,
     LeadCollectionJobRead,
     ProspectCleanRequest,
     ProspectCleanResult,
     ProspectRead,
+    SendRealCampaignRequest,
+    SendRealCampaignResponse,
     SyncToCrmRequest,
     SyncToCrmResult,
 )
-from erp_core.growth.service import GrowthService
+from erp_core.growth.service import GrowthService, collection_plan_for_payload
 from erp_core.shared.config import get_settings
 from erp_core.shared.enums import UserRole
 from erp_core.shared.errors import AppError
@@ -40,7 +45,11 @@ from erp_core.tenancy.dependencies import CurrentPrincipal, get_tenant_db, requi
 router = APIRouter(prefix="/growth", tags=["growth"])
 
 _MANAGERS = (UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
+# Real outreach is also available to field agents, but only through their own or a
+# shared channel account (enforced inside `GrowthService._select_email_account`).
+_OUTREACH_ROLES = (UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.AGENT)
 Operator = Annotated[CurrentPrincipal, Depends(require_roles(*_MANAGERS))]
+OutreachOperator = Annotated[CurrentPrincipal, Depends(require_roles(*_OUTREACH_ROLES))]
 Reader = Annotated[CurrentPrincipal, Depends(require_roles(*UserRole))]
 TenantDB = Annotated[AsyncSession, Depends(get_tenant_db)]
 Limit = Annotated[int, Query(ge=1, le=100)]
@@ -50,13 +59,17 @@ Offset = Annotated[int, Query(ge=0)]
 def _service(request: Request) -> GrowthService:
     """Compose the service from app state so tests can inject a MockTransport client."""
     settings = get_settings()
-    client = getattr(request.app.state, "growth_http_client", None)
+    client: httpx.AsyncClient | None = getattr(request.app.state, "growth_http_client", None)
     redis = getattr(request.app.state, "redis", None)
     limiter = DualTokenBucketLimiter(redis) if redis is not None else None
+    transport: httpx.AsyncBaseTransport | None = getattr(
+        request.app.state, "email_http_transport", None
+    )
     return GrowthService(
         http_client=client,
         google_places_api_key=settings.GOOGLE_PLACES_API_KEY,
         rate_limiter=limiter,
+        email_http_transport=transport,
     )
 
 
@@ -77,17 +90,37 @@ async def create_job(
     principal: Operator,
     service: Service,
 ) -> LeadCollectionJobRead:
-    """Map/POI jobs stay `pending` until `/run`; a CSV payload runs immediately.
+    """Map/POI jobs stay `pending` until `/run`; a CSV payload or a batch recipe runs now.
 
-    The uploaded CSV bytes are request-scoped and never persisted, so the import
-    has to execute while the payload is still in memory.
+    The uploaded CSV bytes and the `cities`/`keywords`/`provider_mode` batch recipe are
+    request-scoped and never persisted, so an import or a multi-city batch has to
+    execute while the payload is still in memory. A legacy job that pins
+    `source_provider` + `target_region` keeps the two-step create/run flow.
+
+    `source_provider` records the *requested* primary provider; the provider that
+    actually produced each row is reported per prospect in `raw_metadata.provider`
+    and aggregated on the job as `sources` (`overpass_osm` / `google_places` /
+    `fallback_catalog`), so live map data is never confused with the fallback.
     """
     job = await service.create_job(session, principal.tenant_id, principal.user_id, payload)
     if payload.csv_content:
         job = await service.run_job(
             session, principal.tenant_id, job.id, csv_content=payload.csv_content
         )
-    return LeadCollectionJobRead.model_validate(job)
+    elif payload.runs_immediately:
+        try:
+            job = await service.run_job(
+                session,
+                principal.tenant_id,
+                job.id,
+                plan=collection_plan_for_payload(payload),
+            )
+        except AppError:
+            # Persist the recorded `status='failed'` + `error_message` audit trail.
+            await session.commit()
+            raise
+    reads = await service.job_reads(session, principal.tenant_id, [job])
+    return reads[0]
 
 
 @router.post("/jobs/{job_id}/run")
@@ -101,7 +134,8 @@ async def run_job(
         # audit trail before the problem detail rolls the request transaction back.
         await session.commit()
         raise
-    return LeadCollectionJobRead.model_validate(job)
+    reads = await service.job_reads(session, principal.tenant_id, [job])
+    return reads[0]
 
 
 @router.get("/summary")
@@ -147,6 +181,17 @@ async def clean_prospects(
     return await service.clean_prospects(
         session, principal.tenant_id, payload.prospect_ids
     )
+
+
+@router.post("/prospects/enrich-emails")
+async def enrich_prospect_emails(
+    payload: EnrichProspectEmailsRequest,
+    session: TenantDB,
+    principal: Operator,
+    service: Service,
+) -> EnrichProspectEmailsResponse:
+    """Fill missing prospect e-mails from the addresses their website publishes."""
+    return await service.enrich_prospect_emails(session, principal.tenant_id, payload)
 
 
 @router.post("/prospects/sync-crm")
@@ -233,3 +278,17 @@ async def launch_campaign(
     campaign_id: UUID, session: TenantDB, principal: Operator, service: Service
 ) -> CampaignLaunchResult:
     return await service.launch_campaign(session, principal.tenant_id, campaign_id)
+
+
+@router.post("/campaigns/{campaign_id}/send-real")
+async def send_campaign_real(
+    campaign_id: UUID,
+    payload: SendRealCampaignRequest,
+    session: TenantDB,
+    principal: OutreachOperator,
+    service: Service,
+) -> SendRealCampaignResponse:
+    """Really deliver the campaign through Resend/SMTP with zero-delay STOP suppression."""
+    return await service.send_campaign_real(
+        session, principal.tenant_id, principal, campaign_id, payload
+    )

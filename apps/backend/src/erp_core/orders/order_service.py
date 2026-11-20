@@ -63,6 +63,9 @@ class OrderService:
             SELECT CAST(warehouse_id AS text) AS id, false AS configured
             FROM inventory_balances WHERE tenant_id = :tid
             UNION
+            SELECT CAST(id AS text) AS id, false AS configured
+            FROM warehouses WHERE tenant_id = :tid
+            UNION
             SELECT config ->> 'warehouse_id' AS id, true AS configured
             FROM channel_accounts
             WHERE tenant_id = :tid AND config ->> 'warehouse_id' IS NOT NULL
