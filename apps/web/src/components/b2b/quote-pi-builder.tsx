@@ -1,14 +1,16 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightCircle,
   CheckCircle2,
   Clock,
   Coins,
+  Eye,
   FileDown,
   Layers3,
+  Mail,
   RefreshCw,
   ScrollText,
 } from "lucide-react";
@@ -18,6 +20,8 @@ import {
   generateQuotePdf,
   repriceQuoteVersion,
 } from "@/lib/api-client/live-client";
+import { quotePdfDownloadUrl } from "@/lib/data-source";
+import { SendPiEmailModal } from "@/components/b2b/send-pi-email-modal";
 import { useI18n } from "@/lib/i18n";
 import { formatMoney, type Incoterm, type QuoteStatus } from "@/lib/contracts";
 import { Badge, Card, CardHeader, EmptyState } from "@/components/ui/page";
@@ -100,21 +104,45 @@ const QUOTE_STATUS_LABEL: Record<QuoteStatus, { zh: string; en: string }> = {
 export function QuotePiBuilder({
   quotes,
   variants,
+  initialQuoteId = null,
+  autoOpenSendEmail = false,
 }: {
   quotes: QuoteRecord[];
   variants: CatalogVariantItem[];
+  /** Inbox 抽屉深链 ?quoteId=... 时直接选中该版本。 */
+  initialQuoteId?: string | null;
+  /** Inbox 抽屉的「发 PI 邮件」深链 ?send_pi_email=1 时直接打开发送抽屉。 */
+  autoOpenSendEmail?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { bi } = useI18n();
-  const [selectedQuoteId, setSelectedQuoteId] = useState<string>(quotes[0]?.id ?? "");
+  const resolvedInitialId =
+    (initialQuoteId && quotes.some((q) => q.id === initialQuoteId)
+      ? initialQuoteId
+      : quotes[0]?.id) ?? "";
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string>(resolvedInitialId);
+  const [autoOpenHandled, setAutoOpenHandled] = useState(false);
   const [previewVariantId, setPreviewVariantId] = useState<string>(variants[0]?.id ?? "");
   const [previewQty, setPreviewQty] = useState<number>(500);
   const [previewIncoterm, setPreviewIncoterm] = useState<Incoterm>("FOB");
   const [convertedBanner, setConvertedBanner] = useState<string | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [emailQuoteId, setEmailQuoteId] = useState<string | null>(null);
 
-  const activeQuote = quotes.find((q) => q.id === selectedQuoteId) ?? quotes[0] ?? null;
+  // 「发 PI 邮件」深链：数据到齐后再打开抽屉（首帧 quotes 还是空的）。
+  useEffect(() => {
+    if (!autoOpenSendEmail || autoOpenHandled || !resolvedInitialId) return;
+    setEmailQuoteId(resolvedInitialId);
+    setAutoOpenHandled(true);
+  }, [autoOpenHandled, autoOpenSendEmail, resolvedInitialId]);
+
+  const activeQuote =
+    quotes.find((q) => q.id === selectedQuoteId) ??
+    quotes.find((q) => q.id === resolvedInitialId) ??
+    quotes[0] ??
+    null;
   const activeVariant = variants.find((v) => v.id === previewVariantId) ?? variants[0] ?? null;
+  const emailModalQuote = quotes.find((q) => q.id === emailQuoteId) ?? null;
 
   const moqPreview = useMemo(() => {
     if (!activeVariant) return null;
@@ -301,7 +329,9 @@ export function QuotePiBuilder({
             (() => {
               const fxState = formatFxCountdown(activeQuote.fx_locked_until);
               const canConvert = activeQuote.status === "accepted" && !fxState.expired;
-              const downloadHref = pdfPreviewUrl ?? activeQuote.download_url ?? null;
+              // 服务端渲染的 PI PDF 直链：永远可预览，不依赖先点“生成”。
+              const downloadHref =
+                pdfPreviewUrl ?? quotePdfDownloadUrl(activeQuote.id, "en");
               const statusCopy =
                 QUOTE_STATUS_LABEL[activeQuote.status] ?? {
                   zh: activeQuote.status,
@@ -396,16 +426,26 @@ export function QuotePiBuilder({
                         <span>{bi("生成 PI PDF", "Generate PI PDF")}</span>
                       </button>
 
-                      {downloadHref && (
-                        <a
-                          href={downloadHref}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="erp-btn rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                        >
-                          {bi("预览 PDF", "Preview PDF")}
-                        </a>
-                      )}
+                      <a
+                        data-testid={`preview-pi-pdf-${activeQuote.id}`}
+                        href={downloadHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="erp-btn rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>{bi("预览 PDF", "Preview PDF")}</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        data-testid={`open-send-pi-email-${activeQuote.id}`}
+                        onClick={() => setEmailQuoteId(activeQuote.id)}
+                        className="erp-btn rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        <span>{bi("发 PI 邮件", "Send PI email")}</span>
+                      </button>
 
                       {fxState.expired && (
                         <button
@@ -485,6 +525,13 @@ export function QuotePiBuilder({
           ))}
         </ul>
       </Card>
+
+      {emailModalQuote && (
+        <SendPiEmailModal
+          quote={emailModalQuote}
+          onClose={() => setEmailQuoteId(null)}
+        />
+      )}
     </div>
   );
 }

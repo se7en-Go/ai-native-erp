@@ -28,6 +28,7 @@ class AiProposalRead(BaseModel):
     target_entity_id: UUID | None
     proposed_payload: dict[str, Any]
     citations: list[dict[str, Any]]
+    source_tool_call_id: UUID | None = None
     confidence_score: Decimal
     estimated_margin_pct: Decimal | None
     status: ProposalStatus

@@ -684,6 +684,18 @@
             ],
             "title": "Reviewed By User Id"
           },
+          "source_tool_call_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Tool Call Id"
+          },
           "status": {
             "$ref": "#/components/schemas/ProposalStatus"
           },
@@ -8584,6 +8596,91 @@
         "title": "PendingProposalGroup",
         "type": "object"
       },
+      "PiTemplateSettings": {
+        "description": "Tenant-configurable export Proforma Invoice letterhead, bank wire and terms.",
+        "properties": {
+          "bank_account_no": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Bank Account No",
+            "type": "string"
+          },
+          "bank_address": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Bank Address",
+            "type": "string"
+          },
+          "bank_beneficiary_name": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Bank Beneficiary Name",
+            "type": "string"
+          },
+          "bank_name": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Bank Name",
+            "type": "string"
+          },
+          "bank_swift_code": {
+            "default": "",
+            "maxLength": 60,
+            "title": "Bank Swift Code",
+            "type": "string"
+          },
+          "company_address": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Company Address",
+            "type": "string"
+          },
+          "company_legal_name": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Company Legal Name",
+            "type": "string"
+          },
+          "contact_email": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Contact Email",
+            "type": "string"
+          },
+          "contact_phone": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Contact Phone",
+            "type": "string"
+          },
+          "default_terms_notes": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Default Terms Notes",
+            "type": "string"
+          },
+          "footer_signature_title": {
+            "default": "Authorized Signature & Company Stamp",
+            "maxLength": 160,
+            "title": "Footer Signature Title",
+            "type": "string"
+          },
+          "tax_or_reg_no": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Tax Or Reg No",
+            "type": "string"
+          },
+          "website": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Website",
+            "type": "string"
+          }
+        },
+        "title": "PiTemplateSettings",
+        "type": "object"
+      },
       "PlatformRead": {
         "description": "Playbook metadata plus the honest publishing capability for one platform.",
         "properties": {
@@ -11325,6 +11422,129 @@
           "queued_for_delivery"
         ],
         "title": "SendInboxMessageResponse",
+        "type": "object"
+      },
+      "SendQuoteEmailRequest": {
+        "properties": {
+          "channel_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Account Id"
+          },
+          "language": {
+            "default": "en",
+            "enum": [
+              "en",
+              "zh"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "message_body": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Body"
+          },
+          "recipient_email": {
+            "format": "email",
+            "title": "Recipient Email",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "required": [
+          "recipient_email"
+        ],
+        "title": "SendQuoteEmailRequest",
+        "type": "object"
+      },
+      "SendQuoteEmailResponse": {
+        "properties": {
+          "external_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Message Id"
+          },
+          "from_email": {
+            "title": "From Email",
+            "type": "string"
+          },
+          "pdf_filename": {
+            "title": "Pdf Filename",
+            "type": "string"
+          },
+          "pdf_size_bytes": {
+            "title": "Pdf Size Bytes",
+            "type": "integer"
+          },
+          "provider": {
+            "enum": [
+              "resend",
+              "smtp_imap"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "quote_no": {
+            "title": "Quote No",
+            "type": "string"
+          },
+          "quote_status": {
+            "title": "Quote Status",
+            "type": "string"
+          },
+          "recipient_email": {
+            "title": "Recipient Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quote_id",
+          "quote_no",
+          "recipient_email",
+          "from_email",
+          "provider",
+          "pdf_filename",
+          "pdf_size_bytes",
+          "quote_status"
+        ],
+        "title": "SendQuoteEmailResponse",
         "type": "object"
       },
       "ShipOrderRequest": {
@@ -14529,6 +14749,66 @@
         ]
       }
     },
+    "/api/v1/ai/conversations/{conversation_id}/propose-reply": {
+      "post": {
+        "description": "On-demand grounded reply draft backed by live ERP SQL tools.",
+        "operationId": "propose_conversation_reply_api_v1_ai_conversations__conversation_id__propose_reply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProposalRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose Conversation Reply",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
     "/api/v1/ai/employees": {
       "get": {
         "operationId": "list_employees_api_v1_ai_employees_get",
@@ -17325,6 +17605,77 @@
         ]
       }
     },
+    "/api/v1/b2b/quotes/{quote_id}/pdf/download": {
+      "get": {
+        "operationId": "download_quote_pdf_api_v1_b2b_quotes__quote_id__pdf_download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "enum": [
+                "en",
+                "zh"
+              ],
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Quote Pdf",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
     "/api/v1/b2b/quotes/{quote_id}/reprice-version": {
       "post": {
         "operationId": "reprice_quote_version_api_v1_b2b_quotes__quote_id__reprice_version_post",
@@ -17448,6 +17799,75 @@
           }
         },
         "summary": "Send Quote",
+        "tags": [
+          "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/quotes/{quote_id}/send-email": {
+      "post": {
+        "operationId": "send_quote_email_api_v1_b2b_quotes__quote_id__send_email_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendQuoteEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendQuoteEmailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Quote Email",
         "tags": [
           "b2b"
         ]
@@ -26021,6 +26441,112 @@
           }
         },
         "summary": "Update Member Role",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/api/v1/tenants/pi-template": {
+      "get": {
+        "operationId": "get_pi_template_api_v1_tenants_pi_template_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PiTemplateSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pi Template",
+        "tags": [
+          "tenancy"
+        ]
+      },
+      "patch": {
+        "operationId": "update_pi_template_api_v1_tenants_pi_template_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PiTemplateSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PiTemplateSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Pi Template",
         "tags": [
           "tenancy"
         ]

@@ -38,6 +38,7 @@ import type {
   UserRole,
 } from "@/lib/contracts";
 import type {
+  AiProposalRead,
   AssistantChatRequest,
   AssistantChatResponse,
   CapabilityPolicyItem,
@@ -1875,6 +1876,21 @@ export type AssistantChatResult = Pick<AssistantChatResponse,
     tool_calls: Array<{ tool_call_id?: string; tool_name?: string }>;
 };
 
+/**
+ * `AiProposalRead` → UI 提案卡片。工具接地 ID 由后端写在 `proposed_payload`
+ * 里（契约没有独立字段），这里统一提升到 `source_tool_call_id` 供审核人看。
+ */
+export function mapProposal(proposal: AiProposalRead): AiProposalItem {
+  return {
+    ...proposal,
+    citations: mapCitations(proposal.citations),
+    confidence_score: Number(proposal.confidence_score),
+    estimated_margin_pct: proposal.estimated_margin_pct === null
+      ? null : Number(proposal.estimated_margin_pct),
+    source_tool_call_id: asString(proposal.proposed_payload.source_tool_call_id) || null,
+  };
+}
+
 export async function listProposals(
   status: ProposalStatus,
   typeFilter: "" | ProposalType,
@@ -1883,17 +1899,7 @@ export async function listProposals(
     client: getBffClient(),
     query: { status, limit: 20, offset: 0, proposal_type: typeFilter || undefined },
   }));
-  return {
-    ...data,
-    items: data.items.map((proposal) => ({
-      ...proposal,
-      citations: mapCitations(proposal.citations),
-      confidence_score: Number(proposal.confidence_score),
-      estimated_margin_pct: proposal.estimated_margin_pct === null
-        ? null : Number(proposal.estimated_margin_pct),
-      source_tool_call_id: asString(proposal.proposed_payload.source_tool_call_id) || null,
-    })),
-  };
+  return { ...data, items: data.items.map(mapProposal) };
 }
 
 export async function fetchPendingProposalsCount(): Promise<{ total: number }> {
@@ -2027,4 +2033,139 @@ export async function fetchChannelSuppressions(): Promise<PaginatedResponse<Supp
   return unwrap(await listChannelSuppressionsApiV1ChannelsSuppressionsGet({
     client: getBffClient(), query: { limit: 20, offset: 0 },
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 1/2/3 locked endpoints (master plan) that are not in the generated
+// SDK yet. All of them go through the shared bffFetch transport, so the Next
+// BFF proxy, session cookies and the 401-refresh flow behave exactly like the
+// generated client. Once `pnpm openapi-ts` regenerates sdk.gen.ts these
+// wrappers can delegate to it without touching any caller.
+// ---------------------------------------------------------------------------
+
+export type EmailLanguage = "en" | "zh";
+
+export interface SendQuotePiEmailPayload {
+  recipient_email: string;
+  channel_account_id?: string | null;
+  subject?: string | null;
+  message_body?: string | null;
+  language?: EmailLanguage;
+}
+
+export interface SendQuotePiEmailResponse {
+  quote_id: string;
+  quote_no: string;
+  recipient_email: string;
+  from_email: string;
+  provider: "resend" | "smtp_imap";
+  external_message_id?: string | null;
+  pdf_filename: string;
+  pdf_size_bytes: number;
+  quote_status: string;
+}
+
+/**
+ * 直接可用的 PI PDF 下载地址：交给 <a href target="_blank"> 用浏览器原生
+ * 下载流，不经过 JS，也不会把二进制 PDF 读进内存。
+ */
+export function quotePdfDownloadUrl(
+  quoteId: string,
+  language: EmailLanguage = "en",
+): string {
+  return `/api/bff/v1/b2b/quotes/${encodeURIComponent(quoteId)}/pdf/download?language=${language}`;
+}
+
+/** 一键把已生成的 PI PDF 作为附件发给客户（Resend 或 SMTP/IMAP 发件账号）。 */
+export async function sendQuotePiEmail(
+  quoteId: string,
+  payload: SendQuotePiEmailPayload,
+): Promise<SendQuotePiEmailResponse> {
+  return bffFetch<SendQuotePiEmailResponse>(
+    `/v1/b2b/quotes/${encodeURIComponent(quoteId)}/send-email`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        recipient_email: payload.recipient_email,
+        channel_account_id: payload.channel_account_id ?? null,
+        subject: payload.subject ?? null,
+        message_body: payload.message_body ?? null,
+        language: payload.language ?? "en",
+      }),
+    },
+  );
+}
+
+/** 让 AI 用确定性 SQL 工具查库后生成一条带 ERP 证据的回复提案（L1 待审）。 */
+export async function proposeGroundedReply(
+  conversationId: string,
+): Promise<AiProposalItem> {
+  const proposal = await bffFetch<AiProposalRead>(
+    `/v1/ai/conversations/${encodeURIComponent(conversationId)}/propose-reply`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+  return mapProposal(proposal);
+}
+
+/** PI 抬头 / 银行电汇资料 / 默认条款：全部由租户在 UI 里维护，零硬编码。 */
+export interface PiTemplateSettings {
+  company_legal_name: string;
+  company_address: string;
+  contact_phone: string;
+  contact_email: string;
+  website: string;
+  tax_or_reg_no: string;
+  bank_beneficiary_name: string;
+  bank_name: string;
+  bank_account_no: string;
+  bank_swift_code: string;
+  bank_address: string;
+  default_terms_notes: string;
+  footer_signature_title: string;
+}
+
+const PI_TEMPLATE_FIELDS = [
+  "company_legal_name",
+  "company_address",
+  "contact_phone",
+  "contact_email",
+  "website",
+  "tax_or_reg_no",
+  "bank_beneficiary_name",
+  "bank_name",
+  "bank_account_no",
+  "bank_swift_code",
+  "bank_address",
+  "default_terms_notes",
+  "footer_signature_title",
+] as const satisfies ReadonlyArray<keyof PiTemplateSettings>;
+
+/** 后端可能只回传部分字段：全部补齐为空串，输入框永远是受控的。 */
+export function normalizePiTemplateSettings(
+  raw: Record<string, unknown> | PiTemplateSettings | null | undefined,
+): PiTemplateSettings {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const out = {} as PiTemplateSettings;
+  for (const field of PI_TEMPLATE_FIELDS) {
+    const value = source[field];
+    out[field] = typeof value === "string" ? value : "";
+  }
+  return out;
+}
+
+export async function fetchPiTemplateSettings(): Promise<PiTemplateSettings> {
+  return normalizePiTemplateSettings(
+    await bffFetch<Record<string, unknown>>("/v1/tenants/pi-template"),
+  );
+}
+
+export async function updatePiTemplateSettings(
+  payload: PiTemplateSettings,
+): Promise<PiTemplateSettings> {
+  return normalizePiTemplateSettings(
+    await bffFetch<Record<string, unknown>>("/v1/tenants/pi-template", {
+      method: "PATCH",
+      body: JSON.stringify(normalizePiTemplateSettings(payload)),
+    }),
+  );
 }

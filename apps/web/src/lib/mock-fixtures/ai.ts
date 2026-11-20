@@ -148,3 +148,44 @@ export const mockCopilotChatReply = {
   ],
   should_abstain: false,
 };
+
+/**
+ * `POST /ai/conversations/{id}/propose-reply` 的演示回执：带确定性 SQL 工具
+ * 证据（库存 / 阶梯价 / 交期），让审核卡片能展示「已核验 ERP 证据」。
+ */
+export function mockGroundedProposal(conversationId: string): AiProposalItem {
+  return {
+    id: `prop-grounded-${conversationId}`,
+    capability: "sales_quoting",
+    proposal_type: "quote_draft",
+    conversation_id: conversationId,
+    proposed_payload: {
+      sku: "LED-COB-24V-5M",
+      quantity: 500,
+      unit_price_usd: 14.2,
+      incoterm: "FOB",
+      currency: "USD",
+      reply_text:
+        "Thanks for your inquiry — 500 pcs LED-COB-24V-5M is in stock at US$14.20/pc FOB Shenzhen, lead time 7 days.",
+      source_tool_call_id: "sql-tool-demo-sku-1",
+      tool_evidence: [
+        {
+          tool_name: "get_live_sku_pricing_and_stock",
+          sku: "LED-COB-24V-5M",
+          available_qty: 1240,
+          moq_tier_applied: 500,
+          unit_price_usd: 14.2,
+          incoterm: "FOB",
+          lead_time_days: 7,
+        },
+      ],
+    },
+    citations: [{ doc_id: "doc-led", chunk_id: "c4", score: 0.89 }],
+    confidence_score: 0.93,
+    estimated_margin_pct: 24.5,
+    min_margin_floor_pct: 15.0,
+    source_tool_call_id: "sql-tool-demo-sku-1",
+    status: "pending",
+    created_at: "2026-11-19T08:10:00Z",
+  };
+}

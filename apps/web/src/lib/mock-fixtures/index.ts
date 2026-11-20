@@ -7,6 +7,7 @@ export * from "@/lib/mock-fixtures/b2b";
 export * from "@/lib/mock-fixtures/orders";
 export * from "@/lib/mock-fixtures/onboarding";
 export * from "@/lib/mock-fixtures/channels";
+export * from "@/lib/mock-fixtures/pi-template";
 export * from "@/lib/mock-fixtures/phase3b";
 export * from "@/lib/mock-fixtures/phase3c";
 export * from "@/lib/mock-fixtures/phase3d";

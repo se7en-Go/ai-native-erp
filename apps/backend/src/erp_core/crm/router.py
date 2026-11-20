@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.channels.adapters.email import EmailAdapter
 from erp_core.crm.models import Lead
 from erp_core.crm.quote_service import QuoteService
 from erp_core.crm.schemas import (
@@ -21,6 +22,8 @@ from erp_core.crm.schemas import (
     QuotePdfResponse,
     QuoteRead,
     QuoteRepriceRequest,
+    SendQuoteEmailRequest,
+    SendQuoteEmailResponse,
 )
 from erp_core.crm.workbench import create_scoped_opportunity, require_customer, update_lead
 from erp_core.crm.workbench_schemas import LeadUpdate
@@ -55,6 +58,12 @@ def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
     if factory is None:
         raise RuntimeError("session_factory is not initialized on app.state")
     return factory
+
+
+def build_email_adapter(request: Request) -> EmailAdapter:
+    """Build the delivery engine, honouring an injected HTTP transport in tests."""
+    transport = getattr(request.app.state, "email_http_transport", None)
+    return EmailAdapter(http_transport=transport)
 
 
 @router.get("/leads", response_model=PaginatedResponse[LeadRead])
@@ -209,6 +218,43 @@ async def generate_quote_pdf(
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
         return await _service.generate_pi_pdf(
             session, principal.tenant_id, quote_id, language=language
+        )
+
+
+@router.get("/quotes/{quote_id}/pdf/download")
+async def download_quote_pdf(
+    request: Request,
+    principal: ReaderPrincipal,
+    quote_id: UUID,
+    language: Literal["en", "zh"] = Query(default="en"),
+) -> Response:
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        pdf_bytes, quote = await _service.render_pi_pdf_bytes(
+            session, principal.tenant_id, quote_id, language=language
+        )
+        filename = _service.pi_pdf_filename(quote)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.post("/quotes/{quote_id}/send-email", response_model=SendQuoteEmailResponse)
+async def send_quote_email(
+    request: Request,
+    principal: SalesPrincipal,
+    quote_id: UUID,
+    payload: SendQuoteEmailRequest,
+) -> SendQuoteEmailResponse:
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await _service.send_quote_email(
+            session,
+            principal.tenant_id,
+            principal,
+            quote_id,
+            payload,
+            email_adapter=build_email_adapter(request),
         )
 
 

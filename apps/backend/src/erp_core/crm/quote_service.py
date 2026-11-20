@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, text
@@ -26,6 +27,8 @@ from erp_core.crm.schemas import (
     QuotePdfResponse,
     QuoteRead,
     QuoteRepriceRequest,
+    SendQuoteEmailRequest,
+    SendQuoteEmailResponse,
 )
 from erp_core.shared.enums import (
     FulfillmentStatus,
@@ -39,6 +42,12 @@ from erp_core.shared.errors import AppError
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.dependencies import CurrentPrincipal
+
+if TYPE_CHECKING:
+    from sqlalchemy import RowMapping
+
+    from erp_core.channels.adapters.email import EmailAdapter
+    from erp_core.tenancy.schemas import PiTemplateSettings
 
 
 class QuoteOrderPort(Protocol):
@@ -830,14 +839,11 @@ class QuoteService:
         )
         return await self._serialize_quote(session, tenant_id, quote)
 
-    async def generate_pi_pdf(
-        self, session: AsyncSession, tenant_id: UUID, quote_id: UUID, language: str = "en"
-    ) -> QuotePdfResponse:
-        quote = (
-            await session.execute(
-                select(Quote).where(Quote.tenant_id == tenant_id, Quote.id == quote_id)
-            )
-        ).scalar_one_or_none()
+    async def _load_quote(
+        self, session: AsyncSession, tenant_id: UUID, quote_id: UUID, *, lock: bool = False
+    ) -> Quote:
+        query = select(Quote).where(Quote.tenant_id == tenant_id, Quote.id == quote_id)
+        quote = await session.scalar(query.with_for_update() if lock else query)
         if quote is None:
             raise AppError(
                 slug="quote-not-found",
@@ -846,6 +852,34 @@ class QuoteService:
                 title="Quote Not Found",
                 detail=f"Quote '{quote_id}' not found.",
             )
+        return quote
+
+    async def _load_pi_template(
+        self, session: AsyncSession, tenant_id: UUID
+    ) -> PiTemplateSettings:
+        """Tenant-configured export template, falling back to generic export defaults."""
+        from erp_core.tenancy.schemas import default_pi_template, parse_pi_template
+
+        row = (
+            await session.execute(
+                text(
+                    "SELECT name, ai_policy_settings -> 'pi_template' AS pi_template "
+                    "FROM tenants WHERE id = :tid"
+                ),
+                {"tid": tenant_id},
+            )
+        ).one_or_none()
+        if row is None:
+            return default_pi_template("")
+        return parse_pi_template(str(row.name), row.pi_template)
+
+    async def _build_pi_render_context(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        quote: Quote,
+        language: str,
+    ) -> PiRenderContext:
         items = (
             (
                 await session.execute(
@@ -878,9 +912,11 @@ class QuoteService:
             )
         ).one()
 
-        ctx = PiRenderContext(
+        template = await self._load_pi_template(session, tenant_id)
+
+        return PiRenderContext(
             tenant_id=tenant_id,
-            seller_name=info_row.seller_name,
+            seller_name=template.company_legal_name or str(info_row.seller_name),
             buyer_company=info_row.buyer_company,
             buyer_contact=info_row.buyer_contact,
             buyer_email=info_row.buyer_email,
@@ -910,7 +946,51 @@ class QuoteService:
                 for qi in items
             ],
             language=language,
+            seller_address=template.company_address,
+            seller_phone=template.contact_phone,
+            seller_email=template.contact_email,
+            seller_website=template.website,
+            seller_tax_no=template.tax_or_reg_no,
+            bank_beneficiary_name=template.bank_beneficiary_name,
+            bank_name=template.bank_name,
+            bank_account_no=template.bank_account_no,
+            bank_swift_code=template.bank_swift_code,
+            bank_address=template.bank_address,
+            terms_notes=template.default_terms_notes,
+            footer_signature_title=template.footer_signature_title,
         )
+
+    @staticmethod
+    def pi_pdf_filename(quote: Quote) -> str:
+        safe_no = "".join(ch for ch in quote.quote_no if ch.isalnum() or ch in "-_") or "PI"
+        return f"{safe_no}-v{quote.version}.pdf"
+
+    async def render_pi_pdf_bytes(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        quote_id: UUID,
+        language: str = "en",
+    ) -> tuple[bytes, Quote]:
+        """Render fresh export PI PDF bytes plus the filename and quote they belong to."""
+        quote = await self._load_quote(session, tenant_id, quote_id)
+        ctx = await self._build_pi_render_context(session, tenant_id, quote, language)
+        pdf_bytes = await asyncio.to_thread(ProformaInvoicePdfRenderer.render_pdf_bytes, ctx)
+        if not pdf_bytes:
+            raise AppError(
+                slug="quote-pdf-render-failed",
+                status_code=500,
+                code="ERR_QUOTE_PDF_RENDER_FAILED",
+                title="Quote PDF Render Failed",
+                detail="The Proforma Invoice renderer produced no bytes.",
+            )
+        return pdf_bytes, quote
+
+    async def generate_pi_pdf(
+        self, session: AsyncSession, tenant_id: UUID, quote_id: UUID, language: str = "en"
+    ) -> QuotePdfResponse:
+        quote = await self._load_quote(session, tenant_id, quote_id)
+        ctx = await self._build_pi_render_context(session, tenant_id, quote, language)
         key, url = await self.pdf_renderer.render_and_upload(ctx)
         quote.pdf_r2_key = key
         await session.flush()
@@ -920,6 +1000,209 @@ class QuoteService:
             version=quote.version,
             pdf_r2_key=key,
             download_url=url,
+        )
+
+    async def _select_quote_email_account(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        principal: CurrentPrincipal,
+        channel_account_id: UUID | None,
+    ) -> RowMapping:
+        """Resolve the sending mailbox honouring personal/shared channel ownership."""
+        rows = (
+            (
+                await session.execute(
+                    text(
+                        """
+                        SELECT a.id, a.external_account_id, a.display_name,
+                               a.config, a.owner_user_id, a.visibility_scope,
+                               EXISTS (
+                                   SELECT 1 FROM channel_credentials cc
+                                   WHERE cc.tenant_id = a.tenant_id
+                                     AND cc.channel_account_id = a.id
+                                     AND cc.credential_type = 'messaging_provider'
+                               ) AS has_credentials
+                        FROM channel_accounts a
+                        WHERE a.tenant_id = :tid
+                          AND a.channel_type = 'email'
+                          AND a.status = 'active'
+                        ORDER BY a.updated_at DESC, a.id
+                        """
+                    ),
+                    {"tid": tenant_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        if principal.role == UserRole.AGENT:
+            rows = [
+                row
+                for row in rows
+                if row["owner_user_id"] == principal.user_id
+                or (row["visibility_scope"] == "shared" and row["owner_user_id"] is None)
+            ]
+
+        if channel_account_id is not None:
+            for row in rows:
+                if row["id"] == channel_account_id:
+                    return row
+            raise AppError(
+                slug="email-account-unavailable",
+                status_code=404,
+                code="ERR_EMAIL_ACCOUNT_UNAVAILABLE",
+                title="Email Account Unavailable",
+                detail=(
+                    "The requested email account is missing, inactive, or outside your "
+                    "channel ownership."
+                ),
+            )
+
+        if not rows:
+            raise AppError(
+                slug="email-account-unavailable",
+                status_code=404,
+                code="ERR_EMAIL_ACCOUNT_UNAVAILABLE",
+                title="Email Account Unavailable",
+                detail="Connect an email channel account before sending a Proforma Invoice.",
+            )
+        personal = [row for row in rows if row["owner_user_id"] == principal.user_id]
+        for row in personal:
+            if row["has_credentials"]:
+                return row
+        for row in rows:
+            if row["visibility_scope"] == "shared" and row["has_credentials"]:
+                return row
+        return (personal or rows)[0]
+
+    async def send_quote_email(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        principal: CurrentPrincipal,
+        quote_id: UUID,
+        payload: SendQuoteEmailRequest,
+        email_adapter: EmailAdapter | None = None,
+    ) -> SendQuoteEmailResponse:
+        """One-click grounded PI delivery: render a fresh PDF and email it as an attachment."""
+        from erp_core.channels.adapters.email import EmailAdapter, EmailAttachment
+        from erp_core.channels.ecommerce.base import CredentialVaultHelper
+
+        quote = await self._load_quote(session, tenant_id, quote_id, lock=True)
+        pdf_bytes, quote = await self.render_pi_pdf_bytes(
+            session, tenant_id, quote.id, language=payload.language
+        )
+        pdf_filename = self.pi_pdf_filename(quote)
+
+        account = await self._select_quote_email_account(
+            session, tenant_id, principal, payload.channel_account_id
+        )
+        credentials, _expires_at = await CredentialVaultHelper().load_secret_json(
+            session, tenant_id, account["id"], "messaging_provider"
+        )
+        config = account["config"] or {}
+        provider = (
+            "smtp_imap"
+            if credentials.get("smtp_password") or config.get("provider") == "smtp_imap"
+            else "resend"
+        )
+        mailbox = str(account["external_account_id"])
+        display_name = str(account["display_name"] or "").strip()
+        from_email = f"{display_name} <{mailbox}>" if display_name else mailbox
+
+        object_key = f"tenants/{tenant_id}/quotes/{pdf_filename}"
+        try:
+            await self.pdf_renderer.storage.put_bytes(
+                object_key, pdf_bytes, content_type="application/pdf"
+            )
+        except Exception:  # pragma: no cover - object storage is best effort for delivery
+            pass
+        else:
+            quote.pdf_r2_key = object_key
+
+        subject = (payload.subject or "").strip() or (
+            f"Proforma Invoice {quote.quote_no} v{quote.version} - "
+            f"{quote.incoterm.value} / {quote.total_amount} {quote.quote_currency}"
+        )
+        body_text = (payload.message_body or "").strip() or (
+            self._default_pi_email_body(quote, pdf_filename)
+        )
+        adapter = email_adapter or EmailAdapter()
+        result = await adapter.send_direct_email(
+            provider=provider,  # type: ignore[arg-type]
+            credentials=credentials,
+            from_address=from_email,
+            to_address=str(payload.recipient_email),
+            subject=subject,
+            body_text=body_text,
+            attachments=[
+                EmailAttachment(filename=pdf_filename, content_bytes=pdf_bytes),
+            ],
+            smtp_config={
+                "smtp_host": config.get("smtp_host") or credentials.get("smtp_host"),
+                "smtp_port": config.get("smtp_port") or credentials.get("smtp_port"),
+            },
+        )
+        if not result.success:
+            raise AppError(
+                slug="quote-email-send-failed",
+                title="Quote Email Send Failed",
+                status_code=502,
+                code="ERR_QUOTE_EMAIL_SEND_FAILED",
+                detail=result.error_message or "Failed to send quote email.",
+            )
+
+        previous_status = quote.status
+        if quote.status == QuoteStatus.DRAFT:
+            quote.status = QuoteStatus.SENT
+            await session.flush()
+        await record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_type="human_user",
+            actor_id=str(principal.user_id),
+            action="quote.emailed",
+            resource_type="quote",
+            resource_id=quote.id,
+            before_state={"status": previous_status.value},
+            after_state={
+                "status": quote.status.value,
+                "recipient_email": str(payload.recipient_email),
+                "channel_account_id": str(account["id"]),
+                "provider": provider,
+                "pdf_filename": pdf_filename,
+                "external_message_id": result.external_message_id,
+            },
+        )
+        return SendQuoteEmailResponse(
+            quote_id=quote.id,
+            quote_no=quote.quote_no,
+            recipient_email=str(payload.recipient_email),
+            from_email=from_email,
+            provider=provider,
+            external_message_id=result.external_message_id,
+            pdf_filename=pdf_filename,
+            pdf_size_bytes=len(pdf_bytes),
+            quote_status=quote.status.value,
+        )
+
+    @staticmethod
+    def _default_pi_email_body(quote: Quote, pdf_filename: str) -> str:
+        return (
+            f"Dear Customer,\n\n"
+            f"Please find attached our Proforma Invoice {quote.quote_no} "
+            f"(version {quote.version}).\n\n"
+            f"  Quote No.: {quote.quote_no}\n"
+            f"  Incoterm: {quote.incoterm.value}\n"
+            f"  Port of loading: {quote.port_of_loading or '-'}\n"
+            f"  Port of destination: {quote.port_of_destination or '-'}\n"
+            f"  Total amount: {quote.total_amount} {quote.quote_currency}\n"
+            f"  Payment terms: {quote.payment_terms}\n"
+            f"  Attachment: {pdf_filename}\n\n"
+            "Bank wire details and commercial terms are listed on the attached document.\n"
+            "Please confirm receipt and revert with any questions.\n\n"
+            "Best regards,\nExport Sales Team"
         )
 
     async def convert_quote_to_order(

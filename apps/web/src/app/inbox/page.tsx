@@ -42,6 +42,8 @@ export default function InboxPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>("all");
+  // 抽屉 → 回复框的单向插入通道：nonce 变更即把片段追加到草稿。
+  const [replyInsert, setReplyInsert] = useState<{ text: string; nonce: number } | null>(null);
 
   const canOverseeOwnership =
     principal?.role === "owner" ||
@@ -153,10 +155,19 @@ export default function InboxPage() {
           <InboxComposer
             conversation={activeConversation}
             messages={messagesQuery.data?.items ?? []}
+            insertRequest={replyInsert}
           />
         </div>
         {drawerOpen && activeConversation && (
-          <ContextDrawer customerId={activeConversation.customer_id} />
+          <ContextDrawer
+            customerId={activeConversation.customer_id}
+            onInsertReplyText={(text) =>
+              setReplyInsert((previous) => ({
+                text,
+                nonce: (previous?.nonce ?? 0) + 1,
+              }))
+            }
+          />
         )}
       </div>
       <FloatingCopilot conversationId={activeConversation?.id ?? null} />

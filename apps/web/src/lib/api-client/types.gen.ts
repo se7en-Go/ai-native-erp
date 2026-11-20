@@ -116,6 +116,7 @@ export type AiProposalRead = {
     rejection_reason: string | null;
     reviewed_at: string | null;
     reviewed_by_user_id: string | null;
+    source_tool_call_id?: string | null;
     status: ProposalStatus;
     target_entity_id: string | null;
     target_entity_type: string | null;
@@ -1564,6 +1565,25 @@ export type PendingProposalGroup = {
 };
 
 /**
+ * Tenant-configurable export Proforma Invoice letterhead, bank wire and terms.
+ */
+export type PiTemplateSettings = {
+    bank_account_no?: string;
+    bank_address?: string;
+    bank_beneficiary_name?: string;
+    bank_name?: string;
+    bank_swift_code?: string;
+    company_address?: string;
+    company_legal_name?: string;
+    contact_email?: string;
+    contact_phone?: string;
+    default_terms_notes?: string;
+    footer_signature_title?: string;
+    tax_or_reg_no?: string;
+    website?: string;
+};
+
+/**
  * Playbook metadata plus the honest publishing capability for one platform.
  */
 export type PlatformRead = {
@@ -2028,6 +2048,26 @@ export type SendInboxMessageResponse = {
     message: MessageRead;
     queued_for_delivery: boolean;
     translated_preview?: string | null;
+};
+
+export type SendQuoteEmailRequest = {
+    channel_account_id?: string | null;
+    language?: 'en' | 'zh';
+    message_body?: string | null;
+    recipient_email: string;
+    subject?: string | null;
+};
+
+export type SendQuoteEmailResponse = {
+    external_message_id?: string | null;
+    from_email: string;
+    pdf_filename: string;
+    pdf_size_bytes: number;
+    provider: 'resend' | 'smtp_imap';
+    quote_id: string;
+    quote_no: string;
+    quote_status: string;
+    recipient_email: string;
 };
 
 export type ShipOrderRequest = {
@@ -2634,6 +2674,36 @@ export type UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses = {
 };
 
 export type UpdateCapabilitiesApiV1AiCapabilitiesPatchResponse = UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses[keyof UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses];
+
+export type ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/conversations/{conversation_id}/propose-reply';
+};
+
+export type ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostError = ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostErrors[keyof ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostErrors];
+
+export type ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiProposalRead;
+};
+
+export type ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostResponse = ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostResponses[keyof ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostResponses];
 
 export type ListEmployeesApiV1AiEmployeesGetData = {
     body?: never;
@@ -3898,6 +3968,36 @@ export type GenerateQuotePdfApiV1B2bQuotesQuoteIdPdfPostResponses = {
 
 export type GenerateQuotePdfApiV1B2bQuotesQuoteIdPdfPostResponse = GenerateQuotePdfApiV1B2bQuotesQuoteIdPdfPostResponses[keyof GenerateQuotePdfApiV1B2bQuotesQuoteIdPdfPostResponses];
 
+export type DownloadQuotePdfApiV1B2bQuotesQuoteIdPdfDownloadGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        quote_id: string;
+    };
+    query?: {
+        language?: 'en' | 'zh';
+    };
+    url: '/api/v1/b2b/quotes/{quote_id}/pdf/download';
+};
+
+export type DownloadQuotePdfApiV1B2bQuotesQuoteIdPdfDownloadGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DownloadQuotePdfApiV1B2bQuotesQuoteIdPdfDownloadGetError = DownloadQuotePdfApiV1B2bQuotesQuoteIdPdfDownloadGetErrors[keyof DownloadQuotePdfApiV1B2bQuotesQuoteIdPdfDownloadGetErrors];
+
+export type DownloadQuotePdfApiV1B2bQuotesQuoteIdPdfDownloadGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type RepriceQuoteVersionApiV1B2bQuotesQuoteIdRepriceVersionPostData = {
     body: QuoteRepriceRequest;
     headers?: {
@@ -3957,6 +4057,36 @@ export type SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses = {
 };
 
 export type SendQuoteApiV1B2bQuotesQuoteIdSendPostResponse = SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses[keyof SendQuoteApiV1B2bQuotesQuoteIdSendPostResponses];
+
+export type SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostData = {
+    body: SendQuoteEmailRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        quote_id: string;
+    };
+    query?: never;
+    url: '/api/v1/b2b/quotes/{quote_id}/send-email';
+};
+
+export type SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostError = SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostErrors[keyof SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostErrors];
+
+export type SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SendQuoteEmailResponse;
+};
+
+export type SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostResponse = SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostResponses[keyof SendQuoteEmailApiV1B2bQuotesQuoteIdSendEmailPostResponses];
 
 export type ListTasksApiV1B2bTasksGetData = {
     body?: never;
@@ -7638,6 +7768,62 @@ export type UpdateMemberRoleApiV1TenantsMembershipsMembershipIdPatchResponses = 
 };
 
 export type UpdateMemberRoleApiV1TenantsMembershipsMembershipIdPatchResponse = UpdateMemberRoleApiV1TenantsMembershipsMembershipIdPatchResponses[keyof UpdateMemberRoleApiV1TenantsMembershipsMembershipIdPatchResponses];
+
+export type GetPiTemplateApiV1TenantsPiTemplateGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/pi-template';
+};
+
+export type GetPiTemplateApiV1TenantsPiTemplateGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPiTemplateApiV1TenantsPiTemplateGetError = GetPiTemplateApiV1TenantsPiTemplateGetErrors[keyof GetPiTemplateApiV1TenantsPiTemplateGetErrors];
+
+export type GetPiTemplateApiV1TenantsPiTemplateGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PiTemplateSettings;
+};
+
+export type GetPiTemplateApiV1TenantsPiTemplateGetResponse = GetPiTemplateApiV1TenantsPiTemplateGetResponses[keyof GetPiTemplateApiV1TenantsPiTemplateGetResponses];
+
+export type UpdatePiTemplateApiV1TenantsPiTemplatePatchData = {
+    body: PiTemplateSettings;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/pi-template';
+};
+
+export type UpdatePiTemplateApiV1TenantsPiTemplatePatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdatePiTemplateApiV1TenantsPiTemplatePatchError = UpdatePiTemplateApiV1TenantsPiTemplatePatchErrors[keyof UpdatePiTemplateApiV1TenantsPiTemplatePatchErrors];
+
+export type UpdatePiTemplateApiV1TenantsPiTemplatePatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: PiTemplateSettings;
+};
+
+export type UpdatePiTemplateApiV1TenantsPiTemplatePatchResponse = UpdatePiTemplateApiV1TenantsPiTemplatePatchResponses[keyof UpdatePiTemplateApiV1TenantsPiTemplatePatchResponses];
 
 export type UpdateTenantSettingsApiV1TenantsSettingsPatchData = {
     body: UpdateTenantSettingsRequest;
