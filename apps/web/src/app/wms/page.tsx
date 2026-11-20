@@ -4,23 +4,53 @@ import { useI18n } from "@/lib/i18n";
 
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownUp, Boxes, PackageCheck, Warehouse } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDownUp,
+  Boxes,
+  CheckCircle2,
+  PackageCheck,
+  Plus,
+  ShoppingCart,
+  Warehouse,
+  X,
+} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { useAuthSession } from "@/components/providers";
-import type { CreateStocktake } from "@/lib/api-client/types.gen";
+import type { CreateStocktake, LowStockItemRead, WarehouseCreateRequest } from "@/lib/api-client/types.gen";
+import {
+  createPoFromLowStock,
+  createWmsWarehouse,
+  fetchLowStockAlerts,
+} from "@/lib/api-client/pack-a-erp";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
 import {
   addPhase3aStocktake,
   fetchPhase3aMovements,
   fetchPhase3aStock,
+  fetchPhase3aSuppliers,
   fetchPhase3aVariants,
   fetchPhase3aWarehouses,
 } from "@/lib/phase3a-data";
 
 const OPERATOR_ROLES = new Set(["owner", "admin", "manager"]);
+
+interface WarehouseFormState {
+  code: string;
+  name: string;
+  country_code: string;
+  city: string;
+}
+
+const EMPTY_WAREHOUSE_FORM: WarehouseFormState = {
+  code: "",
+  name: "",
+  country_code: "CN",
+  city: "",
+};
 
 export default function WmsPage() {
   const { bi } = useI18n();
@@ -29,6 +59,19 @@ export default function WmsPage() {
   const [variantId, setVariantId] = useState("");
   const [delta, setDelta] = useState("1");
   const [notes, setNotes] = useState("");
+
+  const [warehouseOpen, setWarehouseOpen] = useState(false);
+  const [warehouseForm, setWarehouseForm] = useState<WarehouseFormState>(EMPTY_WAREHOUSE_FORM);
+  const [warehouseError, setWarehouseError] = useState<string | null>(null);
+  const [createdWarehouses, setCreatedWarehouses] = useState<WarehouseCreateRequest[]>([]);
+
+  const [poItem, setPoItem] = useState<LowStockItemRead | null>(null);
+  const [poSupplierId, setPoSupplierId] = useState("");
+  const [poQuantity, setPoQuantity] = useState("");
+  const [poUnitCost, setPoUnitCost] = useState("");
+  const [createdPo, setCreatedPo] = useState<{ po_no: string; total_amount: string; currency: string } | null>(
+    null
+  );
 
   const canAdjust = OPERATOR_ROLES.has(principal?.role ?? "");
 
@@ -48,6 +91,15 @@ export default function WmsPage() {
   const warehousesQuery = useQuery({
     queryKey: ["orders", "warehouses"],
     queryFn: () => fetchPhase3aWarehouses(),
+  });
+  const lowStockQuery = useQuery({
+    queryKey: ["wms", "low-stock"],
+    queryFn: () => fetchLowStockAlerts(),
+  });
+  const suppliersQuery = useQuery({
+    queryKey: ["supply-chain", "suppliers", "picker"],
+    queryFn: () => fetchPhase3aSuppliers(),
+    enabled: canAdjust,
   });
 
   const adjust = useMutation({
@@ -71,6 +123,48 @@ export default function WmsPage() {
 
   const movements = movementsQuery.data?.items ?? [];
   const stock = stockQuery.data?.items ?? [];
+  const lowStockItems = lowStockQuery.data?.items ?? [];
+  const suppliers = suppliersQuery.data?.items ?? [];
+
+  const createWarehouseMutation = useMutation({
+    mutationFn: (payload: WarehouseCreateRequest) => createWmsWarehouse(payload),
+    onSuccess: (_created, payload) => {
+      setCreatedWarehouses((prev) => [...prev, payload]);
+      setWarehouseForm(EMPTY_WAREHOUSE_FORM);
+      setWarehouseError(null);
+      setWarehouseOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["orders", "warehouses"] });
+      void queryClient.invalidateQueries({ queryKey: ["wms"] });
+    },
+  });
+
+  const createPoMutation = useMutation({
+    mutationFn: (item: LowStockItemRead) =>
+      createPoFromLowStock({
+        supplier_id: poSupplierId,
+        variant_id: item.variant_id,
+        quantity: Number(poQuantity),
+        unit_cost: poUnitCost.trim() || "0",
+      }),
+    onSuccess: (po) => {
+      setCreatedPo({ po_no: po.po_no, total_amount: po.total_amount, currency: po.currency });
+      setPoItem(null);
+      setPoQuantity("");
+      setPoUnitCost("");
+      void queryClient.invalidateQueries({ queryKey: ["wms", "low-stock"] });
+      void queryClient.invalidateQueries({ queryKey: ["supply-chain", "purchase-orders"] });
+    },
+  });
+
+  /** 打开补货弹窗时预填建议补货量与供应商首个可选项。 */
+  const openReplenishment = (item: LowStockItemRead) => {
+    const preferred = suppliers.find((supplier) => supplier.status === "active") ?? suppliers[0];
+    setPoSupplierId(preferred?.id ?? "");
+    setPoQuantity(String(item.suggested_reorder_qty));
+    setPoUnitCost("");
+    setCreatedPo(null);
+    setPoItem(item);
+  };
 
   const summary = useMemo(() => {
     const onHand = stock.reduce((total, row) => total + row.on_hand_qty, 0);
@@ -90,7 +184,42 @@ export default function WmsPage() {
             "流水来自采购收货、订单出库与盘点调整；人工仅可提交盘点调整，且不可占用已预占库存。",
             "Movements come from receiving, order dispatch and stocktakes; manual stocktake adjustments can never consume reserved stock."
           )}
+          actions={
+            canAdjust ? (
+              <button
+                type="button"
+                data-testid="open-create-warehouse-btn"
+                onClick={() => {
+                  setWarehouseError(null);
+                  setWarehouseOpen(true);
+                }}
+                className="erp-btn rounded-xl bg-[#18181B] text-[13px] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{bi("新建仓库", "New warehouse")}</span>
+              </button>
+            ) : undefined
+          }
         />
+
+        {createdWarehouses.length > 0 && (
+          <div
+            data-testid="wms-created-warehouses"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12px] font-semibold text-emerald-900"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span>{bi("本次已新建仓库：", "Warehouses created in this session:")}</span>
+            {createdWarehouses.map((warehouse) => (
+              <span
+                key={warehouse.code}
+                className="rounded-md border border-emerald-300 bg-white px-1.5 py-0.5 font-mono text-[11px]"
+              >
+                {warehouse.code} · {warehouse.name}
+                {warehouse.city ? ` · ${warehouse.city}` : ""}
+              </span>
+            ))}
+          </div>
+        )}
 
         <section
           aria-label={bi("库存关键指标", "Inventory key metrics")}
@@ -124,6 +253,114 @@ export default function WmsPage() {
             accent="violet"
             hint={bi("按当前台账正数流水汇总", "Summed from positive movements")}
           />
+        </section>
+
+        <section
+          data-testid="wms-low-stock-card"
+          className="erp-card overflow-hidden rounded-[20px]"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-3.5 py-2.5">
+            <div className="flex items-center gap-2">
+              <AlertTriangle
+                className={`h-4 w-4 ${lowStockItems.length > 0 ? "text-rose-600" : "text-emerald-600"}`}
+              />
+              <h2 className="text-[13.5px] font-semibold text-slate-900">
+                {bi("低库存补货预警", "Low-stock replenishment alerts")}
+              </h2>
+              <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700">
+                {lowStockItems.length} {bi("项待补", "to restock")}
+              </span>
+            </div>
+            <span className="text-[11.5px] font-medium text-slate-500">
+              {bi(
+                "可用库存低于安全库存阈值时自动列出，建议补货量 = max(安全库存 × 2 − 可用, 安全库存)",
+                "Listed automatically when available stock drops below its safety threshold; suggested qty = max(safety × 2 − available, safety)"
+              )}
+            </span>
+          </div>
+
+          {createdPo && (
+            <div
+              data-testid="low-stock-po-created"
+              className="flex flex-wrap items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12px] font-semibold text-emerald-900"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span>
+                {bi("已生成采购单", "Purchase order created")}{" "}
+                <span className="font-mono">{createdPo.po_no}</span>{" · "}
+                <span className="tabular-nums">
+                  {createdPo.currency} {createdPo.total_amount}
+                </span>
+              </span>
+              <a
+                data-testid="low-stock-po-link"
+                href="/supply-chain/purchase-orders"
+                className="ml-auto inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-[11.5px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+              >
+                <ShoppingCart className="h-3 w-3" />
+                <span>{bi("去采购单验收", "Open purchase orders")}</span>
+              </a>
+            </div>
+          )}
+
+          <table data-testid="wms-low-stock-table" className="erp-table">
+            <thead>
+              <tr>
+                <th>{bi("SKU 与商品", "SKU & product")}</th>
+                <th>{bi("仓库", "Warehouse")}</th>
+                <th className="text-right">{bi("可用 / 安全库存", "Available / safety")}</th>
+                <th className="text-right">{bi("建议补货量", "Suggested qty")}</th>
+                {canAdjust && <th className="text-right">{bi("操作", "Action")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {lowStockItems.map((item) => (
+                <tr key={`${item.warehouse_id}-${item.variant_id}`}>
+                  <td className="py-2">
+                    <div className="font-mono text-[12px] font-semibold text-slate-900">{item.sku}</div>
+                    <div className="text-[11px] font-medium text-slate-500">{item.product_name}</div>
+                  </td>
+                  <td className="py-2 text-slate-600">{item.warehouse_name}</td>
+                  <td className="py-2 text-right">
+                    <span
+                      data-testid={`low-stock-badge-${item.variant_id}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700"
+                    >
+                      {item.available_qty} / {item.safety_stock_qty}
+                    </span>
+                  </td>
+                  <td className="py-2 text-right font-semibold tabular-nums text-slate-900">
+                    {item.suggested_reorder_qty}
+                  </td>
+                  {canAdjust && (
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        data-testid={`low-stock-create-po-${item.variant_id}`}
+                        onClick={() => openReplenishment(item)}
+                        className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
+                      >
+                        <ShoppingCart className="h-3 w-3" />
+                        <span>{bi("一键转采购单", "Create purchase order")}</span>
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {lowStockItems.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={canAdjust ? 5 : 4}
+                    className="py-4 text-center text-[12px] font-medium text-slate-500"
+                  >
+                    {lowStockQuery.isLoading
+                      ? bi("正在检查安全库存…", "Checking safety stock…")
+                      : bi("全部 SKU 均高于安全库存阈值。", "Every SKU is above its safety stock.")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </section>
 
         <TableWrap className="rounded-2xl">
@@ -284,8 +521,297 @@ export default function WmsPage() {
             </tbody>
           </table>
         </TableWrap>
+
+        {warehouseOpen && (
+          <Overlay testId="create-warehouse-modal" labelledBy="create-warehouse-title">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!warehouseForm.code.trim() || !warehouseForm.name.trim()) {
+                  setWarehouseError(bi("仓库编码与名称为必填项。", "Warehouse code and name are required."));
+                  return;
+                }
+                if (!/^[A-Za-z]{2}$/.test(warehouseForm.country_code.trim())) {
+                  setWarehouseError(bi("国家代码必须是两位字母。", "Country code must be two letters."));
+                  return;
+                }
+                setWarehouseError(null);
+                createWarehouseMutation.mutate({
+                  code: warehouseForm.code.trim(),
+                  name: warehouseForm.name.trim(),
+                  country_code: warehouseForm.country_code.trim().toUpperCase(),
+                  city: warehouseForm.city.trim(),
+                });
+              }}
+              className="space-y-3.5"
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+                <div className="min-w-0">
+                  <h3 id="create-warehouse-title" className="text-[15px] font-bold text-slate-950">
+                    {bi("新建仓库", "New warehouse")}
+                  </h3>
+                  <p className="mt-1 text-[12px] leading-5 text-slate-600">
+                    {bi(
+                      "仓库编码唯一且用于采购单与库存台账；建完仓库才能把低库存 SKU 转成采购单。",
+                      "The warehouse code is unique and used by purchase orders and the inventory ledger. Replenishment requires at least one warehouse."
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWarehouseOpen(false)}
+                  aria-label={bi("关闭新建仓库弹窗", "Close the new warehouse dialog")}
+                  className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-xs transition-colors hover:bg-slate-100"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <FormField
+                  testId="warehouse-form-code"
+                  label={bi("仓库编码", "Warehouse code")}
+                  required
+                  value={warehouseForm.code}
+                  onChange={(value) => setWarehouseForm((prev) => ({ ...prev, code: value }))}
+                  placeholder="SZ-BONDED-01"
+                />
+                <FormField
+                  testId="warehouse-form-name"
+                  label={bi("仓库名称", "Warehouse name")}
+                  required
+                  value={warehouseForm.name}
+                  onChange={(value) => setWarehouseForm((prev) => ({ ...prev, name: value }))}
+                  placeholder="Shenzhen Bonded Warehouse"
+                />
+                <FormField
+                  testId="warehouse-form-country"
+                  label={bi("国家代码", "Country code")}
+                  value={warehouseForm.country_code}
+                  onChange={(value) => setWarehouseForm((prev) => ({ ...prev, country_code: value }))}
+                  placeholder="CN"
+                  maxLength={2}
+                />
+                <FormField
+                  testId="warehouse-form-city"
+                  label={bi("城市", "City")}
+                  value={warehouseForm.city}
+                  onChange={(value) => setWarehouseForm((prev) => ({ ...prev, city: value }))}
+                  placeholder="Shenzhen"
+                />
+              </div>
+
+              {(warehouseError || createWarehouseMutation.isError) && (
+                <p
+                  role="alert"
+                  data-testid="create-warehouse-error"
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800"
+                >
+                  {warehouseError ?? createWarehouseMutation.error?.message}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setWarehouseOpen(false)}
+                  className="erp-btn erp-btn-secondary rounded-xl"
+                >
+                  {bi("取消", "Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  data-testid="warehouse-submit"
+                  disabled={createWarehouseMutation.isPending}
+                  className="erp-btn rounded-xl bg-[#18181B] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46] disabled:opacity-40"
+                >
+                  {createWarehouseMutation.isPending
+                    ? bi("正在创建…", "Creating…")
+                    : bi("创建仓库", "Create warehouse")}
+                </button>
+              </div>
+            </form>
+          </Overlay>
+        )}
+
+        {poItem && (
+          <Overlay testId="low-stock-po-modal" labelledBy="low-stock-po-title">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                createPoMutation.mutate(poItem);
+              }}
+              className="space-y-3.5"
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+                <div className="min-w-0">
+                  <h3 id="low-stock-po-title" className="text-[15px] font-bold text-slate-950">
+                    {bi("一键转采购单", "Create purchase order")}
+                  </h3>
+                  <p className="mt-1 text-[12px] leading-5 text-slate-600">
+                    {bi(
+                      "生成的采购单为草稿状态，供应商确认单价后可在采购单页提交并收货入库。",
+                      "The generated purchase order starts as a draft. Confirm the unit cost with the supplier, then submit and receive it from the purchase-order page."
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPoItem(null)}
+                  aria-label={bi("关闭补货弹窗", "Close the replenishment dialog")}
+                  className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-xs transition-colors hover:bg-slate-100"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[12px] font-semibold text-rose-800">
+                <span className="font-mono">{poItem.sku}</span>
+                {" · "}
+                {poItem.product_name}
+                {" · "}
+                <span className="tabular-nums">
+                  {bi("可用", "Available")} {poItem.available_qty} / {bi("安全", "Safety")}{" "}
+                  {poItem.safety_stock_qty}
+                </span>
+              </div>
+
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <label className="block sm:col-span-2">
+                  <span className="mb-1 flex items-center gap-1 text-[11.5px] font-semibold text-slate-700">
+                    {bi("供应商", "Supplier")}
+                    <span className="text-rose-600">*</span>
+                  </span>
+                  <select
+                    data-testid="low-stock-po-supplier"
+                    value={poSupplierId}
+                    onChange={(event) => setPoSupplierId(event.target.value)}
+                    className="erp-input w-full rounded-xl"
+                  >
+                    <option value="">{bi("请选择供应商", "Select a supplier")}</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.code} · {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <FormField
+                  testId="low-stock-po-quantity"
+                  label={bi("采购数量", "Order quantity")}
+                  required
+                  type="number"
+                  min={1}
+                  value={poQuantity}
+                  onChange={setPoQuantity}
+                />
+                <FormField
+                  testId="low-stock-po-unit-cost"
+                  label={bi("单价（USD）", "Unit cost (USD)")}
+                  required
+                  type="number"
+                  step="0.01"
+                  value={poUnitCost}
+                  onChange={setPoUnitCost}
+                  placeholder="14.20"
+                />
+              </div>
+
+              {createPoMutation.isError && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800"
+                >
+                  {createPoMutation.error.message}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setPoItem(null)}
+                  className="erp-btn erp-btn-secondary rounded-xl"
+                >
+                  {bi("取消", "Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  data-testid="low-stock-po-submit"
+                  disabled={
+                    createPoMutation.isPending ||
+                    !poSupplierId ||
+                    !(Number(poQuantity) > 0) ||
+                    !(Number(poUnitCost) >= 0) ||
+                    poUnitCost.trim().length === 0
+                  }
+                  className="erp-btn rounded-xl bg-[#18181B] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46] disabled:opacity-40"
+                >
+                  {createPoMutation.isPending
+                    ? bi("正在生成…", "Creating…")
+                    : bi("生成采购单", "Create purchase order")}
+                </button>
+              </div>
+            </form>
+          </Overlay>
+        )}
       </Page>
     </AppShell>
+  );
+}
+
+/** 居中遮罩弹窗壳：与商品主档新建 / CSV 导入保持同一套命令中心风格。 */
+function Overlay({
+  testId,
+  labelledBy,
+  children,
+}: {
+  testId: string;
+  labelledBy: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+        data-testid={testId}
+        className="erp-card my-6 w-full max-w-xl rounded-[20px] p-4 shadow-2xl"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FormField({
+  testId,
+  label,
+  value,
+  onChange,
+  required = false,
+  ...input
+}: {
+  testId: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
+  return (
+    <label className="block">
+      <span className="mb-1 flex items-center gap-1 text-[11.5px] font-semibold text-slate-700">
+        {label}
+        {required && <span className="text-rose-600">*</span>}
+      </span>
+      <input
+        {...input}
+        data-testid={testId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="erp-input w-full rounded-xl tabular-nums"
+      />
+    </label>
   );
 }
 

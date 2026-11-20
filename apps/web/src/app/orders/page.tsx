@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   CircleDollarSign,
+  FileSpreadsheet,
+  FileText,
   Lock,
   PackageCheck,
   Truck,
@@ -15,6 +17,11 @@ import { ShipmentTimelineDrawer } from "@/components/orders/shipment-timeline-dr
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Badge, EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { shipOrder } from "@/lib/api-client/live-client";
+import {
+  commercialInvoicePdfUrl,
+  packingListPdfUrl,
+  type ExportDocumentLanguage,
+} from "@/lib/api-client/pack-a-erp";
 import { fetchOrders, fetchPendingProposalsCount } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
 import { formatMoney, type OrderMode } from "@/lib/contracts";
@@ -56,6 +63,9 @@ export default function OrdersPage() {
   const [modeFilter, setModeFilter] = useState<"" | OrderMode>("");
   const [drawerOrderId, setDrawerOrderId] = useState<string | null>(null);
   const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
+  // Export documents are rendered server-side from the locked contract, so the
+  // language pill only swaps the `?language=` query of the same PDF route.
+  const [pdfLanguage, setPdfLanguage] = useState<ExportDocumentLanguage>("en");
 
   const pendingProposalsQuery = useQuery({
     queryKey: ["ai", "proposals", "pending-count"],
@@ -183,6 +193,38 @@ export default function OrdersPage() {
                   <th>{bi("履约状态", "Fulfillment")}</th>
                   <th>{bi("收款状态", "Payment")}</th>
                   <th className="text-right">{bi("订单金额", "Total")}</th>
+                  <th>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{bi("出口单据", "Export docs")}</span>
+                      <div
+                        role="group"
+                        aria-label={bi("PDF 语言切换", "PDF language")}
+                        className="inline-flex items-center gap-0.5 rounded-full border border-slate-200 bg-slate-50 p-0.5"
+                      >
+                        {(
+                          [
+                            { key: "en" as const, label: "EN" },
+                            { key: "zh" as const, label: "中文" },
+                          ]
+                        ).map((option) => (
+                          <button
+                            key={option.key}
+                            type="button"
+                            data-testid={`pdf-lang-${option.key}`}
+                            aria-pressed={pdfLanguage === option.key}
+                            onClick={() => setPdfLanguage(option.key)}
+                            className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
+                              pdfLanguage === option.key
+                                ? "bg-[#065F46] text-white shadow-xs"
+                                : "text-slate-600 hover:bg-white"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </th>
                   <th className="text-right">{bi("17TRACK 与出库", "17TRACK & dispatch")}</th>
                 </tr>
               </thead>
@@ -249,6 +291,30 @@ export default function OrdersPage() {
                       </td>
                       <td className="text-right font-semibold tabular-nums text-slate-900">
                         {formatMoney(ord.total_amount, ord.currency)}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <a
+                            data-testid={`download-ci-${ord.id}`}
+                            href={commercialInvoicePdfUrl(ord.id, pdfLanguage)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-semibold text-slate-700 shadow-xs transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+                          >
+                            <FileText className="h-3 w-3" />
+                            <span>{bi("商业发票 CI", "Commercial invoice CI")}</span>
+                          </a>
+                          <a
+                            data-testid={`download-pl-${ord.id}`}
+                            href={packingListPdfUrl(ord.id, pdfLanguage)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-semibold text-slate-700 shadow-xs transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+                          >
+                            <FileSpreadsheet className="h-3 w-3" />
+                            <span>{bi("装箱单 PL", "Packing list PL")}</span>
+                          </a>
+                        </div>
                       </td>
                       <td>
                         <div className="flex flex-wrap items-center justify-end gap-2">
