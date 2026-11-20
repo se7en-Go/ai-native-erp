@@ -31,6 +31,9 @@ export const ROUTE_ROLE_ALLOWLIST: Array<{ prefix: string; roles: UserRole[] }> 
   { prefix: "/dashboard", roles: ["owner", "admin", "manager", "agent", "finance"] },
   { prefix: "/wms", roles: ["owner", "admin", "manager", "agent", "finance"] },
   { prefix: "/analytics", roles: ["owner", "admin", "manager", "agent", "finance"] },
+  // 业务员也要能自助绑定个人 Telegram / 工作邮箱，所以渠道设置单独放行；
+  // 该条目必须排在通用 /settings 之前（canAccessRoute 按顺序取首个前缀命中）。
+  { prefix: "/settings/channels", roles: ["owner", "admin", "manager", "agent"] },
   { prefix: "/settings", roles: ["owner", "admin"] },
   { prefix: "/onboarding", roles: ["owner", "admin"] },
   { prefix: "/ai/capabilities", roles: ["owner", "admin", "manager", "agent", "finance"] },

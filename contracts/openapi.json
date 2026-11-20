@@ -1933,6 +1933,17 @@
       },
       "ChannelAccountRead": {
         "properties": {
+          "bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Username"
+          },
           "channel_type": {
             "$ref": "#/components/schemas/ChannelType"
           },
@@ -1949,11 +1960,54 @@
             "title": "Id",
             "type": "string"
           },
+          "owner_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Email"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
           "rate_limit_profile": {
             "$ref": "#/components/schemas/ChannelRateLimitRead"
           },
           "status": {
             "$ref": "#/components/schemas/ChannelStatus"
+          },
+          "visibility_scope": {
+            "default": "shared",
+            "enum": [
+              "shared",
+              "personal"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
           }
         },
         "required": [
@@ -2213,13 +2267,56 @@
       },
       "ConnectMessagingResponse": {
         "properties": {
+          "bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Username"
+          },
           "channel_account_id": {
             "format": "uuid",
             "title": "Channel Account Id",
             "type": "string"
           },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
           "external_account_id": {
             "title": "External Account Id",
+            "type": "string"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "visibility_scope": {
+            "default": "shared",
+            "enum": [
+              "shared",
+              "personal"
+            ],
+            "title": "Visibility Scope",
             "type": "string"
           }
         },
@@ -2318,13 +2415,62 @@
             ],
             "title": "Assigned User Id"
           },
+          "assigned_user_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Name"
+          },
+          "channel_account_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Account Display Name"
+          },
           "channel_account_id": {
             "format": "uuid",
             "title": "Channel Account Id",
             "type": "string"
           },
+          "channel_owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Owner User Id"
+          },
           "channel_type": {
             "$ref": "#/components/schemas/ChannelType"
+          },
+          "channel_visibility_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "personal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Visibility Scope"
           },
           "conversation_mode": {
             "$ref": "#/components/schemas/ConversationMode"
@@ -3596,6 +3742,176 @@
         "title": "DeliveryStatus",
         "type": "string"
       },
+      "DisconnectChannelResponse": {
+        "properties": {
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChannelStatus",
+            "default": "disconnected"
+          }
+        },
+        "required": [
+          "channel_account_id"
+        ],
+        "title": "DisconnectChannelResponse",
+        "type": "object"
+      },
+      "EmailConnectRequest": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email_address": {
+            "format": "email",
+            "title": "Email Address",
+            "type": "string"
+          },
+          "imap_host": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imap Host"
+          },
+          "imap_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 993,
+            "title": "Imap Port"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "provider": {
+            "default": "resend",
+            "enum": [
+              "resend",
+              "smtp_imap"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "smtp_host": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Host"
+          },
+          "smtp_password": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Password"
+          },
+          "smtp_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 587,
+            "title": "Smtp Port"
+          },
+          "smtp_username": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Username"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "personal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
+          }
+        },
+        "required": [
+          "email_address"
+        ],
+        "title": "EmailConnectRequest",
+        "type": "object"
+      },
       "EmailDnsRead": {
         "properties": {
           "dkim_verified": {
@@ -3636,10 +3952,37 @@
             "title": "Is Coexistence",
             "type": "boolean"
           },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
           "phone_number_id": {
             "minLength": 3,
             "title": "Phone Number Id",
             "type": "string"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "personal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
           },
           "waba_id": {
             "minLength": 3,
@@ -4411,6 +4754,33 @@
             "pattern": "^[0-9]{1,32}$",
             "title": "Ig Account Id",
             "type": "string"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "personal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
           }
         },
         "required": [
@@ -5642,6 +6012,18 @@
             "title": "Display Name",
             "type": "string"
           },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
           "page_access_token": {
             "format": "password",
             "title": "Page Access Token",
@@ -5652,6 +6034,21 @@
             "pattern": "^[0-9]{1,32}$",
             "title": "Page Id",
             "type": "string"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "personal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
           }
         },
         "required": [
@@ -12371,15 +12768,47 @@
             "writeOnly": true
           },
           "display_name": {
-            "maxLength": 150,
-            "minLength": 1,
-            "title": "Display Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "personal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
           }
         },
         "required": [
-          "bot_token",
-          "display_name"
+          "bot_token"
         ],
         "title": "TelegramConnectRequest",
         "type": "object"
@@ -12656,6 +13085,40 @@
           "credits_consumed"
         ],
         "title": "TranslateResponse",
+        "type": "object"
+      },
+      "UpdateChannelOwnershipRequest": {
+        "properties": {
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "reassign_open_conversations": {
+            "default": false,
+            "title": "Reassign Open Conversations",
+            "type": "boolean"
+          },
+          "visibility_scope": {
+            "enum": [
+              "shared",
+              "personal"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "visibility_scope"
+        ],
+        "title": "UpdateChannelOwnershipRequest",
         "type": "object"
       },
       "UpdateConversationRequest": {
@@ -18084,6 +18547,43 @@
             }
           },
           {
+            "in": "query",
+            "name": "owner_user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "visibility_scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "shared",
+                    "personal"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Visibility Scope"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -18123,6 +18623,134 @@
           }
         },
         "summary": "List Channel Accounts",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/accounts/{account_id}": {
+      "delete": {
+        "operationId": "disconnect_channel_account_api_v1_channels_accounts__account_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisconnectChannelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect Channel Account",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/accounts/{account_id}/ownership": {
+      "patch": {
+        "operationId": "update_channel_ownership_api_v1_channels_accounts__account_id__ownership_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateChannelOwnershipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelAccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Channel Ownership",
         "tags": [
           "channels"
         ]
@@ -18331,6 +18959,65 @@
         "summary": "Replay Dead Letter Event",
         "tags": [
           "channels-dlq"
+        ]
+      }
+    },
+    "/api/v1/channels/email/connect": {
+      "post": {
+        "operationId": "connect_email_api_v1_channels_email_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectMessagingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Email",
+        "tags": [
+          "channels"
         ]
       }
     },

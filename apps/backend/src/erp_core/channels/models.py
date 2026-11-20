@@ -61,6 +61,14 @@ class ChannelAccount(Base):
     external_account_id: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        Text, nullable=False, default="shared", server_default=text("'shared'")
+    )
     rate_limit_profile: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=lambda: {"mps": 80, "coexistence": False}
     )

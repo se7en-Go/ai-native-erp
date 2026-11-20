@@ -331,12 +331,17 @@ export type CaptionRead = {
 };
 
 export type ChannelAccountRead = {
+    bot_username?: string | null;
     channel_type: ChannelType;
     display_name: string;
     external_account_id: string;
     id: string;
+    owner_email?: string | null;
+    owner_name?: string | null;
+    owner_user_id?: string | null;
     rate_limit_profile: ChannelRateLimitRead;
     status: ChannelStatus;
+    visibility_scope?: 'shared' | 'personal';
 };
 
 export type ChannelConsentRead = {
@@ -392,8 +397,12 @@ export type CollectionSummary = {
 export type ConfidenceLevel = 'deterministic' | 'human_verified' | 'probabilistic';
 
 export type ConnectMessagingResponse = {
+    bot_username?: string | null;
     channel_account_id: string;
+    display_name?: string | null;
     external_account_id: string;
+    owner_user_id?: string | null;
+    visibility_scope?: 'shared' | 'personal';
 };
 
 export type ConnectResponse = {
@@ -414,8 +423,12 @@ export type ConversationMode = 'b2c_support' | 'b2b_inquiry' | 'mixed';
 export type ConversationRead = {
     ai_autonomy_override?: AutonomyLevel | null;
     assigned_user_id?: string | null;
+    assigned_user_name?: string | null;
+    channel_account_display_name?: string | null;
     channel_account_id: string;
+    channel_owner_user_id?: string | null;
     channel_type: ChannelType;
+    channel_visibility_scope?: ('shared' | 'personal') | null;
     conversation_mode: ConversationMode;
     country_code?: string | null;
     csw_expires_at?: string | null;
@@ -626,6 +639,26 @@ export type DashboardRead = {
 
 export type DeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
 
+export type DisconnectChannelResponse = {
+    channel_account_id: string;
+    status?: ChannelStatus;
+};
+
+export type EmailConnectRequest = {
+    api_key?: string | null;
+    display_name?: string | null;
+    email_address: string;
+    imap_host?: string | null;
+    imap_port?: number | null;
+    owner_user_id?: string | null;
+    provider?: 'resend' | 'smtp_imap';
+    smtp_host?: string | null;
+    smtp_password?: string | null;
+    smtp_port?: number | null;
+    smtp_username?: string | null;
+    visibility_scope?: ('shared' | 'personal') | null;
+};
+
 export type EmailDnsRead = {
     dkim_verified: boolean;
     return_path_verified: boolean;
@@ -636,7 +669,9 @@ export type EmbeddedSignupRequest = {
     code: string;
     display_name?: string;
     is_coexistence?: boolean;
+    owner_user_id?: string | null;
     phone_number_id: string;
+    visibility_scope?: ('shared' | 'personal') | null;
     waba_id: string;
 };
 
@@ -792,6 +827,8 @@ export type InstagramConnectRequest = {
     access_token: string;
     display_name: string;
     ig_account_id: string;
+    owner_user_id?: string | null;
+    visibility_scope?: ('shared' | 'personal') | null;
 };
 
 export type InventoryBalanceItemRead = {
@@ -1018,8 +1055,10 @@ export type MessageSenderType = 'customer' | 'human_agent' | 'ai_agent' | 'syste
 
 export type MessengerConnectRequest = {
     display_name: string;
+    owner_user_id?: string | null;
     page_access_token: string;
     page_id: string;
+    visibility_scope?: ('shared' | 'personal') | null;
 };
 
 export type MoqTierInputInput = {
@@ -2215,7 +2254,9 @@ export type TaskUpdate = {
 
 export type TelegramConnectRequest = {
     bot_token: string;
-    display_name: string;
+    display_name?: string | null;
+    owner_user_id?: string | null;
+    visibility_scope?: ('shared' | 'personal') | null;
 };
 
 export type TenantMembershipOption = {
@@ -2277,6 +2318,12 @@ export type TranslateResponse = {
     model_used: string;
     target_lang: string;
     translated_text: string;
+};
+
+export type UpdateChannelOwnershipRequest = {
+    owner_user_id?: string | null;
+    reassign_open_conversations?: boolean;
+    visibility_scope: 'shared' | 'personal';
 };
 
 export type UpdateConversationRequest = {
@@ -4407,6 +4454,8 @@ export type ListChannelAccountsApiV1ChannelsAccountsGetData = {
     query?: {
         limit?: number;
         offset?: number;
+        owner_user_id?: string | null;
+        visibility_scope?: ('shared' | 'personal') | null;
     };
     url: '/api/v1/channels/accounts';
 };
@@ -4428,6 +4477,66 @@ export type ListChannelAccountsApiV1ChannelsAccountsGetResponses = {
 };
 
 export type ListChannelAccountsApiV1ChannelsAccountsGetResponse = ListChannelAccountsApiV1ChannelsAccountsGetResponses[keyof ListChannelAccountsApiV1ChannelsAccountsGetResponses];
+
+export type DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        account_id: string;
+    };
+    query?: never;
+    url: '/api/v1/channels/accounts/{account_id}';
+};
+
+export type DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteError = DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteErrors[keyof DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteErrors];
+
+export type DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: DisconnectChannelResponse;
+};
+
+export type DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteResponse = DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteResponses[keyof DisconnectChannelAccountApiV1ChannelsAccountsAccountIdDeleteResponses];
+
+export type UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchData = {
+    body: UpdateChannelOwnershipRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        account_id: string;
+    };
+    query?: never;
+    url: '/api/v1/channels/accounts/{account_id}/ownership';
+};
+
+export type UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchError = UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchErrors[keyof UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchErrors];
+
+export type UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChannelAccountRead;
+};
+
+export type UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchResponse = UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchResponses[keyof UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchResponses];
 
 export type ListChannelConsentsApiV1ChannelsConsentsGetData = {
     body?: never;
@@ -4522,6 +4631,34 @@ export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses = {
 };
 
 export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponse = ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses[keyof ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses];
+
+export type ConnectEmailApiV1ChannelsEmailConnectPostData = {
+    body: EmailConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/email/connect';
+};
+
+export type ConnectEmailApiV1ChannelsEmailConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectEmailApiV1ChannelsEmailConnectPostError = ConnectEmailApiV1ChannelsEmailConnectPostErrors[keyof ConnectEmailApiV1ChannelsEmailConnectPostErrors];
+
+export type ConnectEmailApiV1ChannelsEmailConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectMessagingResponse;
+};
+
+export type ConnectEmailApiV1ChannelsEmailConnectPostResponse = ConnectEmailApiV1ChannelsEmailConnectPostResponses[keyof ConnectEmailApiV1ChannelsEmailConnectPostResponses];
 
 export type ConnectInstagramApiV1ChannelsInstagramConnectPostData = {
     body: InstagramConnectRequest;

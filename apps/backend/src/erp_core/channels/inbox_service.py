@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any, Protocol
 
 from redis.asyncio import Redis
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.channels.adapters.base import OutboundMessageRequest
@@ -31,10 +31,40 @@ from erp_core.shared.enums import (
     DeliveryStatus,
     MessageDirection,
     MessageSenderType,
+    UserRole,
 )
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.dependencies import CurrentPrincipal
+
+
+class ConversationAccessDeniedError(Exception):
+    """Raised when a private channel's conversation is outside the caller's scope."""
+
+
+def agent_can_access_conversation(
+    principal: CurrentPrincipal,
+    conversation: Conversation,
+    account: ChannelAccount,
+) -> bool:
+    """Owner/admin/manager see everything; agents only their own or unowned shared work."""
+    if principal.role != UserRole.AGENT:
+        return True
+    if conversation.assigned_user_id is not None:
+        return conversation.assigned_user_id == principal.user_id
+    return account.visibility_scope == "shared" and account.owner_user_id is None
+
+
+def event_visible_to_agent(principal: CurrentPrincipal, parsed: dict[str, Any]) -> bool:
+    """SSE privacy filter: never leak another salesperson's private conversation."""
+    if principal.role != UserRole.AGENT:
+        return True
+    assigned = parsed.get("assigned_user_id")
+    scope = parsed.get("visibility_scope")
+    mine = str(principal.user_id)
+    if assigned is not None and assigned != mine:
+        return False
+    return not (scope == "personal" and assigned != mine)
 
 
 class TranslationHook(Protocol):
@@ -72,8 +102,37 @@ class InboxService:
         q: str | None = None,
         limit: int = 20,
         offset: int = 0,
+        principal: CurrentPrincipal | None = None,
     ) -> PaginatedResponse[ConversationRead]:
-        stmt = select(Conversation).where(Conversation.tenant_id == tenant_id)
+        account = ChannelAccount
+        stmt = (
+            select(
+                Conversation,
+                account.visibility_scope,
+                account.owner_user_id,
+                account.display_name,
+            )
+            .join(
+                account,
+                and_(
+                    account.tenant_id == Conversation.tenant_id,
+                    account.id == Conversation.channel_account_id,
+                ),
+            )
+            .where(Conversation.tenant_id == tenant_id)
+        )
+        if principal is not None and principal.role == UserRole.AGENT:
+            # A sales agent only ever lists their own conversations plus unowned company ones.
+            stmt = stmt.where(
+                or_(
+                    Conversation.assigned_user_id == principal.user_id,
+                    and_(
+                        Conversation.assigned_user_id.is_(None),
+                        account.visibility_scope == "shared",
+                        account.owner_user_id.is_(None),
+                    ),
+                )
+            )
         if tab == "unread":
             stmt = stmt.where(Conversation.unread_count > 0)
         elif tab == "pending_human":
@@ -109,15 +168,28 @@ class InboxService:
         else:
             ordered = stmt.order_by(Conversation.updated_at.desc())
 
-        convs = (await session.execute(ordered.limit(limit).offset(offset))).scalars().all()
+        convs = (await session.execute(ordered.limit(limit).offset(offset))).all()
 
-        cust_ids = list({c.customer_id for c in convs})
+        # Batched lookups: zero N+1 queries and no cross-module ORM import.
+        cust_ids = list({row[0].customer_id for row in convs})
         summaries = await self._identity_service.get_customer_summaries(
             session, tenant_id, cust_ids
         )
+        assignee_ids = {row[0].assigned_user_id for row in convs if row[0].assigned_user_id}
+        assignee_names: dict[uuid.UUID, str] = {}
+        if assignee_ids:
+            for uid, full_name in (
+                await session.execute(
+                    text(
+                        "SELECT id, full_name FROM users WHERE id = ANY(:ids)"
+                    ),
+                    {"ids": list(assignee_ids)},
+                )
+            ).all():
+                assignee_names[uid] = str(full_name)
 
         items = []
-        for c in convs:
+        for c, visibility_scope, owner_user_id, account_name in convs:
             cust_summary = summaries.get(c.customer_id)
             items.append(
                 ConversationRead(
@@ -149,6 +221,12 @@ class InboxService:
                         cust_summary.buyer_local_time.iana_timezone if cust_summary else None
                     ),
                     customer=cust_summary,
+                    assigned_user_name=(
+                        assignee_names.get(c.assigned_user_id) if c.assigned_user_id else None
+                    ),
+                    channel_account_display_name=account_name,
+                    channel_visibility_scope=visibility_scope,
+                    channel_owner_user_id=owner_user_id,
                 )
             )
         return PaginatedResponse(
@@ -169,6 +247,7 @@ class InboxService:
         limit: int = 50,
         offset: int = 0,
         mark_read: bool = True,
+        principal: CurrentPrincipal | None = None,
     ) -> PaginatedResponse[MessageRead]:
         conv = (
             await session.execute(
@@ -180,6 +259,10 @@ class InboxService:
         ).scalar_one_or_none()
         if conv is None:
             raise LookupError("Conversation not found")
+
+        acct = await self._account(session, tenant_id, conv.channel_account_id)
+        if principal is not None and not agent_can_access_conversation(principal, conv, acct):
+            raise ConversationAccessDeniedError("ERR_CONVERSATION_ACCESS_DENIED")
 
         stmt = select(Message).where(
             Message.tenant_id == tenant_id,
@@ -210,6 +293,7 @@ class InboxService:
                         "event": "conversation.updated",
                         "conversation_id": str(conversation_id),
                         "unread_count": 0,
+                        **self._event_scope(conv, acct),
                     }
                 ),
             )
@@ -222,6 +306,26 @@ class InboxService:
             offset=offset,
             has_more=(offset + len(items)) < total,
         )
+
+    def _event_scope(self, conv: Conversation, acct: ChannelAccount) -> dict[str, Any]:
+        """Carry ownership on every inbox event so the SSE fan-out can filter per agent."""
+        return {
+            "assigned_user_id": str(conv.assigned_user_id) if conv.assigned_user_id else None,
+            "visibility_scope": acct.visibility_scope,
+        }
+
+    @staticmethod
+    async def _account(
+        session: AsyncSession, tenant_id: uuid.UUID, account_id: uuid.UUID
+    ) -> ChannelAccount:
+        return (
+            await session.execute(
+                select(ChannelAccount).where(
+                    ChannelAccount.tenant_id == tenant_id,
+                    ChannelAccount.id == account_id,
+                )
+            )
+        ).scalar_one()
 
     async def send_message(
         self,
@@ -245,14 +349,9 @@ class InboxService:
         if conv is None:
             raise LookupError("Conversation not found")
 
-        acct = (
-            await session.execute(
-                select(ChannelAccount).where(
-                    ChannelAccount.tenant_id == tenant_id,
-                    ChannelAccount.id == conv.channel_account_id,
-                )
-            )
-        ).scalar_one()
+        acct = await self._account(session, tenant_id, conv.channel_account_id)
+        if not agent_can_access_conversation(principal, conv, acct):
+            raise ConversationAccessDeniedError("ERR_CONVERSATION_ACCESS_DENIED")
 
         target_lang = req.translate_to or (
             req.target_language if req.translate_before_send else None
@@ -299,6 +398,7 @@ class InboxService:
                         "conversation_id": str(conversation_id),
                         "message_id": str(msg_id),
                         "direction": "internal_note",
+                        **self._event_scope(conv, acct),
                     }
                 ),
             )
@@ -391,6 +491,7 @@ class InboxService:
                     "conversation_id": str(conversation_id),
                     "message_id": str(msg_id),
                     "direction": "outbound",
+                    **self._event_scope(conv, acct),
                 }
             ),
         )
@@ -419,6 +520,18 @@ class InboxService:
         ).scalar_one_or_none()
         if conv is None:
             raise LookupError("Conversation not found")
+
+        acct = await self._account(session, tenant_id, conv.channel_account_id)
+        if not agent_can_access_conversation(principal, conv, acct):
+            raise ConversationAccessDeniedError("ERR_CONVERSATION_ACCESS_DENIED")
+        if (
+            principal.role == UserRole.AGENT
+            and req.assigned_user_id is not None
+            and req.assigned_user_id != principal.user_id
+        ):
+            raise ConversationAccessDeniedError(
+                "Agents cannot reassign conversations to other users"
+            )
 
         before = {
             "status": conv.status,
@@ -461,6 +574,7 @@ class InboxService:
                     "event": "conversation.updated",
                     "conversation_id": str(conversation_id),
                     "status": conv.status,
+                    **self._event_scope(conv, acct),
                 }
             ),
         )
@@ -495,4 +609,7 @@ class InboxService:
             country_code=cust_summary.country_code if cust_summary else None,
             iana_timezone=(cust_summary.buyer_local_time.iana_timezone if cust_summary else None),
             customer=cust_summary,
+            channel_account_display_name=acct.display_name,
+            channel_visibility_scope=acct.visibility_scope,
+            channel_owner_user_id=acct.owner_user_id,
         )
