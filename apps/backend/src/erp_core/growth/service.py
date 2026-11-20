@@ -11,8 +11,13 @@ Compliance boundary, enforced here rather than in the UI:
   so a stale UI preview can never authorize a send. WhatsApp gates are the
   global suppression list, the US ``+1`` marketing prohibition, a recorded
   opt-in, and the dual token bucket. Email carries RFC 8058 ``List-Unsubscribe``.
-* No campaign path performs an outbound paid network call: launch records the
-  per-recipient outcome and hands delivery to the channel worker.
+* ``launch_campaign`` never performs an outbound network call: it records the
+  per-recipient outcome and hands delivery to the channel worker. The explicit
+  ``send_campaign_real`` path is the only one that talks to Resend/SMTP, and it
+  re-checks the zero-delay STOP suppression list immediately before every send.
+* Prospect e-mail enrichment only reads what a business publishes on its own
+  website (``enrichment.py``); nothing is pattern-guessed and no private address
+  is ever fetched.
 """
 
 from __future__ import annotations
@@ -22,28 +27,36 @@ import hashlib
 import io
 import re
 from collections import Counter
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 import httpx
 import phonenumbers
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.channels.consent_service import ConsentAndSuppressionService
 from erp_core.channels.rate_limiter import DualTokenBucketLimiter
 from erp_core.crm.models import Lead
 from erp_core.growth.collectors import (
+    FALLBACK_PROVIDER,
     CollectedRecord,
     CollectRequest,
     build_collector,
+    decode_regions,
+    encode_regions,
+    fallback_catalogue,
     provider_unavailable,
     split_region,
 )
+from erp_core.growth.enrichment import DnsResolver, WebsiteEmailEnricher
 from erp_core.growth.models import (
     CampaignRecipient,
     CollectedProspect,
@@ -60,20 +73,28 @@ from erp_core.growth.schemas import (
     CampaignStatus,
     CampaignUpdate,
     CollectionSummary,
+    EnrichedProspectItem,
+    EnrichmentStatus,
+    EnrichProspectEmailsRequest,
+    EnrichProspectEmailsResponse,
     LeadCollectionJobCreate,
     LeadCollectionJobRead,
     ProspectCleanResult,
     ProspectGrade,
     ProspectRead,
+    SendRealCampaignRequest,
+    SendRealCampaignResponse,
     SuppressionReason,
     SyncedLead,
     SyncToCrmResult,
 )
 from erp_core.identity.models import B2bCompany, Customer
-from erp_core.shared.enums import ChannelType, CustomerType, LeadStatus
+from erp_core.shared.enums import ChannelType, CustomerType, LeadStatus, UserRole
 from erp_core.shared.errors import AppError
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.shared.query import escape_like, page_of, record_not_found
+from erp_core.tenancy.audit import record_audit_event
+from erp_core.tenancy.dependencies import CurrentPrincipal
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
 _MISSING_ADDRESS_PREFIX = "missing:"
@@ -85,8 +106,50 @@ REASON_SUPPRESSED = "命中退订/抑制名单"
 REASON_WHATSAPP_US_BAN = "WhatsApp 美国 +1 营销禁令"
 REASON_WHATSAPP_NO_OPT_IN = "缺少 WhatsApp Opt-In 许可"
 REASON_RATE_LIMITED = "超出 WhatsApp 发送速率"
+REASON_SEND_FAILED = "邮件发送失败"
+
+# Compliant B2B opt-out footer appended to every real outreach message.
+OPT_OUT_FOOTER = "Reply STOP to opt out from future business inquiries."
+OPT_OUT_FOOTER_SEPARATOR = "\n\n---\n"
+_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+# Legacy rows can still carry `pending`; only these statuses are re-processed.
+PENDING_RECIPIENT_STATUSES = ("queued", "pending")
 
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+_EMAIL_ACCOUNT_SQL = """
+    SELECT a.id, a.external_account_id, a.display_name,
+           a.config, a.owner_user_id, a.visibility_scope,
+           EXISTS (
+               SELECT 1 FROM channel_credentials cc
+               WHERE cc.tenant_id = a.tenant_id
+                 AND cc.channel_account_id = a.id
+                 AND cc.credential_type = 'messaging_provider'
+           ) AS has_credentials
+    FROM channel_accounts a
+    WHERE a.tenant_id = :tid
+      AND a.channel_type = 'email'
+      AND a.status = 'active'
+    ORDER BY a.updated_at DESC, a.id
+"""
+
+
+def render_personalized(template: str, context: Mapping[str, str]) -> str:
+    """Fill the documented ``{{placeholder}}`` set; unknown placeholders stay literal."""
+
+    def _replace(match: re.Match[str]) -> str:
+        return context.get(match.group(1).lower(), match.group(0))
+
+    return _PLACEHOLDER_RE.sub(_replace, template or "")
+
+
+def with_opt_out_footer(body: str) -> str:
+    """Append the B2B opt-out footer exactly once."""
+    text = (body or "").rstrip()
+    if OPT_OUT_FOOTER in text:
+        return text
+    return f"{text}{OPT_OUT_FOOTER_SEPARATOR}{OPT_OUT_FOOTER}"
 
 
 def conflict(detail: str, *, code: str, slug: str) -> AppError:
@@ -203,6 +266,53 @@ class ResolvedTarget:
     phone: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class CollectionPlan:
+    """How one collection run selects its provider.
+
+    ``provider_mode`` is the requested mode (``auto``, ``synthetic``, or one concrete
+    provider). Only ``auto``/``synthetic`` are tolerant, i.e. allowed to fall back to
+    the deterministic catalogue instead of failing the job.
+    """
+
+    provider_mode: str
+    cities: tuple[str, ...]
+    keywords: tuple[str, ...]
+    use_city_bbox: bool = False
+
+    @property
+    def tolerant(self) -> bool:
+        return self.provider_mode in ("auto", "synthetic")
+
+
+def collection_plan_for_job(job: LeadCollectionJob) -> CollectionPlan:
+    """Replay a persisted job exactly as it was requested (strict, no fallback)."""
+    return CollectionPlan(
+        provider_mode=job.source_provider,
+        cities=decode_regions(job.target_region),
+        keywords=tuple(job.keywords),
+    )
+
+
+def collection_plan_for_payload(payload: LeadCollectionJobCreate) -> CollectionPlan:
+    """Plan for a batch recipe, which is otherwise request-scoped."""
+    model = payload.provider_mode
+    mode = {
+        "auto": "auto",
+        "synthetic": "synthetic",
+        "overpass": "overpass_osm",
+        "google_places": "google_places",
+    }[model]
+    if payload.source_provider is not None and mode == "auto":
+        mode = payload.source_provider
+    return CollectionPlan(
+        provider_mode=mode,
+        cities=payload.effective_regions,
+        keywords=payload.effective_keywords,
+        use_city_bbox=(mode != "csv_import"),
+    )
+
+
 class GrowthService:
     """Stateless coordinator; every dependency is injectable for deterministic tests."""
 
@@ -215,6 +325,9 @@ class GrowthService:
         overpass_min_interval_seconds: float = 1.0,
         rate_limiter: DualTokenBucketLimiter | None = None,
         unsubscribe_base_url: str = "https://erp.local/api/v1/growth/unsubscribe",
+        email_http_transport: httpx.AsyncBaseTransport | None = None,
+        website_enricher: WebsiteEmailEnricher | None = None,
+        dns_resolver: DnsResolver | None = None,
     ) -> None:
         self._consent = consent or ConsentAndSuppressionService()
         self._http_client = http_client
@@ -222,6 +335,10 @@ class GrowthService:
         self._overpass_min_interval_seconds = overpass_min_interval_seconds
         self._rate_limiter = rate_limiter
         self._unsubscribe_base_url = unsubscribe_base_url
+        self._email_http_transport = email_http_transport
+        self._enricher = website_enricher or WebsiteEmailEnricher(
+            transport=email_http_transport, resolver=dns_resolver
+        )
 
     # ------------------------------------------------------------------ jobs
     async def list_jobs(
@@ -232,7 +349,59 @@ class GrowthService:
             .where(LeadCollectionJob.tenant_id == tenant_id)
             .order_by(LeadCollectionJob.created_at.desc(), LeadCollectionJob.id)
         )
-        return await page_of(session, stmt, LeadCollectionJobRead.model_validate, limit, offset)
+        total = int(
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(LeadCollectionJob)
+                .where(LeadCollectionJob.tenant_id == tenant_id)
+            )
+            or 0
+        )
+        jobs = list(await session.scalars(stmt.limit(limit).offset(offset)))
+        return PaginatedResponse.build(
+            items=await self.job_reads(session, tenant_id, jobs),
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def _job_sources(
+        self, session: AsyncSession, tenant_id: UUID, job_ids: Sequence[UUID]
+    ) -> dict[UUID, dict[str, int]]:
+        """Per-job record counts grouped by the provider that actually produced them."""
+        if not job_ids:
+            return {}
+        provider = sa.func.coalesce(
+            sa.func.jsonb_extract_path_text(CollectedProspect.raw_metadata, "provider"),
+            "unknown",
+        ).label("provider")
+        rows = (
+            await session.execute(
+                sa.select(CollectedProspect.job_id, provider, sa.func.count().label("total"))
+                .where(
+                    CollectedProspect.tenant_id == tenant_id,
+                    CollectedProspect.job_id.in_(job_ids),
+                )
+                .group_by(CollectedProspect.job_id, provider)
+            )
+        ).all()
+        grouped: dict[UUID, dict[str, int]] = {}
+        for job_id, provider_name, total in rows:
+            if job_id is None:
+                continue
+            grouped.setdefault(job_id, {})[str(provider_name)] = int(total)
+        return grouped
+
+    async def job_reads(
+        self, session: AsyncSession, tenant_id: UUID, jobs: Sequence[LeadCollectionJob]
+    ) -> list[LeadCollectionJobRead]:
+        sources = await self._job_sources(session, tenant_id, [job.id for job in jobs])
+        return [
+            LeadCollectionJobRead.model_validate(job).model_copy(
+                update={"sources": sources.get(job.id, {})}
+            )
+            for job in jobs
+        ]
 
     async def collection_summary(self, session: AsyncSession, tenant_id: UUID) -> CollectionSummary:
         prepared = await session.scalar(
@@ -277,9 +446,9 @@ class GrowthService:
     ) -> LeadCollectionJob:
         job = LeadCollectionJob(
             tenant_id=tenant_id,
-            source_provider=payload.source_provider,
-            keywords=list(payload.keywords),
-            target_region=(payload.target_region or None),
+            source_provider=payload.resolved_source_provider,
+            keywords=list(payload.effective_keywords),
+            target_region=encode_regions(payload.effective_regions),
             max_results=payload.max_results,
             min_rating=payload.min_rating,
             require_phone=payload.require_phone,
@@ -310,8 +479,13 @@ class GrowthService:
         job_id: UUID,
         *,
         csv_content: str | None = None,
+        plan: CollectionPlan | None = None,
     ) -> LeadCollectionJob:
-        """Execute a job once. A completed job is returned as-is (idempotent)."""
+        """Execute a job once. A completed job is returned as-is (idempotent).
+
+        ``plan`` carries the request-scoped batch recipe (cities, keywords, provider
+        mode). Without it the persisted job row is replayed exactly as requested.
+        """
         job = await self.get_job(session, tenant_id, job_id, lock=True)
         if job.status == "completed":
             return job
@@ -319,16 +493,18 @@ class GrowthService:
         job.error_message = None
         await session.flush()
 
+        effective = plan or collection_plan_for_job(job)
         request = CollectRequest(
-            keywords=tuple(job.keywords),
-            target_region=job.target_region or "",
+            keywords=effective.keywords,
+            target_region=encode_regions(effective.cities) or (job.target_region or ""),
             max_results=job.max_results,
             min_rating=job.min_rating,
             require_phone=job.require_phone,
             csv_content=csv_content,
+            cities=effective.cities if effective.use_city_bbox else (),
         )
         try:
-            records = await self._collect(job.source_provider, request)
+            records, source = await self._collect(effective, request)
         except AppError as exc:
             job.status = "failed"
             job.error_message = exc.detail
@@ -344,34 +520,70 @@ class GrowthService:
                 or (record.rating is not None and record.rating >= job.min_rating)
             )
         ][: job.max_results]
-        inserted = await self._insert_prospects(session, tenant_id, job.id, filtered)
+        inserted = await self._insert_prospects(session, tenant_id, job.id, filtered, source)
         job.collected_count = inserted
         job.status = "completed"
         job.completed_at = datetime.now(UTC)
         await session.flush()
         return job
 
-    async def _collect(
-        self, source_provider: str, request: CollectRequest
-    ) -> list[CollectedRecord]:
+    @asynccontextmanager
+    async def _http(self) -> AsyncIterator[httpx.AsyncClient]:
+        """Reuse the injected client in tests, otherwise own a short-lived one."""
         if self._http_client is not None:
-            collector = build_collector(
-                source_provider,
-                request,
-                client=self._http_client,
-                google_places_api_key=self._google_places_api_key,
-                overpass_min_interval_seconds=self._overpass_min_interval_seconds,
-            )
-            return await collector.collect()
+            yield self._http_client
+            return
         async with httpx.AsyncClient(timeout=30.0) as client:
-            collector = build_collector(
-                source_provider,
-                request,
-                client=client,
-                google_places_api_key=self._google_places_api_key,
-                overpass_min_interval_seconds=self._overpass_min_interval_seconds,
+            yield client
+
+    def _candidate_providers(self, provider_mode: str) -> tuple[str, ...]:
+        if provider_mode == "auto":
+            if self._google_places_api_key.strip():
+                return ("google_places", "overpass_osm")
+            return ("overpass_osm",)
+        if provider_mode == "overpass":
+            return ("overpass_osm",)
+        if provider_mode in ("google_places", "overpass_osm", "overture_poi"):
+            return (provider_mode,)
+        return ()
+
+    async def _collect(
+        self, plan: CollectionPlan, request: CollectRequest
+    ) -> tuple[list[CollectedRecord], str]:
+        """Run the plan and report which provider actually produced the records."""
+        if plan.provider_mode == "csv_import":
+            async with self._http() as client:
+                records = await build_collector("csv_import", request, client=client).collect()
+            return records, "csv_import"
+        if plan.provider_mode == "synthetic":
+            return (
+                fallback_catalogue(request, reason="provider_mode=synthetic"),
+                FALLBACK_PROVIDER,
             )
-            return await collector.collect()
+        notes: list[str] = []
+        async with self._http() as client:
+            for provider in self._candidate_providers(plan.provider_mode):
+                try:
+                    collector = build_collector(
+                        provider,
+                        request,
+                        client=client,
+                        google_places_api_key=self._google_places_api_key,
+                        overpass_min_interval_seconds=self._overpass_min_interval_seconds,
+                    )
+                    records = await collector.collect()
+                except AppError as exc:
+                    if not plan.tolerant:
+                        raise
+                    notes.append(f"{provider}: {exc.detail}")
+                    continue
+                if records:
+                    return records, provider
+                if not plan.tolerant:
+                    return [], provider
+                notes.append(f"{provider}: no records returned")
+        reason = "; ".join(notes)[:300] or "no live provider configured"
+        return fallback_catalogue(request, reason=reason), FALLBACK_PROVIDER
 
     async def _insert_prospects(
         self,
@@ -379,6 +591,7 @@ class GrowthService:
         tenant_id: UUID,
         job_id: UUID,
         records: list[CollectedRecord],
+        source: str,
     ) -> int:
         rows: list[dict[str, Any]] = []
         for record in records:
@@ -409,7 +622,7 @@ class GrowthService:
                     "whatsapp_reachable": record.whatsapp_reachable,
                     "dedupe_fingerprint": fingerprint,
                     "sync_status": "raw",
-                    "raw_metadata": record.raw_metadata,
+                    "raw_metadata": {**record.raw_metadata, "job_source": source},
                 }
             )
         if not rows:
@@ -1129,15 +1342,336 @@ class GrowthService:
             ],
         )
 
+    # ------------------------------------------------- prospect email enrichment
+    async def enrich_prospect_emails(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        payload: EnrichProspectEmailsRequest,
+    ) -> EnrichProspectEmailsResponse:
+        """Harvest the business e-mail each selected prospect already publishes.
+
+        Only public home/contact pages are read, private/loopback targets are refused
+        before any request, and a prospect that already has an address is skipped
+        unless ``force`` is set. Nothing about the outcome is ever invented.
+        """
+        rows = list(
+            await session.scalars(
+                sa.select(CollectedProspect)
+                .where(
+                    CollectedProspect.tenant_id == tenant_id,
+                    CollectedProspect.id.in_(payload.prospect_ids),
+                )
+                .order_by(CollectedProspect.created_at, CollectedProspect.id)
+                .with_for_update()
+            )
+        )
+        items: list[EnrichedProspectItem] = []
+        found_ids = {row.id for row in rows}
+        for missing in dict.fromkeys(payload.prospect_ids):
+            if missing not in found_ids:
+                items.append(
+                    EnrichedProspectItem(
+                        prospect_id=missing,
+                        company_name="",
+                        website=None,
+                        email=None,
+                        previous_email=None,
+                        grade="C",
+                        status="not_found",
+                    )
+                )
+        checked = 0
+        enriched = 0
+        for row in rows:
+            previous_email = row.email
+            if not (row.website or "").strip():
+                items.append(
+                    self._enrichment_item(row, previous_email, "skipped_no_website")
+                )
+                continue
+            if previous_email and not payload.force:
+                items.append(self._enrichment_item(row, previous_email, "already_has_email"))
+                continue
+            checked += 1
+            outcome = await self._enricher.find_emails(row.website)
+            if outcome.blocked:
+                status: EnrichmentStatus = "blocked"
+            elif outcome.best is not None:
+                status = "enriched"
+            elif outcome.error == "invalid_website":
+                status = "invalid_website"
+            else:
+                status = "no_email_found"
+            if outcome.best is not None:
+                row.email = outcome.best
+                row.grade = grade_for(
+                    phone_e164=row.phone_e164,
+                    email=row.email,
+                    website=row.website,
+                    rating=row.rating,
+                )
+                row.raw_metadata = {
+                    **row.raw_metadata,
+                    "email_source": "public_website",
+                    "email_enriched_at": datetime.now(UTC).isoformat(),
+                    "email_pages_checked": outcome.pages_checked,
+                }
+                enriched += 1
+            items.append(self._enrichment_item(row, previous_email, status))
+        await session.flush()
+        return EnrichProspectEmailsResponse(
+            checked_count=checked, enriched_count=enriched, items=items
+        )
+
+    @staticmethod
+    def _enrichment_item(
+        row: CollectedProspect, previous_email: str | None, status: EnrichmentStatus
+    ) -> EnrichedProspectItem:
+        return EnrichedProspectItem(
+            prospect_id=row.id,
+            company_name=row.company_name,
+            website=row.website,
+            email=row.email,
+            previous_email=previous_email,
+            grade=cast(ProspectGrade, row.grade),
+            status=status,
+        )
+
+    # ------------------------------------------------------- real campaign send
+    async def _select_email_account(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        principal: CurrentPrincipal,
+        channel_account_id: UUID | None,
+    ) -> RowMapping:
+        """Resolve the sending mailbox honouring personal/shared channel ownership."""
+        rows = (
+            (await session.execute(sa.text(_EMAIL_ACCOUNT_SQL), {"tid": tenant_id}))
+            .mappings()
+            .all()
+        )
+        if principal.role == UserRole.AGENT:
+            rows = [
+                row
+                for row in rows
+                if row["owner_user_id"] == principal.user_id
+                or (row["visibility_scope"] == "shared" and row["owner_user_id"] is None)
+            ]
+        if channel_account_id is not None:
+            for row in rows:
+                if row["id"] == channel_account_id:
+                    return row
+            raise AppError(
+                slug="email-account-unavailable",
+                status_code=404,
+                code="ERR_EMAIL_ACCOUNT_UNAVAILABLE",
+                title="Email Account Unavailable",
+                detail=(
+                    "The requested email account is missing, inactive, or outside your "
+                    "channel ownership."
+                ),
+            )
+        if not rows:
+            raise AppError(
+                slug="email-account-unavailable",
+                status_code=404,
+                code="ERR_EMAIL_ACCOUNT_UNAVAILABLE",
+                title="Email Account Unavailable",
+                detail=(
+                    "Connect an email channel account before sending B2B outreach."
+                ),
+            )
+        personal = [row for row in rows if row["owner_user_id"] == principal.user_id]
+        for row in personal:
+            if row["has_credentials"]:
+                return row
+        for row in rows:
+            if row["visibility_scope"] == "shared" and row["has_credentials"]:
+                return row
+        return personal[0] if personal else rows[0]
+
+    async def send_campaign_real(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        principal: CurrentPrincipal,
+        campaign_id: UUID,
+        payload: SendRealCampaignRequest,
+    ) -> SendRealCampaignResponse:
+        """Deliver a queued email campaign through Resend or generic SMTP.
+
+        The zero-delay STOP suppression list is checked per recipient inside this
+        transaction, so a suppression recorded a second ago still wins. A suppressed
+        recipient is marked ``suppressed`` and is never handed to the provider.
+        """
+        from erp_core.channels.adapters.email import EmailAdapter
+        from erp_core.channels.ecommerce.base import CredentialVaultHelper
+
+        campaign = await self.get_campaign(session, tenant_id, campaign_id, lock=True)
+        if campaign.channel_type != "email":
+            raise conflict(
+                "Only an email campaign can be delivered through the email provider.",
+                code="ERR_CAMPAIGN_CHANNEL_UNSUPPORTED",
+                slug="campaign-channel-unsupported",
+            )
+        account = await self._select_email_account(
+            session, tenant_id, principal, payload.channel_account_id
+        )
+        credentials, _expires_at = await CredentialVaultHelper().load_secret_json(
+            session, tenant_id, account["id"], "messaging_provider"
+        )
+        config: dict[str, Any] = dict(account["config"] or {})
+        provider: Literal["resend", "smtp_imap"] = (
+            "smtp_imap"
+            if credentials.get("smtp_password") or config.get("provider") == "smtp_imap"
+            else "resend"
+        )
+        mailbox = str(account["external_account_id"])
+        display_name = str(account["display_name"] or "").strip()
+        from_email = f"{display_name} <{mailbox}>" if display_name else mailbox
+        adapter = EmailAdapter(http_transport=self._email_http_transport)
+
+        statement = (
+            sa.select(CampaignRecipient, CollectedProspect)
+            .outerjoin(
+                CollectedProspect,
+                sa.and_(
+                    CollectedProspect.id == CampaignRecipient.prospect_id,
+                    CollectedProspect.tenant_id == CampaignRecipient.tenant_id,
+                ),
+            )
+            .where(
+                CampaignRecipient.tenant_id == tenant_id,
+                CampaignRecipient.campaign_id == campaign_id,
+                CampaignRecipient.status.in_(PENDING_RECIPIENT_STATUSES),
+            )
+            .order_by(CampaignRecipient.created_at, CampaignRecipient.id)
+            .limit(payload.max_send)
+            .with_for_update(of=CampaignRecipient)
+        )
+        recipients = (await session.execute(statement)).all()
+        sent = 0
+        suppressed = 0
+        failed = 0
+        for recipient, prospect in recipients:
+            previous_status = recipient.status
+            address = recipient.address.strip().lower()
+            if address.startswith(_MISSING_ADDRESS_PREFIX) or not _EMAIL_RE.match(address):
+                failed += 1
+                if not payload.dry_run:
+                    recipient.status = "failed"
+                    recipient.error_reason = (
+                        REASON_ADDRESS_MISSING
+                        if address.startswith(_MISSING_ADDRESS_PREFIX)
+                        else REASON_EMAIL_INVALID
+                    )
+                continue
+            if await self._consent.is_suppressed(session, tenant_id, "email", address):
+                suppressed += 1
+                if not payload.dry_run:
+                    recipient.status = "suppressed"
+                    recipient.error_reason = REASON_SUPPRESSED
+                continue
+            context = self._outreach_context(prospect, address)
+            subject = render_personalized(campaign.subject or campaign.name, context)
+            body_text = with_opt_out_footer(
+                render_personalized(campaign.body_template, context)
+            )
+            if payload.dry_run:
+                sent += 1
+                continue
+            result = await adapter.send_direct_email(
+                provider=provider,
+                credentials=credentials,
+                from_address=from_email,
+                to_address=address,
+                subject=subject,
+                body_text=body_text,
+                headers={"List-Unsubscribe": self._unsubscribe_header(campaign)},
+                smtp_config={
+                    "smtp_host": config.get("smtp_host") or credentials.get("smtp_host"),
+                    "smtp_port": config.get("smtp_port") or credentials.get("smtp_port"),
+                },
+            )
+            if result.success:
+                recipient.status = "sent"
+                recipient.sent_at = datetime.now(UTC)
+                recipient.error_reason = None
+                sent += 1
+            else:
+                recipient.status = "failed"
+                recipient.error_reason = (
+                    result.error_message or REASON_SEND_FAILED
+                )[:500]
+                failed += 1
+            if previous_status != recipient.status:
+                campaign.updated_at = datetime.now(UTC)
+        if not payload.dry_run:
+            campaign.sent_count = int(campaign.sent_count or 0) + sent
+            campaign.suppressed_count = int(campaign.suppressed_count or 0) + suppressed
+            campaign.updated_at = datetime.now(UTC)
+            await session.flush()
+            if sent or suppressed or failed:
+                await record_audit_event(
+                    session,
+                    tenant_id=tenant_id,
+                    actor_type="human_user",
+                    actor_id=str(principal.user_id),
+                    action="growth.campaign_sent_real",
+                    resource_type="marketing_campaign",
+                    resource_id=campaign.id,
+                    before_state={"sent_count": int(campaign.sent_count or 0) - sent},
+                    after_state={
+                        "provider": provider,
+                        "channel_account_id": str(account["id"]),
+                        "from_email": mailbox,
+                        "sent": sent,
+                        "suppressed": suppressed,
+                        "failed": failed,
+                        "max_send": payload.max_send,
+                    },
+                )
+        return SendRealCampaignResponse(
+            campaign_id=campaign.id,
+            provider=provider,
+            from_email=from_email,
+            sent_count=sent,
+            suppressed_count=suppressed,
+            failed_count=failed,
+            dry_run=payload.dry_run,
+        )
+
+    @staticmethod
+    def _outreach_context(
+        prospect: CollectedProspect | None, address: str
+    ) -> dict[str, str]:
+        """Personalization facts that come from the prospect row only, never invented."""
+        company_name = (prospect.company_name if prospect is not None else "") or ""
+        return {
+            "company_name": company_name,
+            "contact_name": (prospect.contact_name or "") if prospect is not None else "",
+            "city": (prospect.city or "") if prospect is not None else "",
+            "country": (prospect.country or "") if prospect is not None else "",
+            "email": address,
+        }
+
 
 __all__ = [
+    "OPT_OUT_FOOTER",
+    "CollectionPlan",
     "GrowthService",
+    "collection_plan_for_job",
+    "collection_plan_for_payload",
     "csv_safe_cell",
     "dedupe_fingerprint",
     "grade_for",
     "normalize_email",
     "normalize_phone",
     "provider_unavailable",
+    "render_personalized",
     "split_region",
     "website_domain",
+    "with_opt_out_footer",
 ]

@@ -15,6 +15,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 LeadSourceProvider = Literal["google_places", "overpass_osm", "overture_poi", "csv_import"]
+# How the collection run picks its provider. `auto` and `synthetic` are the only
+# modes allowed to fall back to the deterministic catalogue, so a demo run can
+# never crash while an explicit provider choice still fails honestly.
+LeadProviderMode = Literal["auto", "overpass", "google_places", "synthetic"]
 JobStatus = Literal["pending", "running", "completed", "failed"]
 ProspectGrade = Literal["A", "B", "C"]
 ProspectSyncStatus = Literal["raw", "cleaned", "synced_to_crm", "discarded"]
@@ -24,6 +28,8 @@ RecipientStatus = Literal["queued", "sent", "suppressed", "failed", "replied"]
 
 Keyword = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 Region = Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)]
+City = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+CityList = Annotated[list[City], Field(min_length=1, max_length=10)]
 CampaignName = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
 ]
@@ -39,25 +45,93 @@ ProspectIds = Annotated[list[UUID], Field(min_length=1, max_length=500)]
 
 
 class LeadCollectionJobCreate(BaseModel):
-    source_provider: LeadSourceProvider
+    """Create a collection job.
+
+    Two shapes are accepted and they stay fully backwards compatible:
+
+    * legacy — `source_provider` pinned, e.g. `overpass_osm` + `target_region`; the
+      job stays `pending` until `POST /jobs/{id}/run` (unchanged behaviour);
+    * batch — `cities`/`city` (one or many), `keywords`/`keyword`, and
+      `provider_mode`; the recipe is request-scoped, so it executes immediately.
+    """
+
+    source_provider: LeadSourceProvider | None = None
+    provider_mode: LeadProviderMode = "auto"
     keywords: Annotated[list[Keyword], Field(max_length=20)] = Field(default_factory=list)
+    keyword: Keyword | None = None
     target_region: Region | None = None
+    city: City | None = None
+    cities: CityList | None = None
     max_results: MaxResults = 100
     min_rating: Rating | None = None
     require_phone: bool = False
     # Compliant CSV/trade-show import: the caller supplies the bytes it is allowed to use.
     csv_content: CsvText | None = None
 
+    @property
+    def effective_keywords(self) -> tuple[str, ...]:
+        keywords = list(self.keywords)
+        if self.keyword is not None and self.keyword not in keywords:
+            keywords.insert(0, self.keyword)
+        return tuple(keyword for keyword in keywords if keyword.strip())
+
+    @property
+    def effective_regions(self) -> tuple[str, ...]:
+        regions: list[str] = []
+        if self.city is not None:
+            regions.append(self.city)
+        for city in self.cities or []:
+            if city not in regions:
+                regions.append(city)
+        if not regions and (self.target_region or "").strip():
+            regions.append((self.target_region or "").strip())
+        return tuple(regions)
+
+    @property
+    def resolved_source_provider(self) -> LeadSourceProvider:
+        """The provider recorded on the job row (the requested primary source)."""
+        if self.source_provider is not None:
+            return self.source_provider
+        if self.csv_content:
+            return "csv_import"
+        if self.provider_mode == "google_places":
+            return "google_places"
+        return "overpass_osm"
+
+    @property
+    def runs_immediately(self) -> bool:
+        """A batch recipe cannot be replayed later, so it runs in this request."""
+        return bool(self.csv_content) or self.source_provider is None or (
+            self.provider_mode != "auto"
+            or self.cities is not None
+            or self.city is not None
+            or self.keyword is not None
+        )
+
     @model_validator(mode="after")
     def validate_source_requirements(self) -> LeadCollectionJobCreate:
-        if self.source_provider == "csv_import":
+        is_csv = self.source_provider == "csv_import" or (
+            self.source_provider is None and bool((self.csv_content or "").strip())
+        )
+        if is_csv:
             if not (self.csv_content or "").strip():
                 raise ValueError("csv_content is required for csv_import")
+            if self.provider_mode != "auto":
+                raise ValueError("provider_mode is not supported for csv_import")
             return self
-        if not self.keywords:
+        if not self.effective_keywords:
             raise ValueError("keywords is required for map/POI collection")
-        if not (self.target_region or "").strip():
-            raise ValueError("target_region is required for map/POI collection")
+        if not self.effective_regions:
+            raise ValueError("target_region or cities is required for map/POI collection")
+        if self.source_provider is not None and self.provider_mode != "auto":
+            pinned = {
+                "overpass": "overpass_osm",
+                "google_places": "google_places",
+            }.get(self.provider_mode)
+            if pinned is not None and pinned != self.source_provider:
+                raise ValueError(
+                    "provider_mode conflicts with source_provider; send only one of them"
+                )
         return self
 
 
@@ -80,6 +154,10 @@ class LeadCollectionJobRead(BaseModel):
     created_by: UUID
     created_at: datetime
     completed_at: datetime | None
+    # Actual per-record sources of this job (`overpass_osm`, `google_places`,
+    # `fallback_catalog`, ...) with their record counts, so the UI can show whether
+    # the leads are live map data or the deterministic fallback catalogue.
+    sources: dict[str, int] = Field(default_factory=dict)
 
 
 class ProspectRead(BaseModel):
@@ -119,6 +197,41 @@ class ProspectCleanRequest(BaseModel):
     """Omit `prospect_ids` to clean every raw prospect of the workspace."""
 
     prospect_ids: ProspectIds | None = None
+
+
+EnrichProspectIds = Annotated[list[UUID], Field(min_length=1, max_length=50)]
+EnrichmentStatus = Literal[
+    "enriched",
+    "no_email_found",
+    "blocked",
+    "invalid_website",
+    "skipped_no_website",
+    "already_has_email",
+    "not_found",
+]
+
+
+class EnrichProspectEmailsRequest(BaseModel):
+    """Enrich selected prospects from the e-mail addresses their website publishes."""
+
+    prospect_ids: EnrichProspectIds
+    force: bool = False
+
+
+class EnrichedProspectItem(BaseModel):
+    prospect_id: UUID
+    company_name: str
+    website: str | None
+    email: str | None
+    previous_email: str | None
+    grade: ProspectGrade
+    status: EnrichmentStatus
+
+
+class EnrichProspectEmailsResponse(BaseModel):
+    checked_count: int
+    enriched_count: int
+    items: list[EnrichedProspectItem]
 
 
 class ProspectCleanResult(BaseModel):
@@ -227,3 +340,27 @@ class CampaignRecipientRead(BaseModel):
     status: RecipientStatus
     error_reason: str | None
     sent_at: datetime | None
+
+
+class SendRealCampaignRequest(BaseModel):
+    """Really deliver a queued email campaign through the tenant's own mailbox."""
+
+    channel_account_id: UUID | None = None
+    dry_run: bool = False
+    max_send: Annotated[int, Field(ge=1, le=50)] = 20
+
+
+class SendRealCampaignResponse(BaseModel):
+    """Counts of one real delivery run.
+
+    On a `dry_run` nothing is persisted and `sent_count` reports how many messages
+    *would* have been delivered.
+    """
+
+    campaign_id: UUID
+    provider: str
+    from_email: str
+    sent_count: int
+    suppressed_count: int
+    failed_count: int
+    dry_run: bool
