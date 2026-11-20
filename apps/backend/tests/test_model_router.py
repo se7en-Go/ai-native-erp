@@ -323,3 +323,92 @@ async def test_router_envelope_byok_is_tenant_bound_and_only_sent_to_provider(
                     text("DELETE FROM tenant_keys WHERE tenant_id = :id"), {"id": tenant}
                 )
                 await db.execute(text("DELETE FROM tenants WHERE id = :id"), {"id": tenant})
+
+
+def _deepseek_only_client(
+    transport: httpx.AsyncBaseTransport,
+) -> AsyncMultiProviderClient:
+    """A provider client where DeepSeek is the only configured credential."""
+    provider = AsyncMultiProviderClient(transport=transport)
+    provider.keys = {
+        "openai": None,
+        "anthropic": None,
+        "gemini": None,
+        "deepseek": "sk-test-deepseek-only",
+    }
+    return provider
+
+
+def _chat_completion_response(model_id: str, text: str) -> dict[str, Any]:
+    return {
+        "choices": [{"message": {"content": text}}],
+        "usage": {"prompt_tokens": 42, "completion_tokens": 12},
+    }
+
+
+async def test_deepseek_only_workspace_hits_deepseek_flash_for_tier1_translation() -> None:
+    """A DeepSeek-only BYOK workspace must still serve Tier-1 translate/polish/summarize."""
+    captured: list[dict[str, Any]] = []
+
+    def receive(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "api.deepseek.com"
+        assert request.headers["authorization"] == "Bearer sk-test-deepseek-only"
+        captured.append(json.loads(request.content.decode()))
+        return httpx.Response(
+            200,
+            json=_chat_completion_response("deepseek-flash", "你好，您的订单已发货。"),
+        )
+
+    provider = _deepseek_only_client(httpx.MockTransport(receive))
+    router = TieredModelRouter(provider_client=provider)
+    result = await router.generate(
+        tenant_id=uuid4(),
+        capability=AiCapability.CS_SUPPORT,
+        system_prefix="Translate the reply into Chinese. Reply with the translation only.",
+        context_block="",
+        user_query="Hello, your order has shipped.",
+        intent="translate",
+        max_tokens=200,
+    )
+
+    assert result.tier == ModelTier.TIER_1_FAST
+    assert result.provider == "deepseek"
+    assert result.model_id == "deepseek-flash"
+    assert result.text == "你好，您的订单已发货。"
+    assert len(captured) == 1
+    payload = captured[0]
+    assert payload["model"] == "deepseek-flash"
+    assert payload["max_tokens"] == 200
+    # Reasoning must be disabled so a short max_tokens budget never returns empty content.
+    assert payload["thinking"] == {"type": "disabled"}
+
+
+async def test_deepseek_flash_disables_thinking_but_other_deepseek_models_keep_it() -> None:
+    payloads: list[dict[str, Any]] = []
+
+    def receive(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        payloads.append(body)
+        return httpx.Response(200, json=_chat_completion_response(body["model"], "ok"))
+
+    provider = _deepseek_only_client(httpx.MockTransport(receive))
+    messages = [{"role": "user", "content": "hello"}]
+
+    await provider.complete(
+        model_id="deepseek-flash",
+        provider="deepseek",
+        messages=messages,
+        max_tokens=64,
+        temperature=0.0,
+    )
+    await provider.complete(
+        model_id="deepseek-v4-pro",
+        provider="deepseek",
+        messages=messages,
+        max_tokens=1024,
+        temperature=0.2,
+    )
+
+    assert payloads[0]["thinking"] == {"type": "disabled"}
+    assert "thinking" not in payloads[1]
+    assert payloads[1]["model"] == "deepseek-v4-pro"

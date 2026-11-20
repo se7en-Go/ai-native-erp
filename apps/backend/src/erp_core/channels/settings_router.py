@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select, text
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.channels.models import (
@@ -127,7 +127,7 @@ async def list_channel_consents(
 ) -> PaginatedResponse[ChannelConsentRead]:
     table = ConsentRecord
     # Correlated lookup keeps the channels module free of identity ORM imports.
-    customer_name: Any = text(
+    customer_name: Any = literal_column(
         "(SELECT display_name FROM customers WHERE customers.id = consent_records.customer_id)"
     ).label("customer_name")
     query = (

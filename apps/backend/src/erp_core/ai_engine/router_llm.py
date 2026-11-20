@@ -119,7 +119,12 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
 }
 
 _DEFAULT_MODEL_BY_TIER: dict[ModelTier, list[str]] = {
-    ModelTier.TIER_1_FAST: ["gemini-2.5-flash-lite", "gpt-6-luna", "claude-haiku-5-5"],
+    ModelTier.TIER_1_FAST: [
+        "gemini-2.5-flash-lite",
+        "gpt-6-luna",
+        "claude-haiku-5-5",
+        "deepseek-flash",
+    ],
     ModelTier.TIER_2_BALANCED: ["gemini-3.1-flash-lite", "deepseek-flash", "gpt-5-mini"],
     ModelTier.TIER_3_DEEP: ["claude-sonnet-5-5", "gpt-6.2-sol", "deepseek-v4-pro"],
 }
@@ -307,15 +312,20 @@ class AsyncMultiProviderClient:
                     else "https://api.deepseek.com/v1/chat/completions"
                 )
                 clean_msgs = [{"role": m["role"], "content": m["content"]} for m in messages]
+                payload: dict[str, Any] = {
+                    "model": model_id,
+                    "messages": clean_msgs,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                }
+                if provider == "deepseek" and model_id == "deepseek-flash":
+                    # Disable reasoning chain for fast/balanced deepseek-flash calls so
+                    # short max_tokens budgets (e.g. translation/polish) never return empty content.
+                    payload["thinking"] = {"type": "disabled"}
                 resp = await client.post(
                     base_url,
                     headers={"Authorization": f"Bearer {api_key}"},
-                    json={
-                        "model": model_id,
-                        "messages": clean_msgs,
-                        "max_tokens": max_tokens,
-                        "temperature": temperature,
-                    },
+                    json=payload,
                 )
                 resp.raise_for_status()
                 data = resp.json()
