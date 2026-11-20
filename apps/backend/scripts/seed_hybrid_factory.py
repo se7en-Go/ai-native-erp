@@ -7,7 +7,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
 from sqlalchemy import text
@@ -30,6 +30,9 @@ import erp_core.tenancy.models  # noqa: F401
 from erp_core.ai_engine.ingestion import DocumentIngestionService
 from erp_core.ai_engine.tools import ErpToolRegistry
 from erp_core.channels.ecommerce.base import CredentialVaultHelper, register_channel_routing
+from erp_core.finance.payment_service import PaymentService
+from erp_core.finance.profit_service import OrderProfitService
+from erp_core.finance.schemas import PaymentCreate
 from erp_core.growth.service import dedupe_fingerprint, grade_for
 from erp_core.shared.config import Settings, get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
@@ -38,6 +41,7 @@ from erp_core.shared.enums import Incoterm, OnboardingStage, UserRole
 from erp_core.supply_chain import procurement
 from erp_core.supply_chain.schemas import ReceivePurchaseOrder
 from erp_core.tenancy.audit import record_audit_event
+from erp_core.tenancy.dependencies import CurrentPrincipal
 from erp_core.tenancy.security import hash_password
 
 SEED_DEMO_PASSWORD = "FactoryPass2026!"
@@ -212,6 +216,7 @@ async def seed_hybrid_factory(
             ("finance@quanzhou-led.example.com", "David Zheng", UserRole.FINANCE),
         ]
         owner_uid = TENANT_A_ID
+        finance_uid = TENANT_A_ID
         for email, full_name, role in tenant_a_users:
             uid = await _upsert_user_and_membership(
                 session,
@@ -223,6 +228,8 @@ async def seed_hybrid_factory(
             )
             if role == UserRole.OWNER:
                 owner_uid = uid
+            elif role == UserRole.FINANCE:
+                finance_uid = uid
 
         await _upsert_encrypted_credential(
             session,
@@ -313,6 +320,15 @@ async def seed_hybrid_factory(
                 variant_id=uuid5(TENANT_A_ID, "sku"),
                 buyer_id=uuid5(TENANT_A_ID, "hans"),
                 owner_id=owner_uid,
+            )
+            # Export B2B quotes, confirmed wholesale orders, 30%/70% T/T milestones and the
+            # CVP snapshots behind `/b2b/quotes` and `/finance`. Reconciled on every run.
+            await _seed_stage1_finance_demo(
+                session,
+                tenant_id=TENANT_A_ID,
+                owner_id=owner_uid,
+                finance_user_id=finance_uid,
+                variant_id=uuid5(TENANT_A_ID, "sku"),
             )
             # The Phase 3B roster is reconciled on every demo seed run, so it does not
             # depend on the catalogue guard above (which only seeds once).
@@ -1253,6 +1269,481 @@ async def _seed_phase3a_demo(
             received_po,
             ReceivePurchaseOrder(receipt_id=row_id("receipt-demo-1002")),
         )
+
+
+# Stage 1 demo finance: real export B2B quotes, 30/70 T/T milestones and CVP snapshots.
+# Both rows are reconciled on every `--with-demo-data` run (deterministic ids + ON CONFLICT),
+# so `/finance` and `/b2b/quotes` never show an empty CN¥0.00 workspace on an upgraded DB.
+
+
+@dataclass(frozen=True, slots=True)
+class _DemoQuoteLine:
+    quantity: int
+    moq_tier: int
+    unit_price: Decimal
+    unit_cost_base: Decimal
+
+    @property
+    def line_total(self) -> Decimal:
+        return (self.unit_price * Decimal(self.quantity)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _DemoB2BScenario:
+    """One export buyer with an FOB/CIF quote, a confirmed order and T/T milestones."""
+
+    key: str
+    company_key: str
+    company_name: str
+    company_country: str
+    buyer_key: str
+    buyer_name: str
+    buyer_email: str
+    buyer_country: str
+    buyer_language: str
+    buyer_timezone: str
+    opportunity_title: str
+    opportunity_stage: str
+    quote_no: str
+    quote_status: str
+    incoterm: Incoterm
+    port_of_loading: str
+    port_of_destination: str
+    payment_terms: str
+    freight_fee: Decimal
+    insurance_fee: Decimal
+    lines: tuple[_DemoQuoteLine, ...]
+    order_no: str
+    platform_commission_base: Decimal
+    channel_msg_cost_base: Decimal
+    ad_attribution_cost_base: Decimal
+    deposit_tx_ref: str
+    balance_tx_ref: str | None
+    deposit_due_days: int
+    balance_due_days: int
+
+    @property
+    def subtotal(self) -> Decimal:
+        return sum((line.line_total for line in self.lines), Decimal("0.00"))
+
+    @property
+    def quote_total(self) -> Decimal:
+        return (self.subtotal + self.freight_fee + self.insurance_fee).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+    @property
+    def shipping_charged(self) -> Decimal:
+        return self.freight_fee + self.insurance_fee
+
+    @property
+    def fx_rate_to_base(self) -> Decimal:
+        return Decimal("1.000000")
+
+    @property
+    def currency(self) -> str:
+        return "USD"
+
+
+_DEMO_B2B_SCENARIOS: tuple[_DemoB2BScenario, ...] = (
+    _DemoB2BScenario(
+        key="euro-light",
+        company_key="berlin-lighting",
+        company_name="Berlin Lighting GmbH",
+        company_country="DE",
+        buyer_key="hans",
+        buyer_name="Hans Weber",
+        buyer_email="hans.weber@berlin-lighting.de",
+        buyer_country="DE",
+        buyer_language="de",
+        buyer_timezone="Europe/Berlin",
+        opportunity_title="Hamburg wholesale programme · 2,000 pcs COB 24V strip",
+        opportunity_stage="negotiating",
+        quote_no="PI-DEMO-1001",
+        quote_status="sent",
+        incoterm=Incoterm.FOB,
+        port_of_loading="Shenzhen (Yantian)",
+        port_of_destination="Hamburg",
+        payment_terms="30% T/T deposit, 70% balance before shipment",
+        freight_fee=Decimal("0.00"),
+        insurance_fee=Decimal("0.00"),
+        lines=(
+            _DemoQuoteLine(
+                quantity=1200,
+                moq_tier=1000,
+                unit_price=Decimal("8.9000"),
+                unit_cost_base=Decimal("5.0000"),
+            ),
+            _DemoQuoteLine(
+                quantity=800,
+                moq_tier=500,
+                unit_price=Decimal("8.2000"),
+                unit_cost_base=Decimal("5.0000"),
+            ),
+        ),
+        order_no="DEMO-B2B-2001",
+        platform_commission_base=Decimal("1034.40"),
+        channel_msg_cost_base=Decimal("120.00"),
+        ad_attribution_cost_base=Decimal("0.00"),
+        deposit_tx_ref="TT-EUROLIGHT-26-0413",
+        # The balance slip is left unverified so Finance can exercise L0 verification.
+        balance_tx_ref="TT-EUROLIGHT-26-0520",
+        deposit_due_days=7,
+        balance_due_days=35,
+    ),
+    _DemoB2BScenario(
+        key="nordic-retail",
+        company_key="nordic-retail",
+        company_name="Nordic Retail AB",
+        company_country="SE",
+        buyer_key="lars-nordic",
+        buyer_name="Lars Nyberg",
+        buyer_email="lars.nyberg@nordic-retail.se",
+        buyer_country="SE",
+        buyer_language="en",
+        buyer_timezone="Europe/Stockholm",
+        opportunity_title="Gothenburg retail chain · 1,500 pcs CIF reorder",
+        opportunity_stage="quoting",
+        quote_no="PI-DEMO-1002",
+        quote_status="pending_approval",
+        incoterm=Incoterm.CIF,
+        port_of_loading="Ningbo",
+        port_of_destination="Gothenburg",
+        payment_terms="30% T/T deposit, 70% against B/L copy",
+        freight_fee=Decimal("520.00"),
+        insurance_fee=Decimal("84.60"),
+        lines=(
+            _DemoQuoteLine(
+                quantity=1200,
+                moq_tier=1000,
+                unit_price=Decimal("9.6000"),
+                unit_cost_base=Decimal("5.0000"),
+            ),
+            _DemoQuoteLine(
+                quantity=300,
+                moq_tier=100,
+                unit_price=Decimal("9.0000"),
+                unit_cost_base=Decimal("5.0000"),
+            ),
+        ),
+        order_no="DEMO-B2B-2002",
+        platform_commission_base=Decimal("592.98"),
+        channel_msg_cost_base=Decimal("96.00"),
+        ad_attribution_cost_base=Decimal("700.00"),
+        deposit_tx_ref="TT-NORDIC-26-0197",
+        balance_tx_ref=None,
+        deposit_due_days=5,
+        balance_due_days=30,
+    ),
+)
+
+_DEMO_T_T_WIRE_FEE = Decimal("35.00")
+
+
+async def _seed_stage1_finance_demo(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    owner_id: UUID,
+    finance_user_id: UUID,
+    variant_id: UUID,
+) -> None:
+    """Reconcile the export B2B demo pipeline: quotes, orders, 30/70 T/T and CVP snapshots.
+
+    Idempotent on every level: deterministic `uuid5` ids plus `ON CONFLICT DO NOTHING` for
+    buyers/opportunities/quotes/orders, the finance services' own receivables guard, and a
+    payment/profit-snapshot existence check. Re-running never duplicates a row and never
+    rewrites a snapshot that already reflects the seeded cost basis.
+    """
+
+    def row_id(key: str) -> UUID:
+        return uuid5(tenant_id, key)
+
+    sku = (
+        await session.execute(
+            text(
+                "SELECT sku, cost_price_base FROM product_variants "
+                "WHERE tenant_id = :tid AND id = :vid"
+            ),
+            {"tid": tenant_id, "vid": variant_id},
+        )
+    ).one_or_none()
+    if sku is None:
+        # Nothing to price against: the catalogue demo seed did not run for this workspace.
+        return
+
+    finance_email = await session.scalar(
+        text("SELECT email FROM users WHERE id = :uid"), {"uid": finance_user_id}
+    )
+    finance_principal = CurrentPrincipal(
+        user_id=finance_user_id,
+        tenant_id=tenant_id,
+        role=UserRole.FINANCE,
+        email=str(finance_email or "finance@example.com"),
+    )
+    payments = PaymentService()
+    profits = OrderProfitService()
+    today = datetime.now(UTC).date()
+
+    for scenario in _DEMO_B2B_SCENARIOS:
+        company_id = row_id(scenario.company_key)
+        buyer_id = row_id(scenario.buyer_key)
+        opportunity_id = row_id(f"opportunity:{scenario.key}")
+        quote_id = row_id(f"quote:{scenario.key}")
+        order_id = row_id(f"order:{scenario.key}")
+
+        await session.execute(
+            text(
+                "INSERT INTO b2b_companies (id, tenant_id, legal_name, country_code) "
+                "VALUES (:cid, :tid, :name, :country) ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "cid": company_id,
+                "tid": tenant_id,
+                "name": scenario.company_name,
+                "country": scenario.company_country,
+            },
+        )
+        await session.execute(
+            text(
+                "INSERT INTO customers (id, tenant_id, customer_type, display_name, "
+                "primary_email, company_id, country_code, iana_timezone, preferred_language) "
+                "VALUES (:bid, :tid, 'b2b_contact', :name, :email, :cid, :country, :tz, :lang) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "bid": buyer_id,
+                "tid": tenant_id,
+                "name": scenario.buyer_name,
+                "email": scenario.buyer_email,
+                "cid": company_id,
+                "country": scenario.buyer_country,
+                "tz": scenario.buyer_timezone,
+                "lang": scenario.buyer_language,
+            },
+        )
+        await session.execute(
+            text(
+                "INSERT INTO opportunities (id, tenant_id, company_id, customer_id, title, "
+                "stage, expected_amount, currency, expected_close_date, owner_user_id) "
+                "VALUES (:oid, :tid, :cid, :bid, :title, :stage, :amount, :ccy, "
+                ":close_date, :owner) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "oid": opportunity_id,
+                "tid": tenant_id,
+                "cid": company_id,
+                "bid": buyer_id,
+                "title": scenario.opportunity_title,
+                "stage": scenario.opportunity_stage,
+                "amount": scenario.subtotal,
+                "ccy": scenario.currency,
+                "close_date": today + timedelta(days=21),
+                "owner": owner_id,
+            },
+        )
+        await session.execute(
+            text(
+                "INSERT INTO quotes (id, tenant_id, opportunity_id, quote_no, version, "
+                "is_proforma_invoice, incoterm, port_of_loading, port_of_destination, "
+                "payment_terms, base_currency, quote_currency, fx_rate_snapshot, "
+                "fx_locked_until, freight_fee, insurance_fee, customs_duty_estimate, "
+                "total_amount, status) "
+                "VALUES (:qid, :tid, :oid, :qno, 1, true, :incoterm, :pol, :pod, :terms, "
+                "'USD', :ccy, :fx, now() + interval '14 days', :freight, :insurance, 0, "
+                ":total, :status) "
+                "ON CONFLICT (tenant_id, quote_no, version) DO NOTHING"
+            ),
+            {
+                "qid": quote_id,
+                "tid": tenant_id,
+                "oid": opportunity_id,
+                "qno": scenario.quote_no,
+                "incoterm": scenario.incoterm.value,
+                "pol": scenario.port_of_loading,
+                "pod": scenario.port_of_destination,
+                "terms": scenario.payment_terms,
+                "ccy": scenario.currency,
+                "fx": scenario.fx_rate_to_base,
+                "freight": scenario.freight_fee,
+                "insurance": scenario.insurance_fee,
+                "total": scenario.quote_total,
+                "status": scenario.quote_status,
+            },
+        )
+        resolved_quote_id = UUID(
+            str(
+                await session.scalar(
+                    text(
+                        "SELECT id FROM quotes WHERE tenant_id = :tid "
+                        "AND quote_no = :qno AND version = 1"
+                    ),
+                    {"tid": tenant_id, "qno": scenario.quote_no},
+                )
+            )
+        )
+        for line in scenario.lines:
+            await session.execute(
+                text(
+                    "INSERT INTO quote_items (id, tenant_id, quote_id, variant_id, "
+                    "sku_snapshot, description_i18n, quantity, moq_tier_applied, "
+                    "unit_price_quote_ccy, unit_cost_base_snapshot, line_total_quote_ccy) "
+                    "VALUES (:iid, :tid, :qid, :vid, :sku, :descr, :qty, :tier, :price, "
+                    ":cost, :line_total) ON CONFLICT (id) DO NOTHING"
+                ),
+                {
+                    "iid": row_id(f"quote-item:{scenario.quote_no}:{line.quantity}"),
+                    "tid": tenant_id,
+                    "qid": resolved_quote_id,
+                    "vid": variant_id,
+                    "sku": str(sku.sku),
+                    "descr": (
+                        f"{sku.sku} · 24V COB strip 5 m · {line.moq_tier}+ pcs tier "
+                        f"({scenario.incoterm.value} {scenario.port_of_destination})"
+                    ),
+                    "qty": line.quantity,
+                    "tier": line.moq_tier,
+                    "price": line.unit_price,
+                    "cost": line.unit_cost_base,
+                    "line_total": line.line_total,
+                },
+            )
+
+        await session.execute(
+            text(
+                "INSERT INTO orders (id, tenant_id, order_no, order_mode, customer_id, "
+                "quote_id, currency, fx_rate_to_base, subtotal_amount, shipping_charged, "
+                "discount_amount, tax_collected, total_amount, fulfillment_status, "
+                "payment_status, channel_metadata) "
+                "VALUES (:oid, :tid, :ono, 'b2b_wholesale', :bid, :qid, :ccy, :fx, :subtotal, "
+                ":ship, 0, 0, :total, 'in_production', 'unpaid', CAST(:meta AS jsonb)) "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {
+                "oid": order_id,
+                "tid": tenant_id,
+                "ono": scenario.order_no,
+                "bid": buyer_id,
+                "qid": resolved_quote_id,
+                "ccy": scenario.currency,
+                "fx": scenario.fx_rate_to_base,
+                "subtotal": scenario.subtotal,
+                "ship": scenario.shipping_charged,
+                "total": scenario.quote_total,
+                "meta": json.dumps(
+                    {
+                        "incoterm": scenario.incoterm.value,
+                        "quote_no": scenario.quote_no,
+                        "port_of_loading": scenario.port_of_loading,
+                        "port_of_destination": scenario.port_of_destination,
+                        "payment_terms": scenario.payment_terms,
+                    }
+                ),
+            },
+        )
+        resolved_order_id = UUID(
+            str(
+                await session.scalar(
+                    text("SELECT id FROM orders WHERE tenant_id = :tid AND order_no = :ono"),
+                    {"tid": tenant_id, "ono": scenario.order_no},
+                )
+            )
+        )
+        for line in scenario.lines:
+            await session.execute(
+                text(
+                    "INSERT INTO order_items (id, tenant_id, order_id, variant_id, "
+                    "sku_snapshot, quantity, unit_price, unit_cost_base_snapshot, "
+                    "line_total) VALUES (:iid, :tid, :oid, :vid, :sku, :qty, :price, "
+                    ":cost, :line_total) ON CONFLICT (id) DO NOTHING"
+                ),
+                {
+                    "iid": row_id(f"order-item:{scenario.order_no}:{line.quantity}"),
+                    "tid": tenant_id,
+                    "oid": resolved_order_id,
+                    "vid": variant_id,
+                    "sku": str(sku.sku),
+                    "qty": line.quantity,
+                    "price": line.unit_price,
+                    "cost": line.unit_cost_base,
+                    "line_total": line.line_total,
+                },
+            )
+
+        receivables = await payments.create_b2b_milestone_receivables(
+            session,
+            tenant_id,
+            resolved_order_id,
+            scenario.quote_total,
+            scenario.currency,
+            due_date_deposit=today + timedelta(days=scenario.deposit_due_days),
+            due_date_balance=today + timedelta(days=scenario.balance_due_days),
+        )
+        milestones = {row.milestone_label: row for row in receivables}
+        deposit = milestones["b2b_30_deposit"]
+        balance = milestones["b2b_70_balance"]
+
+        async def has_payment(receivable_id: UUID) -> bool:
+            return bool(
+                await session.scalar(
+                    text(
+                        "SELECT 1 FROM payment_records WHERE tenant_id = :tid "
+                        "AND rp_id = :rid LIMIT 1"
+                    ),
+                    {"tid": tenant_id, "rid": receivable_id},
+                )
+            )
+
+        if not await has_payment(deposit.id):
+            await payments.record_payment(
+                session,
+                tenant_id,
+                rp_id=deposit.id,
+                amount_received=deposit.due_amount,
+                currency=scenario.currency,
+                actual_fx_rate=scenario.fx_rate_to_base,
+                payment_method="tt_wire",
+                gateway_fee=_DEMO_T_T_WIRE_FEE,
+                external_tx_ref=scenario.deposit_tx_ref,
+                verified_by_user_id=finance_user_id,
+            )
+        if scenario.balance_tx_ref is not None and not await has_payment(balance.id):
+            await payments.submit_payment_receipt(
+                session,
+                tenant_id,
+                finance_principal,
+                PaymentCreate(
+                    rp_id=balance.id,
+                    payment_method="tt_wire",
+                    external_tx_ref=scenario.balance_tx_ref,
+                    amount_received=balance.due_amount,
+                    currency=scenario.currency,
+                    actual_fx_rate=scenario.fx_rate_to_base,
+                    gateway_fee=_DEMO_T_T_WIRE_FEE,
+                ),
+            )
+
+        snapshot_exists = await session.scalar(
+            text(
+                "SELECT 1 FROM order_profit_snapshots WHERE tenant_id = :tid "
+                "AND order_id = :oid LIMIT 1"
+            ),
+            {"tid": tenant_id, "oid": resolved_order_id},
+        )
+        if snapshot_exists is None:
+            # Real CVP waterfall: gross/COGS/shipments/gateway fees are derived by the
+            # production service from the rows above; only the seeded variable costs are passed.
+            await profits.recalculate_order_profit(
+                session,
+                tenant_id,
+                resolved_order_id,
+                platform_commission_base=scenario.platform_commission_base,
+                channel_msg_cost_base=scenario.channel_msg_cost_base,
+                ad_attribution_cost_base=scenario.ad_attribution_cost_base,
+            )
 
 
 async def _seed_workspace_demo_data(
