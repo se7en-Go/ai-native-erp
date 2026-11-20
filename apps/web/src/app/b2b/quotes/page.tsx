@@ -1,8 +1,15 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleDollarSign, FileSignature, Layers3, TrendingUp } from "lucide-react";
+import {
+  CircleDollarSign,
+  FileSignature,
+  Layers3,
+  TrendingUp,
+  UserRoundSearch,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { QuotePiBuilder } from "@/components/b2b/quote-pi-builder";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
@@ -89,8 +96,36 @@ function stageTotal(
 }
 
 export default function B2bQuotesPage() {
+  // `useSearchParams` needs a Suspense boundary so `next build` can still
+  // prerender this route statically (mirrors /settings/channels).
+  return (
+    <Suspense fallback={<B2bQuotesFallback />}>
+      <B2bQuotesPageInner />
+    </Suspense>
+  );
+}
+
+function B2bQuotesFallback() {
+  return (
+    <AppShell currentPath="/b2b/quotes">
+      <Page>
+        <div className="erp-card animate-pulse p-8 text-[13px] font-medium text-stone-500">
+          正在加载 B2B 报价工作台…
+        </div>
+      </Page>
+    </AppShell>
+  );
+}
+
+function B2bQuotesPageInner() {
   const queryClient = useQueryClient();
   const { bi } = useI18n();
+  const searchParams = useSearchParams();
+  // Inbox 上下文抽屉的深链：/b2b/quotes?customer_id=...&customer_name=...
+  const contextCustomerId = searchParams.get("customer_id");
+  const contextCustomerName = searchParams.get("customer_name");
+  const deepLinkQuoteId = searchParams.get("quoteId");
+  const autoOpenSendEmail = searchParams.get("send_pi_email") === "1";
 
   const STAGE_LABEL: Record<OpportunityStage, string> = {
     discovery: bi("需求挖掘", "Discovery"),
@@ -155,6 +190,39 @@ export default function B2bQuotesPage() {
             "Track export inquiries from discovery to closed won: lock FX, auto-price MOQ tiers, generate multilingual PI PDFs and convert to wholesale orders in one click."
           )}
         />
+
+        {contextCustomerName && (
+          <div
+            data-testid="quote-customer-context-banner"
+            className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-3.5 py-2.5"
+          >
+            <span
+              aria-hidden="true"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-emerald-700 ring-1 ring-emerald-200"
+            >
+              <UserRoundSearch className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold leading-5 text-emerald-950">
+                {bi(
+                  `正在为客户「${contextCustomerName}」创建 B2B 报价单`,
+                  `Creating a B2B quote for ${contextCustomerName}`
+                )}
+              </p>
+              <p className="text-[11.5px] leading-5 text-emerald-800">
+                {bi(
+                  "下方试算阶梯价后生成 PI，可直接发邮件给买家；客户档案、历史订单与身份图谱都在 Inbox 右侧面板里。",
+                  "Price the MOQ tiers below, issue the PI and email it to the buyer; the customer profile, order history and identity graph stay in the Inbox drawer."
+                )}
+              </p>
+            </div>
+            {contextCustomerId && (
+              <span className="ml-auto shrink-0 rounded-full border border-emerald-200 bg-white px-2 py-0.5 font-mono text-[10.5px] font-medium text-emerald-800">
+                {contextCustomerId}
+              </span>
+            )}
+          </div>
+        )}
 
         <section
           aria-label={bi("商机管道关键指标", "Pipeline key metrics")}
@@ -284,7 +352,12 @@ export default function B2bQuotesPage() {
           })}
         </div>
 
-        <QuotePiBuilder quotes={quotes} variants={variantsQuery.data?.items ?? []} />
+        <QuotePiBuilder
+          quotes={quotes}
+          variants={variantsQuery.data?.items ?? []}
+          initialQuoteId={deepLinkQuoteId}
+          autoOpenSendEmail={autoOpenSendEmail}
+        />
       </Page>
     </AppShell>
   );

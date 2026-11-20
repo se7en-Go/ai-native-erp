@@ -111,9 +111,25 @@ vi.mock("@/lib/data-source", () => ({
     status: "disconnected",
   })),
   inviteTeamMember: vi.fn(async () => MEMBERS[0]),
+  fetchPiTemplateSettings: vi.fn(async () => ({
+    company_legal_name: "Quanzhou Smart LED Lighting Co., Ltd.",
+    company_address: "No. 88 Photoelectric Industrial Park, Quanzhou, Fujian, China",
+    contact_phone: "+86 595 2688 0000",
+    contact_email: "sales@301go.net",
+    website: "https://www.301go.net",
+    tax_or_reg_no: "91350583MA2XQZLED8",
+    bank_beneficiary_name: "Quanzhou Smart LED Lighting Co., Ltd.",
+    bank_name: "Bank of China, Quanzhou Branch",
+    bank_account_no: "4188 0000 0000 1234",
+    bank_swift_code: "BKCHCNBJ73A",
+    bank_address: "No. 188 Fengze Street, Quanzhou, Fujian, China",
+    default_terms_notes: "30% T/T deposit, 70% before shipment.",
+    footer_signature_title: "Export Sales Manager",
+  })),
+  updatePiTemplateSettings: vi.fn(async (payload: unknown) => payload),
 }));
 
-import { connectMarketplaceChannel } from "@/lib/data-source";
+import { connectMarketplaceChannel, fetchPiTemplateSettings } from "@/lib/data-source";
 
 function makePrincipal(role: Principal["role"]): Principal {
   return {
@@ -178,7 +194,7 @@ describe("channel marketplace catalogue", () => {
   });
 });
 
-describe("4-tab channel hub", () => {
+describe("5-tab channel hub", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stubSearchParams("");
@@ -187,12 +203,13 @@ describe("4-tab channel hub", () => {
     });
   });
 
-  it("renders 4 tabs with live counts, a compact KPI strip and the 11-card grid", async () => {
+  it("renders 5 admin tabs (marketplace, accounts, team, PI template, compliance)", async () => {
     renderHub();
 
     expect(await screen.findByTestId("channel-kpi-strip")).toBeTruthy();
     expect(screen.getByTestId("hub-tab-marketplace").textContent).toContain("11");
     expect(screen.getByTestId("hub-tab-compliance")).toBeTruthy();
+    expect(screen.getByTestId("hub-tab-pi_template")).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByTestId("hub-tab-accounts").textContent).toContain("2");
       expect(screen.getByTestId("hub-tab-team").textContent).toContain("1");
@@ -206,6 +223,32 @@ describe("4-tab channel hub", () => {
     expect(screen.getByTestId("marketplace-status-shopify").textContent).toContain(
       "Not connected"
     );
+  });
+
+  it("keeps exactly 2 tabs for agents (no team / PI template / compliance)", async () => {
+    renderHub(makePrincipal("agent"));
+
+    expect(await screen.findByTestId("hub-tab-marketplace")).toBeTruthy();
+    expect(screen.getByTestId("hub-tab-accounts")).toBeTruthy();
+    expect(screen.queryByTestId("hub-tab-team")).toBeNull();
+    expect(screen.queryByTestId("hub-tab-pi_template")).toBeNull();
+    expect(screen.queryByTestId("hub-tab-compliance")).toBeNull();
+    // The admin-only PI template endpoint is never requested for an agent.
+    expect(fetchPiTemplateSettings).not.toHaveBeenCalled();
+  });
+
+  it("opens the PI template tab and renders the tenant letterhead editor", async () => {
+    renderHub();
+
+    fireEvent.click(await screen.findByTestId("hub-tab-pi_template"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pi-template-company_legal_name")).toHaveValue(
+        "Quanzhou Smart LED Lighting Co., Ltd."
+      );
+    });
+    expect(screen.getByTestId("pi-template-bank_swift_code")).toHaveValue("BKCHCNBJ73A");
+    expect(screen.getByTestId("pi-template-default_terms_notes")).toBeTruthy();
   });
 
   it("filters the grid by category and search without any inline forms", async () => {
