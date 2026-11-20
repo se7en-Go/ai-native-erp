@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { AlertTriangle, Check, Edit3, ShieldCheck, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CircleCheck,
+  Edit3,
+  Send,
+  ShieldCheck,
+  XCircle,
+} from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { AiCapability, ProposalStatus, ProposalType } from "@/lib/contracts";
 import { Badge, Card } from "@/components/ui/page";
@@ -19,6 +27,36 @@ export interface AiProposalItem {
   source_tool_call_id?: string | null;
   status: ProposalStatus;
   created_at: string;
+  /** 批准后后端回写：`queued_for_delivery` 为 true 说明已自动排队外发。 */
+  execution_result?: { [key: string]: unknown } | null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** 把 `proposed_payload.tool_evidence` 展平成可读的「字段 / 真实值」列表。 */
+export function extractToolEvidence(
+  payload: Record<string, unknown>,
+): Array<{ label: string; value: string }> {
+  const raw = payload.tool_evidence;
+  if (!Array.isArray(raw)) return [];
+  const entries: Array<{ label: string; value: string }> = [];
+  for (const item of raw) {
+    const record = asRecord(item);
+    if (record) {
+      for (const [key, value] of Object.entries(record)) {
+        if (value === null || value === undefined) continue;
+        if (typeof value === "object") continue;
+        entries.push({ label: key, value: String(value) });
+      }
+    } else if (typeof item === "string" || typeof item === "number") {
+      entries.push({ label: "evidence", value: String(item) });
+    }
+  }
+  return entries;
 }
 
 const CAPABILITY_COPY: Record<AiCapability, { zh: string; en: string }> = {
@@ -74,6 +112,23 @@ export function ProposalReviewCard({
     zh: proposal.status,
     en: proposal.status,
   };
+
+  // 确定性工具证据：优先看提案顶层告的 tool call id，再看 payload 里的证据清单。
+  const payloadSourceToolCallId =
+    typeof proposal.proposed_payload.source_tool_call_id === "string"
+      ? proposal.proposed_payload.source_tool_call_id
+      : null;
+  const sourceToolCallId = proposal.source_tool_call_id ?? payloadSourceToolCallId;
+  const toolEvidence = extractToolEvidence(proposal.proposed_payload);
+  const hasGroundedEvidence = Boolean(sourceToolCallId) || toolEvidence.length > 0;
+
+  // 批准并已下发客户的证据：execution_result 可能在提案顶层，也可能在 payload 里。
+  const executionResult =
+    asRecord(proposal.execution_result) ??
+    asRecord(proposal.proposed_payload.execution_result);
+  const queuedForDelivery = executionResult?.queued_for_delivery === true;
+  const isApproved =
+    proposal.status === "approved" || proposal.status === "edited_and_approved";
 
   function submitEdit() {
     try {
@@ -160,6 +215,84 @@ export function ProposalReviewCard({
               {bi("取消", "Cancel")}
             </button>
           </div>
+        </div>
+      )}
+
+      {hasGroundedEvidence && (
+        <div
+          data-testid={`proposal-evidence-${proposal.id}`}
+          className="mt-2.5 space-y-1.5"
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              data-testid={`proposal-evidence-badge-${proposal.id}`}
+              className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {bi("已核验 ERP 证据", "Verified ERP evidence")}
+            </span>
+            {sourceToolCallId && (
+              <code
+                data-testid={`proposal-tool-call-${proposal.id}`}
+                className="rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-emerald-700"
+              >
+                {sourceToolCallId}
+              </code>
+            )}
+          </div>
+
+          {toolEvidence.length > 0 && (
+            <details
+              data-testid={`proposal-evidence-preview-${proposal.id}`}
+              className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 text-[11.5px] text-emerald-950"
+            >
+              <summary className="cursor-pointer select-none font-semibold text-emerald-900">
+                {bi(
+                  `展开确定性工具证据（${toolEvidence.length} 项）`,
+                  `Show deterministic tool evidence (${toolEvidence.length})`
+                )}
+              </summary>
+              <ul className="mt-1.5 grid gap-1 sm:grid-cols-2">
+                {toolEvidence.map((entry, index) => (
+                  <li
+                    key={`${entry.label}-${index}-${entry.value}`}
+                    className="flex items-baseline justify-between gap-2 rounded-lg bg-white/80 px-2 py-1"
+                  >
+                    <span className="font-mono text-[10.5px] text-emerald-700">
+                      {entry.label}
+                    </span>
+                    <span className="truncate font-semibold tabular-nums text-emerald-950">
+                      {entry.value}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+      {queuedForDelivery && (
+        <div
+          data-testid={`proposal-delivery-banner-${proposal.id}`}
+          className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-900"
+        >
+          <Send className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+          <span>
+            {bi(
+              "已自动加入外发队列，正在发送给客户",
+              "Queued for delivery — sending to the customer now"
+            )}
+          </span>
+        </div>
+      )}
+
+      {isApproved && !queuedForDelivery && (
+        <div
+          className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[12px] font-semibold text-emerald-800"
+        >
+          <CircleCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+          <span>{bi("审核已通过，可直接执行下发", "Approved and ready to execute")}</span>
         </div>
       )}
 

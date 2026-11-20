@@ -11,6 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
+  FileText,
   LayoutGrid,
   MessagesSquare,
   RefreshCw,
@@ -34,6 +35,7 @@ import {
   type AccountsFilter,
 } from "@/components/channels/connected-accounts-card";
 import { TeamMembersCard } from "@/components/channels/team-members-card";
+import { PiTemplateCard } from "@/components/channels/pi-template-card";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import {
   SegmentedTabs,
@@ -70,7 +72,7 @@ import {
 } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
 
-type HubTab = "marketplace" | "accounts" | "team" | "compliance";
+type HubTab = "marketplace" | "accounts" | "team" | "pi_template" | "compliance";
 
 export default function ChannelsSettingsPage() {
   return (
@@ -258,6 +260,16 @@ function ChannelsHub() {
           testId: "hub-tab-team",
         },
         {
+          value: "pi_template" as const,
+          label: (
+            <span className="inline-flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" />
+              {bi("PI 模板", "PI template")}
+            </span>
+          ),
+          testId: "hub-tab-pi_template",
+        },
+        {
           value: "compliance" as const,
           label: bi("运维与合规", "Ops & compliance"),
           badge: dlqItems.length,
@@ -398,6 +410,12 @@ function ChannelsHub() {
               isLoading={membersQuery.isLoading}
               onInvite={(payload) => inviteMutation.mutateAsync(payload)}
             />
+          </div>
+        )}
+
+        {tab === "pi_template" && isAdmin && (
+          <div className="w-full">
+            <PiTemplateCard enabled={isAdmin} />
           </div>
         )}
 

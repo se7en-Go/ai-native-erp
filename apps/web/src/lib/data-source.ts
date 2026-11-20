@@ -47,14 +47,22 @@ import {
   fetchChannelDlq as liveFetchChannelDlq,
   fetchChannelSuppressions as liveFetchChannelSuppressions,
   fetchPendingProposalsCount as liveFetchPendingProposalsCount,
+  fetchPiTemplateSettings as liveFetchPiTemplateSettings,
   fetchTeamMembers as liveFetchTeamMembers,
   fetchWallet as liveFetchWallet,
   inviteTeamMember as liveInviteTeamMember,
   listProposals,
+  proposeGroundedReply as liveProposeGroundedReply,
+  quotePdfDownloadUrl,
+  sendQuotePiEmail as liveSendQuotePiEmail,
   updateChannelOwnership as liveUpdateChannelOwnership,
+  updatePiTemplateSettings as liveUpdatePiTemplateSettings,
   type BillingWalletResponse,
   type CapabilityConfigItem,
   type KbDocumentItem,
+  type PiTemplateSettings,
+  type SendQuotePiEmailPayload,
+  type SendQuotePiEmailResponse,
 } from "@/lib/api-client/live-client";
 
 import type {
@@ -73,6 +81,7 @@ import {
   mockChannelSuppressions,
   mockConversationsPage,
   mockFinanceOverview,
+  mockGroundedProposal,
   mockInventoryBalancesPage,
   mockInventoryLedgerPage,
   mockKbDocuments,
@@ -81,8 +90,10 @@ import {
   mockOpportunitiesPage,
   mockOrderDetail,
   mockOrdersPage,
+  mockPiTemplateSettings,
   mockProposals,
   mockQuotesPage,
+  mockSendPiEmailResponse,
   mockVariantDetail,
   mockVariantsPage,
   mockTeamMembers,
@@ -117,6 +128,8 @@ import type { ConversationSummary } from "@/components/inbox/conversation-list";
 import type { InboxMessage } from "@/components/inbox/message-thread";
 
 export type { CapabilityConfigItem, KbDocumentItem };
+export type { PiTemplateSettings, SendQuotePiEmailPayload, SendQuotePiEmailResponse };
+export { quotePdfDownloadUrl };
 
 // Mock mode is opt-in only: set NEXT_PUBLIC_USE_MOCK_API=true to run the
 // workbench with zero backend. The default (unset/false) always calls the
@@ -604,4 +617,54 @@ export function fetchPendingProposalsCount(): Promise<{ total: number }> {
     });
   }
   return liveFetchPendingProposalsCount();
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 1/2/3：PI PDF 交付、带 ERP 证据的 AI 提案、PI 抬头模板。
+// mock 模式返回本地镜像，保证没有后端也能跑完“生成 PI → 发邮件 → 审核提案”闭环。
+// ---------------------------------------------------------------------------
+
+/** 一键发送 PI 邮件：Resend 或 SMTP/IMAP 发件账号由后端信封解密后使用。 */
+export function sendQuotePiEmail(
+  quoteId: string,
+  payload: SendQuotePiEmailPayload,
+): Promise<SendQuotePiEmailResponse> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockSendPiEmailResponse(quoteId, `PI-${quoteId.toUpperCase()}`, payload),
+    );
+  }
+  return liveSendQuotePiEmail(quoteId, payload);
+}
+
+/** 让 AI 查库（确定性 SQL 工具）后生成一条待审核的回复提案。 */
+export function proposeGroundedReply(
+  conversationId: string,
+): Promise<AiProposalItem> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(mockGroundedProposal(conversationId));
+  }
+  return liveProposeGroundedReply(conversationId);
+}
+
+/** mock 模式下可写：保存后重新读取能看到刚填的抬头。 */
+const mockPiTemplateState: PiTemplateSettings = { ...mockPiTemplateSettings };
+
+/** 读取租户自己的 PI 抬头 / 银行电汇资料 / 默认条款（owner/admin）。 */
+export function fetchPiTemplateSettings(): Promise<PiTemplateSettings> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve({ ...mockPiTemplateState });
+  }
+  return liveFetchPiTemplateSettings();
+}
+
+/** 保存 PI 抬头设置（owner/admin）。 */
+export function updatePiTemplateSettings(
+  payload: PiTemplateSettings,
+): Promise<PiTemplateSettings> {
+  if (shouldUseMockApi()) {
+    Object.assign(mockPiTemplateState, payload);
+    return Promise.resolve({ ...mockPiTemplateState });
+  }
+  return liveUpdatePiTemplateSettings(payload);
 }

@@ -1,8 +1,18 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Send, StickyNote, Languages, ShieldCheck, Info } from "lucide-react";
+import {
+  ArrowRight,
+  DatabaseZap,
+  Sparkles,
+  Send,
+  StickyNote,
+  Languages,
+  ShieldCheck,
+  Info,
+} from "lucide-react";
 import { sendConversationMessage } from "@/lib/api-client/live-client";
 import { aiAssist } from "@/lib/api-client/plan04-bridge";
 import { translateText } from "@/lib/api-client/live-client";
@@ -12,14 +22,18 @@ import type { InboxToolbarIntent, QuickReplyTemplate } from "@/components/ai-wor
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
 import type { InboxMessage } from "@/components/inbox/message-thread";
 import { fetchInboxAssist, fetchQuickReplies } from "@/lib/phase3b-data";
+import { proposeGroundedReply } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
 
 export function InboxComposer({
   conversation,
   messages = [],
+  insertRequest = null,
 }: {
   conversation: ConversationSummary | null;
   messages?: readonly InboxMessage[];
+  /** 外部（抽屉里的「插入报价/库存」）向草稿追加文本；每次传入新对象即插入一次。 */
+  insertRequest?: { text: string; nonce: number } | null;
 }) {
   const { t, bi } = useI18n();
   const queryClient = useQueryClient();
@@ -33,6 +47,18 @@ export function InboxComposer({
   const [complianceError, setComplianceError] = useState<string | null>(null);
   const [assistNotice, setAssistNotice] = useState<string | null>(null);
   const [assistError, setAssistError] = useState<string | null>(null);
+  const [proposalNotice, setProposalNotice] = useState(false);
+
+  // 抽屉里点「插入报价/库存」：直接追加到当前草稿，发送仍需人工确认。
+  // 用对象身份而非 nonce 判重，语言切换重渲染不会重复插入同一段文本。
+  const handledInsertRef = useRef<{ text: string; nonce: number } | null>(null);
+  useEffect(() => {
+    if (!insertRequest || insertRequest === handledInsertRef.current) return;
+    handledInsertRef.current = insertRequest;
+    const snippet = insertRequest.text;
+    setBodyText((previous) => (previous.trim() ? `${previous.trim()}\n\n${snippet}` : snippet));
+    setAssistNotice(bi("已插入实时库存与阶梯报价片段", "Live stock & tier price inserted"));
+  }, [bi, insertRequest]);
 
   useEffect(() => {
     if (!liveTranslate || !bodyText.trim() || mode === "internal_note") {
@@ -144,6 +170,29 @@ export function InboxComposer({
     },
   });
 
+  // 「AI 查库生成提案」：让 AI 先跑确定性 SQL 工具，再生成带 ERP 证据的待审提案。
+  const proposeMutation = useMutation({
+    mutationFn: async () => {
+      if (!conversation) return null;
+      return proposeGroundedReply(conversation.id);
+    },
+    onSuccess: (proposal) => {
+      if (!proposal) return;
+      setProposalNotice(true);
+      setAssistError(null);
+      void queryClient.invalidateQueries({ queryKey: ["ai", "proposals"] });
+      void queryClient.invalidateQueries({ queryKey: ["ai", "proposals", "pending-count"] });
+    },
+    onError: (error) => {
+      setProposalNotice(false);
+      setAssistError(
+        error instanceof BffApiError
+          ? error.detail
+          : bi("提案生成失败，请稍后重试。", "Failed to generate a grounded proposal."),
+      );
+    },
+  });
+
   if (!conversation) return null;
 
   const phrases: readonly QuickReplyTemplate[] = phrasesQuery.data ?? [];
@@ -193,6 +242,16 @@ export function InboxComposer({
               disabled={assistMutation.isPending}
               pendingAction={assistMutation.isPending ? assistMutation.variables.intent : null}
             />
+            <button
+              type="button"
+              data-testid="propose-grounded-reply-btn"
+              disabled={proposeMutation.isPending}
+              onClick={() => proposeMutation.mutate()}
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[12px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+            >
+              <DatabaseZap className="h-3 w-3" />
+              <span>{bi("AI 查库生成提案", "AI grounded proposal")}</span>
+            </button>
           </div>
 
           <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-50/70 px-2 py-1 text-[11.5px] font-semibold text-emerald-900 ring-1 ring-emerald-200/70">
@@ -207,6 +266,28 @@ export function InboxComposer({
             <span>{t("strictRag")}</span>
           </label>
         </div>
+
+        {proposalNotice && (
+          <div
+            data-testid="propose-grounded-reply-success"
+            className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[12px] font-semibold text-emerald-900"
+          >
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <Link
+              data-testid="propose-grounded-reply-link"
+              href="/ai/proposals"
+              className="inline-flex items-center gap-1 underline decoration-emerald-400 underline-offset-2 hover:text-emerald-700"
+            >
+              <span>
+                {bi(
+                  "已生成带 ERP 证据的提案，去审核并发送",
+                  "Grounded proposal ready — review and send"
+                )}
+              </span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
 
         {assistNotice && (
           <p
