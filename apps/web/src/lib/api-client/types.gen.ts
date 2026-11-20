@@ -2454,6 +2454,30 @@ export type WarehouseRead = {
     is_default: boolean;
 };
 
+export type WebLivechatConnectRequest = {
+    display_name?: string | null;
+    owner_user_id?: string | null;
+    site_domain: string;
+    visibility_scope?: ('shared' | 'personal') | null;
+};
+
+/**
+ * Direct token onboarding for Cloud API and Coexistence numbers.
+ *
+ * ``access_token`` is an unconstrained ``SecretStr`` so a malformed token can never be
+ * echoed back in a validation error; it is range-checked in the route via
+ * ``provider_token``, which raises a problem detail that never repeats the input.
+ */
+export type WhatsAppDirectConnectRequest = {
+    access_token: string;
+    display_name?: string | null;
+    is_coexistence?: boolean;
+    owner_user_id?: string | null;
+    phone_number_id: string;
+    visibility_scope?: ('shared' | 'personal') | null;
+    waba_id: string;
+};
+
 export type WidgetIdentifyRequest = {
     display_name?: string | null;
     email?: string | null;
@@ -4774,6 +4798,62 @@ export type ConnectTelegramApiV1ChannelsTelegramConnectPostResponses = {
 };
 
 export type ConnectTelegramApiV1ChannelsTelegramConnectPostResponse = ConnectTelegramApiV1ChannelsTelegramConnectPostResponses[keyof ConnectTelegramApiV1ChannelsTelegramConnectPostResponses];
+
+export type ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostData = {
+    body: WebLivechatConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/web-livechat/connect';
+};
+
+export type ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostError = ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostErrors[keyof ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostErrors];
+
+export type ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectMessagingResponse;
+};
+
+export type ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostResponse = ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostResponses[keyof ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostResponses];
+
+export type ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostData = {
+    body: WhatsAppDirectConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/whatsapp/connect';
+};
+
+export type ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostError = ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostErrors[keyof ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostErrors];
+
+export type ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConnectMessagingResponse;
+};
+
+export type ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostResponse = ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostResponses[keyof ConnectWhatsappDirectApiV1ChannelsWhatsappConnectPostResponses];
 
 export type RecordWhatsappOptInApiV1ChannelsWhatsappConsentOptInPostData = {
     body: ConsentOptInRequest;
