@@ -44,8 +44,17 @@ export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
 
   return (
     <section aria-label="营销战役配置" className={panel}>
-      <h2 className="text-lg font-bold">营销战役配置</h2>
-      <p className="mb-4 text-sm text-slate-600">预览仅反映当前检查结果；正式发送前由服务端重新校验。</p>
+      <div className="mb-4">
+        <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+            <Save aria-hidden="true" size={15} />
+          </span>
+          营销战役配置
+        </h2>
+        <p className="mt-1 text-[12.5px] leading-6 text-slate-600">
+          预览仅反映当前检查结果；正式发送前由服务端重新校验。
+        </p>
+      </div>
       <div className="grid gap-5 lg:grid-cols-2">
         <form onSubmit={(event) => { event.preventDefault(); void run("save"); }}>
           <fieldset disabled={!!pending} className="space-y-3 disabled:opacity-65">
@@ -69,13 +78,18 @@ export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
             </div>
           </fieldset>
         </form>
-        <aside className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-          <h3 className="flex items-center gap-2 font-bold text-blue-900"><ShieldCheck aria-hidden="true" size={18} />合规检查</h3>
+        <aside className="rounded-2xl border border-blue-200/80 bg-gradient-to-b from-blue-50 to-blue-50/40 p-4 ring-1 ring-blue-100/60">
+          <h3 className="flex items-center gap-2 text-[13.5px] font-bold text-blue-900">
+            <ShieldCheck aria-hidden="true" size={17} />
+            合规检查
+          </h3>
           <p className="mt-2 text-sm text-slate-700">{email
             ? "服务端必须应用全局退订拦截，并随营销邮件发送 RFC 8058 List-Unsubscribe 一键退订头。"
             : "须有有效的 WhatsApp Opt-In；STOP 退订、美国营销限制与频率限制由发送网关强制执行。"}</p>
-          <p className="mt-3 text-sm font-semibold">已选 {count(uniqueTargets.length)} 个目标</p>
-          {preview ? <section aria-label="拦截结果" aria-live="polite" className="mt-3 rounded-lg border border-blue-100 bg-white p-3">
+          <p className="mt-3 inline-flex rounded-full border border-blue-200 bg-white/80 px-2.5 py-0.5 text-[11.5px] font-semibold text-blue-900">
+            已选 {count(uniqueTargets.length)} 个目标
+          </p>
+          {preview ? <section aria-label="拦截结果" aria-live="polite" className="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-xs">
             <dl className="grid grid-cols-2 gap-2 text-sm">
               <div><dt>预览可触达</dt><dd className="text-lg font-bold text-blue-900">{count(preview.eligible_count)}</dd></div>
               <div><dt>本次拦截</dt><dd className="text-lg font-bold text-rose-800">{count(preview.suppressed_count)}</dd></div>
@@ -88,7 +102,19 @@ export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
             : uniqueTargets.length ? "尚未生成当前配置的拦截结果。" : "选择目标线索后才能预览。"}</p>}
         </aside>
       </div>
-      {feedback && <p role={feedback.error ? "alert" : "status"} className={"mt-3 text-sm " + (feedback.error ? "text-rose-700" : "text-blue-900")}>{feedback.text}</p>}
+      {feedback && (
+        <p
+          role={feedback.error ? "alert" : "status"}
+          className={
+            "mt-3 rounded-xl border px-3 py-2 text-[12.5px] font-medium " +
+            (feedback.error
+              ? "border-rose-200 bg-rose-50 text-rose-800"
+              : "border-blue-200 bg-blue-50 text-blue-900")
+          }
+        >
+          {feedback.text}
+        </p>
+      )}
     </section>
   );
 }

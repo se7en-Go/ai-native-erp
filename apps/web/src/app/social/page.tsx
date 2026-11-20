@@ -5,6 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, Globe2, Library, MessageCircle, Send, Sparkles } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
+import { Page, PageHeader } from "@/components/ui/page";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { SocialPlatformMatrix } from "@/components/social/social-platform-matrix";
 import { SocialContentCalendar } from "@/components/social/social-content-calendar";
 import { SocialPostEditor } from "@/components/social/social-post-editor";
@@ -203,39 +206,72 @@ export default function SocialMarketingPage() {
   }
 
   const kpiCards = [
-    { label: "内容总数", value: count(kpis?.total_posts ?? 0) },
-    { label: "已发布", value: count(kpis?.published_posts ?? 0) },
-    { label: "待发布", value: count(kpis?.scheduled_posts ?? 0) },
-    { label: "社媒线索", value: count(kpis?.social_leads ?? 0) },
-    { label: "已转线索", value: count(kpis?.converted_leads ?? 0) },
-    { label: "已授权账号", value: count(kpis?.connected_accounts ?? 0) },
-    { label: "支持平台", value: count(kpis?.supported_platforms ?? 14) },
+    { label: "内容总数", value: count(kpis?.total_posts ?? 0), icon: Globe2, accent: "blue" as const },
+    { label: "已发布", value: count(kpis?.published_posts ?? 0), icon: Send, accent: "emerald" as const },
+    {
+      label: "待发布",
+      value: count(kpis?.scheduled_posts ?? 0),
+      icon: CalendarClock,
+      accent: "amber" as const,
+    },
+    {
+      label: "社媒线索",
+      value: count(kpis?.social_leads ?? 0),
+      icon: MessageCircle,
+      accent: "violet" as const,
+    },
+    {
+      label: "已转线索",
+      value: count(kpis?.converted_leads ?? 0),
+      icon: Sparkles,
+      accent: "rose" as const,
+    },
+    {
+      label: "已授权账号",
+      value: count(kpis?.connected_accounts ?? 0),
+      icon: Send,
+      accent: "slate" as const,
+    },
+    {
+      label: "支持平台",
+      value: count(kpis?.supported_platforms ?? 14),
+      icon: Globe2,
+      accent: "blue" as const,
+    },
   ];
 
   const error = kpisQuery.error ?? accountsQuery.error ?? postsQuery.error ?? mentionsQuery.error;
 
   return (
     <AppShell currentPath="/social" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="erp-page-full space-y-5">
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("社媒营销中心", "Social marketing")}</h1>
-            <p className="text-xs text-slate-500">
-              {bi("国内外 14 平台矩阵、内容日历、AI 文案与舆情转线索。仅对具备发布接口的平台开放定时发布；小红书、抖音、快手、B站、视频号、微博走成片导出与官方后台人工发布。", "A 14-platform matrix, content calendar, AI copywriting and social listening to CRM leads. Scheduled publishing is only enabled for platforms with an API; Xiaohongshu, Douyin, Kuaishou, Bilibili, Channels and Weibo use export plus manual publishing in the official console.")}
-            </p>
-          </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">
-            <Send className="h-3.5 w-3.5" aria-hidden="true" />
-            {bi("授权令牌信封加密 · 零未授权外网发帖", "Envelope-encrypted tokens · zero unauthorised posts")}
-          </span>
-        </header>
+      <Page full className="space-y-5">
+        <PageHeader
+          title={bi("社媒营销中心", "Social marketing")}
+          description={bi(
+            "国内外 14 平台矩阵、内容日历、AI 文案与舆情转线索。仅对具备发布接口的平台开放定时发布；小红书、抖音、快手、B站、视频号、微博走成片导出与官方后台人工发布。",
+            "A 14-platform matrix, content calendar, AI copywriting and social listening to CRM leads. Scheduled publishing is only enabled for platforms with an API; Xiaohongshu, Douyin, Kuaishou, Bilibili, Channels and Weibo use export plus manual publishing in the official console."
+          )}
+          badge={
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+              {bi("授权令牌信封加密 · 零未授权外网发帖", "Envelope-encrypted tokens · zero unauthorised posts")}
+            </span>
+          }
+        />
 
-        <section aria-label="社媒营销概览指标" role="group" className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
+        <section
+          aria-label="社媒营销概览指标"
+          role="group"
+          className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 xl:grid-cols-7"
+        >
           {kpiCards.map((card) => (
-            <div key={card.label} className="min-w-0 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
-              <p className="text-xs text-blue-900">{card.label}</p>
-              <p className="mt-1 break-all text-lg font-bold tabular-nums text-slate-900">{card.value}</p>
-            </div>
+            <BentoStatCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              icon={card.icon}
+              accent={card.accent}
+            />
           ))}
         </section>
 
@@ -258,28 +294,27 @@ export default function SocialMarketingPage() {
           </p>
         ) : null}
 
-        <div role="tablist" aria-label="社媒功能分区" className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`social-tab-${id}`}
-              aria-selected={tab === id}
-              aria-controls={`social-panel-${id}`}
-              onClick={() => setTab(id)}
-              className={
-                "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-blue-700 " +
-                (tab === id ? "bg-blue-700 text-white" : "text-slate-700 hover:bg-slate-100")
-              }
-            >
-              <Icon aria-hidden="true" size={15} />
-              {label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedTabs
+            ariaLabel="社媒功能分区"
+            value={tab}
+            onChange={setTab}
+            options={TABS.map(({ id, label, icon: Icon }) => ({
+              value: id,
+              label: (
+                <span className="inline-flex items-center gap-1.5">
+                  <Icon aria-hidden="true" size={15} />
+                  {label}
+                </span>
+              ),
+            }))}
+          />
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700">
+            {queue.length} 条待发布
+          </span>
         </div>
 
-        <div role="tabpanel" id={`social-panel-${tab}`} aria-labelledby={`social-tab-${tab}`}>
+        <div role="tabpanel" aria-label={TABS.find((item) => item.id === tab)?.label}>
           {tab === "matrix" ? (
             <SocialPlatformMatrix
               accounts={accounts}
@@ -302,11 +337,13 @@ export default function SocialMarketingPage() {
               />
               <section aria-label="待发布队列" className={panel}>
                 <header className="mb-3">
-                  <h2 className="flex items-center gap-2 text-lg font-bold">
-                    <Library aria-hidden="true" size={18} />
+                  <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                      <Library aria-hidden="true" size={15} />
+                    </span>
                     发布中心
                   </h2>
-                  <p className="text-sm text-slate-600">
+                  <p className="mt-1 text-[12.5px] leading-6 text-slate-600">
                     标记发布只登记真实回执，不会代你在任何平台发起未授权发帖；人工发布平台需先在官方后台完成发布。
                   </p>
                 </header>
@@ -317,7 +354,10 @@ export default function SocialMarketingPage() {
                 ) : (
                   <ul className="space-y-2">
                     {queue.map((post) => (
-                      <li key={post.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 p-3">
+                      <li
+                        key={post.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                      >
                         <div className="min-w-0">
                           <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
                             <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-800">
@@ -366,7 +406,7 @@ export default function SocialMarketingPage() {
             />
           ) : null}
         </div>
-      </div>
+      </Page>
     </AppShell>
   );
 }
