@@ -35,6 +35,7 @@ import type {
   PaginatedResponse,
   PaymentStatus,
   QuoteStatus,
+  UserRole,
 } from "@/lib/contracts";
 import type {
   AssistantChatRequest,
@@ -61,6 +62,12 @@ import type {
   ShipmentRead,
   VariantMappingWithLabelRead,
   VariantRead,
+} from "./types.gen";
+import type {
+  ChannelAccountRead,
+  InstagramConnectRequest,
+  MessengerConnectRequest,
+  TelegramConnectRequest,
 } from "./types.gen";
 import {
   acceptQuoteApiV1B2bQuotesQuoteIdAcceptPost,
@@ -326,6 +333,13 @@ export interface OnboardingStateApiItem {
   coexistence_acknowledged?: boolean;
 }
 
+export type ChannelVisibilityScope = "shared" | "personal";
+
+/**
+ * 渠道账号：`ChannelAccountRead` 的 UI 投影。ownership 相关字段目前由后端
+ * 增量返回（sdk.gen.ts 会在 Backend 合并后重新生成），因此这里全部声明为
+ * 可选，并通过 `mapChannelAccount` 从原始响应里安全读取。
+ */
 export interface ChannelAccountApiItem {
   id: string;
   channel_type: ChannelType;
@@ -333,6 +347,46 @@ export interface ChannelAccountApiItem {
   external_account_id: string;
   status: ChannelStatus;
   rate_limit_profile: { mps?: number; coexistence?: boolean };
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  owner_email?: string | null;
+  visibility_scope?: ChannelVisibilityScope | null;
+  bot_username?: string | null;
+}
+
+/** 工作区成员（业务员）账号，对应 GET /tenants/memberships。 */
+export interface TeamMemberApiItem {
+  membership_id: string;
+  tenant_id: string;
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** 契约里的名字（TeamMemberItem）与 UI 侧类型同义。 */
+export type TeamMemberItem = TeamMemberApiItem;
+/** 契约里的名字（ChannelAccountItem）与 UI 侧类型同义。 */
+export type ChannelAccountItem = ChannelAccountApiItem;
+
+export interface InviteTeamMemberPayload {
+  email: string;
+  full_name: string;
+  password: string;
+  role: UserRole;
+}
+
+export interface UpdateChannelOwnershipPayload {
+  visibility_scope: ChannelVisibilityScope;
+  owner_user_id?: string | null;
+  reassign_open_conversations?: boolean;
+}
+
+export interface DisconnectChannelResponse {
+  channel_account_id: string;
+  status: "disconnected";
 }
 
 export interface DlqEventApiItem {
@@ -470,7 +524,48 @@ export function mapChannelParam(channel: string): ChannelType | undefined {
 
 const INBOX_FILTERS = ["all", "unread", "pending_human", "sla_urgent"] as const;
 
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function optionalVisibilityScope(value: unknown): ChannelVisibilityScope | null {
+  return value === "shared" || value === "personal" ? value : null;
+}
+
+/** `ChannelAccountRead` 加上后端增量下发的 ownership 字段（重新生成前先安全读取）。 */
+type ChannelAccountRow = ChannelAccountRead &
+  Partial<{
+    owner_user_id: string | null;
+    owner_name: string | null;
+    owner_email: string | null;
+    visibility_scope: ChannelVisibilityScope | null;
+    bot_username: string | null;
+  }>;
+
+/** 渠道账号投影：ownership 字段缺省时统一回落为 null，UI 直接读不会拿到 undefined。 */
+export function mapChannelAccount(row: ChannelAccountRow): ChannelAccountApiItem {
+  const raw = row as unknown as Record<string, unknown>;
+  return {
+    id: row.id,
+    channel_type: row.channel_type,
+    display_name: row.display_name,
+    external_account_id: row.external_account_id,
+    status: row.status,
+    rate_limit_profile: {
+      mps: row.rate_limit_profile?.mps ?? undefined,
+      coexistence: row.rate_limit_profile?.coexistence ?? undefined,
+    },
+    owner_user_id: optionalString(raw.owner_user_id),
+    owner_name: optionalString(raw.owner_name),
+    owner_email: optionalString(raw.owner_email),
+    visibility_scope: optionalVisibilityScope(raw.visibility_scope),
+    bot_username: optionalString(raw.bot_username),
+  };
+}
+
 export function mapConversation(c: ConversationRead): ConversationSummary {
+  // ConversationRead 尚未包含归属字段（后端增量下发），先按原始报文安全读取。
+  const raw = c as unknown as Record<string, unknown>;
   return {
     id: c.id,
     customer_id: c.customer_id,
@@ -487,6 +582,10 @@ export function mapConversation(c: ConversationRead): ConversationSummary {
     human_agent_window_expires_at: c.human_agent_window_expires_at,
     last_message_preview: c.last_message_preview ?? "",
     updated_at: c.updated_at,
+    assigned_user_id: optionalString(raw.assigned_user_id),
+    assigned_user_name: optionalString(raw.assigned_user_name),
+    channel_account_display_name: optionalString(raw.channel_account_display_name),
+    channel_visibility_scope: optionalVisibilityScope(raw.channel_visibility_scope),
   };
 }
 
@@ -1305,17 +1404,43 @@ export type MessengerConnectPayload = {
   page_id: string;
   page_access_token: string;
   display_name: string;
+  visibility_scope?: ChannelVisibilityScope;
+  owner_user_id?: string | null;
 };
 
 export type InstagramConnectPayload = {
   ig_account_id: string;
   access_token: string;
   display_name: string;
+  visibility_scope?: ChannelVisibilityScope;
+  owner_user_id?: string | null;
 };
 
+/**
+ * Telegram 一处贴即绑：`display_name` 可选——留空时后端会用 `getMe`
+ * 拉到的机器人名称回填，因此只贴 Bot Token 就能完成绑定。
+ */
 export type TelegramConnectPayload = {
   bot_token: string;
-  display_name: string;
+  display_name?: string;
+  visibility_scope?: ChannelVisibilityScope;
+  owner_user_id?: string | null;
+};
+
+/** Resend API Key 与通用 SMTP/IMAP 邮箱共用一张快捷绑定卡。 */
+export type EmailConnectPayload = {
+  email_address: string;
+  display_name?: string | null;
+  provider?: "resend" | "smtp_imap";
+  api_key?: string | null;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_username?: string | null;
+  smtp_password?: string | null;
+  imap_host?: string | null;
+  imap_port?: number | null;
+  visibility_scope?: ChannelVisibilityScope;
+  owner_user_id?: string | null;
 };
 
 export type MessagingConnectPayload =
@@ -1326,33 +1451,129 @@ export type MessagingConnectPayload =
 export type MessagingConnectResult = {
   channel_account_id: string;
   external_account_id: string;
+  display_name?: string | null;
+  owner_user_id?: string | null;
+  visibility_scope?: ChannelVisibilityScope;
+  bot_username?: string | null;
 };
 
-export async function connectMessengerChannel(body: MessengerConnectPayload) {
-  return unwrap(
-    await connectMessengerApiV1ChannelsMessengerConnectPost({
-      client: getBffClient(),
-      body,
-    }),
+/** 连接响应里后端增量下发的字段（sdk.gen.ts 重新生成前先安全读取）。 */
+function mapConnectResult(
+  result: { channel_account_id: string; external_account_id: string },
+): MessagingConnectResult {
+  const raw = result as unknown as Record<string, unknown>;
+  return {
+    channel_account_id: result.channel_account_id,
+    external_account_id: result.external_account_id,
+    display_name: optionalString(raw.display_name),
+    owner_user_id: optionalString(raw.owner_user_id),
+    visibility_scope: optionalVisibilityScope(raw.visibility_scope) ?? undefined,
+    bot_username: optionalString(raw.bot_username),
+  };
+}
+
+export async function connectMessengerChannel(
+  body: MessengerConnectPayload,
+): Promise<MessagingConnectResult> {
+  return mapConnectResult(
+    unwrap(
+      await connectMessengerApiV1ChannelsMessengerConnectPost({
+        client: getBffClient(),
+        // ownership 字段比当前生成的请求体更新，合并后即可去掉这层断言。
+        body: body as unknown as MessengerConnectRequest,
+      }),
+    ),
   );
 }
 
-export async function connectInstagramChannel(body: InstagramConnectPayload) {
-  return unwrap(
-    await connectInstagramApiV1ChannelsInstagramConnectPost({
-      client: getBffClient(),
-      body,
-    }),
+export async function connectInstagramChannel(
+  body: InstagramConnectPayload,
+): Promise<MessagingConnectResult> {
+  return mapConnectResult(
+    unwrap(
+      await connectInstagramApiV1ChannelsInstagramConnectPost({
+        client: getBffClient(),
+        body: body as unknown as InstagramConnectRequest,
+      }),
+    ),
   );
 }
 
-export async function connectTelegramChannel(body: TelegramConnectPayload) {
-  return unwrap(
-    await connectTelegramApiV1ChannelsTelegramConnectPost({
-      client: getBffClient(),
-      body,
-    }),
+export async function connectTelegramChannel(
+  body: TelegramConnectPayload,
+): Promise<MessagingConnectResult> {
+  return mapConnectResult(
+    unwrap(
+      await connectTelegramApiV1ChannelsTelegramConnectPost({
+        client: getBffClient(),
+        body: body as unknown as TelegramConnectRequest,
+      }),
+    ),
   );
+}
+
+/** 邮箱快捷绑定（Resend / SMTP-IMAP）：走 bffFetch，因为契约端点尚未生成 SDK。 */
+export async function connectEmailChannel(
+  body: EmailConnectPayload,
+): Promise<MessagingConnectResult> {
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/email/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapConnectResult({
+    ...raw,
+    channel_account_id: String(raw.channel_account_id ?? ""),
+    external_account_id: String(raw.external_account_id ?? ""),
+  });
+}
+
+/** 切换归属：公司公海 ↔ 指定业务员个人专属（owner/admin）。 */
+export async function updateChannelOwnership(
+  accountId: string,
+  body: UpdateChannelOwnershipPayload,
+): Promise<ChannelAccountApiItem> {
+  const row = await bffFetch<ChannelAccountRow>(
+    `/v1/channels/accounts/${encodeURIComponent(accountId)}/ownership`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        visibility_scope: body.visibility_scope,
+        owner_user_id: body.owner_user_id ?? null,
+        reassign_open_conversations: body.reassign_open_conversations ?? false,
+      }),
+    },
+  );
+  return mapChannelAccount(row);
+}
+
+/** 断开渠道账号：owner/admin 任意，agent/manager 仅限本人个人渠道。 */
+export async function disconnectChannelAccount(
+  accountId: string,
+): Promise<DisconnectChannelResponse> {
+  return bffFetch<DisconnectChannelResponse>(
+    `/v1/channels/accounts/${encodeURIComponent(accountId)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** 团队成员（业务员账号）列表：owner/admin。 */
+export async function fetchTeamMembers(
+  limit = 100,
+  offset = 0,
+): Promise<PaginatedResponse<TeamMemberApiItem>> {
+  return bffFetch<PaginatedResponse<TeamMemberApiItem>>(
+    `/v1/tenants/memberships?limit=${limit}&offset=${offset}`,
+  );
+}
+
+/** 新建业务员 / 团队成员：owner/admin。 */
+export async function inviteTeamMember(
+  body: InviteTeamMemberPayload,
+): Promise<TeamMemberApiItem> {
+  return bffFetch<TeamMemberApiItem>("/v1/tenants/memberships", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export async function mergeCustomers(
@@ -1569,13 +1790,7 @@ export async function fetchChannelAccounts(): Promise<PaginatedResponse<ChannelA
   }));
   return {
     ...page,
-    items: page.items.map(({ rate_limit_profile, ...account }) => ({
-      ...account,
-      rate_limit_profile: {
-        mps: rate_limit_profile.mps ?? undefined,
-        coexistence: rate_limit_profile.coexistence ?? undefined,
-      },
-    })),
+    items: page.items.map((row) => mapChannelAccount(row as ChannelAccountRow)),
   };
 }
 

@@ -29,16 +29,21 @@ import {
 import {
   fetchCapabilities as liveFetchCapabilities,
   fetchKbDocuments as liveFetchKbDocuments,
+  connectEmailChannel as liveConnectEmailChannel,
   connectInstagramChannel as liveConnectInstagramChannel,
   connectMessengerChannel as liveConnectMessengerChannel,
   connectTelegramChannel as liveConnectTelegramChannel,
+  disconnectChannelAccount as liveDisconnectChannelAccount,
   fetchChannelAccounts as liveFetchChannelAccounts,
   fetchChannelConsents as liveFetchChannelConsents,
   fetchChannelDlq as liveFetchChannelDlq,
   fetchChannelSuppressions as liveFetchChannelSuppressions,
   fetchPendingProposalsCount as liveFetchPendingProposalsCount,
+  fetchTeamMembers as liveFetchTeamMembers,
   fetchWallet as liveFetchWallet,
+  inviteTeamMember as liveInviteTeamMember,
   listProposals,
+  updateChannelOwnership as liveUpdateChannelOwnership,
   type BillingWalletResponse,
   type CapabilityConfigItem,
   type KbDocumentItem,
@@ -71,15 +76,21 @@ import {
   mockQuotesPage,
   mockVariantDetail,
   mockVariantsPage,
+  mockTeamMembers,
   mockWallet,
 } from "@/lib/mock-fixtures";
 import type {
+  DisconnectChannelResponse,
+  EmailConnectPayload,
   InstagramConnectPayload,
+  InviteTeamMemberPayload,
   MessengerConnectPayload,
   MessagingConnectPayload,
   MessagingConnectResult,
   MessagingProviderKind,
+  TeamMemberApiItem,
   TelegramConnectPayload,
+  UpdateChannelOwnershipPayload,
 } from "@/lib/api-client/live-client";
 import type { AiProposalItem } from "@/components/ai/proposal-review-card";
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
@@ -310,6 +321,94 @@ export async function connectMessagingChannel(
     return liveConnectInstagramChannel(payload as InstagramConnectPayload);
   }
   return liveConnectTelegramChannel(payload as TelegramConnectPayload);
+}
+
+// ---------------------------------------------------------------------------
+// 归属与团队（Plan 0009）：全部为 bffFetch 包装，mock 模式下保留纯本地降级，
+// 以便没有后端时也能完整演示“快捷绑定 + 业务员归属”流程。
+// ---------------------------------------------------------------------------
+
+/** 邮箱快捷绑定：Resend API Key 或 SMTP/IMAP 邮箱。 */
+export async function connectEmailChannel(
+  payload: EmailConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return {
+      channel_account_id: `mock-email-${payload.email_address}`,
+      external_account_id: payload.email_address,
+      display_name: payload.display_name ?? null,
+      visibility_scope: payload.visibility_scope,
+      owner_user_id: payload.owner_user_id ?? null,
+    };
+  }
+  return liveConnectEmailChannel(payload);
+}
+
+/** 切换归属（公司公海 ↔ 指定业务员个人专属）。 */
+export async function updateChannelOwnership(
+  accountId: string,
+  payload: UpdateChannelOwnershipPayload,
+): Promise<ChannelAccountApiItem> {
+  if (shouldUseMockApi()) {
+    const existing = mockChannelAccounts.items.find((item) => item.id === accountId);
+    return {
+      id: accountId,
+      channel_type:
+        (existing?.channel_type as ChannelAccountApiItem["channel_type"]) ?? "telegram",
+      display_name: existing?.display_name ?? accountId,
+      external_account_id: existing?.external_account_id ?? accountId,
+      status: "active",
+      rate_limit_profile: existing?.rate_limit_profile ?? {},
+      owner_user_id: payload.owner_user_id ?? null,
+      owner_name: null,
+      owner_email: null,
+      visibility_scope: payload.visibility_scope,
+      bot_username: existing?.bot_username ?? null,
+    };
+  }
+  return liveUpdateChannelOwnership(accountId, payload);
+}
+
+/** 断开渠道账号。 */
+export function disconnectChannelAccount(
+  accountId: string,
+): Promise<DisconnectChannelResponse> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve({ channel_account_id: accountId, status: "disconnected" });
+  }
+  return liveDisconnectChannelAccount(accountId);
+}
+
+/** 团队成员列表（owner/admin）。 */
+export function fetchTeamMembers(): Promise<PaginatedResponse<TeamMemberApiItem>> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve(
+      mockTeamMembers as unknown as PaginatedResponse<TeamMemberApiItem>,
+    );
+  }
+  return liveFetchTeamMembers();
+}
+
+/** 新建业务员 / 团队成员（owner/admin）；mock 模式下追加到内存名单。 */
+export async function inviteTeamMember(
+  payload: InviteTeamMemberPayload,
+): Promise<TeamMemberApiItem> {
+  if (shouldUseMockApi()) {
+    const member: TeamMemberApiItem = {
+      membership_id: `mock-membership-${payload.email}`,
+      tenant_id: "mock-tenant",
+      user_id: `mock-user-${payload.email}`,
+      email: payload.email,
+      full_name: payload.full_name,
+      role: payload.role,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+    mockTeamMembers.items.push(member);
+    mockTeamMembers.total = mockTeamMembers.items.length;
+    return member;
+  }
+  return liveInviteTeamMember(payload);
 }
 
 export function fetchChannelDlq(): Promise<PaginatedResponse<DlqEventApiItem>> {

@@ -80,8 +80,29 @@ describe("Task 5.1 AppShell RBAC, i18n, SSE & ESLint Zero-DB Guard", () => {
     expect(screen.getByText(/ERR_INSUFFICIENT_ROLE/i)).toBeInTheDocument();
   });
 
-  it("shows Finance & CVP to finance role and supports 中/EN toggle + sidebar collapse", () => {
+  it("lets a salesperson open /settings/channels while still blocking /finance", () => {
+    // Plan 0009：业务员要能自助绑定个人渠道，但财务仍然封死。
+    expect(canAccessRoute("agent", "/settings/channels")).toBe(true);
+    expect(canAccessRoute("manager", "/settings/channels")).toBe(true);
+    expect(canAccessRoute("agent", "/finance")).toBe(false);
+    expect(canAccessRoute("agent", "/supply-chain/suppliers")).toBe(false);
+    // 其它 /settings/* 仍然只对 owner/admin 开放（前缀顺序保障）。
+    expect(canAccessRoute("agent", "/settings")).toBe(false);
+    expect(canAccessRoute("owner", "/settings")).toBe(true);
+
     renderWithProviders(
+      <AppShell currentPath="/settings/channels" pendingProposalsCount={0}>
+        <div data-testid="channels-settings-body">Quick connect</div>
+      </AppShell>,
+      makePrincipal("agent"),
+      "en"
+    );
+
+    expect(screen.getByTestId("channels-settings-body")).toBeInTheDocument();
+    expect(screen.queryByText(/ERR_INSUFFICIENT_ROLE/i)).toBeNull();
+  });
+
+  it("shows Finance & CVP to finance role and supports 中/EN toggle + sidebar collapse", () => {    renderWithProviders(
       <AppShell currentPath="/finance" pendingProposalsCount={6}>
         <div data-testid="finance-secret">COGS Margin Waterfall</div>
       </AppShell>,
