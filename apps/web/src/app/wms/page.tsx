@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -18,6 +20,7 @@ import {
 const OPERATOR_ROLES = new Set(["owner", "admin", "manager"]);
 
 export default function WmsPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const { principal } = useAuthSession();
   const [variantId, setVariantId] = useState("");
@@ -68,24 +71,24 @@ export default function WmsPage() {
 
   return (
     <AppShell currentPath="/wms" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="erp-page space-y-4">
         <div>
-          <h1 className="text-lg font-bold text-slate-900">WMS 出入库 / Warehouse Movements</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("WMS 出入库台账", "WMS movements")}</h1>
           <p className="text-xs text-slate-500">
-            流水来自采购收货、订单出库与盘点调整；人工仅可提交盘点调整，且不可占用已预占库存。
+            {bi("流水来自采购收货、订单出库与盘点调整；人工仅可提交盘点调整，且不可占用已预占库存。", "Movements come from receiving, order dispatch and stocktakes; manual stocktake adjustments can never consume reserved stock.")}
           </p>
         </div>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-3">
-          <h2 className="text-sm font-semibold text-slate-900">实时库存</h2>
-          <table data-testid="wms-stock-table" className="mt-2 w-full text-left text-xs">
+        <section className="erp-card p-3">
+          <h2 className="text-sm font-semibold text-slate-900">{bi("实时库存", "Live stock")}</h2>
+          <table data-testid="wms-stock-table" className="erp-table mt-2">
             <thead className="text-[10px] uppercase text-slate-400">
               <tr>
-                <th className="py-1">SKU</th>
-                <th className="py-1">仓</th>
-                <th className="py-1">现存</th>
-                <th className="py-1">预占</th>
-                <th className="py-1">可用</th>
+                <th>SKU</th>
+                <th>{bi("仓库", "Warehouse")}</th>
+                <th className="text-right">{bi("现存", "On hand")}</th>
+                <th className="text-right">{bi("预占", "Reserved")}</th>
+                <th className="text-right">{bi("可用", "Available")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -101,7 +104,7 @@ export default function WmsPage() {
               {stock.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-4 text-center text-slate-400">
-                    {stockQuery.isLoading ? "加载中…" : "暂无库存行"}
+                    {stockQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无库存行", "No stock rows")}
                   </td>
                 </tr>
               )}
@@ -116,7 +119,7 @@ export default function WmsPage() {
               event.preventDefault();
               adjust.mutate();
             }}
-            className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-4"
+            className="erp-card grid gap-2 p-3 sm:grid-cols-4"
           >
             <select
               aria-label="Stocktake SKU"
@@ -149,9 +152,9 @@ export default function WmsPage() {
               type="submit"
               data-testid="stocktake-submit"
               disabled={adjust.isPending || Number(delta) === 0}
-              className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+              className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
             >
-              提交盘点调整
+              {bi("提交盘点调整", "Submit stocktake")}
             </button>
             {adjust.isError && (
               <p role="alert" className="sm:col-span-4 text-xs text-rose-700">
@@ -164,19 +167,19 @@ export default function WmsPage() {
             data-testid="stocktake-forbidden"
             className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500"
           >
-            当前角色（{principal?.role}）仅可查看流水与库存，盘点调整需要 Owner / Admin / Manager。
+            {bi(`当前角色（${principal?.role}）仅可查看流水与库存，盘点调整需要 Owner / Admin / Manager。`, `Your role (${principal?.role}) can only view movements and stock; stocktakes require Owner / Admin / Manager.`)}
           </p>
         )}
 
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table data-testid="wms-movements-table" className="w-full text-left text-xs">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+          <table data-testid="wms-movements-table" className="erp-table">
             <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
               <tr>
-                <th className="px-3 py-2.5">流水号</th>
-                <th className="px-3 py-2.5">类型</th>
-                <th className="px-3 py-2.5">数量</th>
-                <th className="px-3 py-2.5">关联单据</th>
-                <th className="px-3 py-2.5">时间</th>
+                <th>{bi("流水号", "Movement no.")}</th>
+                <th>{bi("类型", "Type")}</th>
+                <th className="text-right">{bi("数量", "Qty")}</th>
+                <th>{bi("关联单据", "Reference")}</th>
+                <th>{bi("时间", "Time")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -202,7 +205,7 @@ export default function WmsPage() {
               {movements.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
-                    {movementsQuery.isLoading ? "加载中…" : "暂无流水"}
+                    {movementsQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无流水", "No movements")}
                   </td>
                 </tr>
               )}

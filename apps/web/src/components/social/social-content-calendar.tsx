@@ -47,7 +47,7 @@ export function SocialContentCalendar({ posts, anchor, timeZone = "UTC", onSelec
           <button type="button" aria-label={view === "month" ? "下个月" : "下一周"} className={button} onClick={() => shift(1)}><ChevronRight aria-hidden="true" size={16} /></button>
           <div role="group" aria-label="日历视图" className="inline-flex rounded-lg border border-slate-200 p-0.5">
             {(["month", "week"] as const).map((mode) => <button key={mode} type="button" aria-pressed={view === mode} onClick={() => setView(mode)}
-              className={"rounded-md px-3 py-1.5 text-sm font-medium aria-pressed:bg-fuchsia-700 aria-pressed:text-white hover:bg-slate-100"}>{mode === "month" ? "月视图" : "周视图"}</button>)}
+              className={"rounded-md px-3 py-1.5 text-sm font-medium aria-pressed:bg-blue-700 aria-pressed:text-white hover:bg-slate-100"}>{mode === "month" ? "月视图" : "周视图"}</button>)}
           </div>
         </div>
       </header>

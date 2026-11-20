@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -26,6 +28,7 @@ function newReceiptId(): string {
 }
 
 export default function PurchaseOrdersPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [supplierId, setSupplierId] = useState("");
   const [qty, setQty] = useState("100");
@@ -91,12 +94,11 @@ export default function PurchaseOrdersPage() {
       currentPath="/supply-chain/purchase-orders"
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="erp-page space-y-4">
         <div>
-          <h1 className="text-lg font-bold text-slate-900">采购订单 / Purchase Orders</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("采购订单", "Purchase orders")}</h1>
           <p className="text-xs text-slate-500">
-            收货在同一事务内写入 inventory_ledger、inventory_balances 与 wms_movements；
-            并发收货由行锁串行化，超额收货返回 409。
+            {bi("收货在同一事务内写入 inventory_ledger、inventory_balances 与 wms_movements；并发收货由行锁串行化，超额收货返回 409。", "Receiving writes inventory_ledger, inventory_balances and wms_movements in one transaction; row locks serialise concurrency and over-receipt returns 409.")}
           </p>
         </div>
 
@@ -106,7 +108,7 @@ export default function PurchaseOrdersPage() {
             event.preventDefault();
             createOrder.mutate();
           }}
-          className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-5"
+          className="erp-card grid gap-2 p-3 sm:grid-cols-5"
         >
           <select
             aria-label="Supplier"
@@ -139,15 +141,15 @@ export default function PurchaseOrdersPage() {
             className="rounded border border-slate-300 px-2 py-1 text-xs"
           />
           <p className="self-center text-[11px] text-slate-500">
-            预计金额 {formatMoney((Number(qty) || 0) * (Number(unitCost) || 0), "USD")}
+            {bi("预计金额", "Estimated total")} {formatMoney((Number(qty) || 0) * (Number(unitCost) || 0), "USD")}
           </p>
           <button
             type="submit"
             data-testid="purchase-order-submit"
             disabled={createOrder.isPending || !(variantsQuery.data?.items?.length ?? 0)}
-            className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+            className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
           >
-            新建采购单
+            {bi("新建采购单", "Create purchase order")}
           </button>
           {error && (
             <p role="alert" className="sm:col-span-5 text-xs text-rose-700">
@@ -156,15 +158,15 @@ export default function PurchaseOrdersPage() {
           )}
         </form>
 
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table data-testid="purchase-orders-table" className="w-full text-left text-xs">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+          <table data-testid="purchase-orders-table" className="erp-table">
             <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
               <tr>
-                <th className="px-3 py-2.5">采购单</th>
-                <th className="px-3 py-2.5">物料</th>
-                <th className="px-3 py-2.5">金额</th>
-                <th className="px-3 py-2.5">状态</th>
-                <th className="px-3 py-2.5">收货</th>
+                <th>{bi("采购单", "PO")}</th>
+                <th>{bi("物料", "Items")}</th>
+                <th className="text-right">{bi("金额", "Amount")}</th>
+                <th>{bi("状态", "Status")}</th>
+                <th className="text-right">{bi("收货", "Receive")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -173,13 +175,13 @@ export default function PurchaseOrdersPage() {
                   <td className="px-3 py-2">
                     <div className="font-medium text-slate-800">{order.po_no}</div>
                     <div className="text-slate-500">
-                      预计到货 {order.expected_arrival_date ?? "—"}
+                      {bi("预计到货", "ETA")} {order.expected_arrival_date ?? "—"}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-slate-600">
                     {order.items.map((item) => (
                       <div key={item.id}>
-                        {item.sku} · 收 {item.qty_received}/{item.qty_ordered}
+                        {item.sku} · {bi("已收", "received")} {item.qty_received}/{item.qty_ordered}
                       </div>
                     ))}
                   </td>
@@ -199,7 +201,7 @@ export default function PurchaseOrdersPage() {
                       onClick={() => receiveOrder.mutate(order.id)}
                       className="rounded bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
                     >
-                      一键收货入库
+                      {bi("一键收货入库", "Receive into stock")}
                     </button>
                   </td>
                 </tr>
@@ -207,7 +209,7 @@ export default function PurchaseOrdersPage() {
               {orders.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
-                    {ordersQuery.isLoading ? "加载中…" : "暂无采购单"}
+                    {ordersQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无采购单", "No purchase orders")}
                   </td>
                 </tr>
               )}

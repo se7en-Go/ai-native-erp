@@ -26,7 +26,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function AiStudioPage() {
-  const { t } = useI18n();
+  const { t, bi } = useI18n();
   const queryClient = useQueryClient();
   useAuthSession();
   const [providerBlocked, setProviderBlocked] = useState(false);
@@ -86,19 +86,19 @@ export default function AiStudioPage() {
 
   return (
     <AppShell currentPath="/ai/studio" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="mx-auto max-w-6xl space-y-5">
+      <div className="erp-page space-y-5">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">AI 素材工作台 / AI Studio</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("AI 素材工作台", "AI studio")}</h1>
             <p className="text-xs text-slate-500">
-              关联真实 Catalog SKU 生成多语言文案；生成草稿永远从 draft 开始，批准动作由人工完成。
+              {bi("关联真实商品主档 SKU 生成多语言文案；生成草稿永远从 draft 开始，批准动作由人工完成。", "Generate multilingual copy tied to real catalog SKUs; drafts always start as draft and approval stays manual.")}
             </p>
           </div>
           <Link
             href="/catalog"
             className="rounded border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
           >
-            查看商品目录
+            {bi("查看商品目录", "Open catalog")}
           </Link>
         </header>
 
@@ -132,11 +132,11 @@ export default function AiStudioPage() {
           className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs"
         >
           <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-900">
-            <FileText className="h-4 w-4 text-indigo-600" aria-hidden="true" />
-            素材库
+            <FileText className="h-4 w-4 text-blue-600" aria-hidden="true" />
+            {bi("素材库", "Asset library")}
           </h2>
           {assets.length === 0 ? (
-            <p className="text-sm text-slate-600">还没有保存的素材。</p>
+            <p className="text-[13px] text-slate-500">{bi("还没有保存的素材。", "No saved assets yet.")}</p>
           ) : (
             <ul className="space-y-2.5">
               {assets.map((asset) => (
@@ -163,7 +163,7 @@ export default function AiStudioPage() {
                         className="inline-flex items-center gap-1 rounded border border-emerald-200 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-40"
                       >
                         <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                        批准
+                        {bi("批准", "Approve")}
                       </button>
                       <button
                         type="button"
@@ -173,7 +173,7 @@ export default function AiStudioPage() {
                         className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-40"
                       >
                         <Archive className="h-3 w-3" aria-hidden="true" />
-                        归档
+                        {bi("归档", "Archive")}
                       </button>
                     </div>
                   </div>
@@ -182,7 +182,7 @@ export default function AiStudioPage() {
                   </p>
                   {asset.numeric_guard_passed === false && asset.status === "draft" && (
                     <p className="mt-1.5 text-[11px] font-medium text-amber-800">
-                      数字未被工具校验，发出前请人工核对。
+                      {bi("数字未被工具校验，发出前请人工核对。", "Numbers were not tool-verified; review before publishing.")}
                     </p>
                   )}
                 </li>

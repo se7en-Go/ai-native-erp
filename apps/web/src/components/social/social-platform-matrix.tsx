@@ -45,8 +45,8 @@ export function SocialPlatformMatrix({ accounts, playbooks = PLATFORM_PLAYBOOKS,
   return (
     <section aria-label="社媒平台矩阵" className="space-y-4 text-slate-900">
       <div role="group" aria-label="社媒关键指标" className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        {kpis.map(({ label, value, icon: Icon }) => <div key={label} className="min-w-0 rounded-xl border border-fuchsia-100 bg-fuchsia-50/60 p-3">
-          <div className="flex items-center gap-1.5 text-xs text-fuchsia-900"><Icon aria-hidden="true" size={14} />{label}</div>
+        {kpis.map(({ label, value, icon: Icon }) => <div key={label} className="min-w-0 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+          <div className="flex items-center gap-1.5 text-xs text-blue-900"><Icon aria-hidden="true" size={14} />{label}</div>
           <p className="mt-1 break-all text-lg font-bold tabular-nums">{value}</p>
         </div>)}
       </div>
@@ -59,7 +59,7 @@ export function SocialPlatformMatrix({ accounts, playbooks = PLATFORM_PLAYBOOKS,
           <div className="flex flex-wrap items-center gap-2">
             <div role="group" aria-label="区域筛选" className="inline-flex rounded-lg border border-slate-200 p-0.5">
               {filters.map(({ value, label }) => <button key={value} type="button" aria-pressed={region === value} onClick={() => setRegion(value)}
-                className={"rounded-md px-3 py-1.5 text-sm font-medium aria-pressed:bg-fuchsia-700 aria-pressed:text-white hover:bg-slate-100"}>{label}</button>)}
+                className={"rounded-md px-3 py-1.5 text-sm font-medium aria-pressed:bg-blue-700 aria-pressed:text-white hover:bg-slate-100"}>{label}</button>)}
             </div>
             <input type="search" aria-label="搜索平台" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索平台 / 玩法" className={button + " w-48"} />
           </div>
@@ -77,7 +77,7 @@ export function SocialPlatformMatrix({ accounts, playbooks = PLATFORM_PLAYBOOKS,
                   </div>
                   <p className="mt-2 text-xs leading-relaxed text-slate-600">{playbook.audience}</p>
                   <ul className="mt-2 flex flex-wrap gap-1">
-                    {playbook.acquisition_plays.slice(0, 3).map((play) => <li key={play} className="rounded bg-fuchsia-50 px-1.5 py-0.5 text-[11px] font-medium text-fuchsia-900">{play}</li>)}
+                    {playbook.acquisition_plays.slice(0, 3).map((play) => <li key={play} className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-900">{play}</li>)}
                   </ul>
                   <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
                     <span className={"rounded px-1.5 py-0.5 font-semibold " + (playbook.publish_mode === "api" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900")}>{publishModeLabel[playbook.publish_mode]}</span>

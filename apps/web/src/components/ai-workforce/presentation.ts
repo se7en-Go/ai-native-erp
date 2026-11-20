@@ -15,8 +15,8 @@ export const CAPABILITY_LABELS = {
   finance_recon: "财务对账",
 } satisfies Record<AiCapability, string>;
 
-export const button = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:opacity-50";
-export const field = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-indigo-600";
+export const button = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-50";
+export const field = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-blue-600";
 
 export function formatCount(value: number): string {
   return Number.isSafeInteger(value) && value >= 0 ? value.toLocaleString("zh-CN") : "—";

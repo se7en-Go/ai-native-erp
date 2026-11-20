@@ -7,8 +7,10 @@ import { AppShell } from "@/components/app-shell";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
 import { formatMoney } from "@/lib/contracts";
 import { fetchPhase3aCustomers } from "@/lib/phase3a-data";
+import { useI18n } from "@/lib/i18n";
 
 export default function CrmCustomersPage() {
+  const { bi } = useI18n();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const proposalsQuery = useQuery({
@@ -25,11 +27,11 @@ export default function CrmCustomersPage() {
 
   return (
     <AppShell currentPath="/crm/customers" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="erp-page space-y-4">
         <div>
-          <h1 className="text-lg font-bold text-slate-900">客户档案 / Customers</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("客户档案", "Customers")}</h1>
           <p className="text-xs text-slate-500">
-            跨渠道身份合流后的统一客户档案，包含买家当地时区与生命周期阶段。
+            {bi("跨渠道身份合流后的统一客户档案，包含买家当地时区与生命周期阶段。", "Unified customer profiles after cross-channel identity merge, including buyer local time and lifecycle stage.")}
           </p>
         </div>
 
@@ -39,15 +41,15 @@ export default function CrmCustomersPage() {
           </p>
         )}
 
-        <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table data-testid="customers-table" className="w-full text-left text-xs">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+            <table data-testid="customers-table" className="erp-table">
               <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
                 <tr>
-                  <th className="px-3 py-2.5">客户</th>
-                  <th className="px-3 py-2.5">类型</th>
-                  <th className="px-3 py-2.5">国家 / 时区</th>
-                  <th className="px-3 py-2.5">LTV</th>
+                  <th>{bi("客户", "Customer")}</th>
+                  <th>{bi("类型", "Type")}</th>
+                  <th>{bi("国家 / 时区", "Country / timezone")}</th>
+                  <th className="text-right">LTV</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -57,7 +59,7 @@ export default function CrmCustomersPage() {
                     data-testid={`customer-row-${customer.id}`}
                     onClick={() => setSelectedId(customer.id)}
                     className={`cursor-pointer ${
-                      selected?.id === customer.id ? "bg-indigo-50" : "hover:bg-slate-50"
+                      selected?.id === customer.id ? "bg-blue-50" : "hover:bg-slate-50"
                     }`}
                   >
                     <td className="px-3 py-2">
@@ -76,7 +78,7 @@ export default function CrmCustomersPage() {
                 {customers.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-3 py-6 text-center text-slate-400">
-                      {customersQuery.isLoading ? "加载中…" : "暂无客户"}
+                      {customersQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无客户", "No customers")}
                     </td>
                   </tr>
                 )}
@@ -86,42 +88,42 @@ export default function CrmCustomersPage() {
 
           <aside
             data-testid="customer-detail"
-            className="rounded-lg border border-slate-200 bg-white p-4 text-xs"
+            className="erp-card p-4 text-[13px]"
           >
-            <h2 className="text-sm font-semibold text-slate-900">客户详情</h2>
+            <h2 className="text-sm font-semibold text-slate-900">{bi("客户详情", "Customer detail")}</h2>
             {selected ? (
               <dl className="mt-2 space-y-1.5 text-slate-600">
                 <div className="flex justify-between gap-2">
-                  <dt>姓名</dt>
+                  <dt>{bi("姓名", "Name")}</dt>
                   <dd className="font-medium text-slate-800">{selected.display_name}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt>邮箱</dt>
+                  <dt>{bi("邮箱", "Email")}</dt>
                   <dd className="truncate">{selected.primary_email ?? "—"}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt>电话</dt>
+                  <dt>{bi("电话", "Phone")}</dt>
                   <dd>{selected.primary_phone_e164 ?? "—"}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt>语言</dt>
+                  <dt>{bi("语言", "Language")}</dt>
                   <dd>{selected.preferred_language}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt>生命周期</dt>
+                  <dt>{bi("生命周期", "Lifecycle")}</dt>
                   <dd>{selected.lifecycle_stage}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt>当地时间</dt>
+                  <dt>{bi("当地时间", "Local time")}</dt>
                   <dd>{selected.buyer_local_time.formatted_time ?? "—"}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt>休息时段</dt>
-                  <dd>{selected.buyer_local_time.is_quiet_hours ? "是" : "否"}</dd>
+                  <dt>{bi("休息时段", "Quiet hours")}</dt>
+                  <dd>{selected.buyer_local_time.is_quiet_hours ? bi("是", "Yes") : bi("否", "No")}</dd>
                 </div>
               </dl>
             ) : (
-              <p className="mt-2 text-slate-400">选择左侧客户查看详情</p>
+              <p className="mt-2 text-slate-400">{bi("选择左侧客户查看详情", "Select a customer to see details")}</p>
             )}
           </aside>
         </div>

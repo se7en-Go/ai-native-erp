@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -15,6 +17,7 @@ import {
 const TYPES: FollowupCreate["followup_type"][] = ["email", "call", "meeting", "note"];
 
 export default function CrmFollowupsPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [customerId, setCustomerId] = useState("");
   const [followupType, setFollowupType] = useState<FollowupCreate["followup_type"]>("email");
@@ -46,10 +49,10 @@ export default function CrmFollowupsPage() {
 
   return (
     <AppShell currentPath="/crm/followups" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="erp-page space-y-4">
         <div>
-          <h1 className="text-lg font-bold text-slate-900">跟进记录 / Follow-ups</h1>
-          <p className="text-xs text-slate-500">按客户时间线记录邮件、电话、会议与内部备注。</p>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("跟进记录", "Follow-ups")}</h1>
+          <p className="mt-1 text-[13px] leading-6 text-slate-500">{bi("按客户时间线记录邮件、电话、会议与内部备注。", "Log emails, calls, meetings and internal notes on the customer timeline.")}</p>
         </div>
 
         <form
@@ -64,7 +67,7 @@ export default function CrmFollowupsPage() {
               opportunity_id: null,
             });
           }}
-          className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_140px_2fr_auto]"
+          className="erp-card grid gap-2 p-3 sm:grid-cols-[1fr_140px_2fr_auto]"
         >
           <select
             aria-label="Customer"
@@ -104,9 +107,9 @@ export default function CrmFollowupsPage() {
             type="submit"
             data-testid="followup-submit"
             disabled={!effectiveCustomer || summary.trim().length === 0 || createFollowup.isPending}
-            className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+            className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
           >
-            新增跟进
+            {bi("新增跟进", "Add follow-up")}
           </button>
           {createFollowup.isError && (
             <p role="alert" className="sm:col-span-4 text-xs text-rose-700">
@@ -120,7 +123,7 @@ export default function CrmFollowupsPage() {
             <li
               key={followup.id}
               data-testid={`followup-${followup.id}`}
-              className="rounded-lg border border-slate-200 bg-white p-3 text-xs"
+              className="erp-card p-3 text-[13px]"
             >
               <div className="flex items-center justify-between text-[10px] uppercase text-slate-400">
                 <span>{followup.followup_type}</span>
@@ -128,15 +131,15 @@ export default function CrmFollowupsPage() {
               </div>
               <p className="mt-1 text-slate-700">{followup.summary}</p>
               {followup.next_action_at && (
-                <p className="mt-1 text-[10px] text-indigo-600">
-                  下一步：{new Date(followup.next_action_at).toLocaleString()}
+                <p className="mt-1 text-[10px] text-blue-600">
+                  {bi("下一步", "Next action")}：{new Date(followup.next_action_at).toLocaleString()}
                 </p>
               )}
             </li>
           ))}
           {followups.length === 0 && (
             <li className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
-              {followupsQuery.isLoading ? "加载中…" : "暂无跟进记录"}
+              {followupsQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无跟进记录", "No follow-ups yet")}
             </li>
           )}
         </ol>

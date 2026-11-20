@@ -33,7 +33,7 @@ export function EmployeeCardGrid({ employees, metrics, onToggleEnabled, pendingE
       <section aria-label="数字员工关键指标" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {cards.map(({ label, value, icon: Icon, tone }) => (
           <div key={label} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-600"><Icon aria-hidden="true" size={18} className="text-indigo-600" />{label}</div>
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-600"><Icon aria-hidden="true" size={18} className="text-blue-600" />{label}</div>
             <div className={tone ? "inline-block rounded-full border px-2.5 py-1 text-xs font-semibold " + tone : "break-all text-lg font-bold tabular-nums"}>{value}</div>
           </div>
         ))}
@@ -57,13 +57,13 @@ export function EmployeeCardGrid({ employees, metrics, onToggleEnabled, pendingE
           return (
             <article key={employee.id} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
               <div className="flex items-start gap-3">
-                <div aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-xl bg-indigo-50 text-xl text-indigo-700">{employee.avatar_emoji || <Bot size={23} />}</div>
+                <div aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-xl text-blue-700">{employee.avatar_emoji || <Bot size={23} />}</div>
                 <div className="min-w-0 flex-1 break-words">
                   <h3 className="font-bold">{employee.display_name}</h3>
                   <p className="text-sm text-slate-600">{employee.role_title} · {employee.department}</p>
                 </div>
                 <input type="checkbox" role="switch" aria-label={"启用" + employee.display_name} checked={employee.is_enabled}
-                  disabled={!canManage || pendingEmployeeIds.includes(employee.id)} onChange={(event) => onToggleEnabled(employee.id, event.target.checked)} className="mt-2 size-4 accent-indigo-600" />
+                  disabled={!canManage || pendingEmployeeIds.includes(employee.id)} onChange={(event) => onToggleEnabled(employee.id, event.target.checked)} className="mt-2 size-4 accent-blue-600" />
               </div>
               <p className="mt-4 line-clamp-2 min-h-10 text-sm text-slate-700">{employee.description}</p>
               <footer className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
@@ -71,7 +71,7 @@ export function EmployeeCardGrid({ employees, metrics, onToggleEnabled, pendingE
                   <span className={"rounded-full border px-2 py-0.5 font-semibold " + (autonomy?.tone ?? "")}>{autonomy?.badge ?? "—"}</span>
                   <span>{formatCount(employee.tool_count)} 个工具</span>
                 </div>
-                <button type="button" aria-label={"查看" + employee.display_name + "详情"} onClick={() => setDetailId(employee.id)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">
+                <button type="button" aria-label={"查看" + employee.display_name + "详情"} onClick={() => setDetailId(employee.id)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-blue-700 hover:bg-blue-50">
                   详情 <ChevronRight aria-hidden="true" size={15} />
                 </button>
               </footer>
@@ -81,7 +81,7 @@ export function EmployeeCardGrid({ employees, metrics, onToggleEnabled, pendingE
       </div>
       {detail && (
         <WorkforceDialog title={detail.display_name} closeLabel="关闭详情" drawer onClose={() => setDetailId(null)}>
-          <p className="font-semibold text-indigo-700">{detail.role_title} · {detail.department}</p>
+          <p className="font-semibold text-blue-700">{detail.role_title} · {detail.department}</p>
           <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700">{detail.description}</p>
           <dl className="mt-5 space-y-3 rounded-xl bg-slate-50 p-4 text-sm">
             <div><dt className="font-semibold">当前状态</dt><dd>{detail.is_enabled ? "启用中" : "已停用"}</dd></div>
