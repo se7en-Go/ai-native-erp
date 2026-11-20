@@ -168,6 +168,7 @@ export default function B2bQuotesPage() {
             hint={bi("覆盖挖掘到谈判的全部阶段", "Spans discovery through negotiating")}
           />
           <BentoStatCard
+            variant="hero"
             label={bi("在谈金额", "Open pipeline value")}
             value={formatMoney(openValue.toFixed(2), "USD")}
             icon={CircleDollarSign}

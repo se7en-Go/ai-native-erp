@@ -46,10 +46,10 @@ export function Switch({
       data-testid={testId}
       disabled={disabled}
       onClick={() => !disabled && onCheckedChange(!checked)}
-      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 ${trackSize} ${
+      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 ${trackSize} ${
         checked
-          ? "bg-blue-600 shadow-[inset_0_1px_2px_rgba(15,23,42,0.18)]"
-          : "bg-slate-200 hover:bg-slate-300"
+          ? "bg-emerald-600 shadow-[inset_0_1px_2px_rgba(6,78,59,0.28)]"
+          : "bg-stone-300 hover:bg-stone-400/80"
       }`}
     >
       <span

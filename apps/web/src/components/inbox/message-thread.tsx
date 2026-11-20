@@ -137,7 +137,7 @@ export function MessageThread({
                   isInternalNote
                     ? "border-amber-200 bg-amber-50/90 text-amber-950 shadow-[0_1px_2px_rgba(180,83,9,0.08)]"
                     : isOutbound
-                      ? "rounded-br-md border-blue-600 bg-blue-600 text-white shadow-[0_4px_14px_-6px_rgba(37,99,235,0.6)]"
+                      ? "rounded-br-md border-[#18181B] bg-[#18181B] text-[#FAFAF9] shadow-[0_6px_18px_-8px_rgba(24,24,27,0.55)]"
                       : "rounded-bl-md border-slate-200 bg-white text-slate-900 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.18)]"
                 }`}
               >

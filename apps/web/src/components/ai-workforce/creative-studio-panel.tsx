@@ -79,7 +79,7 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
     >
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#18181B] to-[#065F46] text-white shadow-md shadow-emerald-950/20">
             <WandSparkles size={18} aria-hidden="true" />
           </span>
           <div className="min-w-0">

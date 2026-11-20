@@ -56,16 +56,16 @@ const CHANNEL_LABEL: Record<string, { zh: string; en: string }> = {
 };
 
 const CHANNEL_COLOR: Record<string, string> = {
-  web_livechat: "#2563EB",
-  whatsapp: "#10B981",
-  email: "#7C3AED",
-  facebook_messenger: "#0EA5E9",
+  web_livechat: "#059669",
+  whatsapp: "#0D9488",
+  email: "#18181B",
+  facebook_messenger: "#D97706",
   instagram_dm: "#E11D48",
-  telegram: "#F59E0B",
-  shopify: "#0F172A",
+  telegram: "#047857",
+  shopify: "#57534E",
 };
 
-const FALLBACK_COLORS = ["#2563EB", "#10B981", "#7C3AED", "#F59E0B", "#0EA5E9", "#E11D48"];
+const FALLBACK_COLORS = ["#059669", "#18181B", "#0D9488", "#D97706", "#E11D48", "#57534E"];
 
 const WORKBENCH_LINKS = [
   {
@@ -177,18 +177,18 @@ export default function DashboardPage() {
     <AppShell currentPath="/dashboard" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
       <div className="erp-page space-y-4">
         {/* ── 顶部问候与态势横幅 ───────────────────────────────── */}
-        <section className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_10px_30px_-18px_rgba(15,23,42,0.18)]">
+        <section className="relative overflow-hidden rounded-[20px] border border-[#E5E2DC] bg-white/95 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_2px_rgba(24,24,27,0.05),0_10px_26px_-14px_rgba(24,24,27,0.09)]">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -top-24 -right-16 h-56 w-56 rounded-full bg-blue-100/50 blur-3xl"
+            className="pointer-events-none absolute -top-24 -right-16 h-56 w-56 rounded-full bg-emerald-200/35 blur-3xl"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-emerald-100/40 blur-3xl"
+            className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-amber-100/40 blur-3xl"
           />
           <div className="relative flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3.5">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/25">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#18181B] to-[#065F46] text-white shadow-lg shadow-emerald-950/20">
                 <Layers className="h-6 w-6" aria-hidden="true" />
               </span>
               <div className="min-w-0">
@@ -281,6 +281,7 @@ export default function DashboardPage() {
 
           {showFinancials ? (
             <BentoStatCard
+              variant="hero"
               label={bi("净贡献毛利", "Net contribution margin")}
               value={formatMoney(netMarginTotal, primaryFinancial?.currency ?? "CNY")}
               icon={Sparkles}

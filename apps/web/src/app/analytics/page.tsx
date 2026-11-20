@@ -34,16 +34,16 @@ const FUNNEL_STAGE_LABEL: Record<string, { zh: string; en: string }> = {
 };
 
 const CHANNEL_COLOR: Record<string, string> = {
-  web_livechat: "#2563EB",
-  whatsapp: "#10B981",
-  email: "#7C3AED",
-  facebook_messenger: "#0EA5E9",
+  web_livechat: "#059669",
+  whatsapp: "#0D9488",
+  email: "#18181B",
+  facebook_messenger: "#D97706",
   instagram_dm: "#E11D48",
-  telegram: "#F59E0B",
-  shopify: "#0F172A",
+  telegram: "#047857",
+  shopify: "#57534E",
 };
 
-const FALLBACK_COLORS = ["#2563EB", "#10B981", "#7C3AED", "#F59E0B", "#0EA5E9", "#E11D48"];
+const FALLBACK_COLORS = ["#059669", "#18181B", "#0D9488", "#D97706", "#E11D48", "#57534E"];
 
 export default function AnalyticsPage() {
   const { bi, locale } = useI18n();

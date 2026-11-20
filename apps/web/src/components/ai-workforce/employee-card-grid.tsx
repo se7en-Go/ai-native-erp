@@ -75,6 +75,7 @@ export function EmployeeCardGrid({
           hint="租户内配置的数字员工"
         />
         <BentoStatCard
+          variant="hero"
           label="启用中"
           value={formatCount(metrics.enabledEmployees)}
           icon={ToggleRight}

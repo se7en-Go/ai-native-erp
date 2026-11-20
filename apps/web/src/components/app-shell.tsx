@@ -65,25 +65,26 @@ export function AppShell({
   const canCreateQuote = !role || canAccessRoute(role, "/b2b/quotes");
 
   return (
-    <div className="flex min-h-screen bg-[#F1F4F9] text-slate-950">
+    <div className="flex min-h-screen bg-[#F4F2EE] text-zinc-950">
       <aside
         data-testid="sidebar-nav"
         data-collapsed={collapsed ? "true" : "false"}
-        className={`flex shrink-0 flex-col border-r border-slate-200/90 bg-[#F6F8FB] text-slate-800 transition-[width] duration-200 ${
+        className={`flex shrink-0 flex-col border-r border-[#E5E2DC] bg-[#FAF8F5]/95 text-stone-800 backdrop-blur-md transition-[width] duration-200 ${
           collapsed ? "w-16" : "w-64"
         }`}
       >
-        <div className="flex h-16 items-center justify-between gap-2 border-b border-slate-200/80 px-3.5">
+        <div className="flex h-16 items-center justify-between gap-2 border-b border-[#ECE9E2] px-3.5">
           {!collapsed && (
             <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-[13px] font-bold text-white shadow-sm shadow-blue-600/20">
+              <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#18181B] text-[13px] font-bold text-[#FAFAF9] shadow-sm">
                 QZ
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#FAF8F5]" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-[14px] font-bold tracking-tight text-slate-950">
+                <span className="block truncate text-[14px] font-bold tracking-tight text-zinc-950">
                   {t("brandTitle")}
                 </span>
-                <span className="block truncate text-[11px] font-medium text-slate-500">
+                <span className="block truncate text-[11px] font-medium text-stone-500">
                   {t("brandSubtitle")}
                 </span>
               </span>
@@ -93,7 +94,7 @@ export function AppShell({
             type="button"
             data-testid="sidebar-collapse-btn"
             onClick={() => setCollapsed((prev) => !prev)}
-            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-950"
+            className="rounded-lg p-1.5 text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-zinc-950"
             aria-label={bi("收起或展开侧边栏", "Toggle sidebar")}
           >
             {collapsed ? (
@@ -120,12 +121,12 @@ export function AppShell({
                         [section.id]: !prev[section.id],
                       }))
                     }
-                    className="mb-1 flex w-full items-center gap-1 rounded-md px-2.5 py-1 text-[11.5px] font-semibold tracking-wide text-slate-500 transition-colors hover:text-slate-900"
+                    className="mb-1 flex w-full items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold tracking-wider text-stone-500 uppercase transition-colors hover:text-zinc-900"
                   >
                     {sectionCollapsed ? (
-                      <ChevronRight className="h-3 w-3 text-slate-400" />
+                      <ChevronRight className="h-3 w-3 text-stone-400" />
                     ) : (
-                      <ChevronDown className="h-3 w-3 text-slate-400" />
+                      <ChevronDown className="h-3 w-3 text-stone-400" />
                     )}
                     {t(section.labelKey)}
                   </button>
@@ -143,14 +144,16 @@ export function AppShell({
                           title={collapsed ? t(item.labelKey) : undefined}
                           className={`group relative flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-[13.5px] transition-all duration-150 ${
                             active
-                              ? "bg-[#EBF2FF] font-semibold text-[#1D4ED8] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.14)]"
-                              : "font-medium text-slate-700 hover:bg-slate-200/60 hover:text-slate-950"
+                              ? "bg-[#ECFDF5] font-semibold text-[#065F46] shadow-[inset_0_0_0_1px_rgba(5,150,105,0.22)]"
+                              : "font-medium text-stone-700 hover:bg-[#EFECE6] hover:text-zinc-950"
                           }`}
                         >
                           <span className="flex min-w-0 items-center gap-2.5">
                             <Icon
                               className={`h-4 w-4 shrink-0 transition-colors ${
-                                active ? "text-blue-600" : "text-slate-500 group-hover:text-slate-900"
+                                active
+                                  ? "text-emerald-700"
+                                  : "text-stone-500 group-hover:text-zinc-900"
                               }`}
                             />
                             {!collapsed && <span className="truncate">{t(item.labelKey)}</span>}
@@ -160,12 +163,12 @@ export function AppShell({
                             pendingProposalsCount > 0 ? (
                             <span
                               data-testid="sidebar-pending-proposals-badge"
-                              className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-bold tabular-nums text-white shadow-xs"
+                              className="rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-bold tabular-nums text-white shadow-xs"
                             >
                               {pendingProposalsCount}
                             </span>
                           ) : !collapsed && active ? (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600" />
                           ) : null}
                         </Link>
                       );
@@ -177,19 +180,19 @@ export function AppShell({
           })}
         </nav>
 
-        <div className="border-t border-slate-200/90 bg-white/70 p-3">
+        <div className="border-t border-[#E5E2DC] bg-white/80 p-3">
           {!collapsed && principal && (
             <div className="mb-2.5 flex items-center gap-2.5">
-              <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-600 text-[13px] font-bold text-white shadow-xs">
+              <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#18181B] text-[13px] font-bold text-[#FAFAF9] shadow-xs">
                 {userInitial}
-                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-semibold text-slate-900">
+                <div className="truncate text-[12.5px] font-semibold text-zinc-900">
                   {principal.email}
                 </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
-                  <span className="text-emerald-600">{bi("在线", "Online")}</span>
+                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-stone-500">
+                  <span className="text-emerald-700">{bi("在线", "Online")}</span>
                   <span>·</span>
                   <span>{roleLabel}</span>
                 </div>
@@ -199,90 +202,92 @@ export function AppShell({
           <button
             type="button"
             onClick={() => void logout()}
-            className={`flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 ${
+            className={`flex w-full items-center gap-2 rounded-xl border border-[#E5E2DC] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-stone-700 transition-colors hover:border-stone-300 hover:bg-[#FAF8F5] hover:text-zinc-950 ${
               collapsed ? "justify-center" : ""
             }`}
             aria-label={t("logout")}
           >
-            <LogOut className="h-3.5 w-3.5 text-slate-500" />
+            <LogOut className="h-3.5 w-3.5 text-stone-500" />
             {!collapsed && <span>{t("logout")}</span>}
           </button>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-slate-200/90 bg-white/90 px-4 backdrop-blur-md lg:px-6">
-          <div className="flex min-w-0 items-center gap-2.5 text-[13.5px]">
-            <span className="hidden font-medium text-slate-500 sm:inline">{sectionTitle}</span>
-            <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-slate-400 sm:block" />
-            <span className="truncate font-bold text-slate-950">{pageTitle}</span>
-            <span className="ml-1 hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-slate-700 xl:inline-flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span>USD/CNY</span>
-              <span className="text-emerald-700">7.1200</span>
-              <TrendingUp className="h-3 w-3 text-emerald-600" />
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              data-testid="open-command-palette-btn"
-              onClick={palette.toggle}
-              aria-label={bi("打开全局搜索", "Open global search")}
-              className="flex items-center gap-2.5 rounded-full border border-slate-200/90 bg-slate-100/80 px-3.5 py-1.5 text-[12.5px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-950"
-            >
-              <Search className="h-3.5 w-3.5 text-slate-500" />
-              <span className="hidden md:inline">{t("commandPaletteTitle")}</span>
-              <kbd className="hidden rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 md:inline">
-                ⌘K
-              </kbd>
-            </button>
-
-            <button
-              type="button"
-              data-testid="locale-toggle-btn"
-              onClick={toggleLocale}
-              aria-label={bi("切换语言", "Switch language")}
-              className="inline-flex items-center rounded-full border border-slate-200/90 bg-slate-100/90 p-0.5 text-[12px] font-semibold transition-colors hover:border-slate-300"
-            >
-              <span
-                className={`rounded-full px-2.5 py-1 transition-all ${
-                  locale === "zh"
-                    ? "bg-white text-slate-950 shadow-xs"
-                    : "text-slate-500"
-                }`}
-              >
-                中
+        <div className="sticky top-0 z-30 px-4 pt-3 lg:px-7">
+          <header className="flex h-14 items-center justify-between gap-3 rounded-2xl border border-[#E5E2DC] bg-white/85 px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_6px_22px_-12px_rgba(24,24,27,0.14)] backdrop-blur-xl">
+            <div className="flex min-w-0 items-center gap-2 text-[13.5px]">
+              <span className="hidden font-medium text-stone-500 sm:inline">{sectionTitle}</span>
+              <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-stone-400 sm:block" />
+              <span className="truncate font-bold text-zinc-950">{pageTitle}</span>
+              <span className="ml-1.5 hidden items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/80 px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-emerald-900 xl:inline-flex">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span>USD/CNY</span>
+                <span className="text-emerald-700">7.1200</span>
+                <TrendingUp className="h-3 w-3 text-emerald-600" />
               </span>
-              <span
-                className={`rounded-full px-2.5 py-1 transition-all ${
-                  locale === "en"
-                    ? "bg-white text-slate-950 shadow-xs"
-                    : "text-slate-500"
-                }`}
-              >
-                EN
-              </span>
-            </button>
+            </div>
 
-            {canCreateQuote && (
-              <Link
-                href="/b2b/quotes"
-                className="hidden items-center gap-1.5 rounded-full bg-blue-600 px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-xs shadow-blue-600/20 transition-colors hover:bg-blue-700 sm:inline-flex"
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="open-command-palette-btn"
+                onClick={palette.toggle}
+                aria-label={bi("打开全局搜索", "Open global search")}
+                className="flex items-center gap-2.5 rounded-full border border-[#E5E2DC] bg-[#F7F5F0] px-3.5 py-1.5 text-[12.5px] font-medium text-stone-600 transition-colors hover:border-stone-300 hover:bg-white hover:text-zinc-950"
               >
-                <Plus className="h-3.5 w-3.5" />
-                <span>{bi("新建报价 / PI", "New quote / PI")}</span>
-              </Link>
-            )}
+                <Search className="h-3.5 w-3.5 text-stone-500" />
+                <span className="hidden md:inline">{t("commandPaletteTitle")}</span>
+                <kbd className="hidden rounded-md border border-[#E5E2DC] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-stone-500 md:inline">
+                  ⌘K
+                </kbd>
+              </button>
 
-            {roleLabel && (
-              <span className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700 2xl:inline-flex">
-                {roleLabel}
-              </span>
-            )}
-          </div>
-        </header>
+              <button
+                type="button"
+                data-testid="locale-toggle-btn"
+                onClick={toggleLocale}
+                aria-label={bi("切换语言", "Switch language")}
+                className="inline-flex items-center rounded-full border border-[#E5E2DC] bg-[#F7F5F0] p-0.5 text-[12px] font-semibold transition-colors hover:border-stone-300"
+              >
+                <span
+                  className={`rounded-full px-2.5 py-1 transition-all ${
+                    locale === "zh"
+                      ? "bg-[#18181B] text-[#FAFAF9] shadow-xs"
+                      : "text-stone-500"
+                  }`}
+                >
+                  中
+                </span>
+                <span
+                  className={`rounded-full px-2.5 py-1 transition-all ${
+                    locale === "en"
+                      ? "bg-[#18181B] text-[#FAFAF9] shadow-xs"
+                      : "text-stone-500"
+                  }`}
+                >
+                  EN
+                </span>
+              </button>
+
+              {canCreateQuote && (
+                <Link
+                  href="/b2b/quotes"
+                  className="hidden items-center gap-1.5 rounded-full bg-[#18181B] px-3.5 py-1.5 text-[12.5px] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46] sm:inline-flex"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>{bi("新建报价 / PI", "New quote / PI")}</span>
+                </Link>
+              )}
+
+              {roleLabel && (
+                <span className="hidden items-center gap-1.5 rounded-full border border-[#E5E2DC] bg-[#FAF8F5] px-3 py-1.5 text-[12px] font-semibold text-stone-700 2xl:inline-flex">
+                  {roleLabel}
+                </span>
+              )}
+            </div>
+          </header>
+        </div>
 
         <main className="min-w-0 flex-1">
           {isLoading ? (

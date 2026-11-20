@@ -68,6 +68,7 @@ export default function FinancePage() {
               testId="finance-kpi-revenue"
             />
             <BentoStatCard
+              variant="hero"
               label={bi("净贡献毛利", "Net contribution margin")}
               value={formatMoney(summary.total_net_margin_base, summary.base_currency)}
               icon={TrendingUp}
