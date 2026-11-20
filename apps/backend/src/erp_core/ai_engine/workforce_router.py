@@ -14,8 +14,10 @@ from erp_core.ai_engine.workforce_schemas import (
     CreativeAssetRead,
     CreativeAssetType,
     CreativeAssetUpdate,
+    DailyPatrolBriefRead,
     InboxAssistRequest,
     InboxAssistResponse,
+    PatrolDispatchRead,
     QuickReplyCreate,
     QuickReplyRead,
     WorkforceMatrixResponse,
@@ -40,6 +42,19 @@ PeopleManager = Annotated[
 DeskAgent = Annotated[
     CurrentPrincipal,
     Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.AGENT)),
+]
+# Finance may read the patrol brief; financial exposure is already role-filtered in the service.
+PatrolReader = Annotated[
+    CurrentPrincipal,
+    Depends(
+        require_roles(
+            UserRole.OWNER,
+            UserRole.ADMIN,
+            UserRole.MANAGER,
+            UserRole.AGENT,
+            UserRole.FINANCE,
+        )
+    ),
 ]
 Db = Annotated[AsyncSession, Depends(get_tenant_db)]
 Limit = Annotated[int, Query(ge=1, le=100)]
@@ -117,6 +132,31 @@ async def update_employee(
 ) -> AiEmployeeRead:
     return await service.update_employee(
         session, principal.tenant_id, employee_id, body, actor_id=principal.user_id
+    )
+
+
+@workforce_router.get("/patrol/daily-brief")
+async def daily_patrol_brief(
+    session: Db, principal: PatrolReader, service: Service
+) -> DailyPatrolBriefRead:
+    """Live operations patrol computed from tenant-scoped SQL, never hard-coded numbers."""
+    return await service.daily_patrol_brief(
+        session, principal.tenant_id, role=principal.role, user_id=principal.user_id
+    )
+
+
+@workforce_router.post("/patrol/dispatch/{employee_code}")
+async def dispatch_patrol_employee(
+    employee_code: str, session: Db, principal: DeskAgent, service: Service
+) -> PatrolDispatchRead:
+    """Dispatch a registered digital employee onto live ERP rows for one patrol action."""
+    return await service.dispatch_patrol(
+        session,
+        principal.tenant_id,
+        employee_code,
+        role=principal.role,
+        user_id=principal.user_id,
+        actor_id=principal.user_id,
     )
 
 

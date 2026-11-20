@@ -27,6 +27,7 @@ from erp_core.shared.enums import LeadStatus
 from erp_core.shared.errors import AppError
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.shared.query import page_of, record_not_found
+from erp_core.social.marketing_playbooks import marketing_playbooks
 from erp_core.social.models import SocialAccount, SocialMention, SocialPost
 from erp_core.social.playbooks import PLAYBOOKS, playbook_for, supports_scheduled_publish
 from erp_core.social.schemas import (
@@ -40,6 +41,7 @@ from erp_core.social.schemas import (
     PostPublish,
     PostRead,
     PostUpdate,
+    SocialPlaybookItem,
     SocialSummary,
 )
 
@@ -132,6 +134,29 @@ class SocialService:
                 compliance_note=item.compliance_note,
             )
             for item in PLAYBOOKS
+        ]
+
+    def playbooks(self, region: str = "all") -> list[SocialPlaybookItem]:
+        """Bilingual operating cards; the API claim is derived from the locked publish mode."""
+        return [
+            SocialPlaybookItem(
+                platform=item.platform,
+                region=item.region,
+                name_zh=item.name_zh,
+                name_en=item.name_en,
+                category_zh=item.category_zh,
+                category_en=item.category_en,
+                audience_zh=item.audience_zh,
+                audience_en=item.audience_en,
+                lead_funnel_zh=item.lead_funnel_zh,
+                lead_funnel_en=item.lead_funnel_en,
+                best_practices_zh=list(item.best_practices_zh),
+                best_practices_en=list(item.best_practices_en),
+                official_api_supported=supports_scheduled_publish(item.platform),
+                compliance_note_zh=item.compliance_note_zh,
+                compliance_note_en=item.compliance_note_en,
+            )
+            for item in marketing_playbooks(region)
         ]
 
     # -- summary -----------------------------------------------------------

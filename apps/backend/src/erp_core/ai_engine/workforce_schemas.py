@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from erp_core.shared.enums import AiCapability, AutonomyLevel, ProposalType
 
@@ -22,6 +22,7 @@ PROPOSAL_TYPE_LABELS = _PROPOSAL_TYPE_LABELS
 
 PROPOSALS_HREF = "/ai/proposals"
 CAPABILITIES_HREF = "/ai/capabilities"
+PatrolSeverity = Literal["high", "medium", "info"]
 
 
 class AiEmployeeCreate(BaseModel):
@@ -38,6 +39,24 @@ class AiEmployeeCreate(BaseModel):
     is_enabled: bool = True
     tool_count: int = Field(default=0, ge=0, le=200)
     system_persona: str | None = Field(default=None, max_length=4000)
+    # Optional narrowing request. Tool grants follow the declared capability scope, so every
+    # requested tool must already be covered by `capability_codes`; the effective grant set is
+    # echoed back in `AiEmployeeRead.allowed_tools` and never silently widened or shrunk.
+    allowed_tools: list[str] | None = Field(default=None, max_length=32)
+
+    @field_validator("allowed_tools")
+    @classmethod
+    def _tools_not_blank(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned: list[str] = []
+        for tool in value:
+            name = tool.strip()
+            if not name:
+                raise ValueError("tool names must not be blank")
+            if name not in cleaned:
+                cleaned.append(name)
+        return cleaned
 
 
 class AiEmployeeUpdate(BaseModel):
@@ -71,6 +90,8 @@ class AiEmployeeRead(BaseModel):
     system_persona: str | None
     created_at: datetime
     updated_at: datetime
+    # Real tool grant: the deterministic union of tools implied by `capability_codes`.
+    allowed_tools: list[str] = Field(default_factory=list)
     # Real activity: ai_proposals created for this employee's capabilities in the last 7 days.
     actions_7d: int = 0
     # Real open work: ai_proposals still pending review for those capabilities.
@@ -118,6 +139,57 @@ class WorkforceMatrixResponse(BaseModel):
     l2_auto: list[AutoExecutedCapability]
     l1_pending: list[PendingProposalGroup]
     l0_locked: list[LockedGuardrail]
+
+
+class PatrolAlertItem(BaseModel):
+    """One live, tenant-scoped patrol finding with the employee who owns the follow-up."""
+
+    code: str
+    severity: PatrolSeverity
+    title_zh: str
+    title_en: str
+    detail_zh: str
+    detail_en: str
+    employee_code: str
+    employee_name: str
+    action_href: str
+    count: int
+
+
+class DailyPatrolBriefRead(BaseModel):
+    generated_at: datetime
+    health_score: int = Field(ge=0, le=100)
+    summary_zh: str
+    summary_en: str
+    metrics: dict[str, int]
+    alerts: list[PatrolAlertItem]
+
+
+class PatrolFindingItem(BaseModel):
+    """A single live SQL finding returned by a dispatcher run."""
+
+    code: str
+    title_zh: str
+    title_en: str
+    detail_zh: str
+    detail_en: str
+    count: int
+    action_href: str
+    samples: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class PatrolDispatchRead(BaseModel):
+    employee_code: str
+    employee_name: str
+    employee_role_title: str
+    generated_at: datetime
+    action_summary_zh: str
+    action_summary_en: str
+    metrics: dict[str, int]
+    findings: list[PatrolFindingItem]
+    # A real `task_reminders` follow-up row when the dispatched action is actionable.
+    created_task_id: UUID | None = None
+    recommended_href: str
 
 
 class InboxAssistAction(StrEnum):
