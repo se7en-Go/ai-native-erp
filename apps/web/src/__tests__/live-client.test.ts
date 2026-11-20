@@ -6,7 +6,13 @@
 // captures { url, method, bodyText } per call instead of reading mock.calls.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  connectEmailChannel,
+  connectTelegramChannel,
   convertQuoteToOrder,
+  disconnectChannelAccount,
+  fetchTeamMembers,
+  inviteTeamMember,
+  updateChannelOwnership,
   fetchChannelAccounts,
   fetchChannelConsents,
   fetchChannelDlq,
@@ -24,6 +30,7 @@ import {
   getVariantMappings,
   liveCheckSku,
   mapChannelParam,
+  mapConversation,
   mapInboxMessage,
   mergeCustomers,
   replayDlqEvent,
@@ -50,7 +57,7 @@ interface CapturedCall {
   bodyText: string | null;
 }
 
-function stubFetch(handler: (url: string) => Response) {
+function stubFetch(handler: (url: string, method?: string) => Response) {
   const captured: CapturedCall[] = [];
   const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (input instanceof Request) {
@@ -66,7 +73,8 @@ function stubFetch(handler: (url: string) => Response) {
         bodyText: typeof init?.body === "string" ? init.body : null,
       });
     }
-    return handler(captured[captured.length - 1].url);
+    const last = captured[captured.length - 1];
+    return handler(last.url, last.method);
   });
   vi.stubGlobal("fetch", mock);
   return { mock, captured };
@@ -648,6 +656,178 @@ describe("live-client (generated SDK over the BFF)", () => {
     ]);
     expect(JSON.parse(captured[1].bodyText ?? "")).toEqual({
       scenario_id: "b2c_wismo", message: "where is my order?",
+    });
+  });
+
+  it("maps conversation ownership fields when the backend sends them", () => {
+    const summary = mapConversation({
+      ...CONVERSATION_PAGE.items[0],
+      assigned_user_id: "u-2",
+      assigned_user_name: "李明伦",
+      channel_account_display_name: "qzled_sales_bot",
+      channel_visibility_scope: "personal",
+    } as unknown as Parameters<typeof mapConversation>[0]);
+
+    expect(summary).toMatchObject({
+      id: "conv-1",
+      assigned_user_id: "u-2",
+      assigned_user_name: "李明伦",
+      channel_account_display_name: "qzled_sales_bot",
+      channel_visibility_scope: "personal",
+    });
+
+    const plain = mapConversation(
+      CONVERSATION_PAGE.items[0] as unknown as Parameters<typeof mapConversation>[0],
+    );
+    expect(plain.assigned_user_id).toBeNull();
+    expect(plain.channel_visibility_scope).toBeNull();
+  });
+
+  it("binds Telegram with only a bot token and returns the resolved bot username", async () => {
+    const { captured } = stubFetch(() =>
+      jsonResponse({
+        channel_account_id: "acc-tg",
+        external_account_id: "7012345678",
+        bot_username: "qzled_bot",
+        visibility_scope: "personal",
+        owner_user_id: "u-2",
+      }),
+    );
+
+    const result = await connectTelegramChannel({
+      bot_token: "7012345678:AAH-demo_token_value_1234567890",
+      visibility_scope: "personal",
+      owner_user_id: "u-2",
+    });
+
+    expect(result).toMatchObject({
+      channel_account_id: "acc-tg",
+      external_account_id: "7012345678",
+      bot_username: "qzled_bot",
+      visibility_scope: "personal",
+      owner_user_id: "u-2",
+    });
+    expect(new URL(captured[0].url).pathname).toBe(
+      "/api/bff/api/v1/channels/telegram/connect",
+    );
+    // display_name 留空时不能下发空字符串，交给后端 getMe 自动回填。
+    expect(JSON.parse(captured[0].bodyText ?? "")).toEqual({
+      bot_token: "7012345678:AAH-demo_token_value_1234567890",
+      visibility_scope: "personal",
+      owner_user_id: "u-2",
+    });
+  });
+
+  it("connects email, reassigns ownership and disconnects through the locked BFF paths", async () => {
+    const { captured } = stubFetch((url) => {
+      if (url.includes("/channels/email/connect")) {
+        return jsonResponse({
+          channel_account_id: "acc-mail",
+          external_account_id: "alice@company.com",
+          display_name: "Alice 工作邮箱",
+          visibility_scope: "personal",
+          owner_user_id: "u-2",
+        });
+      }
+      if (url.includes("/ownership")) {
+        return jsonResponse({
+          id: "acc-tg",
+          channel_type: "telegram",
+          external_account_id: "7012345678",
+          display_name: "QZ LED 外贸机器人",
+          status: "active",
+          rate_limit_profile: { mps: null, coexistence: null },
+          owner_user_id: "u-2",
+          owner_name: "李明伦",
+          owner_email: "sales.li@qzled.example.com",
+          visibility_scope: "personal",
+          bot_username: "qzled_bot",
+        });
+      }
+      return jsonResponse({ channel_account_id: "acc-tg", status: "disconnected" });
+    });
+
+    const connected = await connectEmailChannel({
+      email_address: "alice@company.com",
+      provider: "resend",
+      api_key: "re_123456789",
+      visibility_scope: "personal",
+      owner_user_id: "u-2",
+    });
+    expect(connected).toMatchObject({
+      channel_account_id: "acc-mail",
+      external_account_id: "alice@company.com",
+      visibility_scope: "personal",
+    });
+
+    const updated = await updateChannelOwnership("acc-tg", {
+      visibility_scope: "personal",
+      owner_user_id: "u-2",
+      reassign_open_conversations: true,
+    });
+    expect(updated).toMatchObject({
+      id: "acc-tg",
+      visibility_scope: "personal",
+      owner_name: "李明伦",
+      bot_username: "qzled_bot",
+      rate_limit_profile: { mps: undefined, coexistence: undefined },
+    });
+
+    const disconnected = await disconnectChannelAccount("acc-tg");
+    expect(disconnected).toEqual({ channel_account_id: "acc-tg", status: "disconnected" });
+
+    expect(captured.map(({ url, method }) => [url, method])).toEqual([
+      ["/api/bff/v1/channels/email/connect", "POST"],
+      ["/api/bff/v1/channels/accounts/acc-tg/ownership", "PATCH"],
+      ["/api/bff/v1/channels/accounts/acc-tg", "DELETE"],
+    ]);
+    expect(JSON.parse(captured[1].bodyText ?? "")).toEqual({
+      visibility_scope: "personal",
+      owner_user_id: "u-2",
+      reassign_open_conversations: true,
+    });
+  });
+
+  it("lists and invites team memberships for the workspace", async () => {
+    const member = {
+      membership_id: "mem-1",
+      tenant_id: "t-1",
+      user_id: "u-2",
+      email: "sales.li@qzled.example.com",
+      full_name: "李明伦",
+      role: "agent",
+      is_active: true,
+      created_at: "2026-10-08T00:00:00Z",
+    };
+    const { captured } = stubFetch((url, method) => {
+      if (method === "POST") return jsonResponse(member);
+      return jsonResponse({
+        items: [member],
+        total: 1,
+        limit: 100,
+        offset: 0,
+        has_more: false,
+      });
+    });
+
+    const page = await fetchTeamMembers();
+    expect(page.items[0]).toMatchObject({ role: "agent", is_active: true });
+
+    const invited = await inviteTeamMember({
+      email: "wang@qzled.example.com",
+      full_name: "王小明",
+      password: "StrongPass123",
+      role: "agent",
+    });
+    expect(invited).toMatchObject({ membership_id: "mem-1", role: "agent" });
+
+    expect(captured[0].url).toBe("/api/bff/v1/tenants/memberships?limit=100&offset=0");
+    expect(captured[1].url).toBe("/api/bff/v1/tenants/memberships");
+    expect(JSON.parse(captured[1].bodyText ?? "")).toEqual({
+      email: "wang@qzled.example.com",
+      full_name: "王小明",
+      password: "StrongPass123",
+      role: "agent",
     });
   });
 

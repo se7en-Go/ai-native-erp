@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { AlertTriangle, Clock, Search } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, Clock, LockKeyhole, Search } from "lucide-react";
 import type { ChannelType, ConversationMode, ConversationStatus } from "@/lib/contracts";
 import { useI18n } from "@/lib/i18n";
 
@@ -23,6 +24,11 @@ export interface ConversationSummary {
   human_agent_window_expires_at?: string | null;
   last_message_preview: string;
   updated_at: string;
+  /** 归属与路由信息（后端增量下发，缺省即未分配）。 */
+  assigned_user_id?: string | null;
+  assigned_user_name?: string | null;
+  channel_account_display_name?: string | null;
+  channel_visibility_scope?: "shared" | "personal" | null;
 }
 
 /**
@@ -78,7 +84,42 @@ const CHANNEL_DOT: Record<string, string> = {
   shopline: "bg-sky-500",
   shoplazza: "bg-indigo-500",
   tiktok_shop: "bg-slate-700",
+  telegram: "bg-sky-500",
+  messenger: "bg-blue-600",
+  instagram_dm: "bg-rose-500",
 };
+
+type OwnershipPill = { zh: string; en: string; className: string };
+
+/** 会话归属胶囊：个人专属 > 指定负责人 > 公司公海。 */
+export function conversationOwnershipPill(
+  conv: Pick<
+    ConversationSummary,
+    "channel_visibility_scope" | "assigned_user_name" | "assigned_user_id"
+  >,
+  personalLabelZh = "个人",
+): OwnershipPill {
+  if (conv.channel_visibility_scope === "personal") {
+    const owner = conv.assigned_user_name;
+    return {
+      zh: `专属 · ${owner ?? personalLabelZh}`,
+      en: `Personal · ${owner ?? "me"}`,
+      className: "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
+    };
+  }
+  if (conv.assigned_user_name) {
+    return {
+      zh: `负责人 · ${conv.assigned_user_name}`,
+      en: `Owner · ${conv.assigned_user_name}`,
+      className: "bg-indigo-50 text-indigo-700 ring-indigo-200/80",
+    };
+  }
+  return {
+    zh: "公司公海",
+    en: "Company shared",
+    className: "bg-slate-100 text-slate-700 ring-slate-200/80",
+  };
+}
 
 export function ConversationList({
   conversations,
@@ -88,6 +129,7 @@ export function ConversationList({
   onSelectFilter,
   onSearchChange,
   onSelectConversation,
+  headerSlot,
 }: {
   conversations: ConversationSummary[];
   selectedConversationId: string | null;
@@ -96,6 +138,8 @@ export function ConversationList({
   onSelectFilter: (filter: ConversationFilterTab) => void;
   onSearchChange: (value: string) => void;
   onSelectConversation: (conversationId: string) => void;
+  /** 管层专用的归属筛选条（全部会话 / 只看我的 / 公司公海）。 */
+  headerSlot?: React.ReactNode;
 }) {
   const { bi } = useI18n();
   const unreadTotal = conversations.reduce((total, conv) => total + conv.unread_count, 0);
@@ -151,12 +195,27 @@ export function ConversationList({
             );
           })}
         </div>
+
+        {headerSlot}
       </div>
 
       <div className="flex-1 divide-y divide-slate-100/90 overflow-y-auto">
         {conversations.length === 0 ? (
-          <div className="m-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-6 text-center text-[12px] font-medium text-slate-600">
-            {bi("没有符合筛选条件的会话。", "No conversations match this filter.")}
+          <div className="m-3 space-y-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-6 text-center text-[12px] font-medium text-slate-600">
+            <div>{bi("没有符合筛选条件的会话。", "No conversations match this filter.")}</div>
+            <div className="text-[11px] font-normal text-slate-500">
+              {bi(
+                "还没有接到客户消息？先绑定一个渠道，客户回复会直接进来。",
+                "No inbound messages yet? Bind a channel first and replies land here."
+              )}
+            </div>
+            <Link
+              href="/settings/channels"
+              data-testid="inbox-quick-connect-link"
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+            >
+              {bi("快捷绑定渠道 →", "Quick connect a channel →")}
+            </Link>
           </div>
         ) : (
           conversations.map((conv) => {
@@ -165,6 +224,7 @@ export function ConversationList({
               conv.sla_due_at !== null &&
               conv.sla_due_at !== undefined &&
               new Date(conv.sla_due_at).getTime() - Date.now() < 1000 * 60 * 60 * 4;
+            const ownership = conversationOwnershipPill(conv, bi("个人", "Personal"));
 
             return (
               <button
@@ -225,6 +285,24 @@ export function ConversationList({
                           pending_human
                         </span>
                       )}
+                      <span
+                        data-testid={`conversation-ownership-${conv.id}`}
+                        title={
+                          conv.channel_visibility_scope === "personal"
+                            ? bi(
+                                "个人专属渠道，仅归属人与主管可见",
+                                "Personal channel for its owner and managers"
+                              )
+                            : bi(
+                                "公司公海渠道，团队共同接管",
+                                "Company shared channel handled by the team"
+                              )
+                        }
+                        className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ring-1 ${ownership.className}`}
+                      >
+                        <LockKeyhole className="h-2.5 w-2.5" />
+                        {bi(ownership.zh, ownership.en)}
+                      </span>
                       {isSlaUrgent && (
                         <span className="inline-flex items-center gap-0.5 rounded-md bg-rose-50 px-1.5 py-0.5 text-rose-700 ring-1 ring-rose-200/70">
                           <Clock className="h-2.5 w-2.5" />
