@@ -9,21 +9,21 @@
   --font-sans:
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Inter",
     system-ui, -apple-system, "Segoe UI", sans-serif;
-  --color-canvas: #f3f5f9;
-  --color-obsidian: #0b1220;
+  --color-canvas: #e8eef5;
+  --color-sidebar: #f8fafc;
   --color-brand: #2563eb;
   --radius-card: 0.75rem;
 }
 
 :root {
-  --bg-canvas: #f3f5f9;
+  --bg-canvas: #e8eef5;
   --fg-primary: #0f172a;
-  --sidebar-bg: #0b1220;
+  --sidebar-bg: #f8fafc;
   --brand: #2563eb;
 }
 
 * {
-  border-color: var(--color-slate-200);
+  border-color: var(--color-slate-300);
 }
 
 html,
@@ -39,6 +39,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "tnum" 1, "cv02" 1, "cv03" 1;
   text-rendering: optimizeLegibility;
+}
+
+/* 工作区内全局抬升中性灰对比度，避免亮屏下浅灰文字发虚看不清 */
+main {
+  --color-slate-400: #64748b;
+  --color-slate-500: #475569;
+  --color-slate-600: #334155;
 }
 
 /* 中文正文的字重与字距：避免浏览器伪粗体 */
@@ -81,16 +88,14 @@ h4 {
 }
 
 @layer components {
-  /* 标准工作台容器：1440 / 1920 / 2560 宽屏都饱满克制 */
+  /* 全宽流体工作台容器：1440 / 1920 / 2560 / 3440 超宽屏全铺满，告别居中孤岛白边 */
   .erp-page {
     width: 100%;
-    max-width: 1680px;
-    margin-inline: auto;
     padding: 1.25rem;
   }
   @media (min-width: 1024px) {
     .erp-page {
-      padding-inline: 1.5rem;
+      padding: 1.5rem 1.75rem;
     }
   }
 
@@ -101,15 +106,17 @@ h4 {
   }
   @media (min-width: 1024px) {
     .erp-page-full {
-      padding-inline: 1.5rem;
+      padding: 1.25rem 1.5rem;
     }
   }
 
   .erp-card {
     border-radius: 0.75rem;
-    border: 1px solid rgb(226 232 240 / 0.8);
+    border: 1px solid #cbd5e1;
     background-color: #fff;
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    box-shadow:
+      0 1px 3px rgb(15 23 42 / 0.08),
+      0 1px 2px rgb(15 23 42 / 0.04);
   }
 
   .erp-card-header {
@@ -118,37 +125,42 @@ h4 {
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    border-bottom: 1px solid rgb(226 232 240 / 0.8);
+    border-bottom: 1px solid #cbd5e1;
+    background-color: #f8fafc;
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
     padding: 0.875rem 1rem;
   }
 
-  /* 表格统一排版：表头低调，正文紧凑，数字右对齐 */
+  /* 表格统一排版：高对比表头与清晰行分割 */
   .erp-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     text-align: left;
     font-size: 13px;
+    color: var(--color-slate-900);
   }
   .erp-table thead th {
     position: sticky;
     top: 0;
     z-index: 1;
-    background-color: rgb(248 250 252 / 0.95);
-    padding: 0.625rem 0.875rem;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--color-slate-500);
+    background-color: #f1f5f9;
+    padding: 0.65rem 0.875rem;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-slate-800);
     white-space: nowrap;
-    border-bottom: 1px solid rgb(226 232 240 / 0.8);
+    border-bottom: 1px solid #cbd5e1;
   }
   .erp-table tbody td {
-    padding: 0.625rem 0.875rem;
+    padding: 0.65rem 0.875rem;
     vertical-align: middle;
-    border-bottom: 1px solid rgb(241 245 249);
+    color: var(--color-slate-800);
+    border-bottom: 1px solid #e2e8f0;
   }
   .erp-table tbody tr:hover {
-    background-color: rgb(248 250 252 / 0.7);
+    background-color: rgb(239 246 255 / 0.65);
   }
   .erp-table tbody tr:last-child td {
     border-bottom: 0;

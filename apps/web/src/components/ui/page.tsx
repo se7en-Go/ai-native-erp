@@ -10,11 +10,11 @@ import React from "react";
 export type Tone = "neutral" | "success" | "warning" | "danger" | "info";
 
 const TONE_CLASS: Record<Tone, string> = {
-  neutral: "border-slate-200 bg-slate-100 text-slate-600",
-  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-800",
-  danger: "border-rose-200 bg-rose-50 text-rose-700",
-  info: "border-blue-200 bg-blue-50 text-blue-700",
+  neutral: "border-slate-300 bg-slate-100 text-slate-700",
+  success: "border-emerald-300 bg-emerald-50 text-emerald-800",
+  warning: "border-amber-300 bg-amber-50 text-amber-900",
+  danger: "border-rose-300 bg-rose-50 text-rose-800",
+  info: "border-blue-300 bg-blue-50 text-blue-800",
 };
 
 export function Badge({
@@ -68,11 +68,11 @@ export function PageHeader({
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{title}</h1>
+          <h1 className="text-[22px] font-bold tracking-tight text-slate-950">{title}</h1>
           {badge}
         </div>
         {description && (
-          <p className="mt-1 max-w-4xl text-[13px] leading-6 text-slate-500">{description}</p>
+          <p className="mt-1 max-w-5xl text-[13.5px] leading-6 text-slate-700">{description}</p>
         )}
         {meta && <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div>}
       </div>
@@ -107,12 +107,12 @@ export function CardHeader({
   return (
     <div className="erp-card-header">
       <div className="min-w-0">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-          {Icon && <Icon className="h-4 w-4 text-slate-400" />}
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-950">
+          {Icon && <Icon className="h-4 w-4 text-slate-600" />}
           {title}
         </h2>
         {description && (
-          <p className="mt-1 text-[12px] leading-5 text-slate-500">{description}</p>
+          <p className="mt-1 text-[12.5px] leading-5 text-slate-600">{description}</p>
         )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -145,13 +145,13 @@ export function StatCard({
   return (
     <div data-testid={testId} className="erp-card p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] font-medium text-slate-500">{label}</span>
-        {Icon && <Icon className="h-4 w-4 text-slate-300" />}
+        <span className="text-[13px] font-semibold text-slate-700">{label}</span>
+        {Icon && <Icon className="h-4 w-4 text-slate-500" />}
       </div>
-      <div className={`mt-1.5 text-[22px] font-semibold tabular-nums ${accent[tone]}`}>
+      <div className={`mt-1.5 text-[24px] font-bold tabular-nums ${accent[tone]}`}>
         {value}
       </div>
-      {hint && <div className="mt-0.5 text-[11px] text-slate-400">{hint}</div>}
+      {hint && <div className="mt-1 text-[12px] text-slate-600">{hint}</div>}
     </div>
   );
 }
@@ -168,14 +168,14 @@ export function EmptyState({
   return (
     <div
       data-testid={testId}
-      className={`rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-8 text-center text-[13px] text-slate-400 ${className}`}
+      className={`rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-[13px] font-medium text-slate-600 ${className}`}
     >
       {children}
     </div>
   );
 }
 
-/** 表格外层：统一圆角、细边框与横向滚动。 */
+/** 表格外层：统一圆角、清晰边框与横向滚动。 */
 export function TableWrap({
   children,
   className = "",
@@ -184,7 +184,7 @@ export function TableWrap({
   className?: string;
 }) {
   return (
-    <div className={`overflow-x-auto rounded-xl border border-slate-200/80 bg-white ${className}`}>
+    <div className={`overflow-x-auto rounded-xl border border-slate-300 bg-white shadow-xs ${className}`}>
       {children}
     </div>
   );
@@ -192,6 +192,6 @@ export function TableWrap({
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[11px] font-medium tracking-wide text-slate-400">{children}</div>
+    <div className="text-[12px] font-semibold tracking-wide text-slate-600">{children}</div>
   );
 }

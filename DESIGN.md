@@ -10,14 +10,14 @@
 
 | 层级 | 角色 | 色值 / 类名 | 说明 |
 | --- | --- | --- | --- |
-| 导航层 | 深曜石蓝灰权威侧边栏 | `#0B1220` (`bg-slate-950`) | 与工作区形成明确纵深；仅用 `border-slate-800/80` 细分割 |
-| 导航激活 | 品牌蓝 | `#3B82F6` / `#2563EB` | 左侧 2px 竖条 + 半透明蓝底 `bg-blue-500/10`，文字 `text-white` |
-| 画布层 | 暖调工作画布 | `#F3F5F9` (`bg-[#F3F5F9]`) | 高通透，比纯白低 1 档明度，衬托卡片 |
-| 卡片层 | 纯白精致卡片 | `bg-white border border-slate-200/80` | 阴影 `shadow-[0_1px_2px_rgba(15,23,42,0.04)]`，圆角 `rounded-xl` |
-| 分割线 | 极细中性线 | `border-slate-200/80` / `divide-slate-100` | 禁止 2px 以上粗边框 |
-| 主文字 | 近黑蓝灰 | `text-slate-900` (`#0F172A`) | 标题 `font-semibold`，不用全大写英文 |
-| 次文字 | 中性灰 | `text-slate-500` | 副标题、字段说明 |
-| 弱文字 | 浅灰 | `text-slate-400` | 占位、时间戳 |
+| 导航层 | 浅灰高对比侧边栏 | `#F8FAFC` (`bg-[#F8FAFC]`) + `border-slate-300` | 柔和护眼，与右侧工作区自然衔接；文字 `text-slate-800` / 图标 `text-slate-600`（对比度 > 10:1） |
+| 导航激活 | 品牌蓝 | `#2563EB` | 左侧 3px 竖条 + `bg-blue-50 border-blue-200 text-blue-700 font-semibold` |
+| 画布层 | 柔和蓝灰工作画布 | `#E8EEF5` (`bg-[#E8EEF5]`) | 与纯白卡片拉开明确明度差，告别惨白刺眼 |
+| 卡片层 | 纯白高对比卡片 | `bg-white border border-slate-300` | 阴影 `0 1px 3px rgba(15,23,42,0.08)`，表头/卡头 `#F8FAFC`/`#F1F5F9` |
+| 分割线 | 清晰中性线 | `border-slate-300` / `border-slate-200` | 轮廓一眼可读 |
+| 主文字 | 深黑蓝灰 | `text-slate-950` (`#020617`) | 标题 `font-bold` |
+| 次文字 | 深中性灰 | `text-slate-700` / `text-slate-600` | 副标题、KPI 标签、说明一律 ≥ `slate-600`，禁止在白底用 `slate-400` 排正文 |
+| 容器宽度 | 全宽流式 | `.erp-page` `width: 100%` | 1440 / 1920 / 2560 / 3440 超宽屏铺满无居中孤岛 |
 
 ### 语义状态色（状态标签唯一来源）
 
