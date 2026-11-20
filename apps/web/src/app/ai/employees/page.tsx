@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck } from "lucide-react";
+import { Bot, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
@@ -66,24 +66,35 @@ export default function AiEmployeesPage() {
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
       <div className="erp-page space-y-5">
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("AI 数字员工中心", "AI employees")}</h1>
-            <p className="text-xs text-slate-500">
-              {bi("每名数字员工都绑定真实的 AI 能力与 ERP 工具；近 7 天动作、任务与成本全部来自 ai_proposals 与 usage_ledger 真实数据。", "Every AI employee is bound to real capabilities and ERP tools; 7-day actions, tasks and costs all come from ai_proposals and usage_ledger.")}
-            </p>
+        <header className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_10px_30px_-18px_rgba(15,23,42,0.18)]">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-20 -right-12 h-48 w-48 rounded-full bg-violet-100/50 blur-3xl"
+          />
+          <div className="relative flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3.5">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-600/25">
+                <Bot className="h-6 w-6" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="text-[22px] font-bold tracking-tight text-slate-950">{bi("AI 数字员工中心", "AI employees")}</h1>
+                <p className="mt-1 max-w-3xl text-[13px] leading-6 text-slate-600">
+                  {bi("每名数字员工都绑定真实的 AI 能力与 ERP 工具；近 7 天动作、任务与成本全部来自 ai_proposals 与 usage_ledger 真实数据。", "Every AI employee is bound to real capabilities and ERP tools; 7-day actions, tasks and costs all come from ai_proposals and usage_ledger.")}
+                </p>
+                <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-emerald-800">
+                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                  {bi("L0 红线由系统强制执行", "L0 guardrails enforced by the system")}
+                </span>
+              </div>
+            </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            {bi("L0 红线由系统强制执行", "L0 guardrails enforced by the system")}
-          </span>
         </header>
 
         {error && (
           <p
             role="alert"
             data-testid="employees-error"
-            className="rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800"
+            className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[12.5px] font-medium text-rose-800"
           >
             {error.message}
           </p>
@@ -92,7 +103,7 @@ export default function AiEmployeesPage() {
         {!canManage && (
           <p
             data-testid="employees-read-only"
-            className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900"
+            className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12.5px] font-medium text-amber-900"
           >
             {bi("当前角色可查看数字员工矩阵，但只有 Owner / Admin / Manager 可以启停员工。", "Your role can view the matrix, but only Owner / Admin / Manager can enable or disable employees.")}
           </p>

@@ -19,6 +19,7 @@ import {
   formatMoney,
   type AiCapability,
 } from "@/lib/contracts";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { useI18n } from "@/lib/i18n";
 import { useAuthSession } from "@/components/providers";
 import { fetchInboxAssist } from "@/lib/phase3b-data";
@@ -242,9 +243,9 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
       ) : (
         <div
           data-testid="copilot-drawer"
-          className="flex h-[540px] w-96 flex-col rounded-xl border border-slate-200 bg-white shadow-2xl"
+          className="flex h-[560px] w-96 flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_-20px_rgba(15,23,42,0.45)]"
         >
-          <div className="flex items-center justify-between rounded-t-xl border-b border-slate-800 bg-[#0B1220] px-3.5 py-2.5 text-white">
+          <div className="flex items-center justify-between rounded-t-2xl border-b border-slate-800 bg-[#0B1220] px-3.5 py-3 text-white">
             <div className="flex items-center gap-2">
               <Bot className="h-4 w-4 text-emerald-400" />
               <span className="text-sm font-semibold">{bi("AI 业务副驾驶", "AI Workbench Copilot")}</span>
@@ -278,29 +279,29 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
           </div>
 
           <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-            <div className="inline-flex rounded border border-slate-200 bg-white p-0.5">
-              <button
-                type="button"
-                data-testid="copilot-mode-global"
-                onClick={() => setMode("global")}
-                className={`rounded px-2 py-0.5 font-medium ${
-                  mode === "global" ? "bg-blue-600 text-white" : "text-slate-600"
-                }`}
-              >
-                {t("globalMode")}
-              </button>
-              <button
-                type="button"
-                data-testid="copilot-mode-strict-rag"
-                onClick={() => setMode("strict_rag")}
-                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 font-medium ${
-                  mode === "strict_rag" ? "bg-emerald-600 text-white" : "text-slate-600"
-                }`}
-              >
-                <ShieldCheck className="h-3 w-3" />
-                <span>{t("strictRag")}</span>
-              </button>
-            </div>
+            <SegmentedTabs
+              ariaLabel={t("strictRag")}
+              value={mode}
+              onChange={setMode}
+              size="sm"
+              options={[
+                {
+                  value: "global",
+                  label: t("globalMode"),
+                  testId: "copilot-mode-global",
+                },
+                {
+                  value: "strict_rag",
+                  label: (
+                    <span className="inline-flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+                      {t("strictRag")}
+                    </span>
+                  ),
+                  testId: "copilot-mode-strict-rag",
+                },
+              ]}
+            />
 
             {wallet && (
               <span className="text-[11px] tabular-nums text-slate-500">
@@ -318,7 +319,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                     key={id}
                     href={href}
                     data-testid={`copilot-chip-${id}`}
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700"
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                   >
                     <Icon className="h-3 w-3" aria-hidden="true" />
                     {bi(label, labelEn)}
@@ -330,7 +331,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                     data-testid={`copilot-chip-${id}`}
                     disabled={briefMutation.isPending}
                     onClick={() => briefMutation.mutate()}
-                    className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
                   >
                     <Icon className="h-3 w-3" aria-hidden="true" />
                     {briefMutation.isPending ? bi("生成中…", "Generating…") : bi(label, labelEn)}
@@ -346,7 +347,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
             {lastBrief && (
               <p
                 data-testid="copilot-brief"
-                className="mt-1.5 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-2 text-[11px] leading-relaxed text-slate-800"
+                className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-[11px] leading-relaxed text-slate-800"
               >
                 {lastBrief}
               </p>
@@ -358,7 +359,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
               {safeCards.map((card) => (
                 <div
                   key={card.capability}
-                  className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs"
+                  className="rounded-xl border border-slate-200 bg-white p-2.5 text-xs shadow-xs"
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-semibold text-slate-800">
@@ -390,7 +391,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
             {lastResult && (
               <div
                 data-testid="copilot-answer-box"
-                className={`rounded-lg border p-2.5 text-xs ${
+                className={`rounded-xl border p-3 text-xs ${
                   lastResult.should_abstain
                     ? "border-amber-300 bg-amber-50 text-amber-950"
                     : "border-blue-200 bg-blue-50/70 text-slate-900"
