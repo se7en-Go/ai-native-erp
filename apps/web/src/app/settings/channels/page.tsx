@@ -1,9 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
+  LayoutGrid,
   MessagesSquare,
   RefreshCw,
   ShieldCheck,
@@ -15,28 +23,41 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import {
+  AGENT_MARKETPLACE_KEYS,
+  ChannelMarketplaceGrid,
+  isMarketplaceChannelKey,
+  visibleMarketplaceItems,
+} from "@/components/channels/channel-marketplace";
+import { ChannelConnectDrawer } from "@/components/channels/channel-connect-drawer";
+import {
   ConnectedAccountsCard,
   type AccountsFilter,
 } from "@/components/channels/connected-accounts-card";
-import { MessagingChannelCard } from "@/components/channels/messaging-channel-cards";
-import { QuickConnectPanel } from "@/components/channels/quick-connect-panel";
 import { TeamMembersCard } from "@/components/channels/team-members-card";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
-import { SegmentedTabs } from "@/components/ui/segmented-tabs";
-import { Badge, Card, CardHeader, EmptyState, Page, PageHeader } from "@/components/ui/page";
+import {
+  SegmentedTabs,
+  type SegmentedTabOption,
+} from "@/components/ui/segmented-tabs";
+import {
+  Badge,
+  Card,
+  CardHeader,
+  EmptyState,
+  Page,
+  PageHeader,
+  TableWrap,
+} from "@/components/ui/page";
 import { replayDlqEvent } from "@/lib/api-client/live-client";
 import type {
-  EmailConnectPayload,
   InviteTeamMemberPayload,
-  MessagingConnectPayload,
+  MarketplaceChannelKey,
+  MarketplaceConnectRequest,
   MessagingConnectResult,
-  MessagingProviderKind,
-  TelegramConnectPayload,
   UpdateChannelOwnershipPayload,
 } from "@/lib/api-client/live-client";
 import {
-  connectEmailChannel,
-  connectMessagingChannel,
+  connectMarketplaceChannel,
   disconnectChannelAccount,
   fetchChannelAccounts,
   fetchChannelConsents,
@@ -49,18 +70,37 @@ import {
 } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
 
-/** Meta 公共主页渠道只能由 owner/admin 绑定（业务员看不到这两张卡）。 */
-const ADMIN_MESSAGING_CHANNELS: ReadonlyArray<MessagingProviderKind> = [
-  "messenger",
-  "instagram_dm",
-];
-
-type ConnectTarget = MessagingProviderKind | "email";
+type HubTab = "marketplace" | "accounts" | "team" | "compliance";
 
 export default function ChannelsSettingsPage() {
+  return (
+    <Suspense fallback={<ChannelsHubFallback />}>
+      <ChannelsHub />
+    </Suspense>
+  );
+}
+
+function ChannelsHubFallback() {
+  return (
+    <AppShell currentPath="/settings/channels">
+      <Page>
+        <div className="erp-card animate-pulse p-8 text-[13px] font-medium text-stone-500">
+          正在加载渠道中心…
+        </div>
+      </Page>
+    </AppShell>
+  );
+}
+
+function ChannelsHub() {
   const { bi } = useI18n();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { principal } = useAuthSession();
   const queryClient = useQueryClient();
+
+  const [tab, setTab] = useState<HubTab>("marketplace");
+  const [drawerKey, setDrawerKey] = useState<MarketplaceChannelKey | null>(null);
   const [logTab, setLogTab] = useState<"consents" | "suppressions">("consents");
 
   const isAdmin = principal?.role === "owner" || principal?.role === "admin";
@@ -113,21 +153,13 @@ export default function ChannelsSettingsPage() {
     },
   });
 
-  const refreshAccounts = () => {
+  const refreshAccounts = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["channels", "accounts"] });
-  };
+  }, [queryClient]);
 
   const connectMutation = useMutation({
-    mutationFn: ({
-      kind,
-      payload,
-    }: {
-      kind: ConnectTarget;
-      payload: MessagingConnectPayload | EmailConnectPayload;
-    }): Promise<MessagingConnectResult> =>
-      kind === "email"
-        ? connectEmailChannel(payload as EmailConnectPayload)
-        : connectMessagingChannel(kind, payload as MessagingConnectPayload),
+    mutationFn: (request: MarketplaceConnectRequest): Promise<MessagingConnectResult> =>
+      connectMarketplaceChannel(request),
     onSuccess: refreshAccounts,
   });
 
@@ -164,8 +196,77 @@ export default function ChannelsSettingsPage() {
     (acct) => !currentUserId || acct.owner_user_id === currentUserId,
   );
 
-  const emailConnected = accounts.some((acct) => acct.channel_type === "email");
-  const telegramConnected = accounts.some((acct) => acct.channel_type === "telegram");
+  const marketplaceCount = visibleMarketplaceItems(isAdmin).length;
+
+  /** 允许当前角色打开的抽屉键：业务员只能开 3 个个人渠道。 */
+  const canOpenDrawer = useCallback(
+    (key: MarketplaceChannelKey) => isAdmin || AGENT_MARKETPLACE_KEYS.includes(key),
+    [isAdmin],
+  );
+
+  const closeDrawer = useCallback(() => {
+    setDrawerKey(null);
+    if (searchParams.get("connect")) {
+      router.replace("/settings/channels");
+    }
+  }, [router, searchParams]);
+
+  const openDrawer = useCallback(
+    (key: MarketplaceChannelKey) => {
+      if (!canOpenDrawer(key)) return;
+      setDrawerKey(key);
+    },
+    [canOpenDrawer],
+  );
+
+  // Inbox 的「快捷绑定此渠道 →」直达：/settings/channels?connect=<channel>
+  const connectParam = searchParams.get("connect");
+  useEffect(() => {
+    if (!isMarketplaceChannelKey(connectParam)) return;
+    if (!canOpenDrawer(connectParam)) return;
+    setDrawerKey(connectParam);
+  }, [canOpenDrawer, connectParam]);
+
+  const tabs = useMemo<SegmentedTabOption<HubTab>[]>(() => {
+    const options: SegmentedTabOption<HubTab>[] = [
+      {
+        value: "marketplace" as const,
+        label: (
+          <span className="inline-flex items-center gap-1.5">
+            <LayoutGrid className="h-3.5 w-3.5" />
+            {isAdmin ? bi("渠道应用市场", "Marketplace") : bi("个人渠道绑定", "My channels")}
+          </span>
+        ),
+        badge: marketplaceCount,
+        testId: "hub-tab-marketplace",
+      },
+      {
+        value: "accounts" as const,
+        label: isAdmin
+          ? bi("已接入账号", "Connected accounts")
+          : bi("我的已接入账号", "My connected accounts"),
+        badge: accounts.length,
+        testId: "hub-tab-accounts",
+      },
+    ];
+    if (isAdmin) {
+      options.push(
+        {
+          value: "team" as const,
+          label: bi("团队成员", "Team"),
+          badge: members.length,
+          testId: "hub-tab-team",
+        },
+        {
+          value: "compliance" as const,
+          label: bi("运维与合规", "Ops & compliance"),
+          badge: dlqItems.length,
+          testId: "hub-tab-compliance",
+        },
+      );
+    }
+    return options;
+  }, [accounts.length, bi, dlqItems.length, isAdmin, marketplaceCount, members.length]);
 
   return (
     <AppShell
@@ -174,20 +275,16 @@ export default function ChannelsSettingsPage() {
     >
       <Page>
         <PageHeader
-          title={
-            isAdmin
-              ? bi("渠道接入、业务员归属与合规退订", "Channels, salesperson ownership & compliance")
-              : bi("我的渠道快捷绑定", "My channel quick connect")
-          }
+          title={bi("渠道中心", "Channel hub")}
           description={
             isAdmin
               ? bi(
-                  "粘贴即绑 Telegram 机器人与工作邮箱；公司公海或指定业务员个人专属一键切换。令牌一律信封加密，Webhook 按原始报文验签。",
-                  "Paste-and-bind Telegram bots and work mailboxes; switch between company-shared and salesperson-personal ownership. Tokens are envelope-encrypted and webhooks verify the raw body."
+                  "11 个渠道一处接入：即时通讯、工作邮箱与独立站。令牌信封加密，Webhook 按原始报文验签。",
+                  "Eleven channels in one hub: messaging, work email and storefronts — envelope-encrypted tokens and signed webhooks."
                 )
               : bi(
-                  "只贴一段 Bot Token 就能连上 Telegram；工作邮箱也能 30 秒绑定。个人专属渠道仅你与老板/主管可见，客户回复直接进你的 Inbox。",
-                  "Paste one bot token to connect Telegram, or bind your work mailbox in 30 seconds. Personal channels stay visible to you and your managers, with replies landing in your inbox."
+                  "绑定你自己的 Telegram、工作邮箱与 WhatsApp 共存号，客户回复直接进你的 Inbox。",
+                  "Bind your own Telegram, work mailbox and WhatsApp coexistence number; replies land in your inbox."
                 )
           }
           badge={
@@ -200,14 +297,18 @@ export default function ChannelsSettingsPage() {
 
         <section
           aria-label={bi("渠道关键指标", "Channel key metrics")}
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          data-testid="channel-kpi-strip"
+          className={`grid gap-3 sm:grid-cols-2 ${isAdmin ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
         >
           <BentoStatCard
             label={bi("已接入账号", "Connected accounts")}
             value={accounts.length}
             icon={MessagesSquare}
             accent="blue"
-            hint={bi("Telegram / 邮箱 / WhatsApp / Meta", "Telegram / email / WhatsApp / Meta")}
+            hint={bi(
+              "WhatsApp / Telegram / 邮箱 / 独立站",
+              "WhatsApp / Telegram / email / storefronts"
+            )}
           />
           <BentoStatCard
             label={bi("我的个人渠道", "My personal channels")}
@@ -242,74 +343,66 @@ export default function ChannelsSettingsPage() {
           )}
         </section>
 
-        <QuickConnectPanel
-          isAdmin={isAdmin}
-          currentUserId={currentUserId}
-          members={members}
-          telegramConnected={telegramConnected}
-          emailConnected={emailConnected}
-          onConnectTelegram={(payload: TelegramConnectPayload) =>
-            connectMutation.mutateAsync({ kind: "telegram", payload })
-          }
-          onConnectEmail={(payload: EmailConnectPayload) =>
-            connectMutation.mutateAsync({ kind: "email", payload })
-          }
-        />
-
-        {isAdmin && (
-          <Card>
-            <CardHeader
-              title={bi(
-                "Messenger 与 Instagram 私信（公司主页）",
-                "Messenger & Instagram DM (company pages)"
-              )}
-              description={bi(
-                "Meta 公共主页属于公司资产：绑定后默认进入公司公海，也可以直接指派给某位业务员个人专属。",
-                "Meta pages are company assets: bindings default to the shared pool but can be assigned to a salesperson."
-              )}
-            />
-            <div className="grid gap-3 p-4 md:grid-cols-2 xl:gap-4">
-              {ADMIN_MESSAGING_CHANNELS.map((kind) => (
-                <MessagingChannelCard
-                  key={kind}
-                  kind={kind}
-                  connected={accounts.some((acct) => acct.channel_type === kind)}
-                  isAdmin
-                  currentUserId={currentUserId}
-                  members={members}
-                  onSubmit={(payload) => connectMutation.mutateAsync({ kind, payload })}
-                />
-              ))}
-            </div>
-          </Card>
-        )}
-
-        <ConnectedAccountsCard
-          accounts={accounts}
-          isAdmin={isAdmin}
-          currentUserId={currentUserId}
-          members={members}
-          filter={accountsFilter}
-          onFilterChange={setSelectedAccountsFilter}
-          onChangeOwnership={(accountId, payload) =>
-            ownershipMutation.mutateAsync({ accountId, payload }).then(() => undefined)
-          }
-          onDisconnect={(accountId) =>
-            disconnectMutation.mutateAsync(accountId).then(() => undefined)
-          }
-        />
-
-        {isAdmin && (
-          <TeamMembersCard
-            members={members}
-            accounts={accounts}
-            isLoading={membersQuery.isLoading}
-            onInvite={(payload) => inviteMutation.mutateAsync(payload)}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SegmentedTabs
+            ariaLabel={bi("渠道中心分区", "Channel hub sections")}
+            value={tab}
+            onChange={setTab}
+            options={tabs}
+            className="flex-wrap"
           />
+          <span className="text-[11px] font-medium text-stone-500">
+            {bi(
+              "令牌一律信封加密，从不以明文回显",
+              "Tokens stay envelope-encrypted and are never echoed back"
+            )}
+          </span>
+        </div>
+
+        {tab === "marketplace" && (
+          <div className="mx-auto w-full max-w-[1280px]">
+            <ChannelMarketplaceGrid
+              accounts={accounts}
+              isAdmin={isAdmin}
+              onOpen={openDrawer}
+            />
+          </div>
         )}
 
-        {isAdmin && (
-          <>
+        {tab === "accounts" && (
+          <div className="mx-auto w-full max-w-[1080px]">
+            <ConnectedAccountsCard
+              accounts={accounts}
+              isAdmin={isAdmin}
+              currentUserId={currentUserId}
+              members={members}
+              tenantSlug={principal?.tenant_slug ?? null}
+              filter={accountsFilter}
+              onFilterChange={setSelectedAccountsFilter}
+              onQuickConnect={() => setTab("marketplace")}
+              onChangeOwnership={(accountId, payload) =>
+                ownershipMutation.mutateAsync({ accountId, payload }).then(() => undefined)
+              }
+              onDisconnect={(accountId) =>
+                disconnectMutation.mutateAsync(accountId).then(() => undefined)
+              }
+            />
+          </div>
+        )}
+
+        {tab === "team" && isAdmin && (
+          <div className="mx-auto w-full max-w-[1080px]">
+            <TeamMembersCard
+              members={members}
+              accounts={accounts}
+              isLoading={membersQuery.isLoading}
+              onInvite={(payload) => inviteMutation.mutateAsync(payload)}
+            />
+          </div>
+        )}
+
+        {tab === "compliance" && isAdmin && (
+          <div className="mx-auto w-full max-w-[1280px] space-y-3">
             <Card>
               <CardHeader
                 title={bi("死信队列（DLQ）重放", "Dead-letter queue (DLQ) replay")}
@@ -330,7 +423,7 @@ export default function ChannelsSettingsPage() {
                       className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2.5"
                     >
                       <div className="min-w-0">
-                        <div className="text-[13px] font-medium text-slate-900">
+                        <div className="text-[13px] font-medium text-zinc-900">
                           {ev.channel_type} · {ev.external_event_id}
                         </div>
                         <div className="text-[12px] text-rose-700">
@@ -341,7 +434,7 @@ export default function ChannelsSettingsPage() {
                         type="button"
                         data-testid={`dlq-replay-btn-${ev.id}`}
                         onClick={() => replayMutation.mutate(ev.id)}
-                        className="erp-btn rounded-xl bg-slate-900 text-white shadow-xs hover:bg-slate-800"
+                        className="erp-btn rounded-xl bg-[#18181B] text-white shadow-xs hover:bg-[#065F46]"
                       >
                         <RefreshCw className="h-3 w-3" />
                         <span>{bi("重放", "Replay")}</span>
@@ -353,11 +446,12 @@ export default function ChannelsSettingsPage() {
             </Card>
 
             <Card>
-              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/90 bg-slate-50/60 p-3">
+              <div className="flex flex-wrap items-center gap-2 border-b border-[#EFECE6] bg-[#FAF8F5]/80 p-3">
                 <SegmentedTabs
                   ariaLabel={bi("合规台账视图", "Compliance ledger view")}
                   value={logTab}
                   onChange={setLogTab}
+                  size="sm"
                   options={[
                     {
                       value: "consents",
@@ -381,7 +475,7 @@ export default function ChannelsSettingsPage() {
                     },
                   ]}
                 />
-                <span className="ml-auto text-[11px] font-medium text-slate-600">
+                <span className="ml-auto text-[11px] font-medium text-stone-600">
                   {bi(
                     "静默时段 21:00–08:00 不发送任何营销消息",
                     "Quiet hours 21:00–08:00 block all marketing sends"
@@ -389,46 +483,93 @@ export default function ChannelsSettingsPage() {
                 </span>
               </div>
 
-              <div className="space-y-1.5 p-4">
-                {logTab === "consents"
-                  ? (consentsQuery.data?.items ?? []).map((c) => (
-                      <div
-                        key={c.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2 text-[12px]"
-                      >
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <strong className="font-semibold text-slate-900">{c.customer_name}</strong>
-                          <span className="text-slate-400">·</span>
-                          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
-                            {c.channel_type}
-                          </span>
-                          <span className="text-slate-400">·</span>
-                          <span className="text-slate-600">{c.proof_source}</span>
-                        </div>
-                        <Badge tone="success">{c.consent_status}</Badge>
-                      </div>
-                    ))
-                  : (suppressionsQuery.data?.items ?? []).map((s) => (
-                      <div
-                        key={s.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2 text-[12px]"
-                      >
-                        <div>
-                          <strong className="font-semibold text-slate-900">
-                            {s.normalized_address}
-                          </strong>
-                          <span className="text-slate-600"> ({s.channel_type})</span>
-                        </div>
-                        <span className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700">
-                          {s.reason}
-                        </span>
-                      </div>
-                    ))}
+              <div className="p-4">
+                {logTab === "consents" ? (
+                  (consentsQuery.data?.items ?? []).length === 0 ? (
+                    <EmptyState>
+                      {bi("还没有订阅同意记录。", "No consent records yet.")}
+                    </EmptyState>
+                  ) : (
+                    <TableWrap>
+                      <table className="erp-table">
+                        <thead>
+                          <tr>
+                            <th>{bi("客户", "Customer")}</th>
+                            <th>{bi("渠道", "Channel")}</th>
+                            <th>{bi("证明来源", "Proof source")}</th>
+                            <th>{bi("状态", "Status")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(consentsQuery.data?.items ?? []).map((c) => (
+                            <tr key={c.id}>
+                              <td className="font-semibold text-zinc-900">{c.customer_name}</td>
+                              <td>
+                                <span className="rounded-md bg-[#FAF8F5] px-1.5 py-0.5 text-[11px] font-medium text-stone-700 ring-1 ring-[#E5E2DC]">
+                                  {c.channel_type}
+                                </span>
+                              </td>
+                              <td className="text-stone-600">{c.proof_source}</td>
+                              <td>
+                                <Badge tone="success">{c.consent_status}</Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </TableWrap>
+                  )
+                ) : (suppressionsQuery.data?.items ?? []).length === 0 ? (
+                  <EmptyState>
+                    {bi("抑制名单为空，暂无退订客户。", "The suppression list is empty.")}
+                  </EmptyState>
+                ) : (
+                  <TableWrap>
+                    <table className="erp-table">
+                      <thead>
+                        <tr>
+                          <th>{bi("标准化地址", "Normalized address")}</th>
+                          <th>{bi("渠道", "Channel")}</th>
+                          <th>{bi("原因", "Reason")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(suppressionsQuery.data?.items ?? []).map((r) => (
+                          <tr key={r.id}>
+                            <td className="font-semibold text-zinc-900">{r.normalized_address}</td>
+                            <td className="text-stone-600">{r.channel_type}</td>
+                            <td>
+                              <span className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700">
+                                {r.reason}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </TableWrap>
+                )}
               </div>
             </Card>
-          </>
+          </div>
         )}
       </Page>
+
+      <ChannelConnectDrawer
+        channelKey={drawerKey}
+        accounts={accounts}
+        isAdmin={isAdmin}
+        currentUserId={currentUserId}
+        members={members}
+        tenantSlug={principal?.tenant_slug ?? null}
+        onSubmit={(request) => connectMutation.mutateAsync(request)}
+        onConnected={refreshAccounts}
+        onClose={closeDrawer}
+        onViewAccounts={() => {
+          closeDrawer();
+          setTab("accounts");
+        }}
+      />
     </AppShell>
   );
 }

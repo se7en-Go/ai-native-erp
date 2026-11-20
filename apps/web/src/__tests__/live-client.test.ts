@@ -7,7 +7,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   connectEmailChannel,
+  connectMarketplaceChannel,
+  connectShopifyCustomApp,
+  connectShopline,
+  connectShoplazza,
   connectTelegramChannel,
+  connectTikTokShop,
+  connectWebLivechat,
+  connectWhatsAppDirect,
+  connectWhatsAppEmbedded,
+  connectWooCommerce,
   convertQuoteToOrder,
   disconnectChannelAccount,
   fetchTeamMembers,
@@ -831,4 +840,118 @@ describe("live-client (generated SDK over the BFF)", () => {
     });
   });
 
+});
+
+describe("channel marketplace connectors (11 channels over bffFetch)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts every connect payload to its locked BFF endpoint", async () => {
+    const { captured } = stubFetch(() =>
+      jsonResponse({ channel_account_id: "acc-1", external_account_id: "ext-1" }),
+    );
+
+    await connectWhatsAppDirect({
+      waba_id: "waba-1",
+      phone_number_id: "phone-1",
+      access_token: "EAAG-token",
+      is_coexistence: true,
+      visibility_scope: "shared",
+    });
+    await connectWhatsAppEmbedded({
+      code: "AQD-code",
+      waba_id: "waba-1",
+      phone_number_id: "phone-1",
+      is_coexistence: false,
+      display_name: "QZ LED WhatsApp",
+    });
+    await connectWebLivechat({ site_domain: "https://shop.example.com" });
+    await connectShopifyCustomApp({
+      shop_domain: "qzled.myshopify.com",
+      client_id: "cid",
+      client_secret: "csecret",
+    });
+    await connectWooCommerce({
+      store_url: "https://shop.example.com",
+      consumer_key: "ck_1",
+      consumer_secret: "cs_1",
+    });
+    await connectShopline({
+      store_domain: "qzled.myshopline.com",
+      access_token: "sl-token",
+      app_secret: "sl-secret",
+    });
+    await connectShoplazza({
+      store_domain: "qzled.myshoplazza.com",
+      access_token: "sp-token",
+      client_secret: "sp-secret",
+    });
+    await connectTikTokShop({
+      shop_id: "7480000000000000000",
+      shop_cipher: "cipher",
+      app_key: "tt-key",
+      app_secret: "tt-secret",
+      access_token: "tt-token",
+      app_mode: "seller_byok",
+    });
+
+    expect(captured.map(({ url, method }) => [url, method])).toEqual([
+      ["/api/bff/v1/channels/whatsapp/connect", "POST"],
+      ["/api/bff/v1/channels/whatsapp/embedded-signup", "POST"],
+      ["/api/bff/v1/channels/web-livechat/connect", "POST"],
+      ["/api/bff/v1/connectors/shopify/custom-app", "POST"],
+      ["/api/bff/v1/connectors/woocommerce/auth-callback", "POST"],
+      ["/api/bff/v1/connectors/shopline/connect", "POST"],
+      ["/api/bff/v1/connectors/shoplazza/connect", "POST"],
+      ["/api/bff/v1/connectors/tiktok/connect", "POST"],
+    ]);
+
+    expect(JSON.parse(captured[0].bodyText ?? "")).toEqual({
+      waba_id: "waba-1",
+      phone_number_id: "phone-1",
+      access_token: "EAAG-token",
+      is_coexistence: true,
+      visibility_scope: "shared",
+    });
+    expect(JSON.parse(captured[7].bodyText ?? "")).toMatchObject({
+      shop_id: "7480000000000000000",
+      app_mode: "seller_byok",
+    });
+  });
+
+  it("dispatches connectMarketplaceChannel by channel and WhatsApp mode", async () => {
+    const { captured } = stubFetch(() =>
+      jsonResponse({ channel_account_id: "acc-1", external_account_id: "ext-1" }),
+    );
+
+    await connectMarketplaceChannel({
+      channel: "whatsapp",
+      mode: "embedded",
+      body: {
+        code: "AQD-code",
+        waba_id: "waba-1",
+        phone_number_id: "phone-1",
+        is_coexistence: true,
+        display_name: "QZ LED",
+      },
+    });
+    await connectMarketplaceChannel({
+      channel: "telegram",
+      body: { bot_token: "7012345678:AAH-token" },
+    });
+    await connectMarketplaceChannel({
+      channel: "web_livechat",
+      body: { site_domain: "https://shop.example.com" },
+    });
+
+    expect(captured[0].url).toBe("/api/bff/v1/channels/whatsapp/embedded-signup");
+    expect(captured[1].url).toBe(
+      "http://localhost:3000/api/bff/api/v1/channels/telegram/connect",
+    );
+    expect(captured[2].url).toBe("/api/bff/v1/channels/web-livechat/connect");
+  });
 });

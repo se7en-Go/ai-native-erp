@@ -119,6 +119,21 @@ vi.mock("@/lib/data-source", () => ({
     channel_account_id: "5e0f0a4c-0000-4000-8000-000000000002",
     external_account_id: payload.email_address,
   })),
+  connectMarketplaceChannel: vi.fn(
+    async (request: { channel: string; body: Record<string, unknown> }) => ({
+      channel_account_id: "5e0f0a4c-0000-4000-8000-000000000001",
+      external_account_id: String(
+        request.body.ig_account_id ??
+          request.body.page_id ??
+          request.body.phone_number_id ??
+          request.body.email_address ??
+          request.body.bot_token ??
+          ""
+      ).split(":")[0],
+      bot_username: request.channel === "telegram" ? "qzled_sales_bot" : null,
+      visibility_scope: (request.body.visibility_scope as string) ?? "shared",
+    })
+  ),
   updateChannelOwnership: vi.fn(async (accountId: string) => ({ ...TELEGRAM_ACCOUNT, id: accountId })),
   disconnectChannelAccount: vi.fn(async (accountId: string) => ({
     channel_account_id: accountId,
@@ -137,7 +152,7 @@ vi.mock("@/lib/data-source", () => ({
 }));
 
 import {
-  connectMessagingChannel,
+  connectMarketplaceChannel,
   disconnectChannelAccount,
   fetchChannelConsents,
   fetchChannelDlq,
@@ -236,10 +251,13 @@ describe("Phase 3D messaging channel connections", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it("connects a channel from the settings page and refreshes the account list", async () => {
+  it("opens the instagram drawer from the marketplace and connects the channel", async () => {
     renderWithProviders(<ChannelsSettingsPage />);
 
-    expect(await screen.findByText("QZ LED Facebook Page")).toBeTruthy();
+    expect(await screen.findByTestId("marketplace-card-instagram_dm")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("open-connect-instagram_dm"));
+    expect(await screen.findByTestId("channel-connect-drawer-instagram_dm")).toBeTruthy();
+
     fireEvent.change(screen.getByTestId("instagram-account-id-input"), {
       target: { value: "17841400000000000" },
     });
@@ -252,11 +270,14 @@ describe("Phase 3D messaging channel connections", () => {
     fireEvent.click(screen.getByTestId("connect-instagram_dm-btn"));
 
     await waitFor(() => {
-      expect(connectMessagingChannel).toHaveBeenCalledWith("instagram_dm", {
-        ig_account_id: "17841400000000000",
-        access_token: "IGQVJ-test-token",
-        display_name: "QZ LED Instagram",
-        visibility_scope: "shared",
+      expect(connectMarketplaceChannel).toHaveBeenCalledWith({
+        channel: "instagram_dm",
+        body: {
+          ig_account_id: "17841400000000000",
+          access_token: "IGQVJ-test-token",
+          display_name: "QZ LED Instagram",
+          visibility_scope: "shared",
+        },
       });
     });
     expect((await screen.findByTestId("connect-success-instagram_dm")).textContent).toContain(
@@ -432,18 +453,41 @@ describe("0009 salesperson ownership — RBAC and admin-only data", () => {
     expect(canAccessRoute("agent", "/settings")).toBe(false);
   });
 
-  it("renders the salesperson workspace without firing admin-only requests", async () => {
+  it("renders only 2 tabs and 3 personal channels for a salesperson, with zero admin calls", async () => {
     renderWithProviders(<ChannelsSettingsPage />, makePrincipal("agent"));
 
-    const panel = await screen.findByTestId("quick-connect-panel");
-    expect(panel.textContent).toContain("My personal quick connect");
+    expect(await screen.findByTestId("channel-marketplace")).toBeTruthy();
 
-    // 业务员看不到 Meta 公司主页卡，也拿不到死信队列/合规/成员数据。
-    expect(screen.queryByTestId("messaging-card-messenger")).toBeNull();
-    expect(screen.queryByTestId("messaging-card-instagram_dm")).toBeNull();
+    // 业务员只看到 Telegram / 工作邮箱 / WhatsApp 共存号三个个人渠道。
+    expect(screen.getByTestId("marketplace-card-telegram")).toBeTruthy();
+    expect(screen.getByTestId("marketplace-card-email")).toBeTruthy();
+    expect(screen.getByTestId("marketplace-card-whatsapp")).toBeTruthy();
+    expect(screen.queryByTestId("marketplace-card-messenger")).toBeNull();
+    expect(screen.queryByTestId("marketplace-card-shopify")).toBeNull();
+    expect(screen.queryByTestId("marketplace-card-web_livechat")).toBeNull();
+
+    // 只有 2 个分区：应用市场 + 已接入账号；团队/合规 tab 不渲染。
+    expect(screen.getByTestId("hub-tab-marketplace")).toBeTruthy();
+    expect(screen.getByTestId("hub-tab-accounts")).toBeTruthy();
+    expect(screen.queryByTestId("hub-tab-team")).toBeNull();
+    expect(screen.queryByTestId("hub-tab-compliance")).toBeNull();
     expect(screen.queryByTestId("team-members-card")).toBeNull();
+
+    // 业务员的绑定归属锁定为个人专属。
+    fireEvent.click(screen.getByTestId("open-connect-telegram"));
     expect(screen.getByTestId("ownership-locked-telegram")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("channel-drawer-close"));
+    expect(screen.queryByTestId("channel-connect-drawer-telegram")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("open-connect-email"));
     expect(screen.getByTestId("ownership-locked-email")).toBeTruthy();
+
+    // 打开 WhatsApp 抽屉：共存模式被锁定为开启。
+    fireEvent.click(screen.getByTestId("channel-drawer-close"));
+    fireEvent.click(screen.getByTestId("open-connect-whatsapp"));
+    const coexistence = screen.getByTestId("whatsapp-coexistence-toggle") as HTMLInputElement;
+    expect(coexistence.checked).toBe(true);
+    expect(coexistence.disabled).toBe(true);
 
     expect(fetchChannelDlq).not.toHaveBeenCalled();
     expect(fetchChannelConsents).not.toHaveBeenCalled();
@@ -454,6 +498,12 @@ describe("0009 salesperson ownership — RBAC and admin-only data", () => {
   it("lets the owner assign a salesperson, invite a new one and disconnect an account", async () => {
     renderWithProviders(<ChannelsSettingsPage />, makePrincipal("owner"));
 
+    // 团队成员与开号在独立 tab；等成员加载完成，归属下拉才有可选项。
+    fireEvent.click(await screen.findByTestId("hub-tab-team"));
+    await screen.findByTestId("team-member-row-mem-agent-1");
+
+    fireEvent.click(screen.getByTestId("hub-tab-accounts"));
+
     // 归属徽标：公海账号显示「公司公海」，并带 Telegram 机器人直链。
     const badge = await screen.findByTestId("account-ownership-badge-ch-telegram-1");
     expect(badge.textContent).toContain("Company shared");
@@ -462,9 +512,6 @@ describe("0009 salesperson ownership — RBAC and admin-only data", () => {
         "href"
       )
     ).toBe("https://t.me/qzled_shared_bot");
-
-    // 成员名单加载后，归属下拉才有可选项。
-    await screen.findByTestId("team-member-row-mem-agent-1");
 
     fireEvent.click(screen.getByTestId("account-toggle-ownership-ch-telegram-1"));
     fireEvent.click(screen.getByTestId("ownership-edit-personal-ch-telegram-1"));
@@ -480,6 +527,9 @@ describe("0009 salesperson ownership — RBAC and admin-only data", () => {
         reassign_open_conversations: true,
       });
     });
+
+    // 成员与开号在独立 tab。
+    fireEvent.click(screen.getByTestId("hub-tab-team"));
 
     // 新建业务员 → 刷新成员列表。
     fireEvent.change(screen.getByTestId("member-invite-name"), {
@@ -505,8 +555,9 @@ describe("0009 salesperson ownership — RBAC and admin-only data", () => {
       "wang@qzled.example.com"
     );
 
-    // 管理员可断开任意账号。
-    fireEvent.click(screen.getByTestId("account-disconnect-ch-messenger-1"));
+    // 回到账号 tab：管理员可断开任意账号。
+    fireEvent.click(screen.getByTestId("hub-tab-accounts"));
+    fireEvent.click(await screen.findByTestId("account-disconnect-ch-messenger-1"));
     await waitFor(() => {
       expect(disconnectChannelAccount).toHaveBeenCalledWith("ch-messenger-1");
     });
@@ -514,6 +565,7 @@ describe("0009 salesperson ownership — RBAC and admin-only data", () => {
 
   it("filters connected accounts by ownership (mine / shared) for a salesperson", async () => {
     renderWithProviders(<ChannelsSettingsPage />, makePrincipal("agent"));
+    fireEvent.click(await screen.findByTestId("hub-tab-accounts"));
     await screen.findByTestId("channel-account-row-ch-telegram-agent-1");
 
     fireEvent.click(screen.getByTestId("accounts-filter-shared"));

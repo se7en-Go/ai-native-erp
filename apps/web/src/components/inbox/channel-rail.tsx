@@ -16,6 +16,7 @@ import {
   Video,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { marketplaceKeyForChannelFilter } from "@/components/channels/channel-marketplace";
 
 export type ChannelFilterKey =
   | "all"
@@ -147,6 +148,10 @@ export function ChannelRail({
   unreadByChannel: Partial<Record<ChannelFilterKey, number>>;
 }) {
   const { bi } = useI18n();
+  const connectKey = marketplaceKeyForChannelFilter(selectedChannel);
+  const settingsHref = connectKey
+    ? `/settings/channels?connect=${connectKey}`
+    : "/settings/channels";
   return (
     <div
       data-testid="inbox-channel-rail"
@@ -193,7 +198,8 @@ export function ChannelRail({
       </div>
 
       <Link
-        href="/settings/channels"
+        href={settingsHref}
+        data-testid="inbox-channel-settings-link"
         className="mt-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-white"
       >
         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-white text-slate-600 ring-1 ring-slate-200">
