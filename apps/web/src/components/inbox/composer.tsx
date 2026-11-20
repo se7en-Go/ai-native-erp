@@ -27,7 +27,7 @@ export function InboxComposer({
   const [bodyText, setBodyText] = useState("");
   const [mode, setMode] = useState<"outbound" | "internal_note">("outbound");
   const [liveTranslate, setLiveTranslate] = useState(false);
-  const [targetLang, setTargetLang] = useState<"en" | "es" | "de" | "fr" | "ja">("en");
+  const [targetLang, setTargetLang] = useState<"zh" | "en" | "es" | "de" | "fr" | "ja">("en");
   const [translatedPreview, setTranslatedPreview] = useState<string>("");
   const [strictRag, setStrictRag] = useState(false);
   const [complianceError, setComplianceError] = useState<string | null>(null);
@@ -314,6 +314,7 @@ export function InboxComposer({
               onChange={(e) => setTargetLang(e.target.value as typeof targetLang)}
               className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-[11.5px] font-semibold text-slate-700"
             >
+              <option value="zh">{bi("中文 (ZH)", "Chinese (ZH)")}</option>
               <option value="en">EN</option>
               <option value="es">ES</option>
               <option value="de">DE</option>

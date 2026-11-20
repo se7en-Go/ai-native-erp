@@ -3,10 +3,13 @@
 import React from "react";
 import Link from "next/link";
 import {
+  Camera,
   Globe,
   Layers,
   Mail,
+  MessageCircle,
   MessageSquare,
+  Send,
   Settings,
   ShoppingBag,
   Store,
@@ -17,6 +20,9 @@ import { useI18n } from "@/lib/i18n";
 export type ChannelFilterKey =
   | "all"
   | "whatsapp"
+  | "telegram"
+  | "facebook_messenger"
+  | "instagram_dm"
   | "email"
   | "web_livechat"
   | "shopify"
@@ -48,6 +54,30 @@ const CHANNEL_RAIL_ITEMS: Array<{
     icon: MessageSquare,
     accent: "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
     activeAccent: "bg-emerald-600 text-white ring-1 ring-emerald-600",
+  },
+  {
+    key: "telegram",
+    zh: "Telegram",
+    en: "Telegram",
+    icon: Send,
+    accent: "bg-sky-50 text-sky-600 ring-1 ring-sky-100",
+    activeAccent: "bg-sky-600 text-white ring-1 ring-sky-600",
+  },
+  {
+    key: "facebook_messenger",
+    zh: "Messenger",
+    en: "Messenger",
+    icon: MessageCircle,
+    accent: "bg-blue-50 text-blue-600 ring-1 ring-blue-100",
+    activeAccent: "bg-blue-600 text-white ring-1 ring-blue-600",
+  },
+  {
+    key: "instagram_dm",
+    zh: "Instagram 私信",
+    en: "Instagram DM",
+    icon: Camera,
+    accent: "bg-rose-50 text-rose-600 ring-1 ring-rose-100",
+    activeAccent: "bg-rose-600 text-white ring-1 ring-rose-600",
   },
   {
     key: "email",

@@ -287,7 +287,7 @@ async def verify_webhook_subscription(
     )
 
 
-@webhook_router.post("/{channel}")
+@webhook_router.post("/{channel:path}")
 async def receive_webhook(channel: str, request: Request) -> JSONResponse:
     """Verify raw HMAC signature, deduplicate into PostgreSQL, and stream to Taskiq in <100ms."""
     bot_key = _telegram_bot_key(channel)

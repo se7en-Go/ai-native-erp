@@ -930,6 +930,110 @@ async def drain_deferred_webhooks(
     return count
 
 
+async def consume_outbound_stream_batch(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+    *,
+    group_name: str = "erp_outbound_workers",
+    consumer_name: str = "worker-1",
+    count: int = 20,
+    block_ms: int = 20,
+    min_idle_ms: int = 15_000,
+    adapter_registry: AdapterRegistry | None = None,
+) -> int:
+    """Consume queued outbound replies from `stream:outbound:messages` and dispatch them."""
+    stream_key = "stream:outbound:messages"
+    try:
+        await redis.xgroup_create(stream_key, group_name, id="0", mkstream=True)
+    except Exception as exc:
+        if "BUSYGROUP" not in str(exc):
+            raise
+
+    crypto = EnvelopeCryptoService(get_settings())
+    processed = 0
+
+    async def _dispatch_entries(entries_list: list[tuple[Any, dict[Any, Any]]]) -> int:
+        done = 0
+        for stream_msg_id, fields in entries_list:
+            raw_payload = _decode_stream_field(fields, "payload")
+            if not raw_payload:
+                await redis.xack(stream_key, group_name, stream_msg_id)
+                continue
+            try:
+                req_obj = OutboundMessageRequest.model_validate(json.loads(raw_payload))
+                await send_outbound_message(
+                    session_factory=session_factory,
+                    redis=redis,
+                    crypto_service=crypto,
+                    request_payload=req_obj,
+                    adapter_registry=adapter_registry,
+                )
+            except Exception:
+                logger.exception("Failed dispatching outbound message %s", stream_msg_id)
+            await redis.xack(stream_key, group_name, stream_msg_id)
+            done += 1
+        return done
+
+    claimed = await redis.xautoclaim(
+        stream_key,
+        group_name,
+        consumer_name,
+        min_idle_ms,
+        start_id="0-0",
+        count=count,
+    )
+    claimed_messages = cast(list[tuple[Any, dict[Any, Any]]], claimed[1] if claimed else [])
+    processed += await _dispatch_entries(claimed_messages)
+
+    raw_entries = cast(
+        list[tuple[Any, list[tuple[Any, dict[Any, Any]]]]],
+        await redis.xreadgroup(
+            groupname=group_name,
+            consumername=consumer_name,
+            streams={stream_key: ">"},
+            count=count,
+            block=block_ms,
+        ),
+    )
+    for _stream_name, messages in raw_entries:
+        processed += await _dispatch_entries(messages)
+    return processed
+
+
+async def drain_delayed_outbound(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+    adapter_registry: AdapterRegistry | None = None,
+) -> int:
+    """Dispatch rate-limited/retried outbound messages whose delay has elapsed."""
+    now_score = datetime.now(UTC).timestamp()
+    due_items = cast(
+        list[bytes | str],
+        await redis.zrangebyscore("queue:outbound:delayed", "-inf", now_score),
+    )
+    if not due_items:
+        return 0
+    crypto = EnvelopeCryptoService(get_settings())
+    count = 0
+    for raw in due_items:
+        removed = await redis.zrem("queue:outbound:delayed", raw)
+        if not removed:
+            continue
+        payload = raw.decode() if isinstance(raw, bytes) else raw
+        item = json.loads(payload)
+        req_obj = OutboundMessageRequest.model_validate(item["payload"])
+        await send_outbound_message(
+            session_factory=session_factory,
+            redis=redis,
+            crypto_service=crypto,
+            request_payload=req_obj,
+            adapter_registry=adapter_registry,
+            attempt=int(item.get("attempt", 1)),
+        )
+        count += 1
+    return count
+
+
 async def run_webhook_worker_once(
     session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
@@ -938,7 +1042,7 @@ async def run_webhook_worker_once(
     adapter_registry: AdapterRegistry | None = None,
     broker_session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> int:
-    """One production pass: compensate, reclaim, read, and drain deferred retries."""
+    """One production pass: compensate, reclaim, read, drain deferred retries and outbound."""
     if broker_session_factory is None:
         raise RuntimeError("webhook broker session is not configured")
     total = await compensate_unenqueued_webhooks(broker_session_factory, redis)
@@ -952,6 +1056,17 @@ async def run_webhook_worker_once(
             broker_session_factory=broker_session_factory,
         )
     total += await drain_deferred_webhooks(session_factory, redis, broker_session_factory)
+    total += await consume_outbound_stream_batch(
+        session_factory,
+        redis,
+        min_idle_ms=min_idle_ms,
+        adapter_registry=adapter_registry,
+    )
+    total += await drain_delayed_outbound(
+        session_factory,
+        redis,
+        adapter_registry=adapter_registry,
+    )
     return total
 
 
