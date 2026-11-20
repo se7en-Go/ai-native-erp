@@ -2,12 +2,21 @@
 
 import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Landmark, Receipt, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Landmark,
+  Receipt,
+  TrendingDown,
+  TrendingUp,
+  Upload,
+} from "lucide-react";
 import { submitReceivablePayment, verifyPayment } from "@/lib/api-client/live-client";
 import { canVerifyFinanceSettlement, isPrivilegedCostViewer } from "@/lib/auth-cookie";
 import { formatMoney, type UserRole } from "@/lib/contracts";
 import { useI18n } from "@/lib/i18n";
 import { Badge, Card, CardHeader, EmptyState } from "@/components/ui/page";
+import { CvpWaterfallBar } from "@/components/ui/erp-charts";
 
 export interface ReceivableMilestoneItem {
   id: string;
@@ -39,12 +48,24 @@ export interface OrderProfitSnapshotItem {
   net_contribution_margin_base: string;
 }
 
-const STATUS_TONE: Record<ReceivableMilestoneItem["status"], "neutral" | "success" | "warning" | "danger" | "info"> = {
+const STATUS_TONE: Record<
+  ReceivableMilestoneItem["status"],
+  "neutral" | "success" | "warning" | "danger" | "info"
+> = {
   open: "info",
   partial: "warning",
   settled: "success",
   overdue: "danger",
   void: "neutral",
+};
+
+/** Semantic dot colour per milestone state — 21st.dev status pill rhythm. */
+const STATUS_DOT: Record<ReceivableMilestoneItem["status"], string> = {
+  open: "bg-blue-500",
+  partial: "bg-amber-500",
+  settled: "bg-emerald-500",
+  overdue: "bg-rose-500",
+  void: "bg-slate-400",
 };
 
 export function PaymentMilestoneTable({
@@ -99,20 +120,36 @@ export function PaymentMilestoneTable({
     void: bi("已作废", "Void"),
   };
 
+  const settledCount = receivables.filter((rp) => rp.status === "settled").length;
+  const blockedCount = receivables.filter((rp) => rp.shipment_blocked_70_unpaid).length;
+
   return (
     <div className="space-y-4">
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader
           icon={Receipt}
-          title={bi("B2B 定金 / 尾款里程碑与 L0 资金复核", "B2B deposit / balance milestones & L0 cash verification")}
+          title={bi(
+            "B2B 定金 / 尾款里程碑与 L0 资金复核",
+            "B2B deposit / balance milestones & L0 cash verification"
+          )}
           description={bi(
             "水单凭证与汇兑流水必须由财务或所有者逐笔复核；尾款未结清前，订单出库被系统强制阻断。",
             "Wire receipts and FX flows must be verified line by line by Finance/Owner; dispatch stays blocked until the balance is settled."
           )}
           actions={
-            <Badge tone="info">
-              {bi("里程碑", "Milestones")} · {receivables.length}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge tone="info">
+                {bi("里程碑", "Milestones")} · {receivables.length}
+              </Badge>
+              <Badge tone="success">
+                {bi("已核销", "Settled")} · {settledCount}
+              </Badge>
+              {blockedCount > 0 && (
+                <Badge tone="warning">
+                  {bi("出库阻断", "Dispatch blocked")} · {blockedCount}
+                </Badge>
+              )}
+            </div>
           }
         />
         <div className="p-0">
@@ -136,25 +173,45 @@ export function PaymentMilestoneTable({
                   {receivables.map((rp) => (
                     <tr key={rp.id}>
                       <td>
-                        <div className="font-medium text-slate-900">{rp.order_no}</div>
-                        <span className="mt-0.5 inline-block rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
+                        <div className="text-[13px] font-bold tracking-tight text-slate-950">
+                          {rp.order_no}
+                        </div>
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-slate-600">
                           {rp.milestone_label}
                         </span>
                       </td>
                       <td className="tabular-nums">
-                        <div className="text-slate-800">
+                        <div className="text-[13px] font-semibold text-slate-900">
                           {bi("应收", "Due")} {formatMoney(rp.due_amount, rp.currency)}
                         </div>
-                        <div className="text-[12px] text-slate-500">
+                        <div className="mt-0.5 text-[11.5px] text-slate-500">
                           {bi("已收", "Paid")} {formatMoney(rp.paid_amount, rp.currency)}
                         </div>
                       </td>
                       <td>
-                        <Badge tone={STATUS_TONE[rp.status]}>{statusLabel[rp.status]}</Badge>
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                            STATUS_TONE[rp.status] === "success"
+                              ? "border-emerald-200/80 bg-emerald-50 text-emerald-800"
+                              : STATUS_TONE[rp.status] === "warning"
+                                ? "border-amber-200/80 bg-amber-50 text-amber-900"
+                                : STATUS_TONE[rp.status] === "danger"
+                                  ? "border-rose-200/80 bg-rose-50 text-rose-800"
+                                  : STATUS_TONE[rp.status] === "info"
+                                    ? "border-blue-200/80 bg-blue-50 text-blue-800"
+                                    : "border-slate-200/80 bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[rp.status]}`}
+                            aria-hidden="true"
+                          />
+                          {statusLabel[rp.status]}
+                        </span>
                         {rp.shipment_blocked_70_unpaid && (
                           <div
                             data-testid="balance-70-unpaid-warning"
-                            className="mt-1 inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+                            className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-900"
                           >
                             <AlertTriangle className="h-3 w-3" />
                             <span>70% Balance Unpaid — Shipment Blocked</span>
@@ -172,7 +229,7 @@ export function PaymentMilestoneTable({
                               }
                               placeholder={bi("水单号", "T/T ref")}
                               aria-label={bi("水单号", "T/T reference")}
-                              className="erp-input w-24 py-1 text-[12px]"
+                              className="h-8 w-24 rounded-lg border border-slate-300 bg-white px-2 text-[12px] text-slate-800 shadow-xs outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
                             />
                             <input
                               type="text"
@@ -182,9 +239,9 @@ export function PaymentMilestoneTable({
                               }
                               placeholder={bi("汇率", "FX")}
                               aria-label={bi("实际汇率", "Actual FX rate")}
-                              className="erp-input w-16 py-1 text-[12px] tabular-nums"
+                              className="h-8 w-16 rounded-lg border border-slate-300 bg-white px-2 text-[12px] tabular-nums text-slate-800 shadow-xs outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
                             />
-                            <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-50">
+                            <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[12px] font-medium text-slate-600 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50">
                               <Upload className="h-3 w-3" />
                               <span>{bi("选择水单", "Choose slip")}</span>
                               <input
@@ -202,7 +259,7 @@ export function PaymentMilestoneTable({
                             <button
                               type="button"
                               onClick={() => uploadPaymentMutation.mutate(rp)}
-                              className="erp-btn erp-btn-secondary py-1 text-[12px]"
+                              className="inline-flex h-8 items-center gap-1 rounded-lg bg-slate-900 px-2.5 text-[12px] font-semibold text-white shadow-xs transition-colors hover:bg-slate-800"
                             >
                               <Upload className="h-3 w-3" />
                               <span>{bi("登记收款", "Record")}</span>
@@ -217,7 +274,7 @@ export function PaymentMilestoneTable({
                             data-testid={`verify-payment-btn-${rp.pending_payment_id}`}
                             disabled={!canVerify || verifyMutation.isPending}
                             onClick={() => verifyMutation.mutate(rp.pending_payment_id!)}
-                            className="erp-btn bg-emerald-600 py-1 text-[12px] text-white hover:bg-emerald-700 disabled:opacity-40"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-[12px] font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             <span>Verify ({rp.pending_tx_ref ?? "T/T"})</span>
@@ -233,7 +290,7 @@ export function PaymentMilestoneTable({
         </div>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader
           icon={Landmark}
           title={bi("CVP 订单贡献毛利瀑布", "CVP order contribution margin waterfall")}
@@ -250,64 +307,98 @@ export function PaymentMilestoneTable({
           }
         />
         <div
-          className={`grid gap-3 p-4 ${
-            cvpSnapshots.length > 2 ? "md:grid-cols-2 2xl:grid-cols-3" : ""
-          }`}
+          className={`grid gap-3 p-4 ${cvpSnapshots.length > 2 ? "md:grid-cols-2 2xl:grid-cols-3" : ""}`}
         >
           {cvpSnapshots.map((snap) => {
             const rev = Number(snap.gross_revenue_base);
+            const cogs = Number(snap.cogs_base);
             const net = Number(snap.net_contribution_margin_base);
             const pct = rev > 0 ? ((net / rev) * 100).toFixed(2) : "0.00";
+            // Everything that is not COGS and not net margin: commission, gateway,
+            // freight/duty, message + ad CPA, net of FX gain/loss. Derived so the
+            // stacked bar always adds up to exactly 100% of the real revenue.
+            const feesAndLogistics = rev - cogs - net;
             return (
               <div
                 key={snap.order_id}
                 data-testid={`cvp-waterfall-${snap.order_id}`}
-                className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 text-[12px]"
+                className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-shadow hover:shadow-[0_4px_14px_rgba(15,23,42,0.07)]"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
-                  <span className="font-semibold text-slate-900">{snap.order_no}</span>
-                  <span className="font-semibold tabular-nums text-emerald-700">
-                    Net Margin: {formatMoney(snap.net_contribution_margin_base, snap.base_currency)}{" "}
-                    ({pct}%)
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="truncate text-[13px] font-bold tracking-tight text-slate-950">
+                    {snap.order_no}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums ${
+                      net >= 0
+                        ? "border-emerald-200/80 bg-emerald-50 text-emerald-800"
+                        : "border-rose-200/80 bg-rose-50 text-rose-800"
+                    }`}
+                  >
+                    {net >= 0 ? (
+                      <TrendingUp className="h-3 w-3" aria-hidden="true" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3" aria-hidden="true" />
+                    )}
+                    Net Margin:{" "}
+                    {formatMoney(snap.net_contribution_margin_base, snap.base_currency)} ({pct}%)
                   </span>
                 </div>
-                <Row
-                  label={bi("+ 营业收入", "+ Gross revenue")}
-                  value={formatMoney(snap.gross_revenue_base, snap.base_currency)}
-                />
-                <Row
-                  label={bi("- 商品成本 (COGS)", "- COGS")}
-                  value={`-${formatMoney(snap.cogs_base, snap.base_currency)}`}
-                  negative
-                />
-                <Row
-                  label={bi("- 平台佣金", "- Platform commission")}
-                  value={`-${formatMoney(snap.platform_commission_base, snap.base_currency)}`}
-                  negative
-                />
-                <Row
-                  label={bi("- 支付通道费", "- Payment gateway fee")}
-                  value={`-${formatMoney(snap.payment_gateway_fee_base, snap.base_currency)}`}
-                  negative
-                />
-                <Row
-                  label={bi("- 头程运费与 DDP 关税", "- Shipping & DDP duty")}
-                  value={`-${formatMoney(snap.shipping_and_duty_base, snap.base_currency)}`}
-                  negative
-                />
-                <Row
-                  label={bi("- 渠道消息与广告 CPA", "- Channel msg & ad CPA")}
-                  value={`-${formatMoney(
-                    Number(snap.channel_msg_cost_base) + Number(snap.ad_attribution_cost_base),
-                    snap.base_currency
-                  )}`}
-                  negative
-                />
-                <Row
-                  label={bi("+/- 汇兑损益", "+/- FX gain/loss")}
-                  value={formatMoney(snap.fx_gain_loss_base, snap.base_currency)}
-                  info
-                />
+
+                <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+                  <CvpWaterfallBar
+                    grossRevenue={rev}
+                    cogs={cogs}
+                    feesAndLogistics={feesAndLogistics}
+                    netMargin={net}
+                  />
+                </div>
+
+                <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                  <Row
+                    label={bi("+ 营业收入", "+ Gross revenue")}
+                    value={formatMoney(snap.gross_revenue_base, snap.base_currency)}
+                    strong
+                  />
+                  <Row
+                    label={bi("- 商品成本 (COGS)", "- COGS")}
+                    value={`-${formatMoney(snap.cogs_base, snap.base_currency)}`}
+                    negative
+                  />
+                  <Row
+                    label={bi("- 平台佣金", "- Platform commission")}
+                    value={`-${formatMoney(snap.platform_commission_base, snap.base_currency)}`}
+                    negative
+                  />
+                  <Row
+                    label={bi("- 支付通道费", "- Payment gateway fee")}
+                    value={`-${formatMoney(snap.payment_gateway_fee_base, snap.base_currency)}`}
+                    negative
+                  />
+                  <Row
+                    label={bi("- 头程运费与 DDP 关税", "- Shipping & DDP duty")}
+                    value={`-${formatMoney(snap.shipping_and_duty_base, snap.base_currency)}`}
+                    negative
+                  />
+                  <Row
+                    label={bi("- 渠道消息与广告 CPA", "- Channel msg & ad CPA")}
+                    value={`-${formatMoney(
+                      Number(snap.channel_msg_cost_base) + Number(snap.ad_attribution_cost_base),
+                      snap.base_currency
+                    )}`}
+                    negative
+                  />
+                  <Row
+                    label={bi("+/- 汇兑损益", "+/- FX gain/loss")}
+                    value={formatMoney(snap.fx_gain_loss_base, snap.base_currency)}
+                    info
+                  />
+                  <Row
+                    label={bi("= 净贡献毛利", "= Net contribution margin")}
+                    value={formatMoney(snap.net_contribution_margin_base, snap.base_currency)}
+                    strong
+                  />
+                </div>
               </div>
             );
           })}
@@ -327,18 +418,26 @@ function Row({
   value,
   negative = false,
   info = false,
+  strong = false,
 }: {
   label: string;
   value: string;
   negative?: boolean;
   info?: boolean;
+  strong?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-slate-500">{label}</span>
+    <div className="flex items-baseline justify-between gap-2 border-b border-dashed border-slate-100 py-1 last:border-0">
+      <span className="text-[11.5px] font-medium text-slate-500">{label}</span>
       <span
-        className={`tabular-nums ${
-          negative ? "text-rose-700" : info ? "text-blue-700" : "text-slate-800"
+        className={`text-[12px] tabular-nums ${
+          negative
+            ? "text-rose-700"
+            : info
+              ? "text-blue-700"
+              : strong
+                ? "font-bold text-slate-950"
+                : "text-slate-800"
         }`}
       >
         {value}
