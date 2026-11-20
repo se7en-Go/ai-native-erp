@@ -229,7 +229,9 @@ export function formatMoney(
   if (rawValue === null || rawValue === undefined || typeof rawValue === "object") {
     return `${currency} 0.00`;
   }
-  const num = typeof rawValue === "number" ? rawValue : Number(rawValue);
+  const normalized =
+    typeof rawValue === "string" ? rawValue.replace(/,/g, "").trim() : rawValue;
+  const num = typeof normalized === "number" ? normalized : Number(normalized);
   if (!Number.isFinite(num)) {
     return `${currency} 0.00`;
   }

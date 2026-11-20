@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { formatMoney } from "@/lib/contracts";
 import {
   buildCvpTrend,
   sumDecimalStrings,
@@ -98,5 +99,18 @@ describe("CVP trend derivation (real snapshots only)", () => {
     expect(empty.margin).toBe("0.00");
     expect(empty.marginPct).toBe("0.00");
     expect(empty.orders).toBe(0);
+  });
+
+  it("formats comma-grouped decimal strings cleanly through formatMoney", () => {
+    expect(formatMoney(sumDecimalStrings(["17240.00", "14220.00"]), "USD")).toBe("$31,460.00");
+    const trend = buildCvpTrend(
+      [
+        snapshot("DEMO-B2B-2002", "14824.60", "5296.02", "USD"),
+        snapshot("DEMO-B2B-2001", "17240.00", "6050.60", "USD"),
+      ],
+      "all"
+    );
+    expect(formatMoney(trend.revenue, trend.baseCurrency)).toBe("$32,064.60");
+    expect(formatMoney(trend.margin, trend.baseCurrency)).toBe("$11,346.62");
   });
 });
