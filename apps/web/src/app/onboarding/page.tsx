@@ -2,9 +2,18 @@
 
 import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Copy, Rocket, ShieldAlert, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  Copy,
+  Rocket,
+  ShieldAlert,
+  Sparkles,
+  Wallet,
+  Workflow,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { Badge, Card, CardHeader, Page, PageHeader, StatCard } from "@/components/ui/page";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
+import { Badge, Card, CardHeader, Page, PageHeader } from "@/components/ui/page";
 import {
   advanceOnboarding,
   completeWhatsappEmbeddedSignup,
@@ -243,49 +252,68 @@ export default function OnboardingPage() {
           }
         />
 
-        <Card className="p-4">
-          <div className="flex flex-wrap gap-2">
+        <Card className="overflow-hidden">
+          <div className="flex items-start justify-between gap-1.5 border-b border-slate-200/90 bg-slate-50/60 px-4 py-4">
             {STEP_KEYS.map((label, idx) => {
               const num = (idx + 1) as 1 | 2 | 3 | 4 | 5;
               const done = step > num;
               const active = step === num;
               return (
-                <span
+                <div
                   key={label.zh}
                   aria-current={active ? "step" : undefined}
-                  className={`flex min-w-[120px] flex-1 items-center gap-2 rounded-lg border px-2.5 py-2 text-[12px] font-medium ${
-                    active
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : done
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                        : "border-slate-200 bg-slate-50 text-slate-500"
-                  }`}
+                  className="relative flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center"
                 >
+                  {idx > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute top-4 right-1/2 h-[2px] w-[calc(100%+0.375rem)] rounded-full ${
+                        step > idx ? "bg-emerald-400" : "bg-slate-200"
+                      }`}
+                    />
+                  )}
                   <span
-                    className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${
+                    className={`relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11.5px] font-bold transition-colors ${
                       active
-                        ? "bg-white/20 text-white"
+                        ? "bg-blue-600 text-white shadow-[0_0_0_4px_rgba(37,99,235,0.15)]"
                         : done
-                          ? "bg-emerald-600 text-white"
-                          : "bg-white text-slate-500"
+                          ? "bg-emerald-500 text-white"
+                          : "border border-slate-200 bg-white text-slate-500"
                     }`}
                   >
-                    {done ? <CheckCircle2 className="h-3 w-3" /> : num}
+                    {done ? <CheckCircle2 className="h-4 w-4" /> : num}
                   </span>
-                  <span className="truncate">{bi(label.zh, label.en)}</span>
-                </span>
+                  <span
+                    className={`min-w-0 max-w-full truncate text-[11px] font-semibold ${
+                      active ? "text-blue-800" : done ? "text-emerald-700" : "text-slate-600"
+                    }`}
+                  >
+                    {bi(label.zh, label.en)}
+                  </span>
+                </div>
               );
             })}
           </div>
-          <div className="mt-3 h-1 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-1 rounded-full bg-blue-600 transition-[width]"
-              style={{ width: `${progressPct}%` }}
-            />
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between gap-2 text-[11.5px] font-semibold text-slate-600">
+              <span>
+                {bi("上线进度", "Launch progress")} · {bi("第", "Step")} {step} / 5
+              </span>
+              <span className="tabular-nums text-blue-700">{progressPct}%</span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 transition-[width] duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            {copiedNotice && (
+              <div className="mt-2 inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[12px] font-semibold text-emerald-800">
+                <CheckCircle2 className="h-3 w-3" />
+                {copiedNotice}
+              </div>
+            )}
           </div>
-          {copiedNotice && (
-            <div className="mt-2 text-[12px] font-medium text-emerald-700">{copiedNotice}</div>
-          )}
         </Card>
 
         {(saveWorkspaceMutation.error || nextMutation.error || completeMutation.error) && (
@@ -304,7 +332,7 @@ export default function OnboardingPage() {
               )}
             />
             <div className="grid gap-3 p-4 md:grid-cols-2">
-              <div>
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
                 <label className="erp-label" htmlFor="onboarding-preset-select">
                   {bi("业务预设", "Business preset")}
                 </label>
@@ -375,7 +403,7 @@ export default function OnboardingPage() {
                 />
               </div>
             </div>
-            <div className="flex justify-end border-t border-slate-100 p-4">
+            <div className="flex justify-end border-t border-slate-200/90 bg-slate-50/60 p-4">
               <button
                 type="button"
                 data-testid="onboarding-save-step1"
@@ -522,7 +550,7 @@ export default function OnboardingPage() {
                   )}
                 </div>
               </div>
-              <div className="flex justify-end border-t border-slate-100 p-4">
+              <div className="flex justify-end border-t border-slate-200/90 bg-slate-50/60 p-4">
                 <button
                   type="button"
                   data-testid="onboarding-next-btn"
@@ -555,10 +583,11 @@ export default function OnboardingPage() {
                     key={tab}
                     type="button"
                     onClick={() => setStorefrontTab(tab)}
-                    className={`rounded-lg border px-3 py-1.5 text-[12px] font-medium ${
+                    aria-pressed={storefrontTab === tab}
+                    className={`rounded-xl border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
                       storefrontTab === tab
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        ? "border-blue-600 bg-blue-600 text-white shadow-[0_2px_8px_-2px_rgba(37,99,235,0.55)]"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
                     {tab}
@@ -566,7 +595,7 @@ export default function OnboardingPage() {
                 ))}
               </div>
 
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3.5">
                 <div>
                   <label className="erp-label" htmlFor="storefront-domain">
                     {bi(`${storefrontTab} 店铺域名 / 句柄`, `${storefrontTab} store domain / handle`)}
@@ -637,7 +666,7 @@ export default function OnboardingPage() {
                 </button>
               </div>
             </div>
-            <div className="flex justify-end border-t border-slate-100 p-4">
+            <div className="flex justify-end border-t border-slate-200/90 bg-slate-50/60 p-4">
               <button
                 type="button"
                 data-testid="onboarding-next-btn"
@@ -674,7 +703,7 @@ export default function OnboardingPage() {
                 />
               </div>
 
-              <div className="break-all rounded-xl bg-[#0B1220] p-3.5 font-mono text-[11px] leading-6 text-emerald-300">
+              <div className="break-all rounded-2xl bg-[#0B1220] p-3.5 font-mono text-[11px] leading-6 text-emerald-300 ring-1 ring-slate-900/10">
                 {snippetCode}
               </div>
 
@@ -697,7 +726,7 @@ export default function OnboardingPage() {
                 </button>
               </div>
             </div>
-            <div className="flex justify-end border-t border-slate-100 p-4">
+            <div className="flex justify-end border-t border-slate-200/90 bg-slate-50/60 p-4">
               <button
                 type="button"
                 data-testid="onboarding-next-btn"
@@ -730,7 +759,10 @@ export default function OnboardingPage() {
                 {SANDBOX_SCENARIOS.map((sc, idx) => {
                   const reply = sandboxPassed[sc.id];
                   return (
-                    <div key={sc.id} className="space-y-1.5 rounded-xl border border-slate-200 p-3.5">
+                    <div
+                      key={sc.id}
+                      className="space-y-1.5 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                    >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[13px] font-medium text-slate-900">
                           {bi(sc.zh, sc.en)}
@@ -751,7 +783,7 @@ export default function OnboardingPage() {
                         {bi("测试消息", "Prompt")}：&ldquo;{sc.message}&rdquo;
                       </div>
                       {reply && (
-                        <div className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[12px] font-medium text-emerald-900">
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[12px] font-semibold text-emerald-900">
                           {bi("通过", "PASS")}: {reply}
                         </div>
                       )}
@@ -759,7 +791,7 @@ export default function OnboardingPage() {
                   );
                 })}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/90 bg-slate-50/60 p-4">
                 <p className="text-[11px] text-slate-500">
                   {bi(
                     "激活后所有 AI 提案仍需人工审核，资金动作永久锁定 L0。",
@@ -779,15 +811,32 @@ export default function OnboardingPage() {
               </div>
             </Card>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <StatCard
+            <section
+              aria-label={bi("上线检查关键指标", "Launch readiness metrics")}
+              className="grid gap-3 sm:grid-cols-3"
+            >
+              <BentoStatCard
                 label={bi("已通过场景", "Sandbox scenarios")}
                 value={`${Object.keys(sandboxPassed).length} / 3`}
-                tone={all3SandboxPassed ? "success" : "warning"}
+                icon={Sparkles}
+                accent={all3SandboxPassed ? "emerald" : "amber"}
+                hint={bi("三条业务消息全部通过才可激活", "All three must pass before activation")}
               />
-              <StatCard label={bi("业务预设", "Preset")} value={preset} />
-              <StatCard label={bi("本位币", "Base currency")} value={baseCurrency} />
-            </div>
+              <BentoStatCard
+                label={bi("业务预设", "Preset")}
+                value={<span className="text-[15px] leading-tight">{preset}</span>}
+                icon={Workflow}
+                accent="blue"
+                hint={bi("决定默认渠道与单据模板", "Drives default channels and templates")}
+              />
+              <BentoStatCard
+                label={bi("本位币", "Base currency")}
+                value={baseCurrency}
+                icon={Wallet}
+                accent="violet"
+                hint={bi("用于 CVP 汇总与利润核算", "Used for CVP aggregation")}
+              />
+            </section>
           </div>
         )}
       </Page>
