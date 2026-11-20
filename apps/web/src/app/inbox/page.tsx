@@ -19,7 +19,6 @@ import {
 import { MessageThread } from "@/components/inbox/message-thread";
 import { InboxComposer } from "@/components/inbox/composer";
 import { ContextDrawer } from "@/components/inbox/context-drawer";
-import { FloatingCopilot } from "@/components/ai/floating-copilot";
 import {
   fetchChannelAccounts,
   fetchPendingProposalsCount,
@@ -235,7 +234,7 @@ export default function InboxPage() {
     <div
       role="group"
       aria-label={bi("按归属筛选会话", "Filter conversations by ownership")}
-      className="grid grid-cols-3 gap-1 rounded-lg bg-[#F4F2EE] p-0.5"
+      className="grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-0.5 dark:bg-gray-800"
     >
       {OWNERSHIP_FILTERS.map((option) => {
         const active = ownershipFilter === option.value;
@@ -246,10 +245,10 @@ export default function InboxPage() {
             aria-pressed={active}
             data-testid={`inbox-ownership-${option.value}`}
             onClick={() => setOwnershipFilter(option.value)}
-            className={`truncate rounded-md px-1.5 py-1 text-[10.5px] font-semibold transition-colors ${
+            className={`truncate rounded-lg px-1.5 py-1 text-[10.5px] font-semibold transition-colors ${
               active
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "text-stone-600 hover:bg-white/80 hover:text-zinc-950"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-gray-600 hover:bg-white hover:text-gray-950 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
             }`}
           >
             {bi(option.zh, option.en)}
@@ -269,8 +268,8 @@ export default function InboxPage() {
         onClick={() => togglePin(activeConversation)}
         className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11.5px] font-semibold transition-colors disabled:opacity-60 ${
           activeConversation.is_pinned
-            ? "border-emerald-300 bg-emerald-600 text-white shadow-[0_1px_6px_-2px_rgba(5,150,105,0.7)] hover:bg-emerald-700"
-            : "border-[#E5E2DC] bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+            ? "border-blue-600 bg-blue-600 text-white shadow-[0_1px_6px_-2px_rgba(37,99,235,0.45)] hover:bg-blue-700"
+            : "border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
         }`}
       >
         <Pin className={`h-3 w-3 ${activeConversation.is_pinned ? "rotate-45" : ""}`} />
@@ -282,8 +281,8 @@ export default function InboxPage() {
       </button>
 
       <div className="relative flex items-center gap-1">
-        <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E2DC] bg-[#FAF8F5] px-1.5 py-1">
-          <Tag className="h-3 w-3 shrink-0 text-emerald-700" />
+        <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-1.5 py-1 dark:border-gray-700 dark:bg-gray-800">
+          <Tag className="h-3 w-3 shrink-0 text-blue-600" />
           <input
             type="text"
             data-testid="add-conv-tag-input"
@@ -297,7 +296,7 @@ export default function InboxPage() {
             }}
             placeholder={bi("加标签…", "Add tag…")}
             aria-label={bi("添加会话标签", "Add conversation tag")}
-            className="w-20 border-0 bg-transparent p-0 text-[11.5px] font-medium text-stone-800 placeholder:text-stone-400 focus:outline-none"
+            className="w-20 border-0 bg-transparent p-0 text-[11.5px] font-medium text-gray-800 placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500"
           />
           <button
             type="button"
@@ -305,7 +304,7 @@ export default function InboxPage() {
             aria-label={bi("确认添加标签", "Confirm new tag")}
             disabled={!tagDraft.trim()}
             onClick={() => commitTag(activeConversation, tagDraft)}
-            className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-40"
+            className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-blue-600 transition-colors hover:bg-blue-100 disabled:opacity-40 dark:hover:bg-blue-500/15"
           >
             <Plus className="h-3 w-3" />
           </button>
@@ -316,7 +315,7 @@ export default function InboxPage() {
           data-testid="conv-tag-panel-btn"
           aria-expanded={tagPanelOpen}
           onClick={() => setTagPanelOpen((prev) => !prev)}
-          className="inline-flex items-center gap-1 rounded-lg border border-[#E5E2DC] bg-white px-2 py-1 text-[11.5px] font-semibold text-stone-700 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11.5px] font-semibold text-gray-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
         >
           <Tag className="h-3 w-3" />
           <span>{bi("标签", "Tags")}</span>
@@ -325,9 +324,9 @@ export default function InboxPage() {
         {tagPanelOpen && (
           <div
             data-testid="conv-tag-panel"
-            className="absolute top-8 left-0 z-20 w-56 rounded-xl border border-[#E5E2DC] bg-white p-2 shadow-[0_12px_32px_-12px_rgba(15,23,42,0.32)]"
+            className="absolute top-8 left-0 z-20 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-[0_12px_32px_-12px_rgba(15,23,42,0.32)] dark:border-gray-700 dark:bg-gray-900"
           >
-            <p className="mb-1.5 px-0.5 text-[10.5px] font-semibold text-stone-500">
+            <p className="mb-1.5 px-0.5 text-[10.5px] font-semibold text-gray-500 dark:text-gray-400">
               {bi("快捷标签", "Quick tags")}
             </p>
             <div className="flex flex-wrap gap-1">
@@ -348,8 +347,8 @@ export default function InboxPage() {
                     }
                     className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 transition-colors ${
                       applied
-                        ? "bg-emerald-600 text-white ring-emerald-700"
-                        : "bg-emerald-50 text-emerald-800 ring-emerald-200 hover:bg-emerald-100"
+                        ? "bg-blue-600 text-white ring-blue-700"
+                        : "bg-blue-50 text-blue-700 ring-blue-200 hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30 dark:hover:bg-blue-500/15"
                     }`}
                   >
                     {tag}
@@ -358,14 +357,14 @@ export default function InboxPage() {
               })}
             </div>
             {(activeConversation.tags ?? []).length > 0 && (
-              <div className="mt-2 space-y-1 border-t border-stone-100 pt-1.5">
-                <p className="px-0.5 text-[10.5px] font-semibold text-stone-500">
+              <div className="mt-2 space-y-1 border-t border-gray-100 pt-1.5 dark:border-gray-800">
+                <p className="px-0.5 text-[10.5px] font-semibold text-gray-500 dark:text-gray-400">
                   {bi("已打标签", "Applied")}
                 </p>
                 {(activeConversation.tags ?? []).map((tag) => (
                   <div
                     key={tag}
-                    className="flex items-center justify-between gap-1 rounded-md bg-stone-50 px-1.5 py-0.5 text-[11px] font-medium text-stone-700"
+                    className="flex items-center justify-between gap-1 rounded-md bg-gray-50 px-1.5 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-200"
                   >
                     <span className="truncate">{tag}</span>
                     <button
@@ -373,7 +372,7 @@ export default function InboxPage() {
                       data-testid={`remove-conv-tag-${tag}`}
                       aria-label={bi(`移除标签 ${tag}`, `Remove tag ${tag}`)}
                       onClick={() => removeTag(activeConversation, tag)}
-                      className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-stone-500 hover:bg-rose-50 hover:text-rose-700"
+                      className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-gray-500 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10"
                     >
                       <X className="h-2.5 w-2.5" />
                     </button>
@@ -389,7 +388,7 @@ export default function InboxPage() {
         <span
           role="alert"
           data-testid="conversation-meta-error"
-          className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10.5px] font-medium text-rose-700 ring-1 ring-rose-200"
+          className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10.5px] font-medium text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30"
         >
           {metaError}
         </span>
@@ -399,55 +398,59 @@ export default function InboxPage() {
 
   return (
     <AppShell pendingProposalsCount={pendingProposalsQuery.data?.total ?? 0}>
-      <div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-white">
+      <div className="flex h-[calc(100vh-4rem)] min-h-0 w-full flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
         <ChannelRail
+          variant="compact"
           selectedChannel={selectedChannel}
           onSelectChannel={setSelectedChannel}
           unreadByChannel={{}}
         />
-        <ConversationList
-          conversations={conversations}
-          selectedConversationId={activeConversation?.id ?? null}
-          activeFilter={activeFilter}
-          searchQuery={searchQuery}
-          onSelectFilter={setActiveFilter}
-          onSearchChange={setSearchQuery}
-          onSelectConversation={setSelectedConversationId}
-          headerSlot={ownershipSlot}
-          quickConnectHref={quickConnectHref}
-          quickConnectLabel={quickConnectLabel}
-          channelAccounts={channelAccountOptions}
-          channelAccountFilter={channelAccountFilter}
-          onChannelAccountFilterChange={setChannelAccountFilter}
-          pinnedOnly={pinnedOnly}
-          onTogglePinnedOnly={() => setPinnedOnly((prev) => !prev)}
-        />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <MessageThread
-            conversation={activeConversation}
-            messages={messagesQuery.data?.items ?? []}
-            onToggleDrawer={() => setDrawerOpen((prev) => !prev)}
-            headerActions={headerActions}
+        <div className="flex min-h-0 flex-1 overflow-hidden bg-white dark:bg-gray-900">
+          <ConversationList
+            conversations={conversations}
+            selectedConversationId={activeConversation?.id ?? null}
+            activeFilter={activeFilter}
+            searchQuery={searchQuery}
+            onSelectFilter={setActiveFilter}
+            onSearchChange={setSearchQuery}
+            onSelectConversation={setSelectedConversationId}
+            headerSlot={ownershipSlot}
+            quickConnectHref={quickConnectHref}
+            quickConnectLabel={quickConnectLabel}
+            channelAccounts={channelAccountOptions}
+            channelAccountFilter={channelAccountFilter}
+            onChannelAccountFilterChange={setChannelAccountFilter}
+            pinnedOnly={pinnedOnly}
+            onTogglePinnedOnly={() => setPinnedOnly((prev) => !prev)}
           />
-          <InboxComposer
-            conversation={activeConversation}
-            messages={messagesQuery.data?.items ?? []}
-            insertRequest={replyInsert}
-          />
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <MessageThread
+                conversation={activeConversation}
+                messages={messagesQuery.data?.items ?? []}
+                onToggleDrawer={() => setDrawerOpen((prev) => !prev)}
+                headerActions={headerActions}
+              />
+              <InboxComposer
+                conversation={activeConversation}
+                messages={messagesQuery.data?.items ?? []}
+                insertRequest={replyInsert}
+              />
+            </div>
+            {drawerOpen && activeConversation && (
+              <ContextDrawer
+                customerId={activeConversation.customer_id}
+                onInsertReplyText={(text) =>
+                  setReplyInsert((previous) => ({
+                    text,
+                    nonce: (previous?.nonce ?? 0) + 1,
+                  }))
+                }
+              />
+            )}
+          </div>
         </div>
-        {drawerOpen && activeConversation && (
-          <ContextDrawer
-            customerId={activeConversation.customer_id}
-            onInsertReplyText={(text) =>
-              setReplyInsert((previous) => ({
-                text,
-                nonce: (previous?.nonce ?? 0) + 1,
-              }))
-            }
-          />
-        )}
       </div>
-      <FloatingCopilot conversationId={activeConversation?.id ?? null} />
     </AppShell>
   );
 }

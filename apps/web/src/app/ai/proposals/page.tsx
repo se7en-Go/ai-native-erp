@@ -80,7 +80,7 @@ export default function AiProposalsPage() {
       currentPath="/ai/proposals"
       pendingProposalsCount={pendingCountQuery.data?.total ?? 0}
     >
-      <Page>
+      <Page className="min-w-0">
         <PageHeader
           title={bi("AI 提案人工审核队列", "AI proposal review queue")}
           description={bi(
@@ -93,7 +93,7 @@ export default function AiProposalsPage() {
             </Badge>
           }
           actions={
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 text-slate-900 dark:text-slate-100">
               <SegmentedTabs<ProposalStatus>
                 ariaLabel={bi("按状态筛选", "Filter by status")}
                 value={statusFilter}
@@ -108,13 +108,13 @@ export default function AiProposalsPage() {
                   })
                 )}
               />
-              <label className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-600 shadow-xs">
-                <Filter className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+              <label className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-600 shadow-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                <Filter className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
                 <select
                   value={typeFilter}
                   aria-label={bi("按提案类型筛选", "Filter by proposal type")}
                   onChange={(e) => setTypeFilter(e.target.value as "" | ProposalType)}
-                  className="bg-transparent text-[12px] font-semibold text-slate-800 outline-none"
+                  className="min-w-0 bg-transparent text-[12px] font-semibold text-slate-800 outline-none dark:text-slate-200"
                 >
                   <option value="">{bi("全部提案类型", "All proposal types")}</option>
                   {(Object.keys(TYPE_COPY) as ProposalType[]).map((type) => (
@@ -130,29 +130,30 @@ export default function AiProposalsPage() {
 
         {items.length === 0 ? (
           <EmptyState>
-            <InboxIcon className="mx-auto mb-2 h-5 w-5 text-slate-300" />
+            <InboxIcon className="mx-auto mb-2 h-5 w-5 text-slate-300 dark:text-slate-600" />
             {bi(
               `当前「${STATUS_COPY[statusFilter].zh}」队列没有提案。`,
               `No proposals in the ${STATUS_COPY[statusFilter].en.toLowerCase()} queue.`
             )}
           </EmptyState>
         ) : (
-          <div className="grid gap-3 2xl:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-2">
             {items.map((proposal) => {
               const role = principal?.role;
               const canReview =
                 role !== "finance" || proposal.proposal_type === "payment_match";
               return (
-                <ProposalReviewCard
-                  key={proposal.id}
-                  proposal={proposal}
-                  canReview={canReview}
-                  onApprove={(id) => approveMutation.mutate(id)}
-                  onEditApprove={(id, edited_payload) =>
-                    editApproveMutation.mutate({ id, edited_payload })
-                  }
-                  onReject={(id, reason) => rejectMutation.mutate({ id, reason })}
-                />
+                <div key={proposal.id} className="min-w-0">
+                  <ProposalReviewCard
+                    proposal={proposal}
+                    canReview={canReview}
+                    onApprove={(id) => approveMutation.mutate(id)}
+                    onEditApprove={(id, edited_payload) =>
+                      editApproveMutation.mutate({ id, edited_payload })
+                    }
+                    onReject={(id, reason) => rejectMutation.mutate({ id, reason })}
+                  />
+                </div>
               );
             })}
           </div>

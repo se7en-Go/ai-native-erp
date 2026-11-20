@@ -14,11 +14,11 @@ import {
   Search,
   ShieldAlert,
   Sun,
-  TrendingUp,
   X,
 } from "lucide-react";
 import { useAuthSession } from "@/components/providers";
 import { CommandPalette, useCommandPalette } from "@/components/command-palette";
+import { LiveFxTicker } from "@/components/live-fx-ticker";
 import { useRealtimeInbox } from "@/hooks/use-realtime-inbox";
 import { canAccessRoute } from "@/lib/auth-cookie";
 import { useI18n } from "@/lib/i18n";
@@ -327,12 +327,7 @@ export function AppShell({
             <span className="truncate font-semibold text-gray-900 dark:text-gray-100">
               {pageTitle}
             </span>
-            <span className="ml-2 hidden items-center gap-1.5 rounded-full border border-blue-200/80 bg-blue-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-blue-700 tabular-nums xl:inline-flex dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-              <span>USD/CNY</span>
-              <span>7.1200</span>
-              <TrendingUp className="h-3 w-3 text-blue-500 dark:text-blue-400" />
-            </span>
+            <LiveFxTicker enabled={Boolean(principal)} />
           </div>
 
           <div className="flex items-center gap-2">

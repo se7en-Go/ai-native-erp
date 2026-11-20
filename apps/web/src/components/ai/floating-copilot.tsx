@@ -332,7 +332,7 @@ function PatrolBriefPanel() {
                 data-testid={`patrol-dispatch-${alert.employee_code}`}
                 disabled={pending}
                 onClick={() => dispatchMutation.mutate(alert.employee_code)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#18181B] px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
               >
                 <Radar className="h-3 w-3" aria-hidden="true" />
                 {pending ? bi("呼叫中…", "Dispatching…") : bi("呼叫", "Dispatch")}
@@ -443,18 +443,26 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
   const safeCards = sanitizeCopilotCards(capabilitiesQuery.data?.capabilities ?? []);
 
   return (
-    <div className="fixed right-5 bottom-5 z-40">
+    <div
+      className={
+        open
+          ? "fixed right-4 top-20 z-40"
+          : "fixed right-0 top-1/2 z-40 -translate-y-1/2"
+      }
+    >
       {!open ? (
         <button
           type="button"
           data-testid="copilot-fab-btn"
           onClick={() => setOpen(true)}
           aria-label={bi("打开 AI 副驾驶", "Open AI copilot")}
-          className="relative flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/25 hover:bg-blue-700"
+          title={bi("AI 副驾驶与巡检日报", "AI Copilot & Daily Patrol")}
+          className="group relative flex flex-col items-center justify-center gap-1 rounded-l-xl border border-r-0 border-blue-500/40 bg-blue-600 px-2.5 py-3 text-white shadow-lg shadow-blue-600/25 transition-all hover:bg-blue-700 hover:pr-3.5"
         >
-          <Bot className="h-6 w-6" />
+          <Bot className="h-5 w-5" />
+          <span className="text-[10px] font-semibold tracking-wider">AI</span>
           {pendingCount > 0 && (
-            <span className="absolute -top-1 -right-1 rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+            <span className="absolute -top-2 -left-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white ring-2 ring-white dark:ring-gray-900">
               {pendingCount}
             </span>
           )}
@@ -462,11 +470,11 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
       ) : (
         <div
           data-testid="copilot-drawer"
-          className="flex h-[560px] w-96 flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_-20px_rgba(15,23,42,0.45)]"
+          className="flex h-[min(600px,calc(100vh-6.5rem))] w-[min(390px,calc(100vw-2rem))] flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900"
         >
-          <div className="flex items-center justify-between rounded-t-2xl border-b border-slate-800 bg-[#0B1220] px-3.5 py-3 text-white">
+          <div className="flex items-center justify-between rounded-t-2xl border-b border-blue-700/40 bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-3 text-white">
             <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-emerald-400" />
+              <Bot className="h-4 w-4 text-blue-100" />
               <span className="text-sm font-semibold">{bi("AI 业务副驾驶", "AI Workbench Copilot")}</span>
               {degradedToL0 && (
                 <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-slate-950">

@@ -75,11 +75,11 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
   return (
     <section
       aria-label="AI 文案与素材工坊"
-      className="rounded-2xl border border-slate-200/90 bg-white p-5 text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_10px_30px_-20px_rgba(15,23,42,0.25)]"
+      className="rounded-xl border border-gray-200 bg-white p-5 text-gray-900 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
     >
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4 dark:border-gray-800">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#18181B] to-[#065F46] text-white shadow-md shadow-emerald-950/20">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm">
             <WandSparkles size={18} aria-hidden="true" />
           </span>
           <div className="min-w-0">

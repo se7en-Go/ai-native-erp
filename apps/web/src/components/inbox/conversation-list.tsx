@@ -56,14 +56,14 @@ const FILTER_TABS: Array<{
   { key: "sla_urgent", label: "sla_urgent", zh: "SLA", titleZh: "SLA 紧急" },
 ];
 
-/** 买家首字母彩色头像：按名称稳定散列到 21st.dev 常用柔和色板。 */
+/** 买家首字母彩色头像：按名称稳定散列到 21st.dev 常用柔和冷色板。 */
 const AVATAR_PALETTE = [
-  "bg-blue-100 text-blue-700 ring-blue-200",
-  "bg-emerald-100 text-emerald-700 ring-emerald-200",
-  "bg-violet-100 text-violet-700 ring-violet-200",
-  "bg-amber-100 text-amber-800 ring-amber-200",
-  "bg-rose-100 text-rose-700 ring-rose-200",
-  "bg-cyan-100 text-cyan-700 ring-cyan-200",
+  "bg-blue-100 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30",
+  "bg-sky-100 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/30",
+  "bg-indigo-100 text-indigo-700 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/30",
+  "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600",
+  "bg-violet-100 text-violet-700 ring-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-violet-500/30",
+  "bg-cyan-100 text-cyan-700 ring-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:ring-cyan-500/30",
 ];
 
 function avatarTone(name: string): string {
@@ -81,21 +81,21 @@ export function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-/** 渠道展示色：与左侧渠道栏保持一致，让会话列表一眼可辨来源。 */
+/** 渠道展示色：保持冷色系区分。 */
 const CHANNEL_DOT: Record<string, string> = {
-  whatsapp_cloud: "bg-emerald-500",
-  whatsapp: "bg-emerald-500",
-  email: "bg-blue-500",
-  made_in_china_email: "bg-blue-500",
-  web_livechat: "bg-violet-500",
-  shopify: "bg-lime-500",
-  woocommerce: "bg-purple-500",
+  whatsapp_cloud: "bg-blue-500",
+  whatsapp: "bg-blue-500",
+  email: "bg-sky-500",
+  made_in_china_email: "bg-sky-500",
+  web_livechat: "bg-indigo-500",
+  shopify: "bg-blue-600",
+  woocommerce: "bg-violet-500",
   shopline: "bg-sky-500",
   shoplazza: "bg-indigo-500",
   tiktok_shop: "bg-slate-700",
-  telegram: "bg-sky-500",
+  telegram: "bg-cyan-500",
   messenger: "bg-blue-600",
-  instagram_dm: "bg-rose-500",
+  instagram_dm: "bg-violet-600",
 };
 
 type OwnershipPill = { zh: string; en: string; className: string };
@@ -113,20 +113,23 @@ export function conversationOwnershipPill(
     return {
       zh: `专属 · ${owner ?? personalLabelZh}`,
       en: `Personal · ${owner ?? "me"}`,
-      className: "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
+      className:
+        "bg-blue-50 text-blue-700 ring-blue-200/80 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30",
     };
   }
   if (conv.assigned_user_name) {
     return {
       zh: `负责人 · ${conv.assigned_user_name}`,
       en: `Owner · ${conv.assigned_user_name}`,
-      className: "bg-indigo-50 text-indigo-700 ring-indigo-200/80",
+      className:
+        "bg-gray-100 text-gray-700 ring-gray-200/80 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700",
     };
   }
   return {
     zh: "公司公海",
     en: "Company shared",
-    className: "bg-slate-100 text-slate-700 ring-slate-200/80",
+    className:
+      "bg-gray-100 text-gray-700 ring-gray-200/80 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700",
   };
 }
 
@@ -174,29 +177,29 @@ export function ConversationList({
   return (
     <div
       data-testid="inbox-conversation-list"
-      className="flex w-72 shrink-0 flex-col border-r border-slate-200/90 bg-white xl:w-80"
+      className="flex min-h-0 w-72 shrink-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 xl:w-80"
     >
-      <div className="space-y-2 border-b border-slate-200/90 p-2.5">
+      <div className="space-y-2 border-b border-gray-200 p-2.5 dark:border-gray-800">
         <div className="flex items-center justify-between gap-2 px-0.5">
-          <span className="text-[12.5px] font-semibold text-slate-800">
+          <span className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
             {bi("会话列表", "Conversations")}
           </span>
           {unreadTotal > 0 && (
-            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-rose-700 ring-1 ring-rose-200">
+            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30">
               {unreadTotal} {bi("条未读", "unread")}
             </span>
           )}
         </div>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={bi("搜索买家、订单号或邮箱…", "Search buyer, order or email…")}
             aria-label={bi("搜索会话", "Search conversations")}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-1.5 pr-2.5 pl-8 text-[12px] text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/12"
+            className="w-full rounded-xl border border-gray-200 bg-gray-50 py-1.5 pr-2.5 pl-8 text-[12px] text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/12 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-900"
           />
         </div>
 
@@ -206,7 +209,7 @@ export function ConversationList({
             aria-label={bi("按绑定账号筛选", "Filter by connected account")}
             value={channelAccountFilter}
             onChange={(e) => onChannelAccountFilterChange?.(e.target.value)}
-            className="min-w-0 flex-1 truncate rounded-lg border border-[#E5E2DC] bg-[#FAF8F5] px-2 py-1 text-[11.5px] font-semibold text-stone-700 transition-colors hover:border-emerald-200 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-emerald-500/12"
+            className="min-w-0 flex-1 truncate rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[11.5px] font-semibold text-gray-700 transition-colors hover:border-blue-200 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/12 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:bg-gray-900"
           >
             <option value="all">{bi("全部账号", "All accounts")}</option>
             {channelAccounts.map((account) => (
@@ -224,8 +227,8 @@ export function ConversationList({
             onClick={() => onTogglePinnedOnly?.()}
             className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11.5px] font-semibold transition-colors ${
               pinnedOnly
-                ? "border-emerald-300 bg-emerald-600 text-white shadow-[0_1px_6px_-2px_rgba(5,150,105,0.7)]"
-                : "border-[#E5E2DC] bg-white text-stone-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+                ? "border-blue-600 bg-blue-600 text-white shadow-[0_1px_6px_-2px_rgba(37,99,235,0.45)]"
+                : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
             }`}
           >
             <Pin className="h-3 w-3" />
@@ -247,7 +250,7 @@ export function ConversationList({
                 className={`truncate rounded-lg px-1.5 py-1 text-[11px] font-semibold transition-all duration-150 ${
                   active
                     ? "bg-blue-600 text-white shadow-[0_1px_4px_-1px_rgba(37,99,235,0.6)]"
-                    : "bg-slate-100/90 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
                 }`}
               >
                 {bi(tab.zh, tab.label)}
@@ -259,11 +262,11 @@ export function ConversationList({
         {headerSlot}
       </div>
 
-      <div className="flex-1 divide-y divide-slate-100/90 overflow-y-auto">
+      <div className="flex-1 divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
         {conversations.length === 0 ? (
-          <div className="m-3 space-y-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-6 text-center text-[12px] font-medium text-slate-600">
+          <div className="m-3 space-y-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-[12px] font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300">
             <div>{bi("没有符合筛选条件的会话。", "No conversations match this filter.")}</div>
-            <div className="text-[11px] font-normal text-slate-500">
+            <div className="text-[11px] font-normal text-gray-500 dark:text-gray-400">
               {bi(
                 "还没有接到客户消息？先绑定一个渠道，客户回复会直接进来。",
                 "No inbound messages yet? Bind a channel first and replies land here."
@@ -272,7 +275,7 @@ export function ConversationList({
             <Link
               href={quickConnectHref}
               data-testid="inbox-quick-connect-link"
-              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+              className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/15"
             >
               {quickConnectLabel ?? bi("快捷绑定渠道 →", "Quick connect a channel →")}
             </Link>
@@ -295,8 +298,8 @@ export function ConversationList({
                 onClick={() => onSelectConversation(conv.id)}
                 className={`relative block w-full border-l-[3px] px-3 py-2.5 text-left transition-colors ${
                   selected
-                    ? "border-blue-600 bg-blue-50/70"
-                    : "border-transparent hover:bg-slate-50"
+                    ? "border-blue-600 bg-blue-50/70 dark:bg-blue-500/10"
+                    : "border-transparent hover:bg-gray-50 dark:hover:bg-gray-800/70"
                 }`}
               >
                 <div className="flex items-start gap-2.5">
@@ -311,12 +314,12 @@ export function ConversationList({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-1 truncate text-[13px] font-semibold text-slate-900">
+                      <span className="flex min-w-0 items-center gap-1 truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                         {conv.is_pinned && (
                           <Pin
                             aria-hidden="true"
                             data-testid={`conversation-pin-${conv.id}`}
-                            className="h-3 w-3 shrink-0 rotate-45 text-emerald-600"
+                            className="h-3 w-3 shrink-0 rotate-45 text-blue-600"
                           />
                         )}
                         <span className="truncate">
@@ -331,7 +334,7 @@ export function ConversationList({
                       )}
                     </div>
 
-                    <p className="mt-0.5 line-clamp-2 text-[12px] leading-5 text-slate-600">
+                    <p className="mt-0.5 line-clamp-2 text-[12px] leading-5 text-gray-600 dark:text-gray-400">
                       {conv.last_message_preview}
                     </p>
 
@@ -341,7 +344,7 @@ export function ConversationList({
                           <span
                             key={tag}
                             data-testid={`conversation-tag-${conv.id}-${tag}`}
-                            className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
+                            className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 ring-1 ring-blue-200/80 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30"
                           >
                             <Tag className="h-2.5 w-2.5" />
                             {tag}
@@ -351,7 +354,7 @@ export function ConversationList({
                     )}
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] font-medium">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-700 ring-1 ring-slate-200/70">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-gray-700 ring-1 ring-gray-200/70 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">
                         <span
                           aria-hidden="true"
                           className={`h-1.5 w-1.5 rounded-full ${
@@ -360,11 +363,11 @@ export function ConversationList({
                         />
                         {conv.channel_type}
                       </span>
-                      <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-blue-700 ring-1 ring-blue-100">
+                      <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-blue-700 ring-1 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30">
                         {conv.conversation_mode}
                       </span>
                       {conv.status === "pending_human" && (
-                        <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-800 ring-1 ring-amber-200/70">
+                        <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-800 ring-1 ring-amber-200/70 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
                           <AlertTriangle className="h-2.5 w-2.5" />
                           pending_human
                         </span>
@@ -388,7 +391,7 @@ export function ConversationList({
                         {bi(ownership.zh, ownership.en)}
                       </span>
                       {isSlaUrgent && (
-                        <span className="inline-flex items-center gap-0.5 rounded-md bg-rose-50 px-1.5 py-0.5 text-rose-700 ring-1 ring-rose-200/70">
+                        <span className="inline-flex items-center gap-0.5 rounded-md bg-rose-50 px-1.5 py-0.5 text-rose-700 ring-1 ring-rose-200/70 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30">
                           <Clock className="h-2.5 w-2.5" />
                           SLA
                         </span>

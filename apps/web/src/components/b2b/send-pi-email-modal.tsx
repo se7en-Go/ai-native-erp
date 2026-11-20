@@ -163,24 +163,24 @@ export function SendPiEmailModal({
         aria-modal="true"
         aria-labelledby="send-pi-email-title"
         data-testid="send-pi-email-modal"
-        className="relative flex h-full w-full max-w-[480px] flex-col border-l border-[#E5E2DC] bg-[#FAF8F5] shadow-[-24px_0_60px_-24px_rgba(24,24,27,0.4)]"
+        className="relative flex h-full w-full max-w-[480px] flex-col border-l border-gray-200 bg-white shadow-[-24px_0_60px_-24px_rgba(15,23,42,0.35)] dark:border-gray-800 dark:bg-gray-900"
       >
-        <header className="flex items-start justify-between gap-2 border-b border-[#E5E2DC] bg-white px-5 py-4">
+        <header className="flex items-start justify-between gap-2 border-b border-gray-200 bg-white px-5 py-4 dark:border-gray-800 dark:bg-gray-900">
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden="true"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-500/30"
             >
               <Mail className="h-[18px] w-[18px]" />
             </span>
             <div className="min-w-0">
               <h2
                 id="send-pi-email-title"
-                className="text-[15px] font-bold tracking-tight text-zinc-950"
+                className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-100"
               >
                 {bi("发送 PI 邮件", "Send PI email")}
               </h2>
-              <p className="mt-0.5 text-[12px] leading-5 text-stone-600">
+              <p className="mt-0.5 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
                 <span className="font-mono tabular-nums">{quote.quote_no}</span> ·{" "}
                 {formatMoney(quote.total_amount, quote.quote_currency)} ·{" "}
                 {quote.incoterm}
@@ -191,7 +191,7 @@ export function SendPiEmailModal({
             type="button"
             data-testid="send-pi-email-close"
             onClick={onClose}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[#E5E2DC] bg-white text-stone-500 transition-colors hover:bg-[#F4F2EE] hover:text-zinc-900"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
           >
             <X className="h-4 w-4" />
           </button>
@@ -201,27 +201,27 @@ export function SendPiEmailModal({
           {receipt ? (
             <div
               data-testid="send-pi-email-success"
-              className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4"
+              className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/10"
             >
-              <div className="flex items-center gap-2 text-[13px] font-bold text-emerald-900">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <div className="flex items-center gap-2 text-[13px] font-bold text-emerald-900 dark:text-emerald-200">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 <span>{bi("PI 邮件已发出", "PI email delivered")}</span>
               </div>
-              <dl className="space-y-1.5 text-[12px] leading-5 text-emerald-950">
+              <dl className="space-y-1.5 text-[12px] leading-5 text-emerald-950 dark:text-emerald-100">
                 <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800">
+                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("发件邮箱", "From")}
                   </dt>
                   <dd className="truncate font-semibold">{receipt.from_email}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800">
+                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("收件人", "Recipient")}
                   </dt>
                   <dd className="truncate font-semibold">{receipt.recipient_email}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800">
+                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("发送通道", "Provider")}
                   </dt>
                   <dd className="font-semibold">
@@ -229,7 +229,7 @@ export function SendPiEmailModal({
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800">
+                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("附件", "Attachment")}
                   </dt>
                   <dd className="min-w-0 truncate text-right font-semibold tabular-nums">
@@ -237,7 +237,7 @@ export function SendPiEmailModal({
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800">
+                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("报价状态", "Quote status")}
                   </dt>
                   <dd className="font-mono text-[11.5px] font-semibold">
@@ -309,12 +309,12 @@ export function SendPiEmailModal({
                   ))}
                 </select>
                 {accountsQuery.isLoading && (
-                  <p className="mt-1 text-[11.5px] text-stone-500">
+                  <p className="mt-1 text-[11.5px] text-gray-500 dark:text-gray-400">
                     {bi("正在读取已接入邮箱账号…", "Loading connected mailboxes…")}
                   </p>
                 )}
                 {!accountsQuery.isLoading && emailAccounts.length === 0 && (
-                  <p className="mt-1 text-[11.5px] text-amber-800">
+                  <p className="mt-1 text-[11.5px] text-amber-800 dark:text-amber-400">
                     {bi(
                       "还没有接入邮箱账号，将使用租户默认发件邮箱。",
                       "No mailbox connected yet — the tenant default sender will be used."
@@ -325,7 +325,7 @@ export function SendPiEmailModal({
 
               <div>
                 <span className="erp-label">{bi("PDF 语言", "PDF language")}</span>
-                <div className="mt-1.5 inline-flex rounded-xl border border-[#E5E2DC] bg-white p-0.5">
+                <div className="mt-1.5 inline-flex rounded-xl border border-gray-200 bg-white p-0.5 dark:border-gray-800 dark:bg-gray-900">
                   {(["en", "zh"] as EmailLanguage[]).map((option) => {
                     const active = language === option;
                     return (
@@ -337,8 +337,8 @@ export function SendPiEmailModal({
                         onClick={() => setLanguage(option)}
                         className={`rounded-lg px-3 py-1 text-[12px] font-semibold transition-colors ${
                           active
-                            ? "bg-emerald-600 text-white shadow-xs"
-                            : "text-stone-600 hover:bg-[#F4F2EE] hover:text-zinc-900"
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
                         }`}
                       >
                         {option.toUpperCase()}
@@ -382,8 +382,8 @@ export function SendPiEmailModal({
                 />
               </div>
 
-              <div className="flex items-start gap-2 rounded-xl border border-[#E5E2DC] bg-white px-3 py-2.5 text-[11.5px] leading-5 text-stone-700">
-                <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <div className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50/70 px-3 py-2.5 text-[11.5px] leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-400">
+                <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
                 <span>
                   {bi(
                     `附件：${quote.quote_no}-${language.toUpperCase()}.pdf（由后端实时渲染并随邮件发送）`,
@@ -392,8 +392,8 @@ export function SendPiEmailModal({
                 </span>
               </div>
 
-              <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-[11.5px] leading-5 text-emerald-900">
-                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-[11.5px] leading-5 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 <span>
                   {bi(
                     "邮箱令牌以信封加密保存，服务端解密后发信；退订客户命中抑制名单时自动拦截。",
@@ -406,7 +406,7 @@ export function SendPiEmailModal({
                 <p
                   role="alert"
                   data-testid="send-pi-email-error"
-                  className="flex items-start gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[12px] font-medium text-rose-800"
+                  className="flex items-start gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
                 >
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>{errorMessage}</span>
@@ -417,8 +417,8 @@ export function SendPiEmailModal({
         </div>
 
         {!receipt && (
-          <footer className="flex items-center justify-between gap-2 border-t border-[#E5E2DC] bg-white px-5 py-3">
-            <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-stone-500">
+          <footer className="flex items-center justify-between gap-2 border-t border-gray-200 bg-white px-5 py-3 dark:border-gray-800 dark:bg-gray-900">
+            <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-gray-500 dark:text-gray-400">
               <FileText className="h-3.5 w-3.5" />
               {bi("PI PDF 自动附在邮件中", "The PI PDF is attached automatically")}
             </span>
@@ -427,7 +427,7 @@ export function SendPiEmailModal({
               data-testid="send-pi-email-submit"
               disabled={!recipientValid || sendMutation.isPending}
               onClick={() => sendMutation.mutate()}
-              className="erp-btn rounded-xl bg-emerald-600 px-4 py-2 text-[13px] font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              className="erp-btn rounded-xl bg-blue-600 px-4 py-2 text-[13px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-50"
             >
               {sendMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

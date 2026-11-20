@@ -57,6 +57,13 @@ const FULFILLMENT_DOT: Record<string, string> = {
   refunded: "bg-slate-400",
 };
 
+/**
+ * PageHeader / CardHeader 为共享原语（无 dark 变体），
+ * 此处以任意变体在页面层补齐深色模式下的标题对比度。
+ */
+const PAGE_DARK_HEADER =
+  "dark:[&_header_h1]:text-gray-100 dark:[&_header_p]:text-gray-400 dark:[&_.erp-card-header_h2]:text-gray-100 dark:[&_.erp-card-header_p]:text-gray-400";
+
 export default function OrdersPage() {
   const queryClient = useQueryClient();
   const { bi } = useI18n();
@@ -108,7 +115,7 @@ export default function OrdersPage() {
       currentPath="/orders"
       pendingProposalsCount={pendingProposalsQuery.data?.total ?? 0}
     >
-      <Page>
+      <Page className={PAGE_DARK_HEADER}>
         <PageHeader
           title={bi("全渠道订单与 17TRACK 物流追踪", "Omnichannel orders & 17TRACK logistics")}
           description={bi(
@@ -171,7 +178,7 @@ export default function OrdersPage() {
         {shipMutation.isError && (
           <p
             role="alert"
-            className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[12px] font-medium text-rose-800"
+            className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
           >
             {shipMutation.error.message}
           </p>
@@ -184,7 +191,7 @@ export default function OrdersPage() {
               : bi("暂无订单。", "No orders yet.")}
           </EmptyState>
         ) : (
-          <TableWrap className="rounded-2xl">
+          <TableWrap className="rounded-2xl border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <table className="erp-table">
               <thead>
                 <tr>
@@ -199,7 +206,7 @@ export default function OrdersPage() {
                       <div
                         role="group"
                         aria-label={bi("PDF 语言切换", "PDF language")}
-                        className="inline-flex items-center gap-0.5 rounded-full border border-slate-200 bg-slate-50 p-0.5"
+                        className="inline-flex items-center gap-0.5 rounded-full border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-800 dark:bg-gray-800"
                       >
                         {(
                           [
@@ -215,8 +222,8 @@ export default function OrdersPage() {
                             onClick={() => setPdfLanguage(option.key)}
                             className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
                               pdfLanguage === option.key
-                                ? "bg-[#065F46] text-white shadow-xs"
-                                : "text-slate-600 hover:bg-white"
+                                ? "bg-blue-600 text-white shadow-xs"
+                                : "text-gray-600 hover:bg-white dark:text-gray-400 dark:hover:bg-gray-700"
                             }`}
                           >
                             {option.label}
@@ -243,13 +250,13 @@ export default function OrdersPage() {
                   return (
                     <tr key={ord.id}>
                       <td>
-                        <div className="font-mono text-[12.5px] font-semibold text-slate-900">
+                        <div className="font-mono text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
                           {ord.order_no}
                         </div>
                         {ord.has_72h_stagnation_alert && (
                           <span
                             data-testid={`order-72h-alert-${ord.id}`}
-                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700"
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
                           >
                             <AlertTriangle className="h-3 w-3" />
                             <span>{bi("72 小时物流停滞", "72h stagnation")}</span>
@@ -257,15 +264,15 @@ export default function OrdersPage() {
                         )}
                       </td>
                       <td>
-                        <div className="font-medium text-slate-800">{ord.customer_name}</div>
+                        <div className="font-medium text-gray-800 dark:text-gray-200">{ord.customer_name}</div>
                         <Badge className="mt-1">{bi(modeCopy.zh, modeCopy.en)}</Badge>
                       </td>
                       <td>
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                             ord.fulfillment_status === "exception"
-                              ? "border-rose-200 bg-rose-50 text-rose-700"
-                              : "border-slate-200 bg-white text-slate-700"
+                              ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                              : "border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                           }`}
                         >
                           <span
@@ -278,18 +285,18 @@ export default function OrdersPage() {
                         </span>
                       </td>
                       <td>
-                        <div className="font-medium text-slate-700">{ord.payment_status}</div>
+                        <div className="font-medium text-gray-700 dark:text-gray-300">{ord.payment_status}</div>
                         {blocked70Unpaid && (
                           <span
                             data-testid={`order-ship-blocked-${ord.id}`}
-                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
                           >
                             <Lock className="h-3 w-3" />
                             <span>{bi("70% 尾款未结清", "70% balance unpaid")}</span>
                           </span>
                         )}
                       </td>
-                      <td className="text-right font-semibold tabular-nums text-slate-900">
+                      <td className="text-right font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                         {formatMoney(ord.total_amount, ord.currency)}
                       </td>
                       <td>
@@ -299,7 +306,7 @@ export default function OrdersPage() {
                             href={commercialInvoicePdfUrl(ord.id, pdfLanguage)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-semibold text-slate-700 shadow-xs transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11.5px] font-semibold text-gray-700 shadow-xs transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
                           >
                             <FileText className="h-3 w-3" />
                             <span>{bi("商业发票 CI", "Commercial invoice CI")}</span>
@@ -309,7 +316,7 @@ export default function OrdersPage() {
                             href={packingListPdfUrl(ord.id, pdfLanguage)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-semibold text-slate-700 shadow-xs transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11.5px] font-semibold text-gray-700 shadow-xs transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
                           >
                             <FileSpreadsheet className="h-3 w-3" />
                             <span>{bi("装箱单 PL", "Packing list PL")}</span>
@@ -337,7 +344,7 @@ export default function OrdersPage() {
                             placeholder={bi("运单号", "Tracking #")}
                             aria-label={bi("运单号", "Tracking number")}
                             disabled={blocked70Unpaid}
-                            className="erp-input w-28 rounded-xl py-1 text-[12px] disabled:bg-slate-100"
+                            className="erp-input w-28 rounded-xl py-1 text-[12px] disabled:bg-gray-100 dark:disabled:bg-gray-800"
                           />
                           <button
                             type="button"
@@ -348,7 +355,7 @@ export default function OrdersPage() {
                                 trackingNumber: trackingInputs[ord.id] ?? "",
                               })
                             }
-                            className="erp-btn rounded-xl bg-slate-900 text-white shadow-xs hover:bg-slate-800 disabled:opacity-40"
+                            className="erp-btn rounded-xl bg-blue-600 text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
                           >
                             <ArrowRightLeft className="h-3 w-3" />
                             <span>{bi("出库", "Ship")}</span>

@@ -152,3 +152,22 @@ class PaymentVerifyResponse(BaseModel):
     ok: bool = True
     payment: PaymentRecordRead
     order_fulfillment_status: FulfillmentStatus
+
+
+class LiveFxRateItem(BaseModel):
+    pair: str
+    base: str
+    quote: str
+    rate: Decimal
+
+
+class LiveFxRatesRead(BaseModel):
+    base: str
+    quote: str
+    usd_cny: Decimal
+    rates: list[LiveFxRateItem]
+    source: str
+    as_of_date: str
+    fetched_at: datetime
+    is_live: bool
+    refresh_interval_seconds: int

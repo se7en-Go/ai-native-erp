@@ -1024,6 +1024,25 @@ export type LeadUpdate = {
     status?: LeadStatus | null;
 };
 
+export type LiveFxRateItem = {
+    base: string;
+    pair: string;
+    quote: string;
+    rate: string;
+};
+
+export type LiveFxRatesRead = {
+    as_of_date: string;
+    base: string;
+    fetched_at: string;
+    is_live: boolean;
+    quote: string;
+    rates: Array<LiveFxRateItem>;
+    refresh_interval_seconds: number;
+    source: string;
+    usd_cny: string;
+};
+
 export type LiveSkuCheckRead = {
     available_qty: number;
     incoterm: string;
@@ -5791,6 +5810,37 @@ export type ExportCvpCsvApiV1FinanceCvpExportCsvGetResponses = {
      */
     200: unknown;
 };
+
+export type GetLiveFxRatesApiV1FinanceFxRatesLiveGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        base?: string;
+        force_refresh?: boolean;
+    };
+    url: '/api/v1/finance/fx-rates/live';
+};
+
+export type GetLiveFxRatesApiV1FinanceFxRatesLiveGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetLiveFxRatesApiV1FinanceFxRatesLiveGetError = GetLiveFxRatesApiV1FinanceFxRatesLiveGetErrors[keyof GetLiveFxRatesApiV1FinanceFxRatesLiveGetErrors];
+
+export type GetLiveFxRatesApiV1FinanceFxRatesLiveGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LiveFxRatesRead;
+};
+
+export type GetLiveFxRatesApiV1FinanceFxRatesLiveGetResponse = GetLiveFxRatesApiV1FinanceFxRatesLiveGetResponses[keyof GetLiveFxRatesApiV1FinanceFxRatesLiveGetResponses];
 
 export type GetOrderProfitApiV1FinanceOrdersOrderIdProfitGetData = {
     body?: never;

@@ -5792,6 +5792,91 @@
         "title": "LeadUpdate",
         "type": "object"
       },
+      "LiveFxRateItem": {
+        "properties": {
+          "base": {
+            "title": "Base",
+            "type": "string"
+          },
+          "pair": {
+            "title": "Pair",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pair",
+          "base",
+          "quote",
+          "rate"
+        ],
+        "title": "LiveFxRateItem",
+        "type": "object"
+      },
+      "LiveFxRatesRead": {
+        "properties": {
+          "as_of_date": {
+            "title": "As Of Date",
+            "type": "string"
+          },
+          "base": {
+            "title": "Base",
+            "type": "string"
+          },
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "is_live": {
+            "title": "Is Live",
+            "type": "boolean"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "rates": {
+            "items": {
+              "$ref": "#/components/schemas/LiveFxRateItem"
+            },
+            "title": "Rates",
+            "type": "array"
+          },
+          "refresh_interval_seconds": {
+            "title": "Refresh Interval Seconds",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "usd_cny": {
+            "title": "Usd Cny",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base",
+          "quote",
+          "usd_cny",
+          "rates",
+          "source",
+          "as_of_date",
+          "fetched_at",
+          "is_live",
+          "refresh_interval_seconds"
+        ],
+        "title": "LiveFxRatesRead",
+        "type": "object"
+      },
       "LiveSkuCheckRead": {
         "properties": {
           "available_qty": {
@@ -22205,6 +22290,77 @@
           }
         },
         "summary": "Export Cvp Csv",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/fx-rates/live": {
+      "get": {
+        "operationId": "get_live_fx_rates_api_v1_finance_fx_rates_live_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "base",
+            "required": false,
+            "schema": {
+              "default": "USD",
+              "maxLength": 3,
+              "minLength": 3,
+              "title": "Base",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force_refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force Refresh",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveFxRatesRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Live Fx Rates",
         "tags": [
           "finance"
         ]

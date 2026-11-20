@@ -15,8 +15,10 @@ export const CAPABILITY_LABELS = {
   finance_recon: "财务对账",
 } satisfies Record<AiCapability, string>;
 
-export const button = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-50";
-export const field = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-blue-600";
+export const button =
+  "rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-gray-700 transition-colors hover:border-blue-300 hover:bg-blue-50/60 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-blue-600 dark:hover:bg-gray-700 dark:hover:text-blue-300";
+export const field =
+  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus-visible:outline-2 focus-visible:outline-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100";
 
 export function formatCount(value: number): string {
   return Number.isSafeInteger(value) && value >= 0 ? value.toLocaleString("zh-CN") : "—";

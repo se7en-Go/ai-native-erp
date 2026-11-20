@@ -33,17 +33,18 @@ const FUNNEL_STAGE_LABEL: Record<string, { zh: string; en: string }> = {
   closed_lost: { zh: "已输单", en: "Closed lost" },
 };
 
+/** 渠道环形图配色：科技蓝 → 靛蓝 → 青 → 翡翠 → 紫（深浅色下均有足够对比度）。 */
 const CHANNEL_COLOR: Record<string, string> = {
-  web_livechat: "#059669",
-  whatsapp: "#0D9488",
-  email: "#18181B",
-  facebook_messenger: "#D97706",
-  instagram_dm: "#E11D48",
-  telegram: "#047857",
-  shopify: "#57534E",
+  web_livechat: "#2563EB",
+  whatsapp: "#0EA5E9",
+  email: "#4F46E5",
+  facebook_messenger: "#8B5CF6",
+  instagram_dm: "#10B981",
+  telegram: "#2563EB",
+  shopify: "#4F46E5",
 };
 
-const FALLBACK_COLORS = ["#059669", "#18181B", "#0D9488", "#D97706", "#E11D48", "#57534E"];
+const FALLBACK_COLORS = ["#2563EB", "#4F46E5", "#0EA5E9", "#10B981", "#8B5CF6"];
 
 export default function AnalyticsPage() {
   const { bi, locale } = useI18n();
@@ -84,21 +85,21 @@ export default function AnalyticsPage() {
         {/* ── 页头 ─────────────────────────────────────────────── */}
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="flex items-center gap-2 text-[22px] font-bold tracking-tight text-slate-950">
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+            <h1 className="flex items-center gap-2 text-[22px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60">
                 <BarChart3 className="h-4.5 w-4.5" aria-hidden="true" />
               </span>
               {bi("统计分析", "Analytics")}
             </h1>
-            <p className="mt-1.5 max-w-3xl text-[13px] leading-6 text-slate-600">
+            <p className="mt-1.5 max-w-3xl text-[13px] leading-6 text-slate-600 dark:text-slate-400">
               {bi(
                 "渠道构成、B2B 商机漏斗、CVP 边际毛利与 SKU 毛利表现；成本与毛利对业务员角色自动脱敏，所有数字均来自真实接口。",
                 "Channel mix, B2B opportunity funnel, CVP contribution margin and SKU performance; costs and margins are masked for sales agents and every number comes from a real endpoint."
               )}
             </p>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11.5px] font-semibold text-slate-600 shadow-xs">
-            <TrendingUp className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11.5px] font-semibold text-slate-600 shadow-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+            <TrendingUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
             {bi("商业 BI 仪表盘", "Business BI dashboard")}
           </span>
         </header>
@@ -106,7 +107,7 @@ export default function AnalyticsPage() {
         {overviewQuery.isError && (
           <p
             role="alert"
-            className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[12.5px] font-medium text-rose-800"
+            className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[12.5px] font-medium text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300"
           >
             {overviewQuery.error.message}
           </p>
@@ -152,14 +153,14 @@ export default function AnalyticsPage() {
 
         {/* ── 趋势 + 渠道甜甜圈 ────────────────────────────────── */}
         <div className="grid gap-4 lg:grid-cols-12">
-          <section className="rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] lg:col-span-8">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 p-5">
+          <section className="min-w-0 rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900 lg:col-span-8">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
               <div className="min-w-0">
-                <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
+                <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
                   <TrendingUp className="h-4 w-4 text-blue-600" aria-hidden="true" />
                   {bi("逐单营收与净贡献毛利", "Revenue & net margin per order")}
                 </h2>
-                <p className="mt-1 text-[12px] leading-5 text-slate-600">
+                <p className="mt-1 text-[12px] leading-5 text-slate-600 dark:text-slate-400">
                   {bi(
                     "每个点是一笔真实订单的利润快照（本位币），不做时间插值。",
                     "Each point is one real order profit snapshot in base currency — no time interpolation."
@@ -183,25 +184,25 @@ export default function AnalyticsPage() {
 
             {showMargins ? (
               <div className="space-y-3 p-5 pt-4">
-                <div className="flex flex-wrap items-center gap-4 rounded-xl bg-slate-50/80 px-3.5 py-2.5 text-[12.5px]">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-600">
+                <div className="flex flex-wrap items-center gap-4 rounded-xl bg-slate-50/80 px-3.5 py-2.5 text-[12.5px] dark:bg-slate-800/60">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-400">
                     <span className="h-2 w-2 rounded-full bg-blue-600" />
                     {bi("营收", "Revenue")}
-                    <b className="tabular-nums text-slate-950">
+                    <b className="tabular-nums text-slate-950 dark:text-slate-100">
                       {formatMoney(trend.revenue, trend.baseCurrency)}
                     </b>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-600">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-400">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
                     {bi("净贡献毛利", "Net margin")}
-                    <b className="tabular-nums text-emerald-700">
+                    <b className="tabular-nums text-emerald-700 dark:text-emerald-400">
                       {formatMoney(trend.margin, trend.baseCurrency)}
                     </b>
-                    <span className="rounded-full bg-emerald-50 px-1.5 py-0.2 text-[11px] font-semibold text-emerald-700">
+                    <span className="rounded-full bg-emerald-50 px-1.5 py-0.2 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                       {trend.marginPct}%
                     </span>
                   </span>
-                  <span className="ml-auto text-[11.5px] text-slate-500">
+                  <span className="ml-auto text-[11.5px] text-slate-500 dark:text-slate-400">
                     {bi(`${trend.orders} 笔订单快照`, `${trend.orders} order snapshots`)}
                   </span>
                 </div>
@@ -218,7 +219,7 @@ export default function AnalyticsPage() {
                     currencyPrefix={trend.baseCurrency === "CNY" ? "¥" : "$"}
                   />
                 ) : (
-                  <div className="grid h-[200px] place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-center text-[12.5px] font-medium text-slate-500">
+                  <div className="grid h-[200px] place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-center text-[12.5px] font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
                     {bi(
                       "订单利润快照不足 2 笔，暂时无法绘制趋势曲线。",
                       "Fewer than two order snapshots — not enough to draw a curve."
@@ -229,7 +230,7 @@ export default function AnalyticsPage() {
             ) : (
               <div
                 data-testid="analytics-trend-masked"
-                className="m-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900"
+                className="m-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-300"
               >
                 <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
                 <span>
@@ -242,11 +243,11 @@ export default function AnalyticsPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] lg:col-span-4">
-            <h2 className="text-[15px] font-bold tracking-tight text-slate-950">
+          <section className="min-w-0 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900 lg:col-span-4">
+            <h2 className="text-[15px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
               {bi("渠道分布", "Channel mix")}
             </h2>
-            <p className="mt-1 text-[12px] leading-5 text-slate-600">
+            <p className="mt-1 text-[12px] leading-5 text-slate-600 dark:text-slate-400">
               {bi("会话量占比（真实渠道统计）", "Share of conversations per channel")}
             </p>
             <div data-testid="analytics-channels" className="mt-4">
@@ -268,20 +269,20 @@ export default function AnalyticsPage() {
 
         {/* ── 漏斗 + SKU 毛利 ─────────────────────────────────── */}
         <div className="grid gap-4 lg:grid-cols-12">
-          <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] lg:col-span-5">
+          <section className="min-w-0 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900 lg:col-span-5">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
+                <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
                   <Target className="h-4 w-4 text-blue-600" aria-hidden="true" />
                   {bi("B2B 漏斗转化", "B2B funnel conversion")}
                 </h2>
-                <p className="mt-1 text-[12px] leading-5 text-slate-600">
+                <p className="mt-1 text-[12px] leading-5 text-slate-600 dark:text-slate-400">
                   {bi("阶段数量与赢单转化率", "Stage counts and win conversion")}
                 </p>
               </div>
               <span
                 data-testid="analytics-conversion"
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-emerald-800"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-300"
               >
                 <Percent className="h-3 w-3" aria-hidden="true" />
                 {bi("赢单转化率", "Win rate")} {overview?.won_conversion_pct ?? "—"}%
@@ -303,23 +304,25 @@ export default function AnalyticsPage() {
                 }))}
               />
               {funnel.length === 0 && (
-                <p className="text-[12.5px] text-slate-500">{bi("暂无商机数据", "No opportunities yet")}</p>
+                <p className="text-[12.5px] text-slate-500 dark:text-slate-400">
+                  {bi("暂无商机数据", "No opportunities yet")}
+                </p>
               )}
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] lg:col-span-7">
-            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 p-5">
+          <section className="min-w-0 rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900 lg:col-span-7">
+            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 p-5 dark:border-slate-800">
               <div>
-                <h2 className="text-[15px] font-bold tracking-tight text-slate-950">
+                <h2 className="text-[15px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
                   {bi("SKU 毛利分析", "SKU margin analysis")}
                 </h2>
-                <p className="mt-1 text-[12px] leading-5 text-slate-600">
+                <p className="mt-1 text-[12px] leading-5 text-slate-600 dark:text-slate-400">
                   {bi("按销量、营收、成本与毛利拆解到 SKU", "Units, revenue, cost and margin per SKU")}
                 </p>
               </div>
               {showMargins && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   {bi(`${overview?.sku_margins?.length ?? 0} 个 SKU`, `${overview?.sku_margins?.length ?? 0} SKUs`)}
                 </span>
               )}
@@ -340,16 +343,18 @@ export default function AnalyticsPage() {
                   <tbody>
                     {(overview?.sku_margins ?? []).map((row) => (
                       <tr key={`${row.variant_id}-${row.currency}`}>
-                        <td className="font-semibold text-slate-900">{row.sku}</td>
-                        <td className="text-right tabular-nums text-slate-700">{row.units}</td>
-                        <td className="text-right tabular-nums text-slate-800">
+                        <td className="font-semibold text-slate-900 dark:text-slate-100">{row.sku}</td>
+                        <td className="text-right tabular-nums text-slate-700 dark:text-slate-300">
+                          {row.units}
+                        </td>
+                        <td className="text-right tabular-nums text-slate-800 dark:text-slate-200">
                           {formatMoney(row.revenue, row.currency)}
                         </td>
-                        <td className="text-right tabular-nums text-slate-600">
+                        <td className="text-right tabular-nums text-slate-600 dark:text-slate-400">
                           {formatMoney(row.cost, row.currency)}
                         </td>
                         <td className="text-right tabular-nums">
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[11.5px] font-bold text-emerald-800">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[11.5px] font-bold text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-300">
                             {formatMoney(row.gross_margin, row.currency)}
                           </span>
                         </td>
@@ -357,7 +362,7 @@ export default function AnalyticsPage() {
                     ))}
                     {(overview?.sku_margins ?? []).length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-6 text-center text-[12.5px] text-slate-500">
+                        <td colSpan={5} className="py-6 text-center text-[12.5px] text-slate-500 dark:text-slate-400">
                           {bi("暂无毛利数据", "No margin data")}
                         </td>
                       </tr>
@@ -369,7 +374,7 @@ export default function AnalyticsPage() {
               <div className="p-5">
                 <p
                   data-testid="analytics-margins-masked"
-                  className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900"
+                  className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-300"
                 >
                   <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
                   {bi(

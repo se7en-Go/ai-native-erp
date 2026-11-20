@@ -52,6 +52,13 @@ const EMPTY_WAREHOUSE_FORM: WarehouseFormState = {
   city: "",
 };
 
+/**
+ * PageHeader / CardHeader 为共享原语（无 dark 变体），
+ * 此处以任意变体在页面层补齐深色模式下的标题对比度。
+ */
+const PAGE_DARK_HEADER =
+  "dark:[&_header_h1]:text-gray-100 dark:[&_header_p]:text-gray-400 dark:[&_.erp-card-header_h2]:text-gray-100 dark:[&_.erp-card-header_p]:text-gray-400";
+
 export default function WmsPage() {
   const { bi } = useI18n();
   const queryClient = useQueryClient();
@@ -177,7 +184,7 @@ export default function WmsPage() {
 
   return (
     <AppShell currentPath="/wms" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <Page>
+      <Page className={PAGE_DARK_HEADER}>
         <PageHeader
           title={bi("WMS 出入库台账", "WMS movements")}
           description={bi(
@@ -193,7 +200,7 @@ export default function WmsPage() {
                   setWarehouseError(null);
                   setWarehouseOpen(true);
                 }}
-                className="erp-btn rounded-xl bg-[#18181B] text-[13px] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46]"
+                className="erp-btn rounded-xl bg-blue-600 text-[13px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>{bi("新建仓库", "New warehouse")}</span>
@@ -205,14 +212,14 @@ export default function WmsPage() {
         {createdWarehouses.length > 0 && (
           <div
             data-testid="wms-created-warehouses"
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12px] font-semibold text-emerald-900"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12px] font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
           >
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
             <span>{bi("本次已新建仓库：", "Warehouses created in this session:")}</span>
             {createdWarehouses.map((warehouse) => (
               <span
                 key={warehouse.code}
-                className="rounded-md border border-emerald-300 bg-white px-1.5 py-0.5 font-mono text-[11px]"
+                className="rounded-md border border-emerald-300 bg-white dark:bg-gray-900 px-1.5 py-0.5 font-mono text-[11px] dark:border-emerald-500/40 dark:text-emerald-300"
               >
                 {warehouse.code} · {warehouse.name}
                 {warehouse.city ? ` · ${warehouse.city}` : ""}
@@ -259,19 +266,19 @@ export default function WmsPage() {
           data-testid="wms-low-stock-card"
           className="erp-card overflow-hidden rounded-[20px]"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-3.5 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/50 px-3.5 py-2.5">
             <div className="flex items-center gap-2">
               <AlertTriangle
                 className={`h-4 w-4 ${lowStockItems.length > 0 ? "text-rose-600" : "text-emerald-600"}`}
               />
-              <h2 className="text-[13.5px] font-semibold text-slate-900">
+              <h2 className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100">
                 {bi("低库存补货预警", "Low-stock replenishment alerts")}
               </h2>
-              <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700">
+              <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
                 {lowStockItems.length} {bi("项待补", "to restock")}
               </span>
             </div>
-            <span className="text-[11.5px] font-medium text-slate-500">
+            <span className="text-[11.5px] font-medium text-gray-500 dark:text-gray-400">
               {bi(
                 "可用库存低于安全库存阈值时自动列出，建议补货量 = max(安全库存 × 2 − 可用, 安全库存)",
                 "Listed automatically when available stock drops below its safety threshold; suggested qty = max(safety × 2 − available, safety)"
@@ -282,7 +289,7 @@ export default function WmsPage() {
           {createdPo && (
             <div
               data-testid="low-stock-po-created"
-              className="flex flex-wrap items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12px] font-semibold text-emerald-900"
+              className="flex flex-wrap items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12px] font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
             >
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
               <span>
@@ -295,7 +302,7 @@ export default function WmsPage() {
               <a
                 data-testid="low-stock-po-link"
                 href="/supply-chain/purchase-orders"
-                className="ml-auto inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-[11.5px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+                className="ml-auto inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white dark:bg-gray-900 px-2 py-1 text-[11.5px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-500/40 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
               >
                 <ShoppingCart className="h-3 w-3" />
                 <span>{bi("去采购单验收", "Open purchase orders")}</span>
@@ -317,19 +324,19 @@ export default function WmsPage() {
               {lowStockItems.map((item) => (
                 <tr key={`${item.warehouse_id}-${item.variant_id}`}>
                   <td className="py-2">
-                    <div className="font-mono text-[12px] font-semibold text-slate-900">{item.sku}</div>
-                    <div className="text-[11px] font-medium text-slate-500">{item.product_name}</div>
+                    <div className="font-mono text-[12px] font-semibold text-gray-900 dark:text-gray-100">{item.sku}</div>
+                    <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{item.product_name}</div>
                   </td>
-                  <td className="py-2 text-slate-600">{item.warehouse_name}</td>
+                  <td className="py-2 text-gray-600 dark:text-gray-400">{item.warehouse_name}</td>
                   <td className="py-2 text-right">
                     <span
                       data-testid={`low-stock-badge-${item.variant_id}`}
-                      className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700"
+                      className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
                     >
                       {item.available_qty} / {item.safety_stock_qty}
                     </span>
                   </td>
-                  <td className="py-2 text-right font-semibold tabular-nums text-slate-900">
+                  <td className="py-2 text-right font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                     {item.suggested_reorder_qty}
                   </td>
                   {canAdjust && (
@@ -351,7 +358,7 @@ export default function WmsPage() {
                 <tr>
                   <td
                     colSpan={canAdjust ? 5 : 4}
-                    className="py-4 text-center text-[12px] font-medium text-slate-500"
+                    className="py-4 text-center text-[12px] font-medium text-gray-500 dark:text-gray-400"
                   >
                     {lowStockQuery.isLoading
                       ? bi("正在检查安全库存…", "Checking safety stock…")
@@ -363,9 +370,9 @@ export default function WmsPage() {
           </table>
         </section>
 
-        <TableWrap className="rounded-2xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-3.5 py-2.5">
-            <h2 className="text-[13.5px] font-semibold text-slate-900">
+        <TableWrap className="rounded-2xl border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/50 px-3.5 py-2.5">
+            <h2 className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100">
               {bi("实时库存", "Live stock")}
             </h2>
             <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-blue-800">
@@ -386,16 +393,16 @@ export default function WmsPage() {
               {stock.map((row) => (
                 <tr key={`${row.warehouse_id}-${row.variant_id}`}>
                   <td className="py-1.5">
-                    <span className="font-mono text-[12px] font-semibold text-slate-900">
+                    <span className="font-mono text-[12px] font-semibold text-gray-900 dark:text-gray-100">
                       {row.sku}
                     </span>
                   </td>
-                  <td className="py-1.5 text-slate-600">
-                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px]">
+                  <td className="py-1.5 text-gray-600 dark:text-gray-400">
+                    <span className="rounded-md bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 font-mono text-[11px]">
                       {row.warehouse_id.slice(0, 8)}
                     </span>
                   </td>
-                  <td className="py-1.5 tabular-nums text-slate-800">{row.on_hand_qty}</td>
+                  <td className="py-1.5 tabular-nums text-gray-800 dark:text-gray-200">{row.on_hand_qty}</td>
                   <td className="py-1.5 tabular-nums text-amber-800">{row.reserved_qty}</td>
                   <td className="py-1.5 font-semibold tabular-nums text-emerald-700">
                     {row.available_qty}
@@ -404,7 +411,7 @@ export default function WmsPage() {
               ))}
               {stock.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center font-medium text-slate-500">
+                  <td colSpan={5} className="py-4 text-center font-medium text-gray-500 dark:text-gray-400">
                     {stockQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无库存行", "No stock rows")}
                   </td>
                 </tr>
@@ -426,7 +433,7 @@ export default function WmsPage() {
               aria-label="Stocktake SKU"
               value={variantId || variantsQuery.data?.items?.[0]?.id || ""}
               onChange={(event) => setVariantId(event.target.value)}
-              className="rounded border border-slate-300 px-2 py-1 text-xs"
+              className="rounded border border-gray-300 dark:border-gray-700 px-2 py-1 text-xs"
             >
               {(variantsQuery.data?.items ?? []).map((variant) => (
                 <option key={variant.id} value={variant.id}>
@@ -440,14 +447,14 @@ export default function WmsPage() {
               required
               value={delta}
               onChange={(event) => setDelta(event.target.value)}
-              className="rounded border border-slate-300 px-2 py-1 text-xs"
+              className="rounded border border-gray-300 dark:border-gray-700 px-2 py-1 text-xs"
             />
             <input
               aria-label="Stocktake notes"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               placeholder="盘点说明"
-              className="rounded border border-slate-300 px-2 py-1 text-xs"
+              className="rounded border border-gray-300 dark:border-gray-700 px-2 py-1 text-xs"
             />
             <button
               type="submit"
@@ -466,15 +473,15 @@ export default function WmsPage() {
         ) : (
           <p
             data-testid="stocktake-forbidden"
-            className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-[12px] font-medium text-slate-700"
+            className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 p-3 text-[12px] font-medium text-gray-700 dark:text-gray-300"
           >
             {bi(`当前角色（${principal?.role}）仅可查看流水与库存，盘点调整需要 Owner / Admin / Manager。`, `Your role (${principal?.role}) can only view movements and stock; stocktakes require Owner / Admin / Manager.`)}
           </p>
         )}
 
-        <TableWrap className="rounded-2xl">
+        <TableWrap className="rounded-2xl border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
           <table data-testid="wms-movements-table" className="erp-table">
-            <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
+            <thead className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 font-semibold text-gray-600 dark:text-gray-400">
               <tr>
                 <th>{bi("流水号", "Movement no.")}</th>
                 <th>{bi("类型", "Type")}</th>
@@ -483,16 +490,16 @@ export default function WmsPage() {
                 <th>{bi("时间", "Time")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {movements.map((movement) => (
                 <tr key={movement.id} data-testid={`movement-row-${movement.id}`}>
                   <td className="px-3 py-2">
-                    <span className="font-mono text-[12px] font-semibold text-slate-900">
+                    <span className="font-mono text-[12px] font-semibold text-gray-900 dark:text-gray-100">
                       {movement.movement_no}
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
+                    <span className="rounded-md bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[11px] font-medium text-gray-700 dark:text-gray-300">
                       {movement.movement_type}
                     </span>
                   </td>
@@ -503,17 +510,17 @@ export default function WmsPage() {
                   >
                     {movement.qty_delta > 0 ? `+${movement.qty_delta}` : movement.qty_delta}
                   </td>
-                  <td className="px-3 py-2 text-slate-500">
+                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">
                     {movement.reference_type ?? "—"}
                   </td>
-                  <td className="px-3 py-2 text-slate-500">
+                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">
                     {new Date(movement.created_at).toLocaleString()}
                   </td>
                 </tr>
               ))}
               {movements.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={5} className="px-3 py-6 text-center text-gray-400 dark:text-gray-500">
                     {movementsQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无流水", "No movements")}
                   </td>
                 </tr>
@@ -545,12 +552,12 @@ export default function WmsPage() {
               }}
               className="space-y-3.5"
             >
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+              <div className="flex items-start justify-between gap-3 border-b border-gray-200 dark:border-gray-800 pb-3">
                 <div className="min-w-0">
-                  <h3 id="create-warehouse-title" className="text-[15px] font-bold text-slate-950">
+                  <h3 id="create-warehouse-title" className="text-[15px] font-bold text-gray-900 dark:text-gray-100">
                     {bi("新建仓库", "New warehouse")}
                   </h3>
-                  <p className="mt-1 text-[12px] leading-5 text-slate-600">
+                  <p className="mt-1 text-[12px] leading-5 text-gray-600 dark:text-gray-400">
                     {bi(
                       "仓库编码唯一且用于采购单与库存台账；建完仓库才能把低库存 SKU 转成采购单。",
                       "The warehouse code is unique and used by purchase orders and the inventory ledger. Replenishment requires at least one warehouse."
@@ -561,7 +568,7 @@ export default function WmsPage() {
                   type="button"
                   onClick={() => setWarehouseOpen(false)}
                   aria-label={bi("关闭新建仓库弹窗", "Close the new warehouse dialog")}
-                  className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-xs transition-colors hover:bg-slate-100"
+                  className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1.5 text-gray-600 dark:text-gray-400 shadow-xs transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -605,13 +612,13 @@ export default function WmsPage() {
                 <p
                   role="alert"
                   data-testid="create-warehouse-error"
-                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800"
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
                 >
                   {warehouseError ?? createWarehouseMutation.error?.message}
                 </p>
               )}
 
-              <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+              <div className="flex items-center justify-end gap-2 border-t border-gray-200 dark:border-gray-800 pt-3">
                 <button
                   type="button"
                   onClick={() => setWarehouseOpen(false)}
@@ -623,7 +630,7 @@ export default function WmsPage() {
                   type="submit"
                   data-testid="warehouse-submit"
                   disabled={createWarehouseMutation.isPending}
-                  className="erp-btn rounded-xl bg-[#18181B] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46] disabled:opacity-40"
+                  className="erp-btn rounded-xl bg-blue-600 font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
                 >
                   {createWarehouseMutation.isPending
                     ? bi("正在创建…", "Creating…")
@@ -643,12 +650,12 @@ export default function WmsPage() {
               }}
               className="space-y-3.5"
             >
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+              <div className="flex items-start justify-between gap-3 border-b border-gray-200 dark:border-gray-800 pb-3">
                 <div className="min-w-0">
-                  <h3 id="low-stock-po-title" className="text-[15px] font-bold text-slate-950">
+                  <h3 id="low-stock-po-title" className="text-[15px] font-bold text-gray-900 dark:text-gray-100">
                     {bi("一键转采购单", "Create purchase order")}
                   </h3>
-                  <p className="mt-1 text-[12px] leading-5 text-slate-600">
+                  <p className="mt-1 text-[12px] leading-5 text-gray-600 dark:text-gray-400">
                     {bi(
                       "生成的采购单为草稿状态，供应商确认单价后可在采购单页提交并收货入库。",
                       "The generated purchase order starts as a draft. Confirm the unit cost with the supplier, then submit and receive it from the purchase-order page."
@@ -659,13 +666,13 @@ export default function WmsPage() {
                   type="button"
                   onClick={() => setPoItem(null)}
                   aria-label={bi("关闭补货弹窗", "Close the replenishment dialog")}
-                  className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-xs transition-colors hover:bg-slate-100"
+                  className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1.5 text-gray-600 dark:text-gray-400 shadow-xs transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[12px] font-semibold text-rose-800">
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[12px] font-semibold text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
                 <span className="font-mono">{poItem.sku}</span>
                 {" · "}
                 {poItem.product_name}
@@ -678,7 +685,7 @@ export default function WmsPage() {
 
               <div className="grid gap-2.5 sm:grid-cols-2">
                 <label className="block sm:col-span-2">
-                  <span className="mb-1 flex items-center gap-1 text-[11.5px] font-semibold text-slate-700">
+                  <span className="mb-1 flex items-center gap-1 text-[11.5px] font-semibold text-gray-700 dark:text-gray-300">
                     {bi("供应商", "Supplier")}
                     <span className="text-rose-600">*</span>
                   </span>
@@ -720,13 +727,13 @@ export default function WmsPage() {
               {createPoMutation.isError && (
                 <p
                   role="alert"
-                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800"
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
                 >
                   {createPoMutation.error.message}
                 </p>
               )}
 
-              <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+              <div className="flex items-center justify-end gap-2 border-t border-gray-200 dark:border-gray-800 pt-3">
                 <button
                   type="button"
                   onClick={() => setPoItem(null)}
@@ -744,7 +751,7 @@ export default function WmsPage() {
                     !(Number(poUnitCost) >= 0) ||
                     poUnitCost.trim().length === 0
                   }
-                  className="erp-btn rounded-xl bg-[#18181B] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46] disabled:opacity-40"
+                  className="erp-btn rounded-xl bg-blue-600 font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
                 >
                   {createPoMutation.isPending
                     ? bi("正在生成…", "Creating…")
@@ -800,7 +807,7 @@ function FormField({
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
   return (
     <label className="block">
-      <span className="mb-1 flex items-center gap-1 text-[11.5px] font-semibold text-slate-700">
+      <span className="mb-1 flex items-center gap-1 text-[11.5px] font-semibold text-gray-700 dark:text-gray-300">
         {label}
         {required && <span className="text-rose-600">*</span>}
       </span>
