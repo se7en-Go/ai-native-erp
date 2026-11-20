@@ -53,6 +53,9 @@ type CardCopy = {
   windowZh: string;
   windowEn: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** 品牌着色图标框，让三张接入卡片一眼可辨且不再像线框。 */
+  iconTile: string;
+  accentBar: string;
   fields: FieldCopy[];
 };
 
@@ -66,6 +69,8 @@ const CARDS: Record<MessagingProviderKind, CardCopy> = {
     windowEn:
       "24h standard reply window, extended to 7 days with the HUMAN_AGENT tag for human agents only.",
     icon: MessageCircle,
+    iconTile: "bg-blue-50 text-blue-600 ring-blue-100",
+    accentBar: "bg-blue-500",
     fields: [
       {
         field: "page_id",
@@ -97,6 +102,8 @@ const CARDS: Record<MessagingProviderKind, CardCopy> = {
     windowZh: "超过 24 小时仅可使用 HUMAN_AGENT；Instagram 不支持营销标签。",
     windowEn: "Only HUMAN_AGENT is available beyond 24h; Instagram supports no marketing tags.",
     icon: Instagram,
+    iconTile: "bg-rose-50 text-rose-600 ring-rose-100",
+    accentBar: "bg-rose-500",
     fields: [
       {
         field: "ig_account_id",
@@ -128,6 +135,8 @@ const CARDS: Record<MessagingProviderKind, CardCopy> = {
     windowZh: "Webhook 使用 secret token 验签；Business Mode 保留卖家真实身份。",
     windowEn: "Secret-token verified webhook; Business Mode keeps the seller's real identity.",
     icon: Send,
+    iconTile: "bg-sky-50 text-sky-600 ring-sky-100",
+    accentBar: "bg-sky-500",
     fields: [
       {
         field: "bot_token",
@@ -234,29 +243,45 @@ export function MessagingChannelCard({ kind, connected, onSubmit }: MessagingCha
     <form
       data-testid={`messaging-card-${kind}`}
       onSubmit={submit}
-      className="space-y-2.5 rounded-xl border border-slate-200/80 bg-white p-3.5"
+      className="flex flex-col space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_6px_16px_-6px_rgba(15,23,42,0.2)]"
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2">
-          <Icon className="mt-0.5 h-4 w-4 text-blue-600" />
-          <div>
-            <div className="text-[13px] font-semibold text-slate-900">
+        <div className="flex items-start gap-2.5">
+          <span
+            aria-hidden="true"
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 ${copy.iconTile}`}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[13.5px] font-bold text-slate-900">
               {bi(copy.titleZh, copy.titleEn)}
             </div>
-            <div className="mt-0.5 text-[12px] leading-5 text-slate-500">
+            <div className="mt-0.5 text-[11.5px] leading-5 text-slate-600">
               {bi(copy.subtitleZh, copy.subtitleEn)}
-            </div>
-            <div className="mt-1 text-[11px] leading-5 text-slate-400">
-              {bi(copy.windowZh, copy.windowEn)}
             </div>
           </div>
         </div>
-        {connected && (
-          <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-            {bi("已连接", "connected")}
-          </span>
-        )}
+        <span
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${
+            connected
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-slate-200 bg-slate-100 text-slate-600"
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-slate-400"}`}
+          />
+          {connected ? bi("已连接", "connected") : bi("未连接", "disconnected")}
+        </span>
       </div>
+
+      <p className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-1.5 text-[11px] leading-5 font-medium text-slate-600">
+        {bi(copy.windowZh, copy.windowEn)}
+      </p>
+
+      <span aria-hidden="true" className={`h-[3px] w-10 rounded-full ${copy.accentBar}`} />
 
       {copy.fields.map((field) => (
         <label key={field.testId} className="block">
@@ -270,7 +295,7 @@ export function MessagingChannelCard({ kind, connected, onSubmit }: MessagingCha
             onChange={(event) =>
               setDraft((current) => ({ ...current, [field.field]: event.target.value }))
             }
-            className="erp-input mt-1"
+            className="erp-input mt-1 rounded-xl"
           />
         </label>
       ))}
@@ -279,7 +304,7 @@ export function MessagingChannelCard({ kind, connected, onSubmit }: MessagingCha
         type="submit"
         data-testid={`connect-${kind}-btn`}
         disabled={!valid || submitting}
-        className="erp-btn bg-slate-900 text-white disabled:bg-slate-300"
+        className="erp-btn mt-auto rounded-xl bg-slate-900 font-semibold text-white shadow-xs transition-colors hover:bg-slate-800 disabled:bg-slate-300 disabled:shadow-none"
       >
         <CheckCircle2 className="h-3 w-3" />
         <span>
@@ -288,14 +313,17 @@ export function MessagingChannelCard({ kind, connected, onSubmit }: MessagingCha
       </button>
 
       {error && (
-        <div role="alert" className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-700">
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-medium text-rose-700"
+        >
           {error}
         </div>
       )}
       {connectedId !== null && (
         <div
           data-testid={`connect-success-${kind}`}
-          className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] text-emerald-700"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-medium text-emerald-700"
         >
           {bi("已连接", "Connected")} {connectedId}
         </div>

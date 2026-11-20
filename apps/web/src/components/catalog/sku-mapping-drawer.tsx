@@ -107,17 +107,19 @@ export function SkuMappingDrawer({
       data-testid="sku-mapping-drawer"
       className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl"
     >
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">
+          <h3 className="text-[14px] font-bold text-slate-900">
             {bi("SKU 主档与多平台映射", "SKU master & platform mapping")}
           </h3>
-          {variant && <p className="font-mono text-[11px] text-slate-500">{variant.sku}</p>}
+          {variant && (
+            <p className="mt-0.5 font-mono text-[11px] font-semibold text-blue-700">{variant.sku}</p>
+          )}
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+          className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-xs transition-colors hover:bg-slate-100"
           aria-label={bi("关闭 SKU 抽屉", "Close SKU drawer")}
         >
           <X className="h-4 w-4" />
@@ -126,10 +128,10 @@ export function SkuMappingDrawer({
 
       <div className="flex-1 space-y-5 overflow-y-auto p-4 text-[13px]">
         {variant && (
-          <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+          <div className="space-y-1.5 rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-3.5 ring-1 ring-slate-100">
             <div className="flex justify-between">
-              <span className="text-slate-500">{bi("零售价（USD）", "Retail price (USD)")}</span>
-              <strong className="tabular-nums">
+              <span className="text-slate-600">{bi("零售价（USD）", "Retail price (USD)")}</span>
+              <strong className="tabular-nums text-slate-900">
                 {formatMoney(variant.retail_price_usd, "USD")}
               </strong>
             </div>
@@ -174,7 +176,10 @@ export function SkuMappingDrawer({
 
           <div className="mt-2 space-y-2">
             {tiers.map((tier, idx) => (
-              <div key={idx} className="flex flex-wrap items-center gap-2">
+              <div
+                key={idx}
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/50 px-2.5 py-2"
+              >
                 <label className="text-[12px] text-slate-500" htmlFor={`tier-qty-${idx}`}>
                   {bi("起订量", "Min qty")}
                 </label>
@@ -220,7 +225,7 @@ export function SkuMappingDrawer({
           <button
             type="button"
             onClick={() => saveTiersMutation.mutate()}
-            className="erp-btn erp-btn-primary mt-3"
+            className="erp-btn erp-btn-primary mt-3 rounded-xl shadow-[0_2px_8px_-2px_rgba(37,99,235,0.55)]"
           >
             {bi("保存阶梯价", "Save MOQ tiers")}
           </button>
@@ -239,7 +244,10 @@ export function SkuMappingDrawer({
 
           <div className="mt-2 space-y-2">
             {mappings.map((mapping) => (
-              <div key={mapping.id} className="space-y-2 rounded-xl border border-slate-200 p-3">
+              <div
+                key={mapping.id}
+                className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2 font-medium text-slate-800">
                   <span>{mapping.channel_label ?? mapping.channel_account_id}</span>
                   <Badge>{mapping.external_sku}</Badge>
@@ -269,7 +277,7 @@ export function SkuMappingDrawer({
                     type="button"
                     data-testid={`save-mapping-btn-${mapping.id}`}
                     onClick={() => saveMappingMutation.mutate(mapping)}
-                    className="erp-btn bg-slate-900 text-white hover:bg-slate-800"
+                    className="erp-btn rounded-lg bg-slate-900 text-white hover:bg-slate-800"
                   >
                     {bi("保存", "Save")}
                   </button>

@@ -20,8 +20,15 @@ export function SocialMentionsFeed({ mentions, onConvertToLead, pendingId }: {
     <section aria-label="社媒舆情监听" className={panel}>
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-bold"><MessageCircle aria-hidden="true" size={18} />舆情监听与转线索</h2>
-          <p className="text-sm text-slate-600">仅展示公开提及内容；转线索后写入 ERP 线索池。</p>
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-violet-100">
+              <MessageCircle aria-hidden="true" size={15} />
+            </span>
+            舆情监听与转线索
+          </h2>
+          <p className="mt-0.5 text-[12.5px] leading-6 text-slate-600">
+            仅展示公开提及内容；转线索后写入 ERP 线索池。
+          </p>
         </div>
         <label className="text-sm font-medium">情感筛选
           <select value={sentiment} onChange={(event) => setSentiment(event.target.value as SocialSentiment | "")} className={field}>
@@ -31,16 +38,19 @@ export function SocialMentionsFeed({ mentions, onConvertToLead, pendingId }: {
         </label>
       </header>
       {error && <p role="alert" className="mb-2 text-sm text-rose-700">{error}</p>}
-      {!visible.length ? <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600">没有符合条件的提及。</p> : (
+      {!visible.length ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-4 text-[12.5px] font-medium text-slate-600">没有符合条件的提及。</p> : (
         <ul className="space-y-2">
           {visible.map((mention) => (
-            <li key={mention.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 p-3">
+            <li
+              key={mention.id}
+              className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-shadow hover:shadow-[0_4px_14px_rgba(15,23,42,0.08)]"
+            >
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-800">{platformLabel(mention.platform)}</span>
                   <span className="font-semibold text-slate-800">{mention.author_handle}</span>
                   <span>{mention.occurred_at.slice(0, 10)}</span>
-                  <span className={"rounded-full px-2 py-0.5 font-semibold " + sentimentTone[mention.sentiment]}>{sentimentLabel[mention.sentiment]}</span>
+                  <span className={"rounded-full px-2 py-0.5 text-[10.5px] font-semibold " + sentimentTone[mention.sentiment]}>{sentimentLabel[mention.sentiment]}</span>
                 </p>
                 <p className="mt-1 break-words text-sm text-slate-800">{mention.content_text}</p>
               </div>

@@ -2,10 +2,13 @@
 
 import { useI18n } from "@/lib/i18n";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowDownUp, Boxes, PackageCheck, Warehouse } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
+import { Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { useAuthSession } from "@/components/providers";
 import type { CreateStocktake } from "@/lib/api-client/types.gen";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
@@ -69,20 +72,71 @@ export default function WmsPage() {
   const movements = movementsQuery.data?.items ?? [];
   const stock = stockQuery.data?.items ?? [];
 
+  const summary = useMemo(() => {
+    const onHand = stock.reduce((total, row) => total + row.on_hand_qty, 0);
+    const reserved = stock.reduce((total, row) => total + row.reserved_qty, 0);
+    const inbound = movements
+      .filter((m) => m.qty_delta > 0)
+      .reduce((total, m) => total + m.qty_delta, 0);
+    return { onHand, reserved, inbound, available: onHand - reserved };
+  }, [stock, movements]);
+
   return (
     <AppShell currentPath="/wms" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="erp-page space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("WMS 出入库台账", "WMS movements")}</h1>
-          <p className="text-xs text-slate-500">
-            {bi("流水来自采购收货、订单出库与盘点调整；人工仅可提交盘点调整，且不可占用已预占库存。", "Movements come from receiving, order dispatch and stocktakes; manual stocktake adjustments can never consume reserved stock.")}
-          </p>
-        </div>
+      <Page>
+        <PageHeader
+          title={bi("WMS 出入库台账", "WMS movements")}
+          description={bi(
+            "流水来自采购收货、订单出库与盘点调整；人工仅可提交盘点调整，且不可占用已预占库存。",
+            "Movements come from receiving, order dispatch and stocktakes; manual stocktake adjustments can never consume reserved stock."
+          )}
+        />
 
-        <section className="erp-card p-3">
-          <h2 className="text-sm font-semibold text-slate-900">{bi("实时库存", "Live stock")}</h2>
-          <table data-testid="wms-stock-table" className="erp-table mt-2">
-            <thead className="text-[10px] uppercase text-slate-400">
+        <section
+          aria-label={bi("库存关键指标", "Inventory key metrics")}
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <BentoStatCard
+            label={bi("现存总量", "Total on hand")}
+            value={summary.onHand}
+            icon={Boxes}
+            accent="blue"
+            hint={bi("跨全部仓库合计", "Across every warehouse")}
+          />
+          <BentoStatCard
+            label={bi("已预占", "Reserved")}
+            value={summary.reserved}
+            icon={Warehouse}
+            accent="amber"
+            hint={bi("盘点调整不可占用预占库存", "Stocktakes can never consume reserved stock")}
+          />
+          <BentoStatCard
+            label={bi("可用库存", "Available")}
+            value={summary.available}
+            icon={PackageCheck}
+            accent="emerald"
+            hint={bi("现存减去预占", "On hand minus reserved")}
+          />
+          <BentoStatCard
+            label={bi("累计入库", "Total inbound")}
+            value={summary.inbound}
+            icon={ArrowDownUp}
+            accent="violet"
+            hint={bi("按当前台账正数流水汇总", "Summed from positive movements")}
+          />
+        </section>
+
+        <TableWrap className="rounded-2xl">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-3.5 py-2.5">
+            <h2 className="text-[13.5px] font-semibold text-slate-900">
+              {bi("实时库存", "Live stock")}
+            </h2>
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-blue-800">
+              {stock.length} {bi("行", "rows")}
+            </span>
+          </div>
+          <table data-testid="wms-stock-table" className="erp-table">
+            <thead>
               <tr>
                 <th>SKU</th>
                 <th>{bi("仓库", "Warehouse")}</th>
@@ -91,26 +145,36 @@ export default function WmsPage() {
                 <th className="text-right">{bi("可用", "Available")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody>
               {stock.map((row) => (
                 <tr key={`${row.warehouse_id}-${row.variant_id}`}>
-                  <td className="py-1.5 font-medium">{row.sku}</td>
-                  <td className="py-1.5 text-slate-500">{row.warehouse_id.slice(0, 8)}</td>
-                  <td className="py-1.5">{row.on_hand_qty}</td>
-                  <td className="py-1.5">{row.reserved_qty}</td>
-                  <td className="py-1.5 font-semibold">{row.available_qty}</td>
+                  <td className="py-1.5">
+                    <span className="font-mono text-[12px] font-semibold text-slate-900">
+                      {row.sku}
+                    </span>
+                  </td>
+                  <td className="py-1.5 text-slate-600">
+                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px]">
+                      {row.warehouse_id.slice(0, 8)}
+                    </span>
+                  </td>
+                  <td className="py-1.5 tabular-nums text-slate-800">{row.on_hand_qty}</td>
+                  <td className="py-1.5 tabular-nums text-amber-800">{row.reserved_qty}</td>
+                  <td className="py-1.5 font-semibold tabular-nums text-emerald-700">
+                    {row.available_qty}
+                  </td>
                 </tr>
               ))}
               {stock.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-slate-400">
+                  <td colSpan={5} className="py-4 text-center font-medium text-slate-500">
                     {stockQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无库存行", "No stock rows")}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </section>
+        </TableWrap>
 
         {canAdjust ? (
           <form
@@ -119,7 +183,7 @@ export default function WmsPage() {
               event.preventDefault();
               adjust.mutate();
             }}
-            className="erp-card grid gap-2 p-3 sm:grid-cols-4"
+            className="erp-card grid gap-2 p-3.5 sm:grid-cols-4"
           >
             <select
               aria-label="Stocktake SKU"
@@ -152,7 +216,7 @@ export default function WmsPage() {
               type="submit"
               data-testid="stocktake-submit"
               disabled={adjust.isPending || Number(delta) === 0}
-              className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+              className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
             >
               {bi("提交盘点调整", "Submit stocktake")}
             </button>
@@ -165,13 +229,13 @@ export default function WmsPage() {
         ) : (
           <p
             data-testid="stocktake-forbidden"
-            className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500"
+            className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-[12px] font-medium text-slate-700"
           >
             {bi(`当前角色（${principal?.role}）仅可查看流水与库存，盘点调整需要 Owner / Admin / Manager。`, `Your role (${principal?.role}) can only view movements and stock; stocktakes require Owner / Admin / Manager.`)}
           </p>
         )}
 
-        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+        <TableWrap className="rounded-2xl">
           <table data-testid="wms-movements-table" className="erp-table">
             <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
               <tr>
@@ -185,8 +249,16 @@ export default function WmsPage() {
             <tbody className="divide-y divide-slate-100">
               {movements.map((movement) => (
                 <tr key={movement.id} data-testid={`movement-row-${movement.id}`}>
-                  <td className="px-3 py-2 font-medium text-slate-800">{movement.movement_no}</td>
-                  <td className="px-3 py-2 text-slate-600">{movement.movement_type}</td>
+                  <td className="px-3 py-2">
+                    <span className="font-mono text-[12px] font-semibold text-slate-900">
+                      {movement.movement_no}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
+                      {movement.movement_type}
+                    </span>
+                  </td>
                   <td
                     className={`px-3 py-2 font-semibold ${
                       movement.qty_delta >= 0 ? "text-emerald-700" : "text-rose-700"
@@ -211,8 +283,8 @@ export default function WmsPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+        </TableWrap>
+      </Page>
     </AppShell>
   );
 }

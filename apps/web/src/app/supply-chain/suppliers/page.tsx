@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Building2, Factory, Globe2, Timer } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
+import { EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/page";
 import type { SupplierCreate } from "@/lib/api-client/types.gen";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
 import { addPhase3aSupplier, fetchPhase3aSuppliers, patchPhase3aSupplier } from "@/lib/phase3a-data";
@@ -47,15 +50,67 @@ export default function SuppliersPage() {
   const suppliers = suppliersQuery.data?.items ?? [];
   const canSubmit = form.code.trim().length > 0 && form.name.trim().length > 0;
 
+  const summary = useMemo(() => {
+    const active = suppliers.filter((s) => (s.status ?? "active") === "active").length;
+    const countries = new Set(
+      suppliers.map((s) => (s as { country?: string | null }).country).filter(Boolean)
+    );
+    const leadTimes = suppliers
+      .map((s) => Number(s.lead_time_days ?? 0))
+      .filter((days) => Number.isFinite(days) && days > 0);
+    const avgLead =
+      leadTimes.length === 0
+        ? 0
+        : Math.round(leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length);
+    return { active, countries: countries.size, avgLead };
+  }, [suppliers]);
+
   return (
     <AppShell currentPath="/supply-chain/suppliers" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="erp-page space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("供应商名录", "Suppliers")}</h1>
-          <p className="text-xs text-slate-500">
-            {bi("供应商代码在租户内唯一；停用（inactive）后不可再开新采购单，历史单据保留。", "Supplier codes are unique per tenant; inactive suppliers cannot open new purchase orders while history is retained.")}
-          </p>
-        </div>
+      <Page>
+        <PageHeader
+          title={bi("供应商名录", "Suppliers")}
+          description={bi(
+            "供应商代码在租户内唯一；停用（inactive）后不可再开新采购单，历史单据保留。",
+            "Supplier codes are unique per tenant; inactive suppliers cannot open new purchase orders while history is retained."
+          )}
+        />
+
+        <section
+          aria-label={bi("供应商关键指标", "Supplier key metrics")}
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <BentoStatCard
+            label={bi("供应商总数", "Total suppliers")}
+            value={suppliers.length}
+            icon={Building2}
+            accent="blue"
+            hint={bi("代码在租户内唯一", "Codes are unique per tenant")}
+          />
+          <BentoStatCard
+            label={bi("合作中", "Active")}
+            value={summary.active}
+            icon={Factory}
+            accent="emerald"
+            badge={`${suppliers.length - summary.active} ${bi("停用", "inactive")}`}
+            badgeTone="slate"
+            hint={bi("停用后不可开新采购单", "Inactive suppliers cannot open new POs")}
+          />
+          <BentoStatCard
+            label={bi("平均交期", "Average lead time")}
+            value={`${summary.avgLead} ${bi("天", "days")}`}
+            icon={Timer}
+            accent="amber"
+            hint={bi("用于采购单预计到货推算", "Drives purchase order ETA")}
+          />
+          <BentoStatCard
+            label={bi("覆盖国家", "Countries covered")}
+            value={summary.countries}
+            icon={Globe2}
+            accent="violet"
+            hint={bi("按供应商登记国家统计", "Counted from registered countries")}
+          />
+        </section>
 
         <form
           data-testid="supplier-form"
@@ -70,7 +125,7 @@ export default function SuppliersPage() {
               lead_time_days: Number(form.lead_time_days) || 0,
             });
           }}
-          className="erp-card grid gap-2 p-3 sm:grid-cols-6"
+          className="erp-card grid gap-2 p-3.5 sm:grid-cols-6"
         >
           <input
             aria-label="Supplier code"
@@ -126,7 +181,7 @@ export default function SuppliersPage() {
           )}
         </form>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+        <TableWrap className="rounded-2xl">
           <table data-testid="suppliers-table" className="erp-table">
             <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
               <tr>
@@ -141,16 +196,42 @@ export default function SuppliersPage() {
               {suppliers.map((supplier) => (
                 <tr key={supplier.id} data-testid={`supplier-row-${supplier.id}`}>
                   <td className="px-3 py-2">
-                    <div className="font-medium text-slate-800">{supplier.name}</div>
-                    <div className="text-slate-500">{supplier.code}</div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-violet-100"
+                      >
+                        <Building2 className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-900">{supplier.name}</div>
+                        <div className="font-mono text-[11px] text-slate-500">{supplier.code}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-slate-700">
                     {supplier.contact_name ?? "—"}
-                    <div className="text-slate-400">{supplier.contact_email ?? ""}</div>
+                    <div className="text-[11px] text-slate-500">{supplier.contact_email ?? ""}</div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{supplier.lead_time_days ?? 0}</td>
+                  <td className="px-3 py-2 font-medium tabular-nums text-slate-700">
+                    {supplier.lead_time_days ?? 0}
+                  </td>
                   <td className="px-3 py-2">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-700">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${
+                        (supplier.status ?? "active") === "active"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          (supplier.status ?? "active") === "active"
+                            ? "bg-emerald-500"
+                            : "bg-slate-400"
+                        }`}
+                      />
                       {supplier.status ?? "active"}
                     </span>
                   </td>
@@ -164,7 +245,7 @@ export default function SuppliersPage() {
                           status: supplier.status === "active" ? "inactive" : "active",
                         })
                       }
-                      className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
                     >
                       {supplier.status === "active" ? bi("停用", "Disable") : bi("启用", "Enable")}
                     </button>
@@ -180,8 +261,15 @@ export default function SuppliersPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+        </TableWrap>
+        {suppliers.length === 0 && (
+          <EmptyState>
+            {suppliersQuery.isLoading
+              ? bi("正在加载供应商…", "Loading suppliers…")
+              : bi("暂无供应商，请先新建一家。", "No suppliers yet, create the first one.")}
+          </EmptyState>
+        )}
+      </Page>
     </AppShell>
   );
 }

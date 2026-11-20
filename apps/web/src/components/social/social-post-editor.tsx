@@ -113,20 +113,29 @@ export function SocialPostEditor({ accounts, skus, initialPlatforms = [], onGene
   return (
     <section aria-label="社媒贴文编辑器" className={panel}>
       <header className="mb-4">
-        <h2 className="text-lg font-bold">贴文编辑器</h2>
-        <p className="text-sm text-slate-600">每个平台生成一条贴文记录；手动发布平台只导出素材，不代为发布。</p>
+        <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-violet-100">
+            <Sparkles aria-hidden="true" size={15} />
+          </span>
+          贴文编辑器
+        </h2>
+        <p className="mt-1 text-[12.5px] leading-6 text-slate-600">
+          每个平台生成一条贴文记录；手动发布平台只导出素材，不代为发布。
+        </p>
       </header>
       <form onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void submit("schedule"); }} aria-busy={busy} className="grid gap-5 lg:grid-cols-2">
         <fieldset disabled={busy} className="space-y-3 disabled:opacity-65">
           <legend className="text-sm font-semibold">发布平台</legend>
-          <p className="text-xs text-slate-600">已授权账号：{accounts.filter((account) => account.status === "connected").length} 个</p>
-          <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
-            {PLATFORM_PLAYBOOKS.map((playbook) => <label key={playbook.platform} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50">
+          <p className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-slate-700">
+            已授权账号：{accounts.filter((account) => account.status === "connected").length} 个
+          </p>
+          <div className="max-h-64 space-y-1 overflow-y-auto rounded-2xl border border-slate-200 p-2">
+            {PLATFORM_PLAYBOOKS.map((playbook) => <label key={playbook.platform} className="flex items-center justify-between gap-2 rounded-xl px-2 py-1.5 text-[12.5px] transition-colors hover:bg-slate-50">
               <span className="flex min-w-0 items-center gap-2">
                 <input type="checkbox" aria-label={playbook.label} checked={platforms.includes(playbook.platform)} onChange={(event) => togglePlatform(playbook.platform, event.target.checked)} className="accent-blue-700" />
                 <span className="truncate">{playbook.emoji} {playbook.label}</span>
               </span>
-              <span className={"shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium " + (playbook.publish_mode === "api" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900")}>
+              <span className={"shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold " + (playbook.publish_mode === "api" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800")}>
                 {publishModeLabel[playbook.publish_mode]} · {accountStatusLabel[connected.has(playbook.platform) ? "connected" : "disconnected"]}
               </span>
             </label>)}
@@ -160,7 +169,7 @@ export function SocialPostEditor({ accounts, skus, initialPlatforms = [], onGene
             </div>
             {tagError && <p role="alert" className="text-xs text-rose-700">{tagError}</p>}
             {!!hashtags.length && <ul aria-label="已添加标签" className="flex flex-wrap gap-1.5">
-              {hashtags.map((tag) => <li key={tag} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-900">
+              {hashtags.map((tag) => <li key={tag} className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11.5px] font-semibold text-blue-900">
                 {tag}
                 <button type="button" aria-label={"移除标签 " + tag} className="rounded-full p-0.5 hover:bg-blue-100" onClick={() => setHashtags((prev) => prev.filter((item) => item !== tag))}><X aria-hidden="true" size={12} /></button>
               </li>)}
@@ -169,17 +178,29 @@ export function SocialPostEditor({ accounts, skus, initialPlatforms = [], onGene
           <label className="block text-sm font-semibold">定时发布时间
             <input type="datetime-local" aria-label="定时发布时间" value={when} onChange={(event) => setWhen(event.target.value)} className={field} />
           </label>
-          {!!manual.length && <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          {!!manual.length && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-900">
             {manual.map((platform) => getPlaybook(platform)?.label).join("、")}：需在官方创作中心人工确认发布，已阻止定时发布。
           </p>}
-          {!!unauthorized.length && <p role="status" className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700">
+          {!!unauthorized.length && <p role="status" className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700">
             未授权平台：{unauthorized.map((platform) => getPlaybook(platform)?.label).join("、")}，请先完成授权。
           </p>}
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={busy || !readyToSave} className={button} onClick={() => void submit("save")}><Save aria-hidden="true" size={15} />保存草稿</button>
             <button type="submit" disabled={busy || !canSchedule} className={primary}><CalendarClock aria-hidden="true" size={15} />定时发布</button>
           </div>
-          {feedback && <p role={feedback.error ? "alert" : "status"} className={"text-sm " + (feedback.error ? "text-rose-700" : "text-blue-900")}>{feedback.text}</p>}
+          {feedback && (
+            <p
+              role={feedback.error ? "alert" : "status"}
+              className={
+                "rounded-xl border px-3 py-2 text-[12.5px] font-medium " +
+                (feedback.error
+                  ? "border-rose-200 bg-rose-50 text-rose-800"
+                  : "border-blue-200 bg-blue-50 text-blue-900")
+              }
+            >
+              {feedback.text}
+            </p>
+          )}
         </div>
       </form>
     </section>

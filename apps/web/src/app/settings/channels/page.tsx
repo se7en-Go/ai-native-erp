@@ -2,10 +2,12 @@
 
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, MessagesSquare, RefreshCw, ShieldCheck } from "lucide-react";
+import { Ban, MessagesSquare, RefreshCw, ShieldCheck, Siren, UserCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { MessagingChannelCard } from "@/components/channels/messaging-channel-cards";
-import { Badge, Card, CardHeader, EmptyState, Page, PageHeader, StatCard } from "@/components/ui/page";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { Badge, Card, CardHeader, EmptyState, Page, PageHeader } from "@/components/ui/page";
 import { replayDlqEvent } from "@/lib/api-client/live-client";
 import {
   connectMessagingChannel,
@@ -92,28 +94,39 @@ export default function ChannelsSettingsPage() {
           }
         />
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
+        <section
+          aria-label={bi("渠道关键指标", "Channel key metrics")}
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <BentoStatCard
             label={bi("已接入账号", "Connected accounts")}
             value={accounts.length}
             icon={MessagesSquare}
+            accent="blue"
+            hint={bi("WhatsApp / 邮件 / Meta / Telegram", "WhatsApp / email / Meta / Telegram")}
           />
-          <StatCard
+          <BentoStatCard
             label={bi("死信队列事件", "Dead-letter events")}
             value={dlqItems.length}
-            tone={dlqItems.length > 0 ? "warning" : "success"}
+            icon={Siren}
+            accent={dlqItems.length > 0 ? "rose" : "emerald"}
+            hint={bi("失败事件不丢，可原样重放", "Failed events are retained and replayable")}
           />
-          <StatCard
+          <BentoStatCard
             label={bi("订阅同意记录", "Consent records")}
             value={consentsQuery.data?.items.length ?? 0}
-            tone="info"
+            icon={UserCheck}
+            accent="violet"
+            hint={bi("每次 Opt-In 都留存证明来源", "Every opt-in keeps its proof source")}
           />
-          <StatCard
+          <BentoStatCard
             label={bi("退订 / 抑制名单", "Suppression list")}
             value={suppressionsQuery.data?.items.length ?? 0}
-            tone={suppressionsQuery.data?.items.length ? "danger" : "neutral"}
+            icon={Ban}
+            accent={suppressionsQuery.data?.items.length ? "rose" : "slate"}
+            hint={bi("零延迟 STOP 抑制", "Zero-delay STOP suppression")}
           />
-        </div>
+        </section>
 
         <Card>
           <CardHeader
@@ -123,7 +136,7 @@ export default function ChannelsSettingsPage() {
               "Bind Meta and Telegram messaging accounts. Provider tokens are envelope-encrypted at rest and every webhook verifies the raw body."
             )}
           />
-          <div className="grid gap-3 p-4 md:grid-cols-3">
+          <div className="grid gap-3 p-4 md:grid-cols-3 xl:gap-4">
             {MESSAGING_CHANNELS.map((kind) => (
               <MessagingChannelCard
                 key={kind}
@@ -149,10 +162,13 @@ export default function ChannelsSettingsPage() {
               {accounts.map((acct) => (
                 <div
                   key={acct.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2.5"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5"
                 >
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="truncate text-[13px] font-medium text-slate-900">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white text-blue-600 ring-1 ring-slate-200">
+                      <MessagesSquare className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="truncate text-[13px] font-semibold text-slate-900">
                       {acct.display_name}
                     </span>
                     <Badge>{acct.channel_type}</Badge>
@@ -161,7 +177,10 @@ export default function ChannelsSettingsPage() {
                     {acct.rate_limit_profile?.mps && (
                       <Badge tone="info">{acct.rate_limit_profile.mps} mps</Badge>
                     )}
-                    <Badge tone="success">{acct.status}</Badge>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-800">
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {acct.status}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -188,7 +207,7 @@ export default function ChannelsSettingsPage() {
                 dlqItems.map((ev) => (
                   <div
                     key={ev.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/40 px-3 py-2.5"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2.5"
                   >
                     <div className="min-w-0">
                       <div className="text-[13px] font-medium text-slate-900">
@@ -202,7 +221,7 @@ export default function ChannelsSettingsPage() {
                       type="button"
                       data-testid={`dlq-replay-btn-${ev.id}`}
                       onClick={() => replayMutation.mutate(ev.id)}
-                      className="erp-btn bg-slate-900 text-white hover:bg-slate-800"
+                      className="erp-btn rounded-xl bg-slate-900 text-white shadow-xs hover:bg-slate-800"
                     >
                       <RefreshCw className="h-3 w-3" />
                       <span>{bi("重放", "Replay")}</span>
@@ -215,34 +234,35 @@ export default function ChannelsSettingsPage() {
         </div>
 
         <Card>
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 p-3">
-            <button
-              type="button"
-              data-testid="tab-consent-records"
-              onClick={() => setLogTab("consents")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium ${
-                logTab === "consents"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span>{bi("订阅同意台账", "Consent ledger")}</span>
-            </button>
-            <button
-              type="button"
-              data-testid="tab-suppression-list"
-              onClick={() => setLogTab("suppressions")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium ${
-                logTab === "suppressions"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <Ban className="h-3.5 w-3.5" />
-              <span>{bi("退订 / 抑制名单", "Suppression list")}</span>
-            </button>
-            <span className="ml-auto text-[11px] text-slate-400">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/90 bg-slate-50/60 p-3">
+            <SegmentedTabs
+              ariaLabel={bi("合规台账视图", "Compliance ledger view")}
+              value={logTab}
+              onChange={setLogTab}
+              options={[
+                {
+                  value: "consents",
+                  label: (
+                    <span className="inline-flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      {bi("订阅同意台账", "Consent ledger")}
+                    </span>
+                  ),
+                  testId: "tab-consent-records",
+                },
+                {
+                  value: "suppressions",
+                  label: (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Ban className="h-3.5 w-3.5" />
+                      {bi("退订 / 抑制名单", "Suppression list")}
+                    </span>
+                  ),
+                  testId: "tab-suppression-list",
+                },
+              ]}
+            />
+            <span className="ml-auto text-[11px] font-medium text-slate-600">
               {bi("静默时段 21:00–08:00 不发送任何营销消息", "Quiet hours 21:00–08:00 block all marketing sends")}
             </span>
           </div>
@@ -252,14 +272,16 @@ export default function ChannelsSettingsPage() {
               ? (consentsQuery.data?.items ?? []).map((c) => (
                   <div
                     key={c.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 text-[12px]"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2 text-[12px]"
                   >
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <strong className="text-slate-800">{c.customer_name}</strong>
+                      <strong className="font-semibold text-slate-900">{c.customer_name}</strong>
                       <span className="text-slate-400">·</span>
-                      <span className="text-slate-500">{c.channel_type}</span>
+                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
+                        {c.channel_type}
+                      </span>
                       <span className="text-slate-400">·</span>
-                      <span className="text-slate-500">{c.proof_source}</span>
+                      <span className="text-slate-600">{c.proof_source}</span>
                     </div>
                     <Badge tone="success">{c.consent_status}</Badge>
                   </div>
@@ -267,13 +289,15 @@ export default function ChannelsSettingsPage() {
               : (suppressionsQuery.data?.items ?? []).map((s) => (
                   <div
                     key={s.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 text-[12px]"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2 text-[12px]"
                   >
                     <div>
-                      <strong className="text-slate-800">{s.normalized_address}</strong>
-                      <span className="text-slate-500"> ({s.channel_type})</span>
+                      <strong className="font-semibold text-slate-900">{s.normalized_address}</strong>
+                      <span className="text-slate-600"> ({s.channel_type})</span>
                     </div>
-                    <span className="text-rose-700">{s.reason}</span>
+                    <span className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700">
+                      {s.reason}
+                    </span>
                   </div>
                 ))}
           </div>

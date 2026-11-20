@@ -43,8 +43,15 @@ export function ProspectCleaningTable({ prospects, selectedId, onSelect, onClean
     <section aria-label="线索清洗池" aria-busy={busy} className={panel}>
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">线索清洗池</h2>
-          <p className="text-sm text-slate-600">勾选线索以限定批量操作范围；未勾选时使用当前筛选结果。</p>
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+              <ListFilter aria-hidden="true" size={15} />
+            </span>
+            线索清洗池
+          </h2>
+          <p className="mt-1 text-[12.5px] leading-6 text-slate-600">
+            勾选线索以限定批量操作范围；未勾选时使用当前筛选结果。
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={button} disabled={busy || !cleanIds.length} onClick={() => void run("clean")}><ListFilter aria-hidden="true" size={15} />批量去重清洗</button>
@@ -63,13 +70,18 @@ export function ProspectCleaningTable({ prospects, selectedId, onSelect, onClean
             <option value="">全部状态</option>{Object.entries(syncLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
-        <p className="pb-2 text-sm text-slate-600" aria-live="polite">{visible.length} 条线索 · 已选 {checkedRows.length} 条</p>
+        <p
+          className="mb-0.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-slate-700"
+          aria-live="polite"
+        >
+          {visible.length} 条线索 · 已选 {checkedRows.length} 条
+        </p>
       </div>
       {error && <p role="alert" className="mb-3 text-sm text-rose-700">操作未完成，请重试。</p>}
-      {!visible.length ? <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600">没有符合条件的线索。</p> : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table aria-label="线索清洗结果" className="w-full min-w-[38rem] text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600"><tr>
+      {!visible.length ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-4 text-[12.5px] font-medium text-slate-600">没有符合条件的线索。</p> : (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <table aria-label="线索清洗结果" className="w-full min-w-[38rem] text-left text-[13px]">
+            <thead className="bg-slate-100/80 text-[11.5px] font-semibold text-slate-700"><tr>
               <th scope="col" className="p-3"><input type="checkbox" aria-label="选择所有显示线索" disabled={busy} checked={checkedRows.length === visible.length} className="accent-blue-700" onChange={(event) => setChecked(event.target.checked ? visible.map((row) => row.id) : [])} /></th>
               {["企业", "地区", "评级", "评分", "WhatsApp", "状态"].map((label) => <th scope="col" className="whitespace-nowrap p-3 font-semibold" key={label}>{label}</th>)}
             </tr></thead>
@@ -78,9 +90,18 @@ export function ProspectCleaningTable({ prospects, selectedId, onSelect, onClean
                 <td className="p-3"><input type="checkbox" aria-label={"选择 " + row.company_name} checked={checked.includes(row.id)} disabled={busy} className="accent-blue-700" onChange={(event) => setChecked((prev) => event.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id))} /></td>
                 <th scope="row" className="max-w-64 break-words p-3 font-semibold">{onSelect ? <button type="button" aria-pressed={selectedId === row.id} className="text-left text-blue-800 hover:underline" onClick={() => onSelect(row.id)}>{row.company_name}</button> : row.company_name}</th>
                 <td className="p-3 text-slate-600">{[row.city, row.country].filter(Boolean).join(" · ") || "—"}</td>
-                <td className="p-3"><span className={"rounded-full px-2 py-0.5 font-semibold " + gradeTone[row.grade]}>{row.grade}</span></td>
+                <td className="p-3">
+                  <span
+                    className={
+                      "inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold " +
+                      gradeTone[row.grade]
+                    }
+                  >
+                    {row.grade}
+                  </span>
+                </td>
                 <td className="p-3 tabular-nums">{row.rating ?? "—"}</td>
-                <td className="whitespace-nowrap p-3"><span className={"rounded-full px-2 py-0.5 text-xs font-medium " + (row.whatsapp_reachable === true ? "bg-emerald-100 text-emerald-900" : "bg-slate-100 text-slate-700")}>
+                <td className="whitespace-nowrap p-3"><span className={"rounded-full border px-2 py-0.5 text-[10.5px] font-semibold " + (row.whatsapp_reachable === true ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-100 text-slate-700")}>
                   {row.whatsapp_reachable === true ? "WhatsApp 可达" : row.whatsapp_reachable === false ? "不可达" : "未确认"}
                 </span></td>
                 <td className="whitespace-nowrap p-3 text-slate-700">{syncLabel[row.sync_status]}</td>

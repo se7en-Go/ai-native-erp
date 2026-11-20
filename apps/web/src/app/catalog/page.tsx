@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PackageSearch, Search, ShieldCheck } from "lucide-react";
+import { BadgeCheck, Boxes, PackageSearch, Search, ShieldCheck, Tags } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { SkuMappingDrawer } from "@/components/catalog/sku-mapping-drawer";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Badge, EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { fetchCatalogVariants, fetchPendingProposalsCount } from "@/lib/data-source";
 import { isPrivilegedCostViewer } from "@/lib/auth-cookie";
@@ -32,6 +33,13 @@ export default function CatalogPage() {
 
   const variants = variantsQuery.data?.items ?? [];
 
+  const summary = useMemo(() => {
+    const categories = new Set(variants.map((v) => v.category));
+    const certs = new Set(variants.flatMap((v) => v.certifications));
+    const tiers = variants.reduce((total, v) => total + v.b2b_moq_tiers.length, 0);
+    return { categories: categories.size, certs: certs.size, tiers };
+  }, [variants]);
+
   return (
     <AppShell
       currentPath="/catalog"
@@ -53,7 +61,7 @@ export default function CatalogPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={bi("搜索 SPU、SKU 或 HS 编码…", "Search SPU, SKU or HS code…")}
                 aria-label={bi("搜索商品", "Search catalog")}
-                className="erp-input w-72 pl-8"
+                className="erp-input w-72 rounded-xl pl-8"
               />
             </div>
           }
@@ -72,6 +80,40 @@ export default function CatalogPage() {
           }
         />
 
+        <section
+          aria-label={bi("商品主档关键指标", "Catalog key metrics")}
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <BentoStatCard
+            label={bi("主档 SKU", "Master SKUs")}
+            value={variants.length}
+            icon={Boxes}
+            accent="blue"
+            hint={bi("B2B 与 B2C 共用同一份主档", "One master shared by B2B and B2C")}
+          />
+          <BentoStatCard
+            label={bi("覆盖类目", "Categories")}
+            value={summary.categories}
+            icon={Tags}
+            accent="violet"
+            hint={bi("类目决定默认 HS 编码与合规要求", "Drives default HS codes and compliance")}
+          />
+          <BentoStatCard
+            label={bi("合规认证", "Compliance certificates")}
+            value={summary.certs}
+            icon={BadgeCheck}
+            accent="emerald"
+            hint={bi("CE / RoHS / UL 等证书挂载在变体上", "CE / RoHS / UL attach to each variant")}
+          />
+          <BentoStatCard
+            label={bi("阶梯价档位", "MOQ price tiers")}
+            value={summary.tiers}
+            icon={PackageSearch}
+            accent="amber"
+            hint={bi("报价单落库时快照当前阶梯", "Quotes snapshot the active tier")}
+          />
+        </section>
+
         {variants.length === 0 ? (
           <EmptyState>
             {variantsQuery.isLoading
@@ -79,7 +121,7 @@ export default function CatalogPage() {
               : bi("没有匹配的商品，请调整关键词。", "No matching products. Try another keyword.")}
           </EmptyState>
         ) : (
-          <TableWrap>
+          <TableWrap className="rounded-2xl">
             <table className="erp-table">
               <thead>
                 <tr>
@@ -100,11 +142,23 @@ export default function CatalogPage() {
                 {variants.map((v) => (
                   <tr key={v.id}>
                     <td>
-                      <div className="font-medium text-slate-900">{v.sku}</div>
-                      <div className="text-[11px] text-slate-500">{v.spu_code}</div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100"
+                        >
+                          <Boxes className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-mono text-[12.5px] font-semibold text-slate-900">
+                            {v.sku}
+                          </div>
+                          <div className="text-[11px] font-medium text-slate-500">{v.spu_code}</div>
+                        </div>
+                      </div>
                     </td>
                     <td>
-                      <div className="text-slate-700">{v.category}</div>
+                      <div className="font-medium text-slate-800">{v.category}</div>
                       {v.hs_code && (
                         <div className="font-mono text-[11px] text-slate-500">HS {v.hs_code}</div>
                       )}
@@ -118,20 +172,20 @@ export default function CatalogPage() {
                         ))}
                       </div>
                     </td>
-                    <td className="text-right tabular-nums text-slate-800">
+                    <td className="text-right font-semibold tabular-nums text-slate-900">
                       {formatMoney(v.retail_price_usd, "USD")}
                     </td>
                     {canViewCost && (
-                      <td className="text-right tabular-nums text-slate-600">
+                      <td className="text-right tabular-nums text-slate-700">
                         {formatMoney(v.cost_price_base, v.base_currency)}
                       </td>
                     )}
-                    <td className="tabular-nums text-[12px] text-slate-600">
+                    <td className="tabular-nums text-[12px] text-slate-700">
                       <div className="flex flex-wrap gap-1">
                         {v.b2b_moq_tiers.map((t) => (
                           <span
                             key={`${t.min_qty}-${t.unit_price_usd}`}
-                            className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5"
+                            className="rounded-md border border-blue-100 bg-blue-50/70 px-1.5 py-0.5 font-medium text-blue-900"
                           >
                             {t.min_qty}+ / ${t.unit_price_usd}
                           </span>
@@ -143,7 +197,7 @@ export default function CatalogPage() {
                         type="button"
                         data-testid={`open-sku-drawer-${v.id}`}
                         onClick={() => setSelectedVariantId(v.id)}
-                        className="erp-btn erp-btn-secondary py-1 text-[12px]"
+                        className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
                       >
                         <PackageSearch className="h-3.5 w-3.5" />
                         <span>{bi("配置映射", "Configure mappings")}</span>

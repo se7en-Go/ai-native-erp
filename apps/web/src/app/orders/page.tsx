@@ -1,10 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRightLeft, Lock, Truck } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  CircleDollarSign,
+  Lock,
+  PackageCheck,
+  Truck,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ShipmentTimelineDrawer } from "@/components/orders/shipment-timeline-drawer";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Badge, EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { shipOrder } from "@/lib/api-client/live-client";
 import { fetchOrders, fetchPendingProposalsCount } from "@/lib/data-source";
@@ -27,6 +35,19 @@ const FULFILLMENT_LABEL: Record<string, { zh: string; en: string }> = {
   exception: { zh: "物流异常", en: "Exception" },
   cancelled: { zh: "已取消", en: "Cancelled" },
   refunded: { zh: "已退款", en: "Refunded" },
+};
+
+/** 履约状态圆点：与 21st.dev Data Grid 状态胶囊保持一致语义。 */
+const FULFILLMENT_DOT: Record<string, string> = {
+  pending_payment: "bg-amber-500",
+  confirmed_reserved: "bg-blue-500",
+  in_production: "bg-violet-500",
+  partially_shipped: "bg-cyan-500",
+  shipped: "bg-emerald-500",
+  delivered: "bg-emerald-600",
+  exception: "bg-rose-500",
+  cancelled: "bg-slate-400",
+  refunded: "bg-slate-400",
 };
 
 export default function OrdersPage() {
@@ -60,6 +81,18 @@ export default function OrdersPage() {
 
   const orders = ordersQuery.data?.items ?? [];
 
+  const summary = useMemo(() => {
+    const blocked = orders.filter(
+      (o) => o.order_mode === "b2b_wholesale" && o.payment_status !== "paid"
+    ).length;
+    const shipped = orders.filter(
+      (o) => o.fulfillment_status === "shipped" || o.fulfillment_status === "delivered"
+    ).length;
+    const alerts = orders.filter((o) => o.has_72h_stagnation_alert).length;
+    const value = orders.reduce((total, o) => total + Number(o.total_amount || 0), 0);
+    return { blocked, shipped, alerts, value };
+  }, [orders]);
+
   return (
     <AppShell
       currentPath="/orders"
@@ -77,7 +110,7 @@ export default function OrdersPage() {
               value={modeFilter}
               aria-label={bi("按订单模式筛选", "Filter by order mode")}
               onChange={(e) => setModeFilter(e.target.value as "" | OrderMode)}
-              className="erp-input w-auto"
+              className="erp-input w-auto rounded-xl"
             >
               <option value="">{bi("全部订单模式", "All order modes")}</option>
               <option value="b2c_retail">{bi("B2C 零售", "B2C retail")}</option>
@@ -87,10 +120,48 @@ export default function OrdersPage() {
           }
         />
 
+        <section
+          aria-label={bi("订单关键指标", "Order key metrics")}
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <BentoStatCard
+            label={bi("订单总数", "Total orders")}
+            value={orders.length}
+            icon={PackageCheck}
+            accent="blue"
+            hint={bi("B2C 零售与 B2B 批发合并统计", "B2C retail and B2B wholesale combined")}
+          />
+          <BentoStatCard
+            label={bi("订单金额", "Order value")}
+            value={formatMoney(summary.value.toFixed(2), "USD")}
+            icon={CircleDollarSign}
+            accent="violet"
+            hint={bi("按订单币种折算前合计", "Summed before currency conversion")}
+          />
+          <BentoStatCard
+            label={bi("尾款未结清", "Balance unpaid")}
+            value={summary.blocked}
+            icon={Lock}
+            accent="amber"
+            badge={summary.blocked > 0 ? bi("已拦截出库", "Dispatch blocked") : undefined}
+            badgeTone="amber"
+            hint={bi("B2B 批发 70% 尾款未结清不出货", "Wholesale ships only after the 70% balance")}
+          />
+          <BentoStatCard
+            label={bi("物流异常预警", "Logistics alerts")}
+            value={summary.alerts}
+            icon={AlertTriangle}
+            accent={summary.alerts > 0 ? "rose" : "emerald"}
+            badge={`${summary.shipped} ${bi("已出运", "shipped")}`}
+            badgeTone="emerald"
+            hint={bi("72 小时无轨迹更新自动预警", "Auto-alerts after 72h without tracking updates")}
+          />
+        </section>
+
         {shipMutation.isError && (
           <p
             role="alert"
-            className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[12px] text-rose-800"
+            className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[12px] font-medium text-rose-800"
           >
             {shipMutation.error.message}
           </p>
@@ -103,7 +174,7 @@ export default function OrdersPage() {
               : bi("暂无订单。", "No orders yet.")}
           </EmptyState>
         ) : (
-          <TableWrap>
+          <TableWrap className="rounded-2xl">
             <table className="erp-table">
               <thead>
                 <tr>
@@ -130,11 +201,13 @@ export default function OrdersPage() {
                   return (
                     <tr key={ord.id}>
                       <td>
-                        <div className="font-medium text-slate-900">{ord.order_no}</div>
+                        <div className="font-mono text-[12.5px] font-semibold text-slate-900">
+                          {ord.order_no}
+                        </div>
                         {ord.has_72h_stagnation_alert && (
                           <span
                             data-testid={`order-72h-alert-${ord.id}`}
-                            className="mt-1 inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700"
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700"
                           >
                             <AlertTriangle className="h-3 w-3" />
                             <span>{bi("72 小时物流停滞", "72h stagnation")}</span>
@@ -142,27 +215,39 @@ export default function OrdersPage() {
                         )}
                       </td>
                       <td>
-                        <div className="text-slate-800">{ord.customer_name}</div>
-                        <Badge className="mt-0.5">{bi(modeCopy.zh, modeCopy.en)}</Badge>
+                        <div className="font-medium text-slate-800">{ord.customer_name}</div>
+                        <Badge className="mt-1">{bi(modeCopy.zh, modeCopy.en)}</Badge>
                       </td>
                       <td>
-                        <Badge tone={ord.fulfillment_status === "exception" ? "danger" : "info"}>
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                            ord.fulfillment_status === "exception"
+                              ? "border-rose-200 bg-rose-50 text-rose-700"
+                              : "border-slate-200 bg-white text-slate-700"
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              FULFILLMENT_DOT[ord.fulfillment_status] ?? "bg-slate-400"
+                            }`}
+                          />
                           {bi(fulfillmentCopy.zh, fulfillmentCopy.en)}
-                        </Badge>
+                        </span>
                       </td>
                       <td>
-                        <div className="text-slate-700">{ord.payment_status}</div>
+                        <div className="font-medium text-slate-700">{ord.payment_status}</div>
                         {blocked70Unpaid && (
                           <span
                             data-testid={`order-ship-blocked-${ord.id}`}
-                            className="mt-1 inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900"
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
                           >
                             <Lock className="h-3 w-3" />
                             <span>{bi("70% 尾款未结清", "70% balance unpaid")}</span>
                           </span>
                         )}
                       </td>
-                      <td className="text-right font-medium tabular-nums text-slate-800">
+                      <td className="text-right font-semibold tabular-nums text-slate-900">
                         {formatMoney(ord.total_amount, ord.currency)}
                       </td>
                       <td>
@@ -171,7 +256,7 @@ export default function OrdersPage() {
                             type="button"
                             data-testid={`open-shipment-drawer-${ord.id}`}
                             onClick={() => setDrawerOrderId(ord.id)}
-                            className="erp-btn erp-btn-secondary py-1 text-[12px]"
+                            className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
                           >
                             <Truck className="h-3 w-3" />
                             <span>{bi("物流时间轴与台账", "Timeline & ledger")}</span>
@@ -186,7 +271,7 @@ export default function OrdersPage() {
                             placeholder={bi("运单号", "Tracking #")}
                             aria-label={bi("运单号", "Tracking number")}
                             disabled={blocked70Unpaid}
-                            className="erp-input w-28 py-1 text-[12px] disabled:bg-slate-100"
+                            className="erp-input w-28 rounded-xl py-1 text-[12px] disabled:bg-slate-100"
                           />
                           <button
                             type="button"
@@ -197,7 +282,7 @@ export default function OrdersPage() {
                                 trackingNumber: trackingInputs[ord.id] ?? "",
                               })
                             }
-                            className="erp-btn bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-40"
+                            className="erp-btn rounded-xl bg-slate-900 text-white shadow-xs hover:bg-slate-800 disabled:opacity-40"
                           >
                             <ArrowRightLeft className="h-3 w-3" />
                             <span>{bi("出库", "Ship")}</span>
@@ -214,10 +299,7 @@ export default function OrdersPage() {
       </Page>
 
       {drawerOrderId && (
-        <ShipmentTimelineDrawer
-          orderId={drawerOrderId}
-          onClose={() => setDrawerOrderId(null)}
-        />
+        <ShipmentTimelineDrawer orderId={drawerOrderId} onClose={() => setDrawerOrderId(null)} />
       )}
     </AppShell>
   );

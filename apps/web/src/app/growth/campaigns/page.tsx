@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Megaphone, Play, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { Page, PageHeader } from "@/components/ui/page";
 import { CampaignBuilderPanel } from "@/components/growth/campaign-builder-panel";
 import { button, count, panel, primary } from "@/components/growth/presentation";
 import type { CampaignDraft, MarketingCampaign, SuppressionPreview } from "@/components/growth/types";
@@ -91,19 +92,20 @@ export default function GrowthCampaignsPage() {
       currentPath="/growth/campaigns"
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
-      <div className="erp-page-full space-y-5">
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("合规营销战役", "Compliant campaigns")}</h1>
-            <p className="text-xs text-slate-500">
-              {bi("邮件战役强制应用全局退订拦截并随信发送 RFC 8058 List-Unsubscribe；WhatsApp 战役要求有效 Opt-In、拦截美国 +1 营销号码，并由双令牌桶限速。预检结果只是快照，启动时服务端会重新校验。", "Email campaigns always apply global suppression plus RFC 8058 List-Unsubscribe; WhatsApp campaigns require valid opt-in, block US +1 marketing numbers and are rate-limited by dual token buckets. Previews are snapshots; the server re-validates on launch.")}
-            </p>
-          </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            {bi("发送前复核 · 零延迟 STOP 抑制", "Re-check before send · zero-delay STOP suppression")}
-          </span>
-        </header>
+      <Page full className="space-y-5">
+        <PageHeader
+          title={bi("合规营销战役", "Compliant campaigns")}
+          description={bi(
+            "邮件战役强制应用全局退订拦截并随信发送 RFC 8058 List-Unsubscribe；WhatsApp 战役要求有效 Opt-In、拦截美国 +1 营销号码，并由双令牌桶限速。预检结果只是快照，启动时服务端会重新校验。",
+            "Email campaigns always apply global suppression plus RFC 8058 List-Unsubscribe; WhatsApp campaigns require valid opt-in, block US +1 marketing numbers and are rate-limited by dual token buckets. Previews are snapshots; the server re-validates on launch."
+          )}
+          badge={
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              {bi("发送前复核 · 零延迟 STOP 抑制", "Re-check before send · zero-delay STOP suppression")}
+            </span>
+          }
+        />
 
         {error ? (
           <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
@@ -130,12 +132,14 @@ export default function GrowthCampaignsPage() {
         />
 
         <section aria-label="营销战役列表" className={panel}>
-          <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-lg font-bold">
-              <Megaphone aria-hidden="true" size={18} />
+          <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-amber-50 text-amber-600 ring-1 ring-amber-100">
+                <Megaphone aria-hidden="true" size={15} />
+              </span>
               战役列表与合规预检
             </h2>
-            <span className="text-sm text-slate-600">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-emerald-800">
               {bi("已清洗可触达线索", "Cleaned reachable leads")} {count(targetIds.length)}
             </span>
           </header>
@@ -148,18 +152,29 @@ export default function GrowthCampaignsPage() {
               {campaigns.map((campaign) => {
                 const snapshot = previews[campaign.id];
                 return (
-                  <li key={campaign.id} className="rounded-xl border border-slate-200 p-4">
+                  <li
+                  key={campaign.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-shadow hover:shadow-[0_6px_16px_-6px_rgba(15,23,42,0.2)]"
+                >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h3 className="break-words font-bold text-slate-900">{campaign.name}</h3>
-                        <p className="text-xs text-slate-600">
-                          {campaign.channel_type === "email" ? "邮件" : "WhatsApp Cloud"} ·{" "}
-                          {STATUS_LABEL[campaign.status] ?? campaign.status} · 目标{" "}
-                          {count(campaign.total_targets)} 条 · 已发送 {count(campaign.sent_count)} ·
-                          拦截 {count(campaign.suppressed_count)}
-                        </p>
+                        <h3 className="break-words text-[14px] font-bold text-slate-900">
+                          {campaign.name}
+                        </h3>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] font-semibold">
+                          <span className="rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-slate-700">
+                            {campaign.channel_type === "email" ? "邮件" : "WhatsApp Cloud"}
+                          </span>
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-800">
+                            {STATUS_LABEL[campaign.status] ?? campaign.status}
+                          </span>
+                          <span className="font-medium text-slate-600">
+                            目标 {count(campaign.total_targets)} 条 · 已发送{" "}
+                            {count(campaign.sent_count)} · 拦截 {count(campaign.suppressed_count)}
+                          </span>
+                        </div>
                         {campaign.subject ? (
-                          <p className="mt-1 text-sm text-slate-700">主题：{campaign.subject}</p>
+                          <p className="mt-1.5 text-[13px] text-slate-700">主题：{campaign.subject}</p>
                         ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -186,18 +201,18 @@ export default function GrowthCampaignsPage() {
                     {snapshot ? (
                       <div
                         aria-label={`战役 ${campaign.name} 合规预检结果`}
-                        className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3"
+                        className="mt-3 rounded-xl border border-blue-200/80 bg-blue-50/60 p-3"
                       >
                         <dl className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <dt>可发送</dt>
-                            <dd className="text-lg font-bold text-blue-900">
+                          <div className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-blue-100">
+                            <dt className="text-[11.5px] font-medium text-slate-600">可发送</dt>
+                            <dd className="text-[20px] font-bold leading-tight tabular-nums text-blue-900">
                               {count(snapshot.eligible_count)}
                             </dd>
                           </div>
-                          <div>
-                            <dt>本次拦截</dt>
-                            <dd className="text-lg font-bold text-rose-800">
+                          <div className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-rose-100">
+                            <dt className="text-[11.5px] font-medium text-slate-600">本次拦截</dt>
+                            <dd className="text-[20px] font-bold leading-tight tabular-nums text-rose-800">
                               {count(snapshot.suppressed_count)}
                             </dd>
                           </div>
@@ -222,7 +237,7 @@ export default function GrowthCampaignsPage() {
             </ul>
           )}
         </section>
-      </div>
+      </Page>
     </AppShell>
   );
 }

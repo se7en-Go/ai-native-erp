@@ -2,10 +2,13 @@
 
 import { useI18n } from "@/lib/i18n";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CircleDollarSign, ClipboardList, PackageCheck, Timer } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
+import { EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { formatMoney } from "@/lib/contracts";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
 import {
@@ -89,18 +92,65 @@ export default function PurchaseOrdersPage() {
   const error = createOrder.error ?? receiveOrder.error ?? ordersQuery.error;
   const canReceive = (status: string) => status === "ordered" || status === "partially_received";
 
+  const summary = useMemo(() => {
+    const receiving = orders.filter((o) => canReceive(o.status)).length;
+    const value = orders.reduce((total, o) => total + Number(o.total_amount || 0), 0);
+    const openQty = orders.reduce(
+      (total, o) =>
+        total +
+        o.items.reduce((qty, item) => qty + Math.max(0, item.qty_ordered - item.qty_received), 0),
+      0
+    );
+    return { receiving, value, openQty };
+  }, [orders]);
+
   return (
     <AppShell
       currentPath="/supply-chain/purchase-orders"
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
-      <div className="erp-page space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("采购订单", "Purchase orders")}</h1>
-          <p className="text-xs text-slate-500">
-            {bi("收货在同一事务内写入 inventory_ledger、inventory_balances 与 wms_movements；并发收货由行锁串行化，超额收货返回 409。", "Receiving writes inventory_ledger, inventory_balances and wms_movements in one transaction; row locks serialise concurrency and over-receipt returns 409.")}
-          </p>
-        </div>
+      <Page>
+        <PageHeader
+          title={bi("采购订单", "Purchase orders")}
+          description={bi(
+            "收货在同一事务内写入 inventory_ledger、inventory_balances 与 wms_movements；并发收货由行锁串行化，超额收货返回 409。",
+            "Receiving writes inventory_ledger, inventory_balances and wms_movements in one transaction; row locks serialise concurrency and over-receipt returns 409."
+          )}
+        />
+
+        <section
+          aria-label={bi("采购关键指标", "Purchasing key metrics")}
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <BentoStatCard
+            label={bi("采购单总数", "Purchase orders")}
+            value={orders.length}
+            icon={ClipboardList}
+            accent="blue"
+            hint={bi("含部分收货与全部收货", "Includes partial and full receipts")}
+          />
+          <BentoStatCard
+            label={bi("采购金额", "Committed value")}
+            value={formatMoney(summary.value.toFixed(2), "USD")}
+            icon={CircleDollarSign}
+            accent="violet"
+            hint={bi("按采购单币种直接汇总", "Summed in each PO currency")}
+          />
+          <BentoStatCard
+            label={bi("待到货数量", "Open quantity")}
+            value={summary.openQty}
+            icon={Timer}
+            accent="amber"
+            hint={bi("已收数量从订购数量中扣减", "Received quantity deducted from ordered")}
+          />
+          <BentoStatCard
+            label={bi("可收货单据", "Receivable POs")}
+            value={summary.receiving}
+            icon={PackageCheck}
+            accent="emerald"
+            hint={bi("仅 ordered / partially_received 可收货", "Only ordered / partially_received can receive")}
+          />
+        </section>
 
         <form
           data-testid="purchase-order-form"
@@ -108,7 +158,7 @@ export default function PurchaseOrdersPage() {
             event.preventDefault();
             createOrder.mutate();
           }}
-          className="erp-card grid gap-2 p-3 sm:grid-cols-5"
+          className="erp-card grid gap-2 p-3.5 sm:grid-cols-5"
         >
           <select
             aria-label="Supplier"
@@ -147,7 +197,7 @@ export default function PurchaseOrdersPage() {
             type="submit"
             data-testid="purchase-order-submit"
             disabled={createOrder.isPending || !(variantsQuery.data?.items?.length ?? 0)}
-            className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+            className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
           >
             {bi("新建采购单", "Create purchase order")}
           </button>
@@ -158,7 +208,7 @@ export default function PurchaseOrdersPage() {
           )}
         </form>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+        <TableWrap className="rounded-2xl">
           <table data-testid="purchase-orders-table" className="erp-table">
             <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
               <tr>
@@ -173,23 +223,44 @@ export default function PurchaseOrdersPage() {
               {orders.map((order) => (
                 <tr key={order.id} data-testid={`purchase-order-row-${order.id}`}>
                   <td className="px-3 py-2">
-                    <div className="font-medium text-slate-800">{order.po_no}</div>
-                    <div className="text-slate-500">
+                    <div className="font-mono text-[12.5px] font-semibold text-slate-900">
+                      {order.po_no}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
                       {bi("预计到货", "ETA")} {order.expected_arrival_date ?? "—"}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-slate-700">
                     {order.items.map((item) => (
-                      <div key={item.id}>
-                        {item.sku} · {bi("已收", "received")} {item.qty_received}/{item.qty_ordered}
+                      <div key={item.id} className="flex items-center gap-1.5">
+                        <span
+                          aria-hidden="true"
+                          className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                        />
+                        <span className="font-mono text-[11.5px]">{item.sku}</span>
+                        <span className="text-[11px] text-slate-500">
+                          {bi("已收", "received")} {item.qty_received}/{item.qty_ordered}
+                        </span>
                       </div>
                     ))}
                   </td>
-                  <td className="px-3 py-2 text-slate-700">
+                  <td className="px-3 py-2 font-semibold tabular-nums text-slate-900">
                     {formatMoney(order.total_amount, order.currency)}
                   </td>
                   <td className="px-3 py-2">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-700">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${
+                        canReceive(order.status)
+                          ? "border-amber-200 bg-amber-50 text-amber-800"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          canReceive(order.status) ? "bg-amber-500" : "bg-emerald-500"
+                        }`}
+                      />
                       {order.status}
                     </span>
                   </td>
@@ -199,7 +270,7 @@ export default function PurchaseOrdersPage() {
                       data-testid={`receive-po-${order.id}`}
                       disabled={!canReceive(order.status) || receiveOrder.isPending}
                       onClick={() => receiveOrder.mutate(order.id)}
-                      className="rounded bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
+                      className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:opacity-40"
                     >
                       {bi("一键收货入库", "Receive into stock")}
                     </button>
@@ -215,8 +286,15 @@ export default function PurchaseOrdersPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+        </TableWrap>
+        {orders.length === 0 && (
+          <EmptyState>
+            {ordersQuery.isLoading
+              ? bi("正在加载采购单…", "Loading purchase orders…")
+              : bi("暂无采购单，请先新建一张。", "No purchase orders yet, create the first one.")}
+          </EmptyState>
+        )}
+      </Page>
     </AppShell>
   );
 }

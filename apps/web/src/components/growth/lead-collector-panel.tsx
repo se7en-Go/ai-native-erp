@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { Crosshair, Filter, ListChecks, MapPin, UploadCloud } from "lucide-react";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { count, field, panel, primary } from "./presentation";
 import type { CollectionMetrics, LeadCollectionRequest, LeadSourceProvider } from "./types";
 
@@ -13,8 +14,10 @@ const providers = {
 } satisfies Record<LeadSourceProvider, { label: string; help: string }>;
 
 const stats = [
-  { key: "collected", label: "已采集", icon: MapPin }, { key: "cleaned", label: "已清洗", icon: Filter },
-  { key: "synced", label: "已同步 ERP", icon: UploadCloud }, { key: "jobs", label: "采集任务", icon: ListChecks },
+  { key: "collected", label: "已采集", icon: MapPin, accent: "blue" },
+  { key: "cleaned", label: "已清洗", icon: Filter, accent: "violet" },
+  { key: "synced", label: "已同步 ERP", icon: UploadCloud, accent: "emerald" },
+  { key: "jobs", label: "采集任务", icon: ListChecks, accent: "amber" },
 ] as const;
 
 export function LeadCollectorPanel({ metrics, onStart, pending = false }: {
@@ -61,22 +64,41 @@ export function LeadCollectorPanel({ metrics, onStart, pending = false }: {
 
   return (
     <section aria-label="线索采集配置" className="space-y-4 text-slate-900">
-      <div role="group" aria-label="线索采集关键指标" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {stats.map(({ key, label, icon: Icon }) => <div key={key} className="min-w-0 rounded-xl border border-blue-100 bg-blue-50/65 p-3">
-          <div className="flex items-center gap-1.5 text-xs text-blue-900"><Icon aria-hidden="true" size={14} />{label}</div>
-          <p className="mt-1 break-all text-lg font-bold tabular-nums">{count(metrics[key])}</p>
-        </div>)}
+      <div role="group" aria-label="线索采集关键指标" className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {stats.map(({ key, label, icon: Icon, accent }) => (
+          <BentoStatCard
+            key={key}
+            label={label}
+            value={count(metrics[key])}
+            icon={Icon}
+            accent={accent}
+          />
+        ))}
       </div>
       <form className={panel} onSubmit={submit} aria-busy={busy}>
-        <h2 className="text-lg font-bold">配置采集任务</h2>
-        <p className="mb-4 text-sm text-slate-600">按目标市场从许可数据源收集潜在企业。</p>
+        <div className="mb-4">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+              <Crosshair aria-hidden="true" size={15} />
+            </span>
+            配置采集任务
+          </h2>
+          <p className="mt-1 text-[12.5px] leading-6 text-slate-600">
+            按目标市场从许可数据源收集潜在企业。
+          </p>
+        </div>
         <fieldset disabled={busy} className="space-y-4 disabled:opacity-65">
           <label className="block text-sm font-semibold">数据源
             <select value={source} className={field} onChange={(event) => { setSource(event.target.value as LeadSourceProvider); setFile(null); setFeedback(null); }}>
               {Object.entries(providers).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
-          <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900" aria-live="polite">{providers[source].help}</p>
+          <p
+            className="rounded-xl border border-blue-100 bg-blue-50/80 px-3 py-2 text-[12px] leading-relaxed font-medium text-blue-900"
+            aria-live="polite"
+          >
+            {providers[source].help}
+          </p>
           {isCsv && <label className="block text-sm font-semibold">CSV 文件
             <input type="file" accept=".csv,text/csv" aria-required="true" className={field} onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
           </label>}
@@ -95,10 +117,31 @@ export function LeadCollectorPanel({ metrics, onStart, pending = false }: {
             </label>
           </div>
           {!validRating && <p role="alert" className="text-xs text-rose-700">请输入 0 到 5 之间、最多两位小数的评分。</p>}
-          <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" role="switch" checked={requirePhone} onChange={(event) => setRequirePhone(event.target.checked)} className="accent-blue-700" />必须含电话</label>
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-[12.5px] font-semibold text-slate-800">
+            <input
+              type="checkbox"
+              role="switch"
+              checked={requirePhone}
+              onChange={(event) => setRequirePhone(event.target.checked)}
+              className="accent-blue-700"
+            />
+            必须含电话
+          </label>
           <button type="submit" className={primary} disabled={busy || !canSubmit}><Crosshair size={16} aria-hidden="true" />{busy ? "正在提交…" : "启动采集"}</button>
         </fieldset>
-        {feedback && <p role={feedback.ok ? "status" : "alert"} className={"mt-3 text-sm " + (feedback.ok ? "text-blue-900" : "text-rose-700")}>{feedback.text}</p>}
+        {feedback && (
+          <p
+            role={feedback.ok ? "status" : "alert"}
+            className={
+              "mt-3 rounded-xl border px-3 py-2 text-[12.5px] font-medium " +
+              (feedback.ok
+                ? "border-blue-200 bg-blue-50 text-blue-900"
+                : "border-rose-200 bg-rose-50 text-rose-800")
+            }
+          >
+            {feedback.text}
+          </p>
+        )}
       </form>
     </section>
   );
