@@ -62,8 +62,8 @@ export function LeadCollectorPanel({ metrics, onStart, pending = false }: {
   return (
     <section aria-label="线索采集配置" className="space-y-4 text-slate-900">
       <div role="group" aria-label="线索采集关键指标" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {stats.map(({ key, label, icon: Icon }) => <div key={key} className="min-w-0 rounded-xl border border-teal-100 bg-teal-50/65 p-3">
-          <div className="flex items-center gap-1.5 text-xs text-teal-900"><Icon aria-hidden="true" size={14} />{label}</div>
+        {stats.map(({ key, label, icon: Icon }) => <div key={key} className="min-w-0 rounded-xl border border-blue-100 bg-blue-50/65 p-3">
+          <div className="flex items-center gap-1.5 text-xs text-blue-900"><Icon aria-hidden="true" size={14} />{label}</div>
           <p className="mt-1 break-all text-lg font-bold tabular-nums">{count(metrics[key])}</p>
         </div>)}
       </div>
@@ -76,7 +76,7 @@ export function LeadCollectorPanel({ metrics, onStart, pending = false }: {
               {Object.entries(providers).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
-          <p className="rounded-lg bg-teal-50 px-3 py-2 text-xs leading-relaxed text-teal-900" aria-live="polite">{providers[source].help}</p>
+          <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900" aria-live="polite">{providers[source].help}</p>
           {isCsv && <label className="block text-sm font-semibold">CSV 文件
             <input type="file" accept=".csv,text/csv" aria-required="true" className={field} onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
           </label>}
@@ -95,10 +95,10 @@ export function LeadCollectorPanel({ metrics, onStart, pending = false }: {
             </label>
           </div>
           {!validRating && <p role="alert" className="text-xs text-rose-700">请输入 0 到 5 之间、最多两位小数的评分。</p>}
-          <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" role="switch" checked={requirePhone} onChange={(event) => setRequirePhone(event.target.checked)} className="accent-teal-700" />必须含电话</label>
+          <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" role="switch" checked={requirePhone} onChange={(event) => setRequirePhone(event.target.checked)} className="accent-blue-700" />必须含电话</label>
           <button type="submit" className={primary} disabled={busy || !canSubmit}><Crosshair size={16} aria-hidden="true" />{busy ? "正在提交…" : "启动采集"}</button>
         </fieldset>
-        {feedback && <p role={feedback.ok ? "status" : "alert"} className={"mt-3 text-sm " + (feedback.ok ? "text-teal-900" : "text-rose-700")}>{feedback.text}</p>}
+        {feedback && <p role={feedback.ok ? "status" : "alert"} className={"mt-3 text-sm " + (feedback.ok ? "text-blue-900" : "text-rose-700")}>{feedback.text}</p>}
       </form>
     </section>
   );

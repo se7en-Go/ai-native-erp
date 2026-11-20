@@ -3,6 +3,7 @@
 import React from "react";
 import { AlertTriangle, Clock, Search } from "lucide-react";
 import type { ChannelType, ConversationMode, ConversationStatus } from "@/lib/contracts";
+import { useI18n } from "@/lib/i18n";
 
 export type ConversationFilterTab = "all" | "unread" | "pending_human" | "sla_urgent";
 
@@ -24,11 +25,20 @@ export interface ConversationSummary {
   updated_at: string;
 }
 
-const FILTER_TABS: Array<{ key: ConversationFilterTab; label: string }> = [
-  { key: "all", label: "all" },
-  { key: "unread", label: "unread" },
-  { key: "pending_human", label: "pending_human" },
-  { key: "sla_urgent", label: "sla_urgent" },
+/**
+ * 筛选标签保留机器码（all / unread / pending_human / sla_urgent）作为可访问名称，
+ * 保证既有单测与运维语义一致；中文说明通过 title 提供。
+ */
+const FILTER_TABS: Array<{
+  key: ConversationFilterTab;
+  label: string;
+  zh: string;
+  titleZh: string;
+}> = [
+  { key: "all", label: "all", zh: "全部", titleZh: "全部会话" },
+  { key: "unread", label: "unread", zh: "未读", titleZh: "未读会话" },
+  { key: "pending_human", label: "pending_human", zh: "待接管", titleZh: "待人工接管" },
+  { key: "sla_urgent", label: "sla_urgent", zh: "SLA", titleZh: "SLA 紧急" },
 ];
 
 export function ConversationList({
@@ -48,10 +58,11 @@ export function ConversationList({
   onSearchChange: (value: string) => void;
   onSelectConversation: (conversationId: string) => void;
 }) {
+  const { bi } = useI18n();
   return (
     <div
       data-testid="inbox-conversation-list"
-      className="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-white"
+      className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white xl:w-80"
     >
       <div className="border-b border-slate-200 p-2.5">
         <div className="relative">
@@ -60,8 +71,9 @@ export function ConversationList({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search buyer, order, or email..."
-            className="w-full rounded-md border border-slate-200 py-1.5 pr-3 pl-8 text-xs focus:border-indigo-500 focus:outline-none"
+            placeholder={bi("搜索买家、订单号或邮箱…", "Search buyer, order or email…")}
+            aria-label={bi("搜索会话", "Search conversations")}
+            className="erp-input py-1.5 pl-8 text-[12px]"
           />
         </div>
 
@@ -72,15 +84,16 @@ export function ConversationList({
               <button
                 key={tab.key}
                 type="button"
+                title={bi(tab.titleZh, tab.label)}
                 aria-label={`Filter ${tab.key === "all" ? "everything" : tab.key}`}
                 onClick={() => onSelectFilter(tab.key)}
-                className={`truncate rounded px-1.5 py-1 text-[11px] font-medium ${
+                className={`truncate rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors ${
                   active
-                    ? "bg-indigo-600 text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
-                {tab.label}
+                {bi(tab.zh, tab.label)}
               </button>
             );
           })}
@@ -89,7 +102,9 @@ export function ConversationList({
 
       <div className="flex-1 divide-y divide-slate-100 overflow-y-auto">
         {conversations.length === 0 ? (
-          <div className="p-6 text-center text-xs text-slate-400">No conversations match filter.</div>
+          <div className="p-6 text-center text-[12px] text-slate-400">
+            {bi("没有符合筛选条件的会话。", "No conversations match this filter.")}
+          </div>
         ) : (
           conversations.map((conv) => {
             const selected = conv.id === selectedConversationId;
@@ -105,40 +120,43 @@ export function ConversationList({
                 aria-label={`${conv.customer_name} — ${conv.last_message_preview}`}
                 data-testid={`conversation-item-${conv.id}`}
                 onClick={() => onSelectConversation(conv.id)}
-                className={`block w-full p-3 text-left transition-colors ${
-                  selected ? "bg-indigo-50/70" : "hover:bg-slate-50"
+                className={`block w-full border-l-2 p-3 text-left transition-colors ${
+                  selected
+                    ? "border-blue-500 bg-blue-50/60"
+                    : "border-transparent hover:bg-slate-50"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-semibold text-slate-900">
-                    {conv.customer_name} {conv.country_code ? `(${conv.country_code})` : ""}
+                  <span className="truncate text-[13px] font-medium text-slate-900">
+                    {conv.customer_name}
+                    {conv.country_code ? ` (${conv.country_code})` : ""}
                   </span>
                   {conv.unread_count > 0 && (
-                    <span className="rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
                       {conv.unread_count}
                     </span>
                   )}
                 </div>
 
-                <p className="mt-1 line-clamp-2 text-xs text-slate-600">
+                <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-600">
                   {conv.last_message_preview}
                 </p>
 
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-700">
+                <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px]">
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
                     {conv.channel_type}
                   </span>
-                  <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-blue-700">
+                  <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">
                     {conv.conversation_mode}
                   </span>
                   {conv.status === "pending_human" && (
-                    <span className="inline-flex items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
+                    <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800">
                       <AlertTriangle className="h-3 w-3" />
                       pending_human
                     </span>
                   )}
                   {isSlaUrgent && (
-                    <span className="inline-flex items-center gap-0.5 rounded bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-800">
+                    <span className="inline-flex items-center gap-0.5 rounded bg-rose-50 px-1.5 py-0.5 font-medium text-rose-700">
                       <Clock className="h-3 w-3" />
                       SLA
                     </span>

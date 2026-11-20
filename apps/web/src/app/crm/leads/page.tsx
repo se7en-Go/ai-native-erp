@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
@@ -24,6 +26,7 @@ const STATUSES: Array<LeadStatus | ""> = [
 ];
 
 export default function CrmLeadsPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const { principal } = useAuthSession();
   const [status, setStatus] = useState<LeadStatus | "">("");
@@ -55,12 +58,12 @@ export default function CrmLeadsPage() {
 
   return (
     <AppShell currentPath="/crm/leads" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="erp-page space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">CRM 线索池 / Leads</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("CRM 线索池", "CRM leads")}</h1>
             <p className="text-xs text-slate-500">
-              线索资格评分、来源渠道与一键转商机；转商机后线索状态自动变为 converted。
+              {bi("线索资格评分、来源渠道与一键转商机；转商机后线索状态自动变为 converted。", "Qualification score, source channel and one-click conversion; the lead becomes converted automatically.")}
             </p>
           </div>
           <select
@@ -71,7 +74,7 @@ export default function CrmLeadsPage() {
           >
             {STATUSES.map((value) => (
               <option key={value || "all"} value={value}>
-                {value || "全部状态"}
+                {value || bi("全部状态", "All statuses")}
               </option>
             ))}
           </select>
@@ -83,15 +86,15 @@ export default function CrmLeadsPage() {
           </p>
         )}
 
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table data-testid="leads-table" className="w-full text-left text-xs">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+          <table data-testid="leads-table" className="erp-table">
             <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
               <tr>
-                <th className="px-3 py-2.5">线索 / 客户</th>
-                <th className="px-3 py-2.5">来源</th>
-                <th className="px-3 py-2.5">评分</th>
-                <th className="px-3 py-2.5">状态</th>
-                <th className="px-3 py-2.5">操作</th>
+                <th>{bi("线索 / 客户", "Lead / customer")}</th>
+                <th>{bi("来源", "Source")}</th>
+                <th>{bi("评分", "Score")}</th>
+                <th>{bi("状态", "Status")}</th>
+                <th className="text-right">{bi("操作", "Action")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -122,16 +125,16 @@ export default function CrmLeadsPage() {
                         onClick={() => qualify.mutate(lead.id)}
                         className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-40"
                       >
-                        标记已资格
+                        {bi("标记已资格", "Mark qualified")}
                       </button>
                       <button
                         type="button"
                         data-testid={`convert-lead-${lead.id}`}
                         disabled={lead.status === "converted" || convert.isPending}
                         onClick={() => convert.mutate(lead)}
-                        className="flex items-center gap-1 rounded bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                        className="flex items-center gap-1 rounded bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-40"
                       >
-                        转商机 <ArrowRight className="h-3 w-3" />
+                        {bi("转商机", "Convert")} <ArrowRight className="h-3 w-3" />
                       </button>
                     </div>
                   </td>
@@ -140,7 +143,7 @@ export default function CrmLeadsPage() {
               {leads.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
-                    {leadsQuery.isLoading ? "加载中…" : "暂无线索"}
+                    {leadsQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无线索", "No leads")}
                   </td>
                 </tr>
               )}

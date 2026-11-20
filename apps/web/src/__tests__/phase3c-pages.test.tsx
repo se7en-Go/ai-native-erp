@@ -86,7 +86,8 @@ describe("Phase 3C pages", () => {
     const row = within(table)
       .getAllByRole("row")
       .find((candidate) => candidate.textContent?.includes("Milan Illuminazione SRL"));
-    expect(row?.className).toContain("bg-teal-50");
+    // Stage 1 设计系统统一品牌蓝激活态（原 teal 强调色已收敛为品牌蓝）。
+    expect(row?.className).toContain("bg-blue-50");
   });
 
   it("cleans raw prospects and syncs cleaned ones into the ERP lead pool", async () => {

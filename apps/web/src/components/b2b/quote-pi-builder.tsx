@@ -9,7 +9,9 @@ import {
   generateQuotePdf,
   repriceQuoteVersion,
 } from "@/lib/api-client/live-client";
+import { useI18n } from "@/lib/i18n";
 import { formatMoney, type Incoterm, type QuoteStatus } from "@/lib/contracts";
+import { Badge, Card, CardHeader, EmptyState } from "@/components/ui/page";
 import type { CatalogVariantItem, MoqTier } from "@/components/catalog/sku-mapping-drawer";
 
 export interface QuoteItemView {
@@ -60,6 +62,9 @@ export function resolveMoqTierPrice(
   return { tierMinQty: 1, unitPriceUsd: fallbackPriceUsd };
 }
 
+/**
+ * FX 锁定倒计时。E2E 与历史单测依赖英文标签文本，故此处保持英文技术文案。
+ */
 export function formatFxCountdown(fxLockedUntilIso: string): {
   expired: boolean;
   label: string;
@@ -74,6 +79,15 @@ export function formatFxCountdown(fxLockedUntilIso: string): {
   return { expired: false, label: `FX Locked: ${hours}h ${mins}m remaining` };
 }
 
+const QUOTE_STATUS_LABEL: Record<QuoteStatus, { zh: string; en: string }> = {
+  draft: { zh: "草稿", en: "Draft" },
+  pending_approval: { zh: "待审批", en: "Pending approval" },
+  sent: { zh: "已发送", en: "Sent" },
+  accepted: { zh: "买方已接受", en: "Accepted" },
+  expired: { zh: "已过期", en: "Expired" },
+  converted: { zh: "已转订单", en: "Converted" },
+};
+
 export function QuotePiBuilder({
   quotes,
   variants,
@@ -82,6 +96,7 @@ export function QuotePiBuilder({
   variants: CatalogVariantItem[];
 }) {
   const queryClient = useQueryClient();
+  const { bi } = useI18n();
   const [selectedQuoteId, setSelectedQuoteId] = useState<string>(quotes[0]?.id ?? "");
   const [previewVariantId, setPreviewVariantId] = useState<string>(variants[0]?.id ?? "");
   const [previewQty, setPreviewQty] = useState<number>(500);
@@ -131,6 +146,7 @@ export function QuotePiBuilder({
   const convertMutation = useMutation({
     mutationFn: (quoteId: string) => convertQuoteToOrder(quoteId),
     onSuccess: (res) => {
+      // E2E 断言该成功提示包含 "Converted 1-Click to Order"，保持英文原文。
       setConvertedBanner(`Converted 1-Click to Order ${res.order.order_no} (${res.order.id})`);
       void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
       void queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -138,232 +154,287 @@ export function QuotePiBuilder({
   });
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs space-y-3">
-        <h3 className="text-sm font-bold text-slate-900">MOQ Tier Auto-Price Calculator</h3>
-        <div>
-          <label className="block font-medium text-slate-600">Select SKU</label>
-          <select
-            value={activeVariant?.id ?? ""}
-            onChange={(e) => setPreviewVariantId(e.target.value)}
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
-          >
-            {variants.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.sku}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+    <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+      <Card className="h-fit">
+        <CardHeader
+          title={bi("MOQ 阶梯价试算", "MOQ tier price calculator")}
+          description={bi("输入数量自动匹配最优阶梯价", "Quantity auto-matches the best tier")}
+        />
+        <div className="space-y-3 p-4 text-[13px]">
           <div>
-            <label className="block font-medium text-slate-600">Order Qty</label>
-            <input
-              type="number"
-              min={1}
-              data-testid="moq-preview-qty-input"
-              value={previewQty}
-              onChange={(e) => setPreviewQty(Math.max(1, Number(e.target.value) || 1))}
-              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
-            />
-          </div>
-          <div>
-            <label className="block font-medium text-slate-600">Incoterm</label>
+            <label className="erp-label" htmlFor="moq-preview-sku">
+              {bi("选择商品 SKU", "Select SKU")}
+            </label>
             <select
-              value={previewIncoterm}
-              onChange={(e) => setPreviewIncoterm(e.target.value as Incoterm)}
-              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              id="moq-preview-sku"
+              value={activeVariant?.id ?? ""}
+              onChange={(e) => setPreviewVariantId(e.target.value)}
+              className="erp-input mt-1.5"
             >
-              <option value="EXW">EXW</option>
-              <option value="FOB">FOB</option>
-              <option value="CIF">CIF</option>
-              <option value="DDP">DDP</option>
-              <option value="DAP">DAP</option>
+              {variants.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.sku}
+                </option>
+              ))}
             </select>
           </div>
-        </div>
-        {moqPreview && (
-          <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3 space-y-1">
-            <div className="text-slate-700">
-              Applied Tier: <strong>MOQ {moqPreview.tierMinQty}+</strong> ({previewIncoterm})
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="erp-label" htmlFor="moq-preview-qty-input">
+                {bi("采购数量", "Order qty")}
+              </label>
+              <input
+                id="moq-preview-qty-input"
+                type="number"
+                min={1}
+                data-testid="moq-preview-qty-input"
+                value={previewQty}
+                onChange={(e) => setPreviewQty(Math.max(1, Number(e.target.value) || 1))}
+                className="erp-input mt-1.5 tabular-nums"
+              />
             </div>
-            <div data-testid="moq-preview-price" className="text-base font-bold text-indigo-900">
-              {formatMoney(moqPreview.unitPriceUsd, "USD")} / pc
-            </div>
-            <div className="text-slate-600">
-              Est. Subtotal: {formatMoney(moqPreview.unitPriceUsd * previewQty, "USD")}
+            <div>
+              <label className="erp-label" htmlFor="moq-preview-incoterm">
+                {bi("贸易术语", "Incoterm")}
+              </label>
+              <select
+                id="moq-preview-incoterm"
+                value={previewIncoterm}
+                onChange={(e) => setPreviewIncoterm(e.target.value as Incoterm)}
+                className="erp-input mt-1.5"
+              >
+                <option value="EXW">EXW</option>
+                <option value="FOB">FOB</option>
+                <option value="CIF">CIF</option>
+                <option value="DDP">DDP</option>
+                <option value="DAP">DAP</option>
+              </select>
             </div>
           </div>
-        )}
-      </div>
 
-      <div className="lg:col-span-2 rounded-lg border border-slate-200 bg-white p-4 text-xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-slate-900">Versioned Proforma Invoice (PI)</h3>
-          <select
-            value={activeQuote?.id ?? ""}
-            onChange={(e) => setSelectedQuoteId(e.target.value)}
-            className="rounded border border-slate-300 px-2 py-1 text-xs"
-          >
-            {quotes.map((q) => (
-              <option key={q.id} value={q.id}>
-                {q.quote_no} (v{q.version} · {q.status})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {convertedBanner && (
-          <div className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 font-semibold text-emerald-900">
-            {convertedBanner}
-          </div>
-        )}
-
-        {convertMutation.isError && (
-          <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
-            {convertMutation.error.message}
-          </p>
-        )}
-
-        {activeQuote ? (
-          (() => {
-            const fxState = formatFxCountdown(activeQuote.fx_locked_until);
-            const canConvert = activeQuote.status === "accepted" && !fxState.expired;
-            const downloadHref = pdfPreviewUrl ?? activeQuote.download_url ?? null;
-
-            return (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-50 p-2.5">
-                  <div>
-                    <span className="text-sm font-bold text-slate-900">{activeQuote.quote_no}</span>
-                    <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5">
-                      v{activeQuote.version}
-                    </span>
-                    <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 font-semibold text-indigo-800">
-                      {activeQuote.incoterm}
-                    </span>
-                    <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 font-semibold">
-                      {activeQuote.status}
-                    </span>
-                  </div>
-
-                  <span
-                    data-testid={`fx-lock-badge-${activeQuote.id}`}
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold ${
-                      fxState.expired
-                        ? "bg-rose-100 text-rose-800"
-                        : "bg-emerald-100 text-emerald-800"
-                    }`}
-                  >
-                    <Clock className="h-3 w-3" />
-                    <span>{fxState.label}</span>
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-slate-600">
-                  <div>
-                    Route: {activeQuote.port_of_loading ?? "Shenzhen"} →{" "}
-                    {activeQuote.port_of_destination ?? "Buyer Port"}
-                  </div>
-                  <div>
-                    FX Snapshot: 1 {activeQuote.quote_currency} = {activeQuote.fx_rate_snapshot}{" "}
-                    {activeQuote.base_currency}
-                  </div>
-                  <div className="col-span-2">Payment Terms: {activeQuote.payment_terms}</div>
-                </div>
-
-                <table className="w-full border border-slate-200 text-left">
-                  <thead className="bg-slate-50 text-slate-600">
-                    <tr>
-                      <th className="px-2 py-1.5">SKU</th>
-                      <th className="px-2 py-1.5">Qty</th>
-                      <th className="px-2 py-1.5">Unit Price</th>
-                      <th className="px-2 py-1.5">Line Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {activeQuote.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-2 py-1.5 font-medium">{item.sku_snapshot}</td>
-                        <td className="px-2 py-1.5">{item.quantity}</td>
-                        <td className="px-2 py-1.5">
-                          {formatMoney(item.unit_price_quote_ccy, activeQuote.quote_currency)}
-                        </td>
-                        <td className="px-2 py-1.5 font-semibold">
-                          {formatMoney(item.line_total_quote_ccy, activeQuote.quote_currency)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
-                  <div className="text-sm font-bold text-slate-900">
-                    Total: {formatMoney(activeQuote.total_amount, activeQuote.quote_currency)}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => pdfMutation.mutate(activeQuote.id)}
-                      className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-100"
-                    >
-                      <FileDown className="h-3.5 w-3.5" />
-                      <span>Generate PI PDF</span>
-                    </button>
-
-                    {downloadHref && (
-                      <a
-                        href={downloadHref}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 font-semibold text-indigo-700"
-                      >
-                        Preview PDF
-                      </a>
-                    )}
-
-                    {fxState.expired && (
-                      <button
-                        type="button"
-                        onClick={() => renewFxMutation.mutate(activeQuote.id)}
-                        className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 py-1.5 font-semibold text-amber-900"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        <span>Renew FX Lock</span>
-                      </button>
-                    )}
-
-                    {activeQuote.status !== "accepted" && activeQuote.status !== "converted" && (
-                      <button
-                        type="button"
-                        onClick={() => acceptMutation.mutate(activeQuote.id)}
-                        className="inline-flex items-center gap-1 rounded bg-slate-800 px-2.5 py-1.5 font-semibold text-white"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>Mark Accepted</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      data-testid={`convert-quote-btn-${activeQuote.id}`}
-                      disabled={!canConvert || convertMutation.isPending}
-                      onClick={() => convertMutation.mutate(activeQuote.id)}
-                      className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                    >
-                      <ArrowRightCircle className="h-3.5 w-3.5" />
-                      <span>1-Click Convert to Order</span>
-                    </button>
-                  </div>
-                </div>
+          {moqPreview && (
+            <div className="space-y-1.5 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+              <div className="text-[12px] text-slate-600">
+                {bi("命中阶梯", "Applied tier")}：<strong>MOQ {moqPreview.tierMinQty}+</strong> ·{" "}
+                {previewIncoterm}
               </div>
-            );
-          })()
-        ) : (
-          <div className="p-4 text-center text-slate-400">No quotes yet.</div>
-        )}
-      </div>
+              <div
+                data-testid="moq-preview-price"
+                className="text-lg font-semibold tabular-nums text-blue-900"
+              >
+                {formatMoney(moqPreview.unitPriceUsd, "USD")} / pc
+              </div>
+              <div className="text-[12px] tabular-nums text-slate-600">
+                {bi("预估小计", "Est. subtotal")}：
+                {formatMoney(moqPreview.unitPriceUsd * previewQty, "USD")}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-1 border-t border-slate-100 pt-3 text-[12px] text-slate-500">
+            <p>{bi("阶梯价规则：数量越大单价越低，报价单落库时快照保存。", "Tier pricing: larger quantities get lower unit prices, snapshotted into the quote.")}</p>
+            <p>{bi("FOB/CIF 需确认装运港与目的港，DDP 需另计目的国关税。", "FOB/CIF require POL/POD; DDP must include destination duty.")}</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title={bi("形式发票（PI）版本管理", "Versioned proforma invoice (PI)")}
+          description={bi(
+            "每次改价生成新版本，汇率快照与条款随版本冻结",
+            "Every reprice creates a new version with a frozen FX snapshot and terms"
+          )}
+          actions={
+            <select
+              aria-label={bi("选择报价单版本", "Select quote version")}
+              value={activeQuote?.id ?? ""}
+              onChange={(e) => setSelectedQuoteId(e.target.value)}
+              className="erp-input w-auto py-1 text-[12px]"
+            >
+              {quotes.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.quote_no} · v{q.version}
+                </option>
+              ))}
+            </select>
+          }
+        />
+        <div className="space-y-3 p-4 text-[13px]">
+          {convertedBanner && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-900">
+              {convertedBanner}
+            </div>
+          )}
+
+          {convertMutation.isError && (
+            <p
+              role="alert"
+              className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[12px] text-rose-800"
+            >
+              {convertMutation.error.message}
+            </p>
+          )}
+
+          {activeQuote ? (
+            (() => {
+              const fxState = formatFxCountdown(activeQuote.fx_locked_until);
+              const canConvert = activeQuote.status === "accepted" && !fxState.expired;
+              const downloadHref = pdfPreviewUrl ?? activeQuote.download_url ?? null;
+              const statusCopy =
+                QUOTE_STATUS_LABEL[activeQuote.status] ?? {
+                  zh: activeQuote.status,
+                  en: activeQuote.status,
+                };
+
+              return (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-900">{activeQuote.quote_no}</span>
+                      <Badge>v{activeQuote.version}</Badge>
+                      <Badge tone="info">{activeQuote.incoterm}</Badge>
+                      <Badge tone={activeQuote.status === "accepted" ? "success" : "neutral"}>
+                        {bi(statusCopy.zh, statusCopy.en)}
+                      </Badge>
+                    </div>
+
+                    <span
+                      data-testid={`fx-lock-badge-${activeQuote.id}`}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
+                        fxState.expired
+                          ? "border-rose-200 bg-rose-50 text-rose-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      <Clock className="h-3 w-3" />
+                      <span className="tabular-nums">{fxState.label}</span>
+                    </span>
+                  </div>
+
+                  <div className="grid gap-2 rounded-xl border border-slate-100 p-3 text-[12px] text-slate-600 sm:grid-cols-2">
+                    <div>
+                      {bi("航线", "Route")}：{activeQuote.port_of_loading ?? "Shenzhen"} →{" "}
+                      {activeQuote.port_of_destination ?? bi("买方港口", "Buyer port")}
+                    </div>
+                    <div className="tabular-nums">
+                      {bi("汇率快照", "FX snapshot")}：1 {activeQuote.quote_currency} ={" "}
+                      {activeQuote.fx_rate_snapshot} {activeQuote.base_currency}
+                    </div>
+                    <div className="sm:col-span-2">
+                      {bi("付款条件", "Payment terms")}：{activeQuote.payment_terms}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="erp-table">
+                      <thead>
+                        <tr>
+                          <th>SKU</th>
+                          <th className="text-right">{bi("数量", "Qty")}</th>
+                          <th className="text-right">{bi("单价", "Unit price")}</th>
+                          <th className="text-right">{bi("行小计", "Line total")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeQuote.items.map((item) => (
+                          <tr key={item.id}>
+                            <td className="font-medium text-slate-800">{item.sku_snapshot}</td>
+                            <td className="text-right tabular-nums">{item.quantity}</td>
+                            <td className="text-right tabular-nums">
+                              {formatMoney(item.unit_price_quote_ccy, activeQuote.quote_currency)}
+                            </td>
+                            <td className="text-right font-medium tabular-nums">
+                              {formatMoney(item.line_total_quote_ccy, activeQuote.quote_currency)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                    <div className="text-sm font-semibold tabular-nums text-slate-900">
+                      {bi("合同总额", "Total")}：
+                      {formatMoney(activeQuote.total_amount, activeQuote.quote_currency)}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => pdfMutation.mutate(activeQuote.id)}
+                        className="erp-btn erp-btn-secondary"
+                      >
+                        <FileDown className="h-3.5 w-3.5" />
+                        <span>{bi("生成 PI PDF", "Generate PI PDF")}</span>
+                      </button>
+
+                      {downloadHref && (
+                        <a
+                          href={downloadHref}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="erp-btn border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                        >
+                          {bi("预览 PDF", "Preview PDF")}
+                        </a>
+                      )}
+
+                      {fxState.expired && (
+                        <button
+                          type="button"
+                          onClick={() => renewFxMutation.mutate(activeQuote.id)}
+                          className="erp-btn border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          <span>{bi("续锁汇率", "Renew FX lock")}</span>
+                        </button>
+                      )}
+
+                      {activeQuote.status !== "accepted" && activeQuote.status !== "converted" && (
+                        <button
+                          type="button"
+                          onClick={() => acceptMutation.mutate(activeQuote.id)}
+                          className="erp-btn bg-slate-800 text-white hover:bg-slate-900"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>Mark Accepted</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        data-testid={`convert-quote-btn-${activeQuote.id}`}
+                        disabled={!canConvert || convertMutation.isPending}
+                        onClick={() => convertMutation.mutate(activeQuote.id)}
+                        className="erp-btn erp-btn-primary disabled:opacity-50"
+                      >
+                        <ArrowRightCircle className="h-3.5 w-3.5" />
+                        <span>{bi("一键转批发订单", "1-Click Convert to Order")}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
+          ) : (
+            <EmptyState>{bi("暂无报价单。", "No quotes yet.")}</EmptyState>
+          )}
+        </div>
+      </Card>
+
+      <Card className="h-fit">
+        <CardHeader
+          title={bi("报价条款与合规提示", "Quote terms & compliance")}
+          description={bi("生成 PI 前请确认以下商务要素", "Confirm these commercial terms before issuing the PI")}
+        />
+        <ul className="space-y-2.5 p-4 text-[12px] leading-6 text-slate-600">
+          <li>{bi("贸易术语：FOB 深圳 / CIF 汉堡 / EXW 工厂交货，按客户习惯选择。", "Incoterms: FOB Shenzhen / CIF Hamburg / EXW ex-works, chosen per buyer.")}</li>
+          <li>{bi("付款方式：30% T/T 定金 + 70% 见提单副本付清，尾款未结清不出货。", "Payment: 30% T/T deposit plus 70% against B/L copy; no dispatch before balance.")}</li>
+          <li>{bi("汇率锁定 48 小时，超期需重新取价并生成新版本。", "FX is locked for 48 hours; after expiry reprice and issue a new version.")}</li>
+          <li>{bi("PI 中的 HS 编码、品牌与型号须与报关资料一致。", "HS code, brand and model on the PI must match customs documents.")}</li>
+        </ul>
+      </Card>
     </div>
   );
 }

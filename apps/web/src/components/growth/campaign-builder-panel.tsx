@@ -69,15 +69,15 @@ export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
             </div>
           </fieldset>
         </form>
-        <aside className="rounded-xl border border-teal-100 bg-teal-50/60 p-4">
-          <h3 className="flex items-center gap-2 font-bold text-teal-900"><ShieldCheck aria-hidden="true" size={18} />合规检查</h3>
+        <aside className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+          <h3 className="flex items-center gap-2 font-bold text-blue-900"><ShieldCheck aria-hidden="true" size={18} />合规检查</h3>
           <p className="mt-2 text-sm text-slate-700">{email
             ? "服务端必须应用全局退订拦截，并随营销邮件发送 RFC 8058 List-Unsubscribe 一键退订头。"
             : "须有有效的 WhatsApp Opt-In；STOP 退订、美国营销限制与频率限制由发送网关强制执行。"}</p>
           <p className="mt-3 text-sm font-semibold">已选 {count(uniqueTargets.length)} 个目标</p>
-          {preview ? <section aria-label="拦截结果" aria-live="polite" className="mt-3 rounded-lg border border-teal-100 bg-white p-3">
+          {preview ? <section aria-label="拦截结果" aria-live="polite" className="mt-3 rounded-lg border border-blue-100 bg-white p-3">
             <dl className="grid grid-cols-2 gap-2 text-sm">
-              <div><dt>预览可触达</dt><dd className="text-lg font-bold text-teal-900">{count(preview.eligible_count)}</dd></div>
+              <div><dt>预览可触达</dt><dd className="text-lg font-bold text-blue-900">{count(preview.eligible_count)}</dd></div>
               <div><dt>本次拦截</dt><dd className="text-lg font-bold text-rose-800">{count(preview.suppressed_count)}</dd></div>
             </dl>
             {!!preview.reasons.length && <ul className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-sm">
@@ -88,7 +88,7 @@ export function CampaignBuilderPanel({ targetIds, onPreview, onSaveDraft }: {
             : uniqueTargets.length ? "尚未生成当前配置的拦截结果。" : "选择目标线索后才能预览。"}</p>}
         </aside>
       </div>
-      {feedback && <p role={feedback.error ? "alert" : "status"} className={"mt-3 text-sm " + (feedback.error ? "text-rose-700" : "text-teal-900")}>{feedback.text}</p>}
+      {feedback && <p role={feedback.error ? "alert" : "status"} className={"mt-3 text-sm " + (feedback.error ? "text-rose-700" : "text-blue-900")}>{feedback.text}</p>}
     </section>
   );
 }

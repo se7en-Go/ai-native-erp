@@ -192,7 +192,10 @@ export function isNavItemVisible(role: UserRole | null | undefined, href: string
 export interface CommandEntry {
   id: string;
   group: "navigate" | "create";
+  /** Chinese label (zh mode). */
   label: string;
+  /** English label for en mode; falls back to `label` when absent. */
+  labelEn?: string;
   href: string;
   keywords: string;
   roles: UserRole[];
@@ -201,35 +204,40 @@ export interface CommandEntry {
 const CREATE_ACTIONS: Array<Omit<CommandEntry, "group">> = [
   {
     id: "create-lead",
-    label: "新建线索 / New lead",
+    label: "新建线索",
+    labelEn: "New lead",
     href: "/crm/leads?action=new",
     keywords: "lead crm 线索",
     roles: SALES_ROLES,
   },
   {
     id: "create-followup",
-    label: "新增跟进 / Log follow-up",
+    label: "新增跟进",
+    labelEn: "Log follow-up",
     href: "/crm/followups?action=new",
     keywords: "followup 跟进 crm",
     roles: SALES_ROLES,
   },
   {
     id: "create-task",
-    label: "新建任务 / New task",
+    label: "新建任务",
+    labelEn: "New task",
     href: "/tasks?action=new",
     keywords: "task reminder 任务 提醒",
     roles: SALES_ROLES,
   },
   {
     id: "create-supplier",
-    label: "新建供应商 / New supplier",
+    label: "新建供应商",
+    labelEn: "New supplier",
     href: "/supply-chain/suppliers?action=new",
     keywords: "supplier 供应商 采购",
     roles: OPS_ROLES,
   },
   {
     id: "create-po",
-    label: "新建采购单 / New purchase order",
+    label: "新建采购单",
+    labelEn: "New purchase order",
     href: "/supply-chain/purchase-orders?action=new",
     keywords: "purchase order po 采购单",
     roles: OPS_ROLES,
@@ -268,7 +276,7 @@ export function filterCommandEntries(
   const decorated = entries.map((entry) => ({
     entry,
     searchable: normalizeSearchText(
-      `${entry.label} ${labels[entry.href] ?? ""} ${entry.keywords}`
+      `${entry.label} ${entry.labelEn ?? ""} ${labels[entry.href] ?? ""} ${entry.keywords}`
     ),
   }));
   return decorated

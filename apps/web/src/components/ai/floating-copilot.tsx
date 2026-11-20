@@ -23,23 +23,23 @@ import { useI18n } from "@/lib/i18n";
 import { useAuthSession } from "@/components/providers";
 import { fetchInboxAssist } from "@/lib/phase3b-data";
 
-const SAFE_METRIC_LABELS: Record<string, string> = {
-  open_threads: "Open Threads",
-  pending_quotes: "Pending Quotes",
-  stagnant_shipments_72h: "72h Stagnant Shipments",
-  drafts_ready: "Content Drafts Ready",
-  net_margin_pct: "Net Contribution Margin",
-  monthly_profit_target: "Monthly Profit Target",
-  open_receivables_amount: "Open Receivables",
+const SAFE_METRIC_LABELS: Record<string, { zh: string; en: string }> = {
+  open_threads: { zh: "进行中会话", en: "Open threads" },
+  pending_quotes: { zh: "待确认报价", en: "Pending quotes" },
+  stagnant_shipments_72h: { zh: "72h 停滞运单", en: "72h stagnant shipments" },
+  drafts_ready: { zh: "待审内容草稿", en: "Content drafts ready" },
+  net_margin_pct: { zh: "净贡献毛利率", en: "Net contribution margin" },
+  monthly_profit_target: { zh: "月度利润目标", en: "Monthly profit target" },
+  open_receivables_amount: { zh: "未结应收", en: "Open receivables" },
 };
 
-const CAPABILITY_TITLES: Record<AiCapability, string> = {
-  cs_support: "CS Support",
-  sales_quoting: "Sales & Quoting",
-  order_logistics: "Orders & Logistics",
-  content_studio: "Content Studio",
-  biz_analytics: "Business Analytics",
-  finance_recon: "Finance Recon",
+const CAPABILITY_TITLES: Record<AiCapability, { zh: string; en: string }> = {
+  cs_support: { zh: "客服支持", en: "CS support" },
+  sales_quoting: { zh: "销售报价", en: "Sales & quoting" },
+  order_logistics: { zh: "订单物流", en: "Orders & logistics" },
+  content_studio: { zh: "内容工坊", en: "Content studio" },
+  biz_analytics: { zh: "经营分析", en: "Business analytics" },
+  finance_recon: { zh: "财务对账", en: "Finance recon" },
 };
 
 export const CopilotMetricSchema = z.object({
@@ -120,10 +120,22 @@ export function sanitizeCopilotCards(rawCards: unknown[]): CopilotSummaryCard[] 
 
 /** Chips are navigation shortcuts plus one real daily brief; never raw payloads. */
 const COPILOT_CHIPS = [
-  { id: "daily-brief", label: "AI 日报", icon: Newspaper },
-  { id: "pending-proposals", label: "待审提案", icon: ClipboardCheck, href: "/ai/proposals" },
-  { id: "today-followups", label: "今日跟进", icon: CalendarClock, href: "/crm/followups" },
-  { id: "stock-alerts", label: "库存预警", icon: PackageX, href: "/wms" },
+  { id: "daily-brief", label: "AI 日报", labelEn: "Daily brief", icon: Newspaper },
+  {
+    id: "pending-proposals",
+    label: "待审提案",
+    labelEn: "Pending proposals",
+    icon: ClipboardCheck,
+    href: "/ai/proposals",
+  },
+  {
+    id: "today-followups",
+    label: "今日跟进",
+    labelEn: "Today's follow-ups",
+    icon: CalendarClock,
+    href: "/crm/followups",
+  },
+  { id: "stock-alerts", label: "库存预警", labelEn: "Stock alerts", icon: PackageX, href: "/wms" },
 ] as const;
 
 /** Only plain strings are rendered, so a nested payload can never print [object Object]. */
@@ -145,7 +157,7 @@ function renderSafeMetricValue(metric: z.infer<typeof CopilotMetricSchema>): str
 export type { AssistantChatResult, BillingWalletResponse };
 
 export function FloatingCopilot({ conversationId }: { conversationId?: string | null }) {
-  const { t } = useI18n();
+  const { t, bi } = useI18n();
   const { principal } = useAuthSession();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"global" | "strict_rag">("global");
@@ -217,7 +229,8 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
           type="button"
           data-testid="copilot-fab-btn"
           onClick={() => setOpen(true)}
-          className="relative flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700"
+          aria-label={bi("打开 AI 副驾驶", "Open AI copilot")}
+          className="relative flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/25 hover:bg-blue-700"
         >
           <Bot className="h-6 w-6" />
           {pendingCount > 0 && (
@@ -231,10 +244,10 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
           data-testid="copilot-drawer"
           className="flex h-[540px] w-96 flex-col rounded-xl border border-slate-200 bg-white shadow-2xl"
         >
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-900 px-3.5 py-2.5 text-white rounded-t-xl">
+          <div className="flex items-center justify-between rounded-t-xl border-b border-slate-800 bg-[#0B1220] px-3.5 py-2.5 text-white">
             <div className="flex items-center gap-2">
               <Bot className="h-4 w-4 text-emerald-400" />
-              <span className="text-sm font-semibold">AI Workbench Copilot</span>
+              <span className="text-sm font-semibold">{bi("AI 业务副驾驶", "AI Workbench Copilot")}</span>
               {degradedToL0 && (
                 <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-slate-950">
                   L0 Fallback
@@ -257,7 +270,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 type="button"
                 onClick={() => setOpen(false)}
                 className="rounded p-1 hover:bg-slate-800"
-                aria-label="Close copilot"
+                aria-label={bi("关闭副驾驶", "Close copilot")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -271,7 +284,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 data-testid="copilot-mode-global"
                 onClick={() => setMode("global")}
                 className={`rounded px-2 py-0.5 font-medium ${
-                  mode === "global" ? "bg-indigo-600 text-white" : "text-slate-600"
+                  mode === "global" ? "bg-blue-600 text-white" : "text-slate-600"
                 }`}
               >
                 {t("globalMode")}
@@ -290,23 +303,25 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
             </div>
 
             {wallet && (
-              <span className="text-[11px] text-slate-500">Credits: {remainingCredits}</span>
+              <span className="text-[11px] tabular-nums text-slate-500">
+                {bi("额度", "Credits")} {remainingCredits}
+              </span>
             )}
           </div>
 
           <div className="border-b border-slate-200 bg-white px-3 py-2">
             <div className="flex flex-wrap gap-1.5">
-              {COPILOT_CHIPS.map(({ id, label, icon: Icon, ...rest }) => {
+              {COPILOT_CHIPS.map(({ id, label, labelEn, icon: Icon, ...rest }) => {
                 const href = "href" in rest ? rest.href : undefined;
                 return href ? (
                   <Link
                     key={id}
                     href={href}
                     data-testid={`copilot-chip-${id}`}
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-indigo-300 hover:text-indigo-700"
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700"
                   >
                     <Icon className="h-3 w-3" aria-hidden="true" />
-                    {label}
+                    {bi(label, labelEn)}
                   </Link>
                 ) : (
                   <button
@@ -315,10 +330,10 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                     data-testid={`copilot-chip-${id}`}
                     disabled={briefMutation.isPending}
                     onClick={() => briefMutation.mutate()}
-                    className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                   >
                     <Icon className="h-3 w-3" aria-hidden="true" />
-                    {briefMutation.isPending ? "生成中…" : label}
+                    {briefMutation.isPending ? bi("生成中…", "Generating…") : bi(label, labelEn)}
                   </button>
                 );
               })}
@@ -347,7 +362,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-semibold text-slate-800">
-                      {CAPABILITY_TITLES[card.capability]}
+                      {bi(CAPABILITY_TITLES[card.capability].zh, CAPABILITY_TITLES[card.capability].en)}
                     </span>
                     <span className="rounded bg-white px-1 py-0.5 text-[10px] font-medium text-slate-600">
                       {card.autonomy_level}
@@ -357,7 +372,10 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                     {card.metrics.map((metric) => (
                       <div key={metric.label_key} className="flex items-center justify-between">
                         <span className="text-[11px] text-slate-500">
-                          {SAFE_METRIC_LABELS[metric.label_key]}
+                          {bi(
+                            SAFE_METRIC_LABELS[metric.label_key].zh,
+                            SAFE_METRIC_LABELS[metric.label_key].en
+                          )}
                         </span>
                         <span className="font-semibold text-slate-900">
                           {renderSafeMetricValue(metric)}
@@ -375,7 +393,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 className={`rounded-lg border p-2.5 text-xs ${
                   lastResult.should_abstain
                     ? "border-amber-300 bg-amber-50 text-amber-950"
-                    : "border-indigo-200 bg-indigo-50/70 text-slate-900"
+                    : "border-blue-200 bg-blue-50/70 text-slate-900"
                 }`}
               >
                 {lastResult.should_abstain && (
@@ -407,7 +425,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 )}
                 {lastResult.tool_calls?.[0]?.tool_call_id && (
                   <div className="mt-1 text-[10px] text-slate-500">
-                    SQL Tool Verified: {lastResult.tool_calls[0].tool_call_id}
+                    {bi("SQL 工具已校验", "SQL tool verified")}：{lastResult.tool_calls[0].tool_call_id}
                   </div>
                 )}
               </div>
@@ -421,15 +439,15 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ask SKU stock, order tracking, or KB..."
-                className="flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs focus:border-indigo-500 focus:outline-none"
+                placeholder={bi("问库存、物流进度或知识库条款…", "Ask SKU stock, order tracking or KB terms…")}
+                className="flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
               />
               <button
                 type="button"
                 data-testid="copilot-query-submit"
                 disabled={!query.trim() || askMutation.isPending}
                 onClick={() => askMutation.mutate()}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 <Send className="h-3.5 w-3.5" />
               </button>

@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import type { SupplierCreate } from "@/lib/api-client/types.gen";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
 import { addPhase3aSupplier, fetchPhase3aSuppliers, patchPhase3aSupplier } from "@/lib/phase3a-data";
+import { useI18n } from "@/lib/i18n";
 
 const EMPTY_FORM = {
   code: "",
@@ -18,6 +19,7 @@ const EMPTY_FORM = {
 };
 
 export default function SuppliersPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -47,11 +49,11 @@ export default function SuppliersPage() {
 
   return (
     <AppShell currentPath="/supply-chain/suppliers" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="erp-page space-y-4">
         <div>
-          <h1 className="text-lg font-bold text-slate-900">供应商名录 / Suppliers</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("供应商名录", "Suppliers")}</h1>
           <p className="text-xs text-slate-500">
-            供应商代码在租户内唯一；停用（inactive）后不可再开新采购单，历史单据保留。
+            {bi("供应商代码在租户内唯一；停用（inactive）后不可再开新采购单，历史单据保留。", "Supplier codes are unique per tenant; inactive suppliers cannot open new purchase orders while history is retained.")}
           </p>
         </div>
 
@@ -68,7 +70,7 @@ export default function SuppliersPage() {
               lead_time_days: Number(form.lead_time_days) || 0,
             });
           }}
-          className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-6"
+          className="erp-card grid gap-2 p-3 sm:grid-cols-6"
         >
           <input
             aria-label="Supplier code"
@@ -113,9 +115,9 @@ export default function SuppliersPage() {
             type="submit"
             data-testid="supplier-submit"
             disabled={!canSubmit || createSupplier.isPending}
-            className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+            className="erp-btn erp-btn-primary py-1 disabled:opacity-40"
           >
-            新建供应商
+            {bi("新建供应商", "Create supplier")}
           </button>
           {createSupplier.isError && (
             <p role="alert" className="sm:col-span-6 text-xs text-rose-700">
@@ -124,15 +126,15 @@ export default function SuppliersPage() {
           )}
         </form>
 
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table data-testid="suppliers-table" className="w-full text-left text-xs">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+          <table data-testid="suppliers-table" className="erp-table">
             <thead className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
               <tr>
-                <th className="px-3 py-2.5">编码 / 名称</th>
-                <th className="px-3 py-2.5">联系人</th>
-                <th className="px-3 py-2.5">交期 (天)</th>
-                <th className="px-3 py-2.5">状态</th>
-                <th className="px-3 py-2.5">操作</th>
+                <th>{bi("编码 / 名称", "Code / name")}</th>
+                <th>{bi("联系人", "Contact")}</th>
+                <th className="text-right">{bi("交期（天）", "Lead time (days)")}</th>
+                <th>{bi("状态", "Status")}</th>
+                <th className="text-right">{bi("操作", "Action")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -164,7 +166,7 @@ export default function SuppliersPage() {
                       }
                       className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
                     >
-                      {supplier.status === "active" ? "停用" : "启用"}
+                      {supplier.status === "active" ? bi("停用", "Disable") : bi("启用", "Enable")}
                     </button>
                   </td>
                 </tr>
@@ -172,7 +174,7 @@ export default function SuppliersPage() {
               {suppliers.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
-                    {suppliersQuery.isLoading ? "加载中…" : "暂无供应商"}
+                    {suppliersQuery.isLoading ? bi("加载中…", "Loading…") : bi("暂无供应商", "No suppliers")}
                   </td>
                 </tr>
               )}

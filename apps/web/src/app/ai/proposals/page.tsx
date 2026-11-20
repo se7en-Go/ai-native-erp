@@ -2,19 +2,39 @@
 
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Filter, Inbox as InboxIcon } from "lucide-react";
+
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { ProposalReviewCard } from "@/components/ai/proposal-review-card";
-import {
-  approveProposal,
-  editApproveProposal,
-  rejectProposal,
-} from "@/lib/api-client/live-client";
+import { Badge, EmptyState, Page, PageHeader } from "@/components/ui/page";
+import { approveProposal, editApproveProposal, rejectProposal } from "@/lib/api-client/live-client";
 import { fetchPendingProposalsCount, fetchProposals } from "@/lib/data-source";
+import { useI18n } from "@/lib/i18n";
 import type { ProposalStatus, ProposalType } from "@/lib/contracts";
+
+const STATUS_COPY: Record<ProposalStatus, { zh: string; en: string }> = {
+  pending: { zh: "待审核", en: "Pending" },
+  approved: { zh: "已批准", en: "Approved" },
+  edited_and_approved: { zh: "编辑后批准", en: "Edited & approved" },
+  rejected: { zh: "已驳回", en: "Rejected" },
+  expired: { zh: "已过期", en: "Expired" },
+  failed: { zh: "执行失败", en: "Failed" },
+};
+
+const TYPE_COPY: Record<ProposalType, { zh: string; en: string }> = {
+  reply_draft: { zh: "回复草稿", en: "Reply draft" },
+  crm_entity_extract: { zh: "客户信息抽取", en: "CRM extraction" },
+  quote_draft: { zh: "报价草稿", en: "Quote draft" },
+  follow_up_suggestion: { zh: "跟进建议", en: "Follow-up suggestion" },
+  identity_merge: { zh: "身份合并", en: "Identity merge" },
+  refund_or_reship: { zh: "退款或补发", en: "Refund or reship" },
+  payment_match: { zh: "收款匹配", en: "Payment match" },
+};
 
 export default function AiProposalsPage() {
   const { principal } = useAuthSession();
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<ProposalStatus>("pending");
   const [typeFilter, setTypeFilter] = useState<"" | ProposalType>("");
@@ -59,50 +79,64 @@ export default function AiProposalsPage() {
       currentPath="/ai/proposals"
       pendingProposalsCount={pendingCountQuery.data?.total ?? 0}
     >
-      <div className="mx-auto max-w-5xl space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">L1 AI Proposal Approval Queue</h1>
-            <p className="text-xs text-slate-500">
-              Review AI drafts, CRM extractions, B2B PI quotes, and identity merges. Edit diffs feed tenant-private Golden Few-shot evals.
-            </p>
-          </div>
+      <Page>
+        <PageHeader
+          title={bi("AI 提案人工审核队列", "AI proposal review queue")}
+          description={bi(
+            "所有 L1 级 AI 动作都必须由人审批：回复草稿、客户信息抽取、B2B 报价与身份合并。编辑差异会沉淀为租户私有 Golden Few-shot 评测集。",
+            "Every L1 AI action needs human approval: reply drafts, CRM extraction, B2B quotes and identity merges. Edited diffs feed the tenant-private Golden Few-shot eval set."
+          )}
+          badge={
+            <Badge tone={(pendingCountQuery.data?.total ?? 0) > 0 ? "warning" : "success"}>
+              {bi("待审核", "Pending")} {pendingCountQuery.data?.total ?? 0}
+            </Badge>
+          }
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-[12px] text-slate-500">
+                <Filter className="h-3.5 w-3.5" />
+                {bi("筛选", "Filter")}
+              </span>
+              <select
+                value={statusFilter}
+                aria-label={bi("按状态筛选", "Filter by status")}
+                onChange={(e) => setStatusFilter(e.target.value as ProposalStatus)}
+                className="erp-input w-auto"
+              >
+                {(Object.keys(STATUS_COPY) as ProposalStatus[]).map((status) => (
+                  <option key={status} value={status}>
+                    {bi(STATUS_COPY[status].zh, STATUS_COPY[status].en)}
+                  </option>
+                ))}
+              </select>
 
-          <div className="flex gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as ProposalStatus)}
-              className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
-            >
-              <option value="pending">pending</option>
-              <option value="approved">approved</option>
-              <option value="edited_and_approved">edited_and_approved</option>
-              <option value="rejected">rejected</option>
-            </select>
-
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as "" | ProposalType)}
-              className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
-            >
-              <option value="">All Proposal Types</option>
-              <option value="reply_draft">reply_draft</option>
-              <option value="crm_entity_extract">crm_entity_extract</option>
-              <option value="quote_draft">quote_draft</option>
-              <option value="follow_up_suggestion">follow_up_suggestion</option>
-              <option value="identity_merge">identity_merge</option>
-              <option value="refund_or_reship">refund_or_reship</option>
-              <option value="payment_match">payment_match</option>
-            </select>
-          </div>
-        </div>
+              <select
+                value={typeFilter}
+                aria-label={bi("按提案类型筛选", "Filter by proposal type")}
+                onChange={(e) => setTypeFilter(e.target.value as "" | ProposalType)}
+                className="erp-input w-auto"
+              >
+                <option value="">{bi("全部提案类型", "All proposal types")}</option>
+                {(Object.keys(TYPE_COPY) as ProposalType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {bi(TYPE_COPY[type].zh, TYPE_COPY[type].en)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+        />
 
         {items.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-            No proposals in {statusFilter} queue.
-          </div>
+          <EmptyState>
+            <InboxIcon className="mx-auto mb-2 h-5 w-5 text-slate-300" />
+            {bi(
+              `当前「${STATUS_COPY[statusFilter].zh}」队列没有提案。`,
+              `No proposals in the ${STATUS_COPY[statusFilter].en.toLowerCase()} queue.`
+            )}
+          </EmptyState>
         ) : (
-          <div className="space-y-3">
+          <div className="grid gap-3 2xl:grid-cols-2">
             {items.map((proposal) => {
               const role = principal?.role;
               const canReview =
@@ -116,15 +150,13 @@ export default function AiProposalsPage() {
                   onEditApprove={(id, edited_payload) =>
                     editApproveMutation.mutate({ id, edited_payload })
                   }
-                  onReject={(id, reason) =>
-                    rejectMutation.mutate({ id, reason })
-                  }
+                  onReject={(id, reason) => rejectMutation.mutate({ id, reason })}
                 />
               );
             })}
           </div>
         )}
-      </div>
+      </Page>
     </AppShell>
   );
 }

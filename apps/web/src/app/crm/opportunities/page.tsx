@@ -8,6 +8,7 @@ import type { OpportunityRead, OpportunityStage } from "@/lib/api-client/types.g
 import { formatMoney } from "@/lib/contracts";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
 import { fetchPhase3aOpportunities, patchPhase3aOpportunityStage } from "@/lib/phase3a-data";
+import { useI18n } from "@/lib/i18n";
 
 const STAGES: OpportunityStage[] = [
   "discovery",
@@ -19,6 +20,7 @@ const STAGES: OpportunityStage[] = [
 ];
 
 export default function CrmOpportunitiesPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
 
   const proposalsQuery = useQuery({
@@ -44,11 +46,11 @@ export default function CrmOpportunitiesPage() {
       currentPath="/crm/opportunities"
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="erp-page space-y-4">
         <div>
-          <h1 className="text-lg font-bold text-slate-900">商机阶段看板 / Opportunities</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("商机阶段看板", "Opportunity board")}</h1>
           <p className="text-xs text-slate-500">
-            拖拽替代方案：使用卡片上的阶段选择器推进商机，写操作经租户作用域 API 校验。
+            {bi("使用卡片上的阶段选择器推进商机；所有写操作经租户作用域 API 校验。", "Advance deals with the stage selector on each card; every write is validated by the tenant-scoped API.")}
           </p>
         </div>
 
@@ -58,12 +60,12 @@ export default function CrmOpportunitiesPage() {
           </p>
         )}
 
-        <div data-testid="opportunity-board" className="grid gap-2 overflow-x-auto md:grid-cols-3 xl:grid-cols-6">
+        <div data-testid="opportunity-board" className="grid gap-3 overflow-x-auto md:grid-cols-3 2xl:grid-cols-6">
           {STAGES.map((stage) => (
             <section
               key={stage}
               data-testid={`opportunity-column-${stage}`}
-              className="min-w-[180px] rounded-lg border border-slate-200 bg-white p-2"
+              className="min-w-[200px] rounded-xl border border-slate-200/80 bg-white p-2.5"
             >
               <header className="flex items-center justify-between px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 <span>{stage}</span>
@@ -74,7 +76,7 @@ export default function CrmOpportunitiesPage() {
                   <article
                     key={opportunity.id}
                     data-testid={`opportunity-card-${opportunity.id}`}
-                    className="rounded border border-slate-200 bg-slate-50 p-2 text-xs"
+                    className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 text-[12px]"
                   >
                     <p className="font-medium text-slate-800">{opportunity.title}</p>
                     <p className="text-[10px] text-slate-500">
@@ -84,7 +86,7 @@ export default function CrmOpportunitiesPage() {
                       {formatMoney(opportunity.expected_amount, opportunity.currency)}
                     </p>
                     <select
-                      aria-label={`Move ${opportunity.title}`}
+                      aria-label={`${bi("推进商机", "Move deal")} ${opportunity.title}`}
                       value={opportunity.stage}
                       onChange={(event) =>
                         moveStage.mutate({

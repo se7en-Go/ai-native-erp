@@ -1,12 +1,23 @@
 "use client";
 
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 export type Locale = "zh" | "en";
+
+/** Persisted language preference. Shared with AppShell and the onboarding wizard. */
+export const LOCALE_STORAGE_KEY = "erp_locale";
 
 const DICTIONARY = {
   zh: {
     brandTitle: "工贸全渠道工作台",
+    brandSubtitle: "Quanzhou Smart LED · 外贸企业版",
     navInbox: "聚合沟通 Inbox",
     navProposals: "AI 提案审核",
     navQuotes: "B2B CRM 与报价",
@@ -39,11 +50,13 @@ const DICTIONARY = {
     navWms: "WMS 出入库",
     navAnalytics: "统计分析",
     commandPaletteTitle: "全局搜索与命令",
-    commandPalettePlaceholder: "搜索客户 / 订单 / 报价 / SKU，或跳转页面…",
+    commandPalettePlaceholder: "搜索客户、订单、报价或 SKU，也可直接跳转页面…",
     commandPaletteEmpty: "没有匹配结果",
     commandPaletteHint: "Ctrl+K 打开，Esc 关闭",
     logout: "退出登录",
     roleLabel: "当前角色",
+    workspaceLabel: "当前工作区",
+    breadcrumbHome: "工作台",
     accessDeniedTitle: "权限不足 (ERR_INSUFFICIENT_ROLE)",
     accessDeniedDesc: "当前角色无权访问该财务或系统敏感页面，请联系 Owner 或 Admin。",
     quietHours: "休息时段",
@@ -60,11 +73,15 @@ const DICTIONARY = {
     hideTranslation: "收起译文",
     pendingApprovals: "待审核提案",
     aiAssistFailed: "AI 服务暂不可用",
-    aiProviderUnavailable: "未配置大模型供应商密钥，AI 生成暂不可用（ERR_AI_PROVIDER_UNAVAILABLE）。",
+    aiProviderUnavailable:
+      "未配置大模型供应商密钥，AI 生成暂不可用（ERR_AI_PROVIDER_UNAVAILABLE）。",
     evidence: "证据",
+    loadingWorkspace: "正在加载工作区…",
+    exportCsv: "导出报表",
   },
   en: {
     brandTitle: "Hybrid Trade Workbench",
+    brandSubtitle: "Quanzhou Smart LED · Enterprise",
     navInbox: "Inbox",
     navProposals: "AI Proposals",
     navQuotes: "B2B CRM & Quotes",
@@ -97,13 +114,16 @@ const DICTIONARY = {
     navWms: "WMS Movements",
     navAnalytics: "Analytics",
     commandPaletteTitle: "Global search & commands",
-    commandPalettePlaceholder: "Search customers / orders / quotes / SKUs, or jump to a page…",
+    commandPalettePlaceholder: "Search customers, orders, quotes or SKUs, or jump to a page…",
     commandPaletteEmpty: "No matches",
     commandPaletteHint: "Ctrl+K to open, Esc to close",
     logout: "Sign out",
     roleLabel: "Role",
+    workspaceLabel: "Workspace",
+    breadcrumbHome: "Workbench",
     accessDeniedTitle: "Access Denied (ERR_INSUFFICIENT_ROLE)",
-    accessDeniedDesc: "Your role does not have permission to view this financial or administrative workspace.",
+    accessDeniedDesc:
+      "Your role does not have permission to view this financial or administrative workspace.",
     quietHours: "Quiet Hours",
     localTime: "Local Time",
     strictRag: "Strict RAG",
@@ -121,6 +141,8 @@ const DICTIONARY = {
     aiProviderUnavailable:
       "No LLM provider key is configured, so AI generation is unavailable (ERR_AI_PROVIDER_UNAVAILABLE).",
     evidence: "Evidence",
+    loadingWorkspace: "Loading workspace session…",
+    exportCsv: "Export",
   },
 } as const;
 
@@ -131,13 +153,19 @@ export interface I18nContextValue {
   setLocale: (loc: Locale) => void;
   toggleLocale: () => void;
   t: (key: I18nKey) => string;
+  /**
+   * Single-language copy helper: `bi("收款里程碑", "Cash milestones")`.
+   * Pages must never render `中文 / English` side by side.
+   */
+  bi: (zh: string, en: string) => string;
 }
 
 const I18nContext = createContext<I18nContextValue>({
-  locale: "en",
+  locale: "zh",
   setLocale: () => {},
   toggleLocale: () => {},
-  t: (key) => DICTIONARY.en[key],
+  t: (key) => DICTIONARY.zh[key],
+  bi: (zh) => zh,
 });
 
 export function I18nProvider({
@@ -147,16 +175,43 @@ export function I18nProvider({
   children: React.ReactNode;
   defaultLocale?: Locale;
 }) {
-  const [locale, setLocale] = useState<Locale>(defaultLocale);
+  const [locale, setLocaleState] = useState<Locale>(defaultLocale);
+
+  // Read the persisted preference after mount so SSR markup and the first
+  // client render stay identical (no hydration mismatch).
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+      if (stored === "zh" || stored === "en") {
+        setLocaleState(stored);
+      }
+    } catch {
+      // Private mode / disabled storage: keep the default locale.
+    }
+  }, []);
+
+  const setLocale = useCallback((next: Locale) => {
+    setLocaleState(next);
+    try {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
+    } catch {
+      // Storage is best-effort; the in-memory locale still applies.
+    }
+  }, []);
+
+  const toggleLocale = useCallback(() => {
+    setLocale(locale === "zh" ? "en" : "zh");
+  }, [locale, setLocale]);
 
   const value = useMemo<I18nContextValue>(
     () => ({
       locale,
       setLocale,
-      toggleLocale: () => setLocale((prev) => (prev === "zh" ? "en" : "zh")),
+      toggleLocale,
       t: (key: I18nKey) => DICTIONARY[locale][key],
+      bi: (zh: string, en: string) => (locale === "zh" ? zh : en),
     }),
-    [locale]
+    [locale, setLocale, toggleLocale]
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

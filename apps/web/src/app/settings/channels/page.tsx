@@ -2,11 +2,10 @@
 
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, ShieldCheck, Ban } from "lucide-react";
+import { Ban, MessagesSquare, RefreshCw, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import {
-  MessagingChannelCard,
-} from "@/components/channels/messaging-channel-cards";
+import { MessagingChannelCard } from "@/components/channels/messaging-channel-cards";
+import { Badge, Card, CardHeader, EmptyState, Page, PageHeader, StatCard } from "@/components/ui/page";
 import { replayDlqEvent } from "@/lib/api-client/live-client";
 import {
   connectMessagingChannel,
@@ -16,10 +15,12 @@ import {
   fetchChannelSuppressions,
   fetchPendingProposalsCount,
 } from "@/lib/data-source";
+import { useI18n } from "@/lib/i18n";
 
 const MESSAGING_CHANNELS = ["messenger", "instagram_dm", "telegram"] as const;
 
 export default function ChannelsSettingsPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [logTab, setLogTab] = useState<"consents" | "suppressions">("consents");
 
@@ -68,162 +69,216 @@ export default function ChannelsSettingsPage() {
     },
   });
 
+  const accounts = accountsQuery.data?.items ?? [];
+  const dlqItems = dlqQuery.data?.items ?? [];
+
   return (
     <AppShell
       currentPath="/settings/channels"
       pendingProposalsCount={pendingProposalsQuery.data?.total ?? 0}
     >
-      <div className="mx-auto max-w-6xl space-y-5">
-        <div>
-          <h1 className="text-lg font-bold text-slate-900">
-            Connected Channels, Dead-Letter Queue (DLQ) & Opt-In Compliance
-          </h1>
-          <p className="text-xs text-slate-500">
-            Monitor rate-limit buckets (Coexistence vs Cloud API), replay DLQ webhooks, and audit consent/suppression records.
-          </p>
+      <Page>
+        <PageHeader
+          title={bi("渠道接入与合规退订", "Channel connections & compliance suppression")}
+          description={bi(
+            "绑定 WhatsApp、邮件、Messenger、Instagram 与 Telegram 账号；监控双令牌桶限速、重放死信队列，并审计订阅同意与退订名单。令牌一律信封加密存储，Webhook 按原始报文验签。",
+            "Bind WhatsApp, email, Messenger, Instagram and Telegram accounts; monitor dual token buckets, replay the dead-letter queue and audit opt-in/opt-out records. Tokens are envelope-encrypted and webhooks verify the raw body."
+          )}
+          badge={
+            <Badge tone="success">
+              <ShieldCheck className="h-3 w-3" />
+              {bi("零延迟 STOP 抑制", "Zero-delay STOP suppression")}
+            </Badge>
+          }
+        />
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label={bi("已接入账号", "Connected accounts")}
+            value={accounts.length}
+            icon={MessagesSquare}
+          />
+          <StatCard
+            label={bi("死信队列事件", "Dead-letter events")}
+            value={dlqItems.length}
+            tone={dlqItems.length > 0 ? "warning" : "success"}
+          />
+          <StatCard
+            label={bi("订阅同意记录", "Consent records")}
+            value={consentsQuery.data?.items.length ?? 0}
+            tone="info"
+          />
+          <StatCard
+            label={bi("退订 / 抑制名单", "Suppression list")}
+            value={suppressionsQuery.data?.items.length ?? 0}
+            tone={suppressionsQuery.data?.items.length ? "danger" : "neutral"}
+          />
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs">
-          <h2 className="text-sm font-bold text-slate-900">
-            Messenger, Instagram DM & Telegram Business
-          </h2>
-          <p className="text-slate-500">
-            Bind Meta and Telegram messaging accounts. Provider tokens are envelope-encrypted at
-            rest and every webhook is verified against the raw request body.
-          </p>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <Card>
+          <CardHeader
+            title={bi("Messenger、Instagram 私信与 Telegram 商业版", "Messenger, Instagram DM & Telegram Business")}
+            description={bi(
+              "绑定 Meta 与 Telegram 消息账号。供应商令牌落库前信封加密，每个 Webhook 都按原始请求体验签。",
+              "Bind Meta and Telegram messaging accounts. Provider tokens are envelope-encrypted at rest and every webhook verifies the raw body."
+            )}
+          />
+          <div className="grid gap-3 p-4 md:grid-cols-3">
             {MESSAGING_CHANNELS.map((kind) => (
               <MessagingChannelCard
                 key={kind}
                 kind={kind}
-                connected={(accountsQuery.data?.items ?? []).some(
-                  (acct) => acct.channel_type === kind
-                )}
+                connected={accounts.some((acct) => acct.channel_type === kind)}
                 onSubmit={(payload) => connectMutation.mutateAsync({ kind, payload })}
               />
             ))}
           </div>
-        </div>
+        </Card>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs">
-          <h2 className="text-sm font-bold text-slate-900">Connected Channel Accounts</h2>
-          <div className="mt-3 space-y-2">
-            {(accountsQuery.data?.items ?? []).map((acct) => (
-              <div
-                key={acct.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 p-2.5"
-              >
-                <div>
-                  <span className="font-bold text-slate-900">{acct.display_name}</span>
-                  <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5">
-                    {acct.channel_type}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {acct.rate_limit_profile?.mps && (
-                    <span className="rounded bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">
-                      {acct.rate_limit_profile.mps} mps
-                    </span>
-                  )}
-                  <span className="rounded bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
-                    {acct.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs">
-          <h2 className="text-sm font-bold text-slate-900">Dead Letter Queue (DLQ) Replay</h2>
-          <div className="mt-3 space-y-2">
-            {(dlqQuery.data?.items ?? []).length === 0 ? (
-              <div className="text-slate-400">Zero failed DLQ events.</div>
-            ) : (
-              dlqQuery.data!.items.map((ev) => (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader
+              title={bi("已接入渠道账号", "Connected channel accounts")}
+              actions={
+                <Badge tone="info">
+                  {accounts.length} {bi("个账号", "accounts")}
+                </Badge>
+              }
+            />
+            <div className="space-y-2 p-4">
+              {accounts.map((acct) => (
                 <div
-                  key={ev.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded border border-rose-200 bg-rose-50/40 p-2.5"
+                  key={acct.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2.5"
                 >
-                  <div>
-                    <div className="font-semibold text-slate-900">
-                      {ev.channel_type} · {ev.external_event_id}
-                    </div>
-                    <div className="text-rose-700">
-                      {ev.error_message} (retries: {ev.retry_count})
-                    </div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="truncate text-[13px] font-medium text-slate-900">
+                      {acct.display_name}
+                    </span>
+                    <Badge>{acct.channel_type}</Badge>
                   </div>
-                  <button
-                    type="button"
-                    data-testid={`dlq-replay-btn-${ev.id}`}
-                    onClick={() => replayMutation.mutate(ev.id)}
-                    className="inline-flex items-center gap-1 rounded bg-slate-900 px-2.5 py-1 font-semibold text-white hover:bg-slate-800"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    <span>Replay</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {acct.rate_limit_profile?.mps && (
+                      <Badge tone="info">{acct.rate_limit_profile.mps} mps</Badge>
+                    )}
+                    <Badge tone="success">{acct.status}</Badge>
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+              {accounts.length === 0 && (
+                <EmptyState>{bi("尚未接入任何渠道账号。", "No channel accounts connected yet.")}</EmptyState>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title={bi("死信队列（DLQ）重放", "Dead-letter queue (DLQ) replay")}
+              description={bi(
+                "失败事件不丢：修复下游后可原样重放，幂等键保证不重复入账。",
+                "Failed events are never dropped: replay verbatim after fixing downstream, with idempotency keys preventing double posting."
+              )}
+            />
+            <div className="space-y-2 p-4">
+              {dlqItems.length === 0 ? (
+                <EmptyState>
+                  {bi("当前没有失败的 DLQ 事件。", "Zero failed DLQ events.")}
+                </EmptyState>
+              ) : (
+                dlqItems.map((ev) => (
+                  <div
+                    key={ev.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/40 px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-medium text-slate-900">
+                        {ev.channel_type} · {ev.external_event_id}
+                      </div>
+                      <div className="text-[12px] text-rose-700">
+                        {ev.error_message} ({bi("重试", "retries")} {ev.retry_count})
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid={`dlq-replay-btn-${ev.id}`}
+                      onClick={() => replayMutation.mutate(ev.id)}
+                      className="erp-btn bg-slate-900 text-white hover:bg-slate-800"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      <span>{bi("重放", "Replay")}</span>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs">
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <Card>
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 p-3">
             <button
               type="button"
               data-testid="tab-consent-records"
               onClick={() => setLogTab("consents")}
-              className={`inline-flex items-center gap-1 rounded px-3 py-1 font-semibold ${
-                logTab === "consents" ? "bg-indigo-600 text-white" : "text-slate-600"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium ${
+                logTab === "consents"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               <ShieldCheck className="h-3.5 w-3.5" />
-              <span>Consent Ledger</span>
+              <span>{bi("订阅同意台账", "Consent ledger")}</span>
             </button>
             <button
               type="button"
               data-testid="tab-suppression-list"
               onClick={() => setLogTab("suppressions")}
-              className={`inline-flex items-center gap-1 rounded px-3 py-1 font-semibold ${
-                logTab === "suppressions" ? "bg-indigo-600 text-white" : "text-slate-600"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium ${
+                logTab === "suppressions"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               <Ban className="h-3.5 w-3.5" />
-              <span>Suppression List</span>
+              <span>{bi("退订 / 抑制名单", "Suppression list")}</span>
             </button>
+            <span className="ml-auto text-[11px] text-slate-400">
+              {bi("静默时段 21:00–08:00 不发送任何营销消息", "Quiet hours 21:00–08:00 block all marketing sends")}
+            </span>
           </div>
 
-          <div className="mt-3 space-y-1.5">
+          <div className="space-y-1.5 p-4">
             {logTab === "consents"
               ? (consentsQuery.data?.items ?? []).map((c) => (
                   <div
                     key={c.id}
-                    className="flex items-center justify-between rounded border border-slate-100 p-2"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 text-[12px]"
                   >
-                    <div>
-                      <strong>{c.customer_name}</strong> · {c.channel_type} ·{" "}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <strong className="text-slate-800">{c.customer_name}</strong>
+                      <span className="text-slate-400">·</span>
+                      <span className="text-slate-500">{c.channel_type}</span>
+                      <span className="text-slate-400">·</span>
                       <span className="text-slate-500">{c.proof_source}</span>
                     </div>
-                    <span className="rounded bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
-                      {c.consent_status}
-                    </span>
+                    <Badge tone="success">{c.consent_status}</Badge>
                   </div>
                 ))
               : (suppressionsQuery.data?.items ?? []).map((s) => (
                   <div
                     key={s.id}
-                    className="flex items-center justify-between rounded border border-slate-100 p-2"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 text-[12px]"
                   >
                     <div>
-                      <strong>{s.normalized_address}</strong> ({s.channel_type})
+                      <strong className="text-slate-800">{s.normalized_address}</strong>
+                      <span className="text-slate-500"> ({s.channel_type})</span>
                     </div>
                     <span className="text-rose-700">{s.reason}</span>
                   </div>
                 ))}
           </div>
-        </div>
-      </div>
+        </Card>
+      </Page>
     </AppShell>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { CheckCircle2, Instagram, MessageCircle, Send } from "lucide-react";
 
+import { useI18n } from "@/lib/i18n";
 import type {
   InstagramConnectPayload,
   MessengerConnectPayload,
@@ -38,79 +39,109 @@ type DraftField = keyof MessagingChannelDraft;
 type FieldCopy = {
   field: DraftField;
   testId: string;
-  label: string;
+  labelZh: string;
+  labelEn: string;
   placeholder?: string;
   secret?: boolean;
 };
 
 type CardCopy = {
-  title: string;
-  subtitle: string;
-  window: string;
+  titleZh: string;
+  titleEn: string;
+  subtitleZh: string;
+  subtitleEn: string;
+  windowZh: string;
+  windowEn: string;
   icon: React.ComponentType<{ className?: string }>;
   fields: FieldCopy[];
 };
 
 const CARDS: Record<MessagingProviderKind, CardCopy> = {
   messenger: {
-    title: "Facebook Messenger",
-    subtitle: "Meta Page inbox with fb_psid identity and X-Hub-Signature-256 verification.",
-    window:
+    titleZh: "Facebook Messenger",
+    titleEn: "Facebook Messenger",
+    subtitleZh: "Meta 公共主页收件箱，使用 fb_psid 身份与 X-Hub-Signature-256 验签。",
+    subtitleEn: "Meta Page inbox with fb_psid identity and X-Hub-Signature-256 verification.",
+    windowZh: "24 小时标准回复窗口；人工客服可用 HUMAN_AGENT 标签延长至 7 天。",
+    windowEn:
       "24h standard reply window, extended to 7 days with the HUMAN_AGENT tag for human agents only.",
     icon: MessageCircle,
     fields: [
-      { field: "page_id", testId: "messenger-page-id-input", label: "Page ID", placeholder: "1010101010101010" },
+      {
+        field: "page_id",
+        testId: "messenger-page-id-input",
+        labelZh: "主页 ID",
+        labelEn: "Page ID",
+        placeholder: "1010101010101010",
+      },
       {
         field: "page_access_token",
         testId: "messenger-access-token-input",
-        label: "Page access token",
+        labelZh: "主页访问令牌",
+        labelEn: "Page access token",
         secret: true,
       },
-      { field: "display_name", testId: "messenger-display-name-input", label: "Display name" },
+      {
+        field: "display_name",
+        testId: "messenger-display-name-input",
+        labelZh: "账号显示名",
+        labelEn: "Display name",
+      },
     ],
   },
   instagram_dm: {
-    title: "Instagram DM",
-    subtitle: "Instagram Messaging with story mentions, story replies and ig_psid identity.",
-    window: "Only HUMAN_AGENT is available beyond 24h; Instagram supports no marketing tags.",
+    titleZh: "Instagram 私信",
+    titleEn: "Instagram DM",
+    subtitleZh: "Instagram Messaging，支持快拍提及与快拍回复，身份使用 ig_psid。",
+    subtitleEn: "Instagram Messaging with story mentions, story replies and ig_psid identity.",
+    windowZh: "超过 24 小时仅可使用 HUMAN_AGENT；Instagram 不支持营销标签。",
+    windowEn: "Only HUMAN_AGENT is available beyond 24h; Instagram supports no marketing tags.",
     icon: Instagram,
     fields: [
       {
         field: "ig_account_id",
         testId: "instagram-account-id-input",
-        label: "Instagram account ID",
+        labelZh: "Instagram 账号 ID",
+        labelEn: "Instagram account ID",
         placeholder: "17841400000000000",
       },
       {
         field: "access_token",
         testId: "instagram-access-token-input",
-        label: "Instagram access token",
+        labelZh: "访问令牌",
+        labelEn: "Instagram access token",
         secret: true,
       },
       {
         field: "display_name",
         testId: "instagram-display-name-input",
-        label: "Display name",
+        labelZh: "账号显示名",
+        labelEn: "Display name",
       },
     ],
   },
   telegram: {
-    title: "Telegram Business",
-    subtitle: "Bot API and Business Mode replies sent from the seller's own account.",
-    window: "Secret-token verified webhook; Business Mode keeps the seller's real identity.",
+    titleZh: "Telegram 商业版",
+    titleEn: "Telegram Business",
+    subtitleZh: "Bot API 与 Business Mode，回复从卖家本人账号发出，保留真实身份。",
+    subtitleEn: "Bot API and Business Mode replies sent from the seller's own account.",
+    windowZh: "Webhook 使用 secret token 验签；Business Mode 保留卖家真实身份。",
+    windowEn: "Secret-token verified webhook; Business Mode keeps the seller's real identity.",
     icon: Send,
     fields: [
       {
         field: "bot_token",
         testId: "telegram-bot-token-input",
-        label: "Bot token",
+        labelZh: "Bot 令牌",
+        labelEn: "Bot token",
         placeholder: "123456789:AAH...",
         secret: true,
       },
       {
         field: "display_name",
         testId: "telegram-display-name-input",
-        label: "Display name",
+        labelZh: "账号显示名",
+        labelEn: "Display name",
       },
     ],
   },
@@ -171,6 +202,7 @@ export type MessagingChannelCardProps = {
 };
 
 export function MessagingChannelCard({ kind, connected, onSubmit }: MessagingChannelCardProps) {
+  const { bi } = useI18n();
   const copy = CARDS[kind];
   const Icon = copy.icon;
   const [draft, setDraft] = useState<MessagingChannelDraft>(EMPTY_DRAFT);
@@ -202,27 +234,33 @@ export function MessagingChannelCard({ kind, connected, onSubmit }: MessagingCha
     <form
       data-testid={`messaging-card-${kind}`}
       onSubmit={submit}
-      className="space-y-2 rounded border border-slate-200 p-3"
+      className="space-y-2.5 rounded-xl border border-slate-200/80 bg-white p-3.5"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
-          <Icon className="mt-0.5 h-4 w-4 text-indigo-600" />
+          <Icon className="mt-0.5 h-4 w-4 text-blue-600" />
           <div>
-            <div className="font-bold text-slate-900">{copy.title}</div>
-            <div className="text-slate-500">{copy.subtitle}</div>
-            <div className="mt-1 text-[11px] text-slate-400">{copy.window}</div>
+            <div className="text-[13px] font-semibold text-slate-900">
+              {bi(copy.titleZh, copy.titleEn)}
+            </div>
+            <div className="mt-0.5 text-[12px] leading-5 text-slate-500">
+              {bi(copy.subtitleZh, copy.subtitleEn)}
+            </div>
+            <div className="mt-1 text-[11px] leading-5 text-slate-400">
+              {bi(copy.windowZh, copy.windowEn)}
+            </div>
           </div>
         </div>
         {connected && (
-          <span className="rounded bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
-            connected
+          <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+            {bi("已连接", "connected")}
           </span>
         )}
       </div>
 
       {copy.fields.map((field) => (
         <label key={field.testId} className="block">
-          <span className="text-slate-600">{field.label}</span>
+          <span className="erp-label">{bi(field.labelZh, field.labelEn)}</span>
           <input
             data-testid={field.testId}
             type={field.secret ? "password" : "text"}
@@ -232,7 +270,7 @@ export function MessagingChannelCard({ kind, connected, onSubmit }: MessagingCha
             onChange={(event) =>
               setDraft((current) => ({ ...current, [field.field]: event.target.value }))
             }
-            className="mt-1 w-full rounded border border-slate-200 px-2 py-1"
+            className="erp-input mt-1"
           />
         </label>
       ))}
@@ -241,23 +279,25 @@ export function MessagingChannelCard({ kind, connected, onSubmit }: MessagingCha
         type="submit"
         data-testid={`connect-${kind}-btn`}
         disabled={!valid || submitting}
-        className="inline-flex items-center gap-1 rounded bg-slate-900 px-2.5 py-1 font-semibold text-white disabled:bg-slate-300"
+        className="erp-btn bg-slate-900 text-white disabled:bg-slate-300"
       >
         <CheckCircle2 className="h-3 w-3" />
-        <span>{submitting ? "Connecting…" : "Connect"}</span>
+        <span>
+          {submitting ? bi("连接中…", "Connecting…") : bi("连接渠道", "Connect")}
+        </span>
       </button>
 
       {error && (
-        <div role="alert" className="rounded bg-rose-50 px-2 py-1 text-rose-700">
+        <div role="alert" className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-700">
           {error}
         </div>
       )}
       {connectedId !== null && (
         <div
           data-testid={`connect-success-${kind}`}
-          className="rounded bg-emerald-50 px-2 py-1 text-emerald-700"
+          className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] text-emerald-700"
         >
-          Connected {connectedId}
+          {bi("已连接", "Connected")} {connectedId}
         </div>
       )}
     </form>

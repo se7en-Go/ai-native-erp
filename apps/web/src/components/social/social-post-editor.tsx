@@ -123,7 +123,7 @@ export function SocialPostEditor({ accounts, skus, initialPlatforms = [], onGene
           <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
             {PLATFORM_PLAYBOOKS.map((playbook) => <label key={playbook.platform} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50">
               <span className="flex min-w-0 items-center gap-2">
-                <input type="checkbox" aria-label={playbook.label} checked={platforms.includes(playbook.platform)} onChange={(event) => togglePlatform(playbook.platform, event.target.checked)} className="accent-fuchsia-700" />
+                <input type="checkbox" aria-label={playbook.label} checked={platforms.includes(playbook.platform)} onChange={(event) => togglePlatform(playbook.platform, event.target.checked)} className="accent-blue-700" />
                 <span className="truncate">{playbook.emoji} {playbook.label}</span>
               </span>
               <span className={"shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium " + (playbook.publish_mode === "api" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900")}>
@@ -160,9 +160,9 @@ export function SocialPostEditor({ accounts, skus, initialPlatforms = [], onGene
             </div>
             {tagError && <p role="alert" className="text-xs text-rose-700">{tagError}</p>}
             {!!hashtags.length && <ul aria-label="已添加标签" className="flex flex-wrap gap-1.5">
-              {hashtags.map((tag) => <li key={tag} className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2 py-0.5 text-xs font-medium text-fuchsia-900">
+              {hashtags.map((tag) => <li key={tag} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-900">
                 {tag}
-                <button type="button" aria-label={"移除标签 " + tag} className="rounded-full p-0.5 hover:bg-fuchsia-100" onClick={() => setHashtags((prev) => prev.filter((item) => item !== tag))}><X aria-hidden="true" size={12} /></button>
+                <button type="button" aria-label={"移除标签 " + tag} className="rounded-full p-0.5 hover:bg-blue-100" onClick={() => setHashtags((prev) => prev.filter((item) => item !== tag))}><X aria-hidden="true" size={12} /></button>
               </li>)}
             </ul>}
           </fieldset>
@@ -179,7 +179,7 @@ export function SocialPostEditor({ accounts, skus, initialPlatforms = [], onGene
             <button type="button" disabled={busy || !readyToSave} className={button} onClick={() => void submit("save")}><Save aria-hidden="true" size={15} />保存草稿</button>
             <button type="submit" disabled={busy || !canSchedule} className={primary}><CalendarClock aria-hidden="true" size={15} />定时发布</button>
           </div>
-          {feedback && <p role={feedback.error ? "alert" : "status"} className={"text-sm " + (feedback.error ? "text-rose-700" : "text-fuchsia-900")}>{feedback.text}</p>}
+          {feedback && <p role={feedback.error ? "alert" : "status"} className={"text-sm " + (feedback.error ? "text-rose-700" : "text-blue-900")}>{feedback.text}</p>}
         </div>
       </form>
     </section>

@@ -12,7 +12,7 @@ const defaultLanguages = [
   { code: "en", label: "英语" }, { code: "zh", label: "中文" }, { code: "es", label: "西班牙语" },
   { code: "de", label: "德语" }, { code: "fr", label: "法语" }, { code: "ja", label: "日语" },
 ];
-const primary = "inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-indigo-600 focus-visible:outline-offset-2 disabled:opacity-50";
+const primary = "inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:outline-offset-2 disabled:opacity-50";
 
 export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGenerate, onSave, onCopy }: {
   skus: readonly SkuOption[];
@@ -71,7 +71,7 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
   return (
     <section aria-label="AI 文案与素材工坊" className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-xs">
       <header className="mb-5 border-b border-slate-100 pb-4">
-        <p className="flex items-center gap-2 text-xs font-semibold tracking-widest text-indigo-700"><WandSparkles size={16} aria-hidden="true" /> 创意工作台</p>
+        <p className="flex items-center gap-2 text-xs font-semibold tracking-widest text-blue-700"><WandSparkles size={16} aria-hidden="true" /> 创意工作台</p>
         <h2 className="mt-1 text-xl font-bold">AI 文案与素材工坊</h2>
         <p className="mt-1 text-sm text-slate-600">从商品目录选择 SKU，为不同市场生成可编辑的文案草稿。</p>
       </header>
@@ -94,7 +94,7 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
             <fieldset className="flex flex-wrap gap-2">
               <legend className="mb-1 text-sm font-semibold">输出语言</legend>
               {languages.map(({ code, label }) => <label key={code} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm">
-                <input type="checkbox" checked={validLanguages.includes(code)} className="accent-indigo-600" onChange={(event) => setChosen((prev) => event.target.checked ? [...prev, code] : prev.filter((item) => item !== code))} />{label}
+                <input type="checkbox" checked={validLanguages.includes(code)} className="accent-blue-600" onChange={(event) => setChosen((prev) => event.target.checked ? [...prev, code] : prev.filter((item) => item !== code))} />{label}
               </label>)}
             </fieldset>
             <label className="block text-sm font-semibold">创作要求
@@ -103,12 +103,12 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
             <button type="submit" disabled={!prompt.trim() || !validLanguages.length || !!pending} className={primary}><WandSparkles size={16} aria-hidden="true" />{pending === "generate" ? "正在生成…" : "生成文案"}</button>
           </fieldset>
         </form>
-        <section aria-label="素材预览" className="min-w-0 rounded-xl border border-indigo-100 bg-slate-50 p-4" aria-busy={!!pending}>
+        <section aria-label="素材预览" className="min-w-0 rounded-xl border border-blue-100 bg-slate-50 p-4" aria-busy={!!pending}>
           <h3 className="mb-3 font-bold">素材预览</h3>
           {result ? <>
             <div role="group" aria-label="生成版本" className="mb-3 flex flex-wrap gap-2">
               {assets.map((asset, index) => <button key={asset.id ?? asset.language + ":" + index} type="button" aria-pressed={index === selected} disabled={!!pending}
-                onClick={() => { setSelected(index); setFeedback(null); }} className={button + " aria-pressed:border-indigo-600 aria-pressed:bg-indigo-50"}>{languageName(asset.language)}</button>)}
+                onClick={() => { setSelected(index); setFeedback(null); }} className={button + " aria-pressed:border-blue-600 aria-pressed:bg-blue-50"}>{languageName(asset.language)}</button>)}
             </div>
             <p className="mb-2 break-words text-sm font-semibold">{result.title}</p>
             <textarea aria-label="生成结果" value={result.content_text} disabled={!!pending} rows={8} className={field + " resize-y"} onChange={(event) => {
@@ -123,7 +123,7 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
           </> : <p className="text-sm text-slate-600">选择类型和语言后，生成的文案会显示在这里。</p>}
         </section>
       </div>
-      {feedback && <p role={feedback.error ? "alert" : "status"} className={"mt-4 text-sm " + (feedback.error ? "text-rose-700" : "text-indigo-700")}>{feedback.text}</p>}
+      {feedback && <p role={feedback.error ? "alert" : "status"} className={"mt-4 text-sm " + (feedback.error ? "text-rose-700" : "text-blue-700")}>{feedback.text}</p>}
     </section>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListChecks, ShieldCheck } from "lucide-react";
@@ -28,6 +30,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function GrowthCollectPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -73,25 +76,23 @@ export default function GrowthCollectPage() {
       currentPath="/growth/collect"
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="erp-page-full space-y-5">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">海外地图获客中心 / Global lead map</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("海外地图获客中心", "Global lead map")}</h1>
             <p className="text-xs text-slate-500">
-              仅接入合规数据源：Google Places API (New)（租户自带密钥）、OpenStreetMap
-              Overpass（ODbL）、Overture 开放 POI，以及已获授权的展会 / 名录 CSV。系统不抓取
-              Meta / WhatsApp 数据，导入本身也不构成营销同意。
+              {bi("仅接入合规数据源：Google Places API (New)（租户自带密钥）、OpenStreetMap Overpass（ODbL）、Overture 开放 POI，以及已获授权的展会 / 名录 CSV。系统不抓取 Meta / WhatsApp 数据，导入本身也不构成营销同意。", "Only compliant sources: Google Places API (New) with your own key, OpenStreetMap Overpass (ODbL), Overture open POI and authorised trade-show/directory CSVs. We never scrape Meta or WhatsApp data, and importing never implies marketing consent.")}
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            合规采集 · ODbL 署名与配额由服务端强制
+            {bi("合规采集 · ODbL 署名与配额由服务端强制", "Compliant collection · ODbL attribution and quota enforced server-side")}
           </span>
         </header>
 
         {error ? (
           <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-            获客数据加载失败，请稍后重试。
+            {bi("获客数据加载失败，请稍后重试。", "Failed to load lead data. Please retry.")}
           </p>
         ) : null}
 
@@ -112,13 +113,13 @@ export default function GrowthCollectPage() {
           <header className="mb-3 flex items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <ListChecks aria-hidden="true" size={18} />
-              采集任务记录
+              {bi("采集任务记录", "Collection jobs")}
             </h2>
             <span className="text-sm text-slate-600">共 {count(jobs.length)} 个任务</span>
           </header>
           {!jobs.length ? (
             <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600">
-              还没有采集任务。选择合规数据源并配置目标市场后即可开始。
+              {bi("还没有采集任务。选择合规数据源并配置目标市场后即可开始。", "No collection jobs yet. Pick a compliant source and target market to start.")}
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -142,7 +143,7 @@ export default function GrowthCollectPage() {
                       </th>
                       <td className="p-3 text-slate-600">{job.target_region || "—"}</td>
                       <td className="max-w-64 break-words p-3 text-slate-600">
-                        {job.keywords.length ? job.keywords.join(" / ") : "CSV 导入"}
+                        {job.keywords.length ? job.keywords.join(" / ") : bi("CSV 导入", "CSV import")}
                       </td>
                       <td className="whitespace-nowrap p-3">
                         <span

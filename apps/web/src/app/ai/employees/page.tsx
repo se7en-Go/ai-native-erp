@@ -19,8 +19,10 @@ import {
   setWorkforceEmployeeEnabled,
 } from "@/lib/phase3b-data";
 import { mapDivisionItems, mapMetrics } from "@/lib/api-client/phase3b";
+import { useI18n } from "@/lib/i18n";
 
 export default function AiEmployeesPage() {
+  const { bi } = useI18n();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { principal } = useAuthSession();
@@ -63,18 +65,17 @@ export default function AiEmployeesPage() {
       currentPath="/ai/employees"
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="erp-page space-y-5">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">AI 数字员工中心 / AI Employees</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("AI 数字员工中心", "AI employees")}</h1>
             <p className="text-xs text-slate-500">
-              每名数字员工都绑定真实的 AI 能力与 ERP 工具；近 7 天动作、任务与成本全部来自
-              `ai_proposals` 与 `usage_ledger` 真实数据。
+              {bi("每名数字员工都绑定真实的 AI 能力与 ERP 工具；近 7 天动作、任务与成本全部来自 ai_proposals 与 usage_ledger 真实数据。", "Every AI employee is bound to real capabilities and ERP tools; 7-day actions, tasks and costs all come from ai_proposals and usage_ledger.")}
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            L0 红线由系统强制执行
+            {bi("L0 红线由系统强制执行", "L0 guardrails enforced by the system")}
           </span>
         </header>
 
@@ -93,7 +94,7 @@ export default function AiEmployeesPage() {
             data-testid="employees-read-only"
             className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900"
           >
-            当前角色可查看数字员工矩阵，但只有 Owner / Admin / Manager 可以启停员工。
+            {bi("当前角色可查看数字员工矩阵，但只有 Owner / Admin / Manager 可以启停员工。", "Your role can view the matrix, but only Owner / Admin / Manager can enable or disable employees.")}
           </p>
         )}
 
@@ -107,7 +108,7 @@ export default function AiEmployeesPage() {
           />
         ) : (
           <p data-testid="employees-loading" className="text-sm text-slate-500">
-            正在加载数字员工…
+            {bi("正在加载数字员工…", "Loading AI employees…")}
           </p>
         )}
 
@@ -117,7 +118,7 @@ export default function AiEmployeesPage() {
           </div>
         ) : (
           <p data-testid="workforce-matrix-loading" className="text-sm text-slate-500">
-            正在加载分工矩阵…
+            {bi("正在加载分工矩阵…", "Loading division matrix…")}
           </p>
         )}
       </div>

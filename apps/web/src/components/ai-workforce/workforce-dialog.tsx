@@ -32,7 +32,7 @@ export function WorkforceDialog({ title, closeLabel, drawer = false, onClose, ch
         : "m-auto max-h-[80dvh] w-[min(92vw,32rem)] rounded-2xl bg-white p-5 text-slate-900 shadow-2xl backdrop:bg-slate-900/45"}>
       <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-200 pb-3">
         <h2 id={headingId} className="text-lg font-bold">{title}</h2>
-        <button type="button" aria-label={closeLabel} onClick={onClose} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-indigo-600">
+        <button type="button" aria-label={closeLabel} onClick={onClose} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600">
           <X aria-hidden="true" size={20} />
         </button>
       </div>

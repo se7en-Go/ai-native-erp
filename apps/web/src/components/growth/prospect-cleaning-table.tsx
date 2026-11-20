@@ -70,13 +70,13 @@ export function ProspectCleaningTable({ prospects, selectedId, onSelect, onClean
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table aria-label="线索清洗结果" className="w-full min-w-[38rem] text-left text-sm">
             <thead className="bg-slate-50 text-slate-600"><tr>
-              <th scope="col" className="p-3"><input type="checkbox" aria-label="选择所有显示线索" disabled={busy} checked={checkedRows.length === visible.length} className="accent-teal-700" onChange={(event) => setChecked(event.target.checked ? visible.map((row) => row.id) : [])} /></th>
+              <th scope="col" className="p-3"><input type="checkbox" aria-label="选择所有显示线索" disabled={busy} checked={checkedRows.length === visible.length} className="accent-blue-700" onChange={(event) => setChecked(event.target.checked ? visible.map((row) => row.id) : [])} /></th>
               {["企业", "地区", "评级", "评分", "WhatsApp", "状态"].map((label) => <th scope="col" className="whitespace-nowrap p-3 font-semibold" key={label}>{label}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {visible.map((row) => <tr key={row.id} className={selectedId === row.id ? "bg-teal-50" : "hover:bg-slate-50"}>
-                <td className="p-3"><input type="checkbox" aria-label={"选择 " + row.company_name} checked={checked.includes(row.id)} disabled={busy} className="accent-teal-700" onChange={(event) => setChecked((prev) => event.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id))} /></td>
-                <th scope="row" className="max-w-64 break-words p-3 font-semibold">{onSelect ? <button type="button" aria-pressed={selectedId === row.id} className="text-left text-teal-800 hover:underline" onClick={() => onSelect(row.id)}>{row.company_name}</button> : row.company_name}</th>
+              {visible.map((row) => <tr key={row.id} className={selectedId === row.id ? "bg-blue-50" : "hover:bg-slate-50"}>
+                <td className="p-3"><input type="checkbox" aria-label={"选择 " + row.company_name} checked={checked.includes(row.id)} disabled={busy} className="accent-blue-700" onChange={(event) => setChecked((prev) => event.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id))} /></td>
+                <th scope="row" className="max-w-64 break-words p-3 font-semibold">{onSelect ? <button type="button" aria-pressed={selectedId === row.id} className="text-left text-blue-800 hover:underline" onClick={() => onSelect(row.id)}>{row.company_name}</button> : row.company_name}</th>
                 <td className="p-3 text-slate-600">{[row.city, row.country].filter(Boolean).join(" · ") || "—"}</td>
                 <td className="p-3"><span className={"rounded-full px-2 py-0.5 font-semibold " + gradeTone[row.grade]}>{row.grade}</span></td>
                 <td className="p-3 tabular-nums">{row.rating ?? "—"}</td>

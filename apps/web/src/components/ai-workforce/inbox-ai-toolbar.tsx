@@ -27,7 +27,7 @@ function PhrasePicker({ phrases, onClose, onSelect }: {
       <input type="search" aria-label="搜索短语" value={query} onChange={(event) => setQuery(event.target.value)} className={field} />
       {results.length ? <ul className="mt-3 space-y-2">
         {results.map((phrase) => <li key={phrase.id}>
-          <button type="button" onClick={() => onSelect(phrase)} className="w-full rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50">
+          <button type="button" onClick={() => onSelect(phrase)} className="w-full rounded-xl border border-slate-200 p-3 text-left hover:border-blue-300 hover:bg-blue-50">
             <span className="font-semibold">{phrase.title}</span>
             <span className="ml-2 text-xs text-slate-600">{phrase.category} · {phrase.language}{phrase.shortcut_code && " · " + phrase.shortcut_code}</span>
             <span className="mt-1 block line-clamp-2 break-words text-sm text-slate-700">{phrase.body_text}</span>
@@ -51,11 +51,11 @@ export function InboxAiToolbar({ phrases, onAction, onInsertPhrase, disabled = f
       {actions.map(({ id, label, icon: Icon }) => (
         <button key={id} type="button" disabled={disabled || !!pendingAction} aria-busy={pendingAction === id}
           onClick={() => onAction(id)} className={button + " inline-flex items-center gap-1.5"}>
-          <Icon size={16} aria-hidden="true" className="text-indigo-600" />{label}
+          <Icon size={16} aria-hidden="true" className="text-blue-600" />{label}
         </button>
       ))}
       <button type="button" aria-haspopup="dialog" aria-expanded={open && !disabled} disabled={disabled} onClick={() => setOpen(true)} className={button + " inline-flex items-center gap-1.5"}>
-        <TextQuote size={16} aria-hidden="true" className="text-indigo-600" />快捷短语
+        <TextQuote size={16} aria-hidden="true" className="text-blue-600" />快捷短语
       </button>
       {open && !disabled && <PhrasePicker phrases={phrases} onClose={() => setOpen(false)} onSelect={(phrase) => { onInsertPhrase(phrase); setOpen(false); }} />}
     </div>

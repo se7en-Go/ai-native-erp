@@ -50,7 +50,7 @@ export default function InboxPage() {
 
   return (
     <AppShell pendingProposalsCount={pendingProposalsQuery.data?.total ?? 0}>
-      <div className="flex h-[calc(100vh-5.5rem)] overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-white">
         <ChannelRail
           selectedChannel={selectedChannel}
           onSelectChannel={setSelectedChannel}

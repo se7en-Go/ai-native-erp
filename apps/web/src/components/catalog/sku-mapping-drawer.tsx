@@ -2,11 +2,13 @@
 
 import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, X, Lock } from "lucide-react";
+import { Lock, Plus, Trash2, X } from "lucide-react";
 import { updateSkuMapping, updateVariant } from "@/lib/api-client/live-client";
 import { fetchVariantDetail } from "@/lib/data-source";
 import { isPrivilegedCostViewer } from "@/lib/auth-cookie";
+import { useI18n } from "@/lib/i18n";
 import { formatMoney, type UserRole } from "@/lib/contracts";
+import { Badge } from "@/components/ui/page";
 
 export interface MoqTier {
   min_qty: number;
@@ -51,6 +53,7 @@ export function SkuMappingDrawer({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { bi } = useI18n();
   const canViewCost = isPrivilegedCostViewer(role);
 
   const detailQuery = useQuery({
@@ -102,45 +105,51 @@ export function SkuMappingDrawer({
   return (
     <div
       data-testid="sku-mapping-drawer"
-      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-slate-200 bg-white shadow-2xl"
+      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl"
     >
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <div>
-          <h3 className="text-sm font-bold text-slate-900">
-            SKU Master & Multi-Platform Mapping
+          <h3 className="text-sm font-semibold text-slate-900">
+            {bi("SKU 主档与多平台映射", "SKU master & platform mapping")}
           </h3>
-          {variant && <p className="text-xs text-slate-500">{variant.sku}</p>}
+          {variant && <p className="font-mono text-[11px] text-slate-500">{variant.sku}</p>}
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded p-1 text-slate-500 hover:bg-slate-100"
-          aria-label="Close SKU drawer"
+          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+          aria-label={bi("关闭 SKU 抽屉", "Close SKU drawer")}
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex-1 space-y-5 overflow-y-auto p-4 text-xs">
+      <div className="flex-1 space-y-5 overflow-y-auto p-4 text-[13px]">
         {variant && (
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-1.5">
+          <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
             <div className="flex justify-between">
-              <span className="text-slate-500">Retail Price (USD):</span>
-              <strong>{formatMoney(variant.retail_price_usd, "USD")}</strong>
+              <span className="text-slate-500">{bi("零售价（USD）", "Retail price (USD)")}</span>
+              <strong className="tabular-nums">
+                {formatMoney(variant.retail_price_usd, "USD")}
+              </strong>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Min Margin Floor:</span>
-              <strong>{variant.min_margin_floor_pct}%</strong>
+              <span className="text-slate-500">{bi("最低毛利底线", "Min margin floor")}</span>
+              <strong className="tabular-nums">{variant.min_margin_floor_pct}%</strong>
             </div>
             {canViewCost ? (
               <div className="flex justify-between">
-                <span className="text-slate-500">Base Cost ({variant.base_currency}):</span>
-                <strong>{formatMoney(variant.cost_price_base, variant.base_currency)}</strong>
+                <span className="text-slate-500">
+                  {bi("基础成本", "Base cost")}（{variant.base_currency}）
+                </span>
+                <strong className="tabular-nums">
+                  {formatMoney(variant.cost_price_base, variant.base_currency)}
+                </strong>
               </div>
             ) : (
-              <div className="flex items-center gap-1 text-slate-500">
+              <div className="flex items-center gap-1.5 text-[12px] text-amber-700">
                 <Lock className="h-3.5 w-3.5" />
-                <span>Base manufacturing cost hidden for Agent role</span>
+                <span>{bi("成本价对业务员角色隐藏", "Base manufacturing cost hidden for agents")}</span>
               </div>
             )}
           </div>
@@ -148,24 +157,29 @@ export function SkuMappingDrawer({
 
         <div>
           <div className="flex items-center justify-between">
-            <h4 className="font-bold text-slate-900">B2B MOQ Tier Pricing (USD)</h4>
+            <h4 className="text-sm font-semibold text-slate-900">
+              {bi("B2B MOQ 阶梯价（USD）", "B2B MOQ tier pricing (USD)")}
+            </h4>
             <button
               type="button"
               onClick={() =>
                 setTiers((prev) => [...prev, { min_qty: 100, unit_price_usd: 15.0 }])
               }
-              className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 font-medium hover:bg-slate-100"
+              className="erp-btn erp-btn-secondary py-1 text-[12px]"
             >
               <Plus className="h-3 w-3" />
-              <span>Add Tier</span>
+              <span>{bi("新增阶梯", "Add tier")}</span>
             </button>
           </div>
 
           <div className="mt-2 space-y-2">
             {tiers.map((tier, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <label className="text-slate-500">Min Qty</label>
+              <div key={idx} className="flex flex-wrap items-center gap-2">
+                <label className="text-[12px] text-slate-500" htmlFor={`tier-qty-${idx}`}>
+                  {bi("起订量", "Min qty")}
+                </label>
                 <input
+                  id={`tier-qty-${idx}`}
                   type="number"
                   min={1}
                   value={tier.min_qty}
@@ -174,10 +188,13 @@ export function SkuMappingDrawer({
                     next[idx] = { ...tier, min_qty: Number(e.target.value) || 1 };
                     setTiers(next);
                   }}
-                  className="w-24 rounded border border-slate-300 px-2 py-1"
+                  className="erp-input w-24 py-1 tabular-nums"
                 />
-                <label className="text-slate-500">Unit $</label>
+                <label className="text-[12px] text-slate-500" htmlFor={`tier-price-${idx}`}>
+                  {bi("单价 $", "Unit $")}
+                </label>
                 <input
+                  id={`tier-price-${idx}`}
                   type="number"
                   step="0.01"
                   value={tier.unit_price_usd}
@@ -186,12 +203,13 @@ export function SkuMappingDrawer({
                     next[idx] = { ...tier, unit_price_usd: Number(e.target.value) || 0 };
                     setTiers(next);
                   }}
-                  className="w-24 rounded border border-slate-300 px-2 py-1"
+                  className="erp-input w-24 py-1 tabular-nums"
                 />
                 <button
                   type="button"
                   onClick={() => setTiers((prev) => prev.filter((_, i) => i !== idx))}
-                  className="rounded p-1 text-rose-600 hover:bg-rose-50"
+                  className="rounded-md p-1.5 text-rose-600 hover:bg-rose-50"
+                  aria-label={bi("删除该阶梯", "Delete tier")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -202,33 +220,39 @@ export function SkuMappingDrawer({
           <button
             type="button"
             onClick={() => saveTiersMutation.mutate()}
-            className="mt-2 rounded bg-indigo-600 px-3 py-1.5 font-semibold text-white hover:bg-indigo-700"
+            className="erp-btn erp-btn-primary mt-3"
           >
-            Save MOQ Tiers
+            {bi("保存阶梯价", "Save MOQ tiers")}
           </button>
         </div>
 
         <div>
-          <h4 className="font-bold text-slate-900">
-            Platform SKU Mappings & Bundle Multiplier
+          <h4 className="text-sm font-semibold text-slate-900">
+            {bi("平台 SKU 映射与组合装倍率", "Platform SKU mappings & bundle multiplier")}
           </h4>
-          <p className="mt-0.5 text-[11px] text-slate-500">
-            Bundle multiplier deducts N master SKUs per 1 storefront listing unit sold (e.g. 2-pack = 2).
+          <p className="mt-1 text-[12px] leading-5 text-slate-500">
+            {bi(
+              "组合装倍率 = 每卖出 1 个店铺 listing 扣减多少个主档 SKU（例如 2 支装 = 2）。",
+              "Bundle multiplier = how many master SKUs are deducted per storefront listing sold (2-pack = 2)."
+            )}
           </p>
 
           <div className="mt-2 space-y-2">
             {mappings.map((mapping) => (
-              <div
-                key={mapping.id}
-                className="rounded-md border border-slate-200 p-2.5 space-y-2"
-              >
-                <div className="flex items-center justify-between font-semibold text-slate-800">
+              <div key={mapping.id} className="space-y-2 rounded-xl border border-slate-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 font-medium text-slate-800">
                   <span>{mapping.channel_label ?? mapping.channel_account_id}</span>
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5">{mapping.external_sku}</span>
+                  <Badge>{mapping.external_sku}</Badge>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-slate-600">bundle_multiplier:</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label
+                    className="text-[12px] text-slate-600"
+                    htmlFor={`bundle-multiplier-input-${mapping.id}`}
+                  >
+                    {bi("组合装倍率", "Bundle multiplier")}
+                  </label>
                   <input
+                    id={`bundle-multiplier-input-${mapping.id}`}
                     type="number"
                     min={1}
                     data-testid={`bundle-multiplier-input-${mapping.id}`}
@@ -239,19 +263,24 @@ export function SkuMappingDrawer({
                         [mapping.id]: Math.max(1, Number(e.target.value) || 1),
                       }))
                     }
-                    className="w-20 rounded border border-slate-300 px-2 py-1"
+                    className="erp-input w-20 py-1 tabular-nums"
                   />
                   <button
                     type="button"
                     data-testid={`save-mapping-btn-${mapping.id}`}
                     onClick={() => saveMappingMutation.mutate(mapping)}
-                    className="rounded bg-slate-900 px-2.5 py-1 font-semibold text-white hover:bg-slate-800"
+                    className="erp-btn bg-slate-900 text-white hover:bg-slate-800"
                   >
-                    Save
+                    {bi("保存", "Save")}
                   </button>
                 </div>
               </div>
             ))}
+            {mappings.length === 0 && (
+              <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-[12px] text-slate-400">
+                {bi("尚未绑定任何平台 listing。", "No platform listings mapped yet.")}
+              </p>
+            )}
           </div>
         </div>
       </div>

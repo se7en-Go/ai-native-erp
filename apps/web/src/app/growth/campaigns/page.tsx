@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Megaphone, Play, ShieldCheck } from "lucide-react";
@@ -27,6 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function GrowthCampaignsPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [previews, setPreviews] = useState<Record<string, SuppressionPreview>>({});
   const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
@@ -88,25 +91,23 @@ export default function GrowthCampaignsPage() {
       currentPath="/growth/campaigns"
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="erp-page-full space-y-5">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">合规营销战役 / Campaigns</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("合规营销战役", "Compliant campaigns")}</h1>
             <p className="text-xs text-slate-500">
-              邮件战役强制应用全局退订拦截并随信发送 RFC 8058 List-Unsubscribe；WhatsApp
-              战役要求有效 Opt-In、拦截美国 +1 营销号码，并由双令牌桶限速。预检结果只是快照，
-              启动时服务端会重新校验。
+              {bi("邮件战役强制应用全局退订拦截并随信发送 RFC 8058 List-Unsubscribe；WhatsApp 战役要求有效 Opt-In、拦截美国 +1 营销号码，并由双令牌桶限速。预检结果只是快照，启动时服务端会重新校验。", "Email campaigns always apply global suppression plus RFC 8058 List-Unsubscribe; WhatsApp campaigns require valid opt-in, block US +1 marketing numbers and are rate-limited by dual token buckets. Previews are snapshots; the server re-validates on launch.")}
             </p>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-900">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            发送前复核 · 零延迟 STOP 抑制
+            {bi("发送前复核 · 零延迟 STOP 抑制", "Re-check before send · zero-delay STOP suppression")}
           </span>
         </header>
 
         {error ? (
           <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-            战役数据加载失败，请稍后重试。
+            {bi("战役数据加载失败，请稍后重试。", "Failed to load campaign data. Please retry.")}
           </p>
         ) : null}
         {feedback ? (
@@ -116,7 +117,7 @@ export default function GrowthCampaignsPage() {
               "rounded-xl border p-3 text-sm " +
               (feedback.error
                 ? "border-rose-200 bg-rose-50 text-rose-800"
-                : "border-teal-200 bg-teal-50 text-teal-900")
+                : "border-blue-200 bg-blue-50 text-blue-900")
             }
           >
             {feedback.text}
@@ -134,11 +135,13 @@ export default function GrowthCampaignsPage() {
               <Megaphone aria-hidden="true" size={18} />
               战役列表与合规预检
             </h2>
-            <span className="text-sm text-slate-600">已清洗可触达线索 {count(targetIds.length)} 条</span>
+            <span className="text-sm text-slate-600">
+              {bi("已清洗可触达线索", "Cleaned reachable leads")} {count(targetIds.length)}
+            </span>
           </header>
           {!campaigns.length ? (
             <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600">
-              还没有营销战役。配置渠道与内容后保存草稿，再执行预检与启动。
+              {bi("还没有营销战役。配置渠道与内容后保存草稿，再执行预检与启动。", "No campaigns yet. Configure channel and content, save a draft, then preview and launch.")}
             </p>
           ) : (
             <ul className="space-y-3">
@@ -183,12 +186,12 @@ export default function GrowthCampaignsPage() {
                     {snapshot ? (
                       <div
                         aria-label={`战役 ${campaign.name} 合规预检结果`}
-                        className="mt-3 rounded-lg border border-teal-100 bg-teal-50/60 p-3"
+                        className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3"
                       >
                         <dl className="grid grid-cols-2 gap-2 text-sm">
                           <div>
                             <dt>可发送</dt>
-                            <dd className="text-lg font-bold text-teal-900">
+                            <dd className="text-lg font-bold text-blue-900">
                               {count(snapshot.eligible_count)}
                             </dd>
                           </div>
@@ -200,7 +203,7 @@ export default function GrowthCampaignsPage() {
                           </div>
                         </dl>
                         {snapshot.reasons.length ? (
-                          <ul className="mt-2 space-y-1 border-t border-teal-100 pt-2 text-sm">
+                          <ul className="mt-2 space-y-1 border-t border-blue-100 pt-2 text-sm">
                             {snapshot.reasons.map((row) => (
                               <li key={row.reason} className="flex justify-between gap-2">
                                 <span>{row.reason}</span>

@@ -18,6 +18,7 @@ import type {
   SocialPostDraft,
 } from "@/components/social/types";
 import { fetchCatalogVariants, fetchPendingProposalsCount } from "@/lib/data-source";
+import { useI18n } from "@/lib/i18n";
 import { isProviderUnavailable } from "@/lib/phase3b-data";
 import {
   connectSocialAccount,
@@ -48,6 +49,7 @@ function suggestedHandle(platform: SocialPlatform): string {
 }
 
 export default function SocialMarketingPage() {
+  const { bi } = useI18n();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabId>("matrix");
   const [pendingPlatforms, setPendingPlatforms] = useState<readonly SocialPlatform[]>([]);
@@ -214,25 +216,24 @@ export default function SocialMarketingPage() {
 
   return (
     <AppShell currentPath="/social" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="erp-page-full space-y-5">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">社媒营销中心 / Social Marketing</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{bi("社媒营销中心", "Social marketing")}</h1>
             <p className="text-xs text-slate-500">
-              国内外 14 平台矩阵、内容日历、AI 文案与舆情转线索。仅对具备发布接口的平台开放定时发布；
-              小红书、抖音、快手、B站、视频号、微博走成片导出与官方后台人工发布。
+              {bi("国内外 14 平台矩阵、内容日历、AI 文案与舆情转线索。仅对具备发布接口的平台开放定时发布；小红书、抖音、快手、B站、视频号、微博走成片导出与官方后台人工发布。", "A 14-platform matrix, content calendar, AI copywriting and social listening to CRM leads. Scheduled publishing is only enabled for platforms with an API; Xiaohongshu, Douyin, Kuaishou, Bilibili, Channels and Weibo use export plus manual publishing in the official console.")}
             </p>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-fuchsia-200 bg-fuchsia-50 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-900">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">
             <Send className="h-3.5 w-3.5" aria-hidden="true" />
-            授权令牌信封加密 · 零未授权外网发帖
+            {bi("授权令牌信封加密 · 零未授权外网发帖", "Envelope-encrypted tokens · zero unauthorised posts")}
           </span>
         </header>
 
         <section aria-label="社媒营销概览指标" role="group" className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
           {kpiCards.map((card) => (
-            <div key={card.label} className="min-w-0 rounded-xl border border-fuchsia-100 bg-fuchsia-50/60 p-3">
-              <p className="text-xs text-fuchsia-900">{card.label}</p>
+            <div key={card.label} className="min-w-0 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+              <p className="text-xs text-blue-900">{card.label}</p>
               <p className="mt-1 break-all text-lg font-bold tabular-nums text-slate-900">{card.value}</p>
             </div>
           ))}
@@ -240,7 +241,7 @@ export default function SocialMarketingPage() {
 
         {error ? (
           <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-            社媒数据加载失败，请稍后重试。
+            {bi("社媒数据加载失败，请稍后重试。", "Failed to load social data. Please retry.")}
           </p>
         ) : null}
         {feedback ? (
@@ -250,7 +251,7 @@ export default function SocialMarketingPage() {
               "rounded-xl border p-3 text-sm " +
               (feedback.error
                 ? "border-rose-200 bg-rose-50 text-rose-800"
-                : "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-900")
+                : "border-blue-200 bg-blue-50 text-blue-900")
             }
           >
             {feedback.text}
@@ -268,8 +269,8 @@ export default function SocialMarketingPage() {
               aria-controls={`social-panel-${id}`}
               onClick={() => setTab(id)}
               className={
-                "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-fuchsia-700 " +
-                (tab === id ? "bg-fuchsia-700 text-white" : "text-slate-700 hover:bg-slate-100")
+                "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-blue-700 " +
+                (tab === id ? "bg-blue-700 text-white" : "text-slate-700 hover:bg-slate-100")
               }
             >
               <Icon aria-hidden="true" size={15} />
