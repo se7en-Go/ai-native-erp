@@ -2,7 +2,16 @@
 
 import React, { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Clock, FileDown, CheckCircle2, RefreshCw, ArrowRightCircle } from "lucide-react";
+import {
+  ArrowRightCircle,
+  CheckCircle2,
+  Clock,
+  Coins,
+  FileDown,
+  Layers3,
+  RefreshCw,
+  ScrollText,
+} from "lucide-react";
 import {
   acceptQuote,
   convertQuoteToOrder,
@@ -154,11 +163,12 @@ export function QuotePiBuilder({
   });
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
-      <Card className="h-fit">
+    <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+      <Card className="h-fit overflow-hidden">
         <CardHeader
           title={bi("MOQ 阶梯价试算", "MOQ tier price calculator")}
           description={bi("输入数量自动匹配最优阶梯价", "Quantity auto-matches the best tier")}
+          icon={Coins}
         />
         <div className="space-y-3 p-4 text-[13px]">
           <div>
@@ -169,7 +179,7 @@ export function QuotePiBuilder({
               id="moq-preview-sku"
               value={activeVariant?.id ?? ""}
               onChange={(e) => setPreviewVariantId(e.target.value)}
-              className="erp-input mt-1.5"
+              className="erp-input mt-1.5 rounded-xl"
             >
               {variants.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -190,7 +200,7 @@ export function QuotePiBuilder({
                 data-testid="moq-preview-qty-input"
                 value={previewQty}
                 onChange={(e) => setPreviewQty(Math.max(1, Number(e.target.value) || 1))}
-                className="erp-input mt-1.5 tabular-nums"
+                className="erp-input mt-1.5 rounded-xl tabular-nums"
               />
             </div>
             <div>
@@ -201,7 +211,7 @@ export function QuotePiBuilder({
                 id="moq-preview-incoterm"
                 value={previewIncoterm}
                 onChange={(e) => setPreviewIncoterm(e.target.value as Incoterm)}
-                className="erp-input mt-1.5"
+                className="erp-input mt-1.5 rounded-xl"
               >
                 <option value="EXW">EXW</option>
                 <option value="FOB">FOB</option>
@@ -213,44 +223,54 @@ export function QuotePiBuilder({
           </div>
 
           {moqPreview && (
-            <div className="space-y-1.5 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
-              <div className="text-[12px] text-slate-600">
-                {bi("命中阶梯", "Applied tier")}：<strong>MOQ {moqPreview.tierMinQty}+</strong> ·{" "}
-                {previewIncoterm}
+            <div className="relative overflow-hidden rounded-2xl border border-blue-200/80 bg-gradient-to-b from-blue-50 to-blue-50/40 p-3.5 ring-1 ring-blue-100/60">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-blue-800">
+                  {bi("命中阶梯", "Applied tier")} · MOQ {moqPreview.tierMinQty}+
+                </span>
+                <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                  {previewIncoterm}
+                </span>
               </div>
               <div
                 data-testid="moq-preview-price"
-                className="text-lg font-semibold tabular-nums text-blue-900"
+                className="mt-2 text-[26px] font-bold leading-none tracking-tight tabular-nums text-blue-900"
               >
-                {formatMoney(moqPreview.unitPriceUsd, "USD")} / pc
+                {formatMoney(moqPreview.unitPriceUsd, "USD")}
+                <span className="ml-1 text-[13px] font-semibold text-blue-700/80">/ pc</span>
               </div>
-              <div className="text-[12px] tabular-nums text-slate-600">
-                {bi("预估小计", "Est. subtotal")}：
-                {formatMoney(moqPreview.unitPriceUsd * previewQty, "USD")}
+              <div className="mt-2 flex items-baseline justify-between gap-2 border-t border-blue-200/70 pt-2 text-[12px]">
+                <span className="font-medium text-slate-600">
+                  {bi("预估小计", "Est. subtotal")}
+                </span>
+                <span className="font-bold tabular-nums text-slate-900">
+                  {formatMoney(moqPreview.unitPriceUsd * previewQty, "USD")}
+                </span>
               </div>
             </div>
           )}
 
-          <div className="space-y-1 border-t border-slate-100 pt-3 text-[12px] text-slate-500">
+          <div className="space-y-1.5 rounded-xl bg-slate-50/80 p-3 text-[12px] leading-5 text-slate-600">
             <p>{bi("阶梯价规则：数量越大单价越低，报价单落库时快照保存。", "Tier pricing: larger quantities get lower unit prices, snapshotted into the quote.")}</p>
             <p>{bi("FOB/CIF 需确认装运港与目的港，DDP 需另计目的国关税。", "FOB/CIF require POL/POD; DDP must include destination duty.")}</p>
           </div>
         </div>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader
           title={bi("形式发票（PI）版本管理", "Versioned proforma invoice (PI)")}
           description={bi(
             "每次改价生成新版本，汇率快照与条款随版本冻结",
             "Every reprice creates a new version with a frozen FX snapshot and terms"
           )}
+          icon={Layers3}
           actions={
             <select
               aria-label={bi("选择报价单版本", "Select quote version")}
               value={activeQuote?.id ?? ""}
               onChange={(e) => setSelectedQuoteId(e.target.value)}
-              className="erp-input w-auto py-1 text-[12px]"
+              className="erp-input w-auto rounded-xl py-1 text-[12px]"
             >
               {quotes.map((q) => (
                 <option key={q.id} value={q.id}>
@@ -262,8 +282,9 @@ export function QuotePiBuilder({
         />
         <div className="space-y-3 p-4 text-[13px]">
           {convertedBanner && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-900">
-              {convertedBanner}
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[12px] font-semibold text-emerald-900">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span>{convertedBanner}</span>
             </div>
           )}
 
@@ -289,9 +310,11 @@ export function QuotePiBuilder({
 
               return (
                 <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-slate-900">{activeQuote.quote_no}</span>
+                      <span className="font-mono text-[13px] font-bold text-slate-900">
+                        {activeQuote.quote_no}
+                      </span>
                       <Badge>v{activeQuote.version}</Badge>
                       <Badge tone="info">{activeQuote.incoterm}</Badge>
                       <Badge tone={activeQuote.status === "accepted" ? "success" : "neutral"}>
@@ -312,7 +335,7 @@ export function QuotePiBuilder({
                     </span>
                   </div>
 
-                  <div className="grid gap-2 rounded-xl border border-slate-100 p-3 text-[12px] text-slate-600 sm:grid-cols-2">
+                  <div className="grid gap-2 rounded-2xl border border-slate-200/70 bg-white p-3.5 text-[12px] leading-6 text-slate-700 sm:grid-cols-2">
                     <div>
                       {bi("航线", "Route")}：{activeQuote.port_of_loading ?? "Shenzhen"} →{" "}
                       {activeQuote.port_of_destination ?? bi("买方港口", "Buyer port")}
@@ -326,7 +349,7 @@ export function QuotePiBuilder({
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
                     <table className="erp-table">
                       <thead>
                         <tr>
@@ -353,17 +376,21 @@ export function QuotePiBuilder({
                     </table>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <div className="text-sm font-semibold tabular-nums text-slate-900">
-                      {bi("合同总额", "Total")}：
-                      {formatMoney(activeQuote.total_amount, activeQuote.quote_currency)}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/70 bg-slate-50/60 px-3.5 py-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-medium text-slate-600">
+                        {bi("合同总额", "Contract total")}
+                      </div>
+                      <div className="text-[22px] font-bold leading-tight tabular-nums text-slate-950">
+                        {formatMoney(activeQuote.total_amount, activeQuote.quote_currency)}
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => pdfMutation.mutate(activeQuote.id)}
-                        className="erp-btn erp-btn-secondary"
+                        className="erp-btn erp-btn-secondary rounded-xl"
                       >
                         <FileDown className="h-3.5 w-3.5" />
                         <span>{bi("生成 PI PDF", "Generate PI PDF")}</span>
@@ -374,7 +401,7 @@ export function QuotePiBuilder({
                           href={downloadHref}
                           target="_blank"
                           rel="noreferrer"
-                          className="erp-btn border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          className="erp-btn rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                         >
                           {bi("预览 PDF", "Preview PDF")}
                         </a>
@@ -384,7 +411,7 @@ export function QuotePiBuilder({
                         <button
                           type="button"
                           onClick={() => renewFxMutation.mutate(activeQuote.id)}
-                          className="erp-btn border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                          className="erp-btn rounded-xl border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                           <span>{bi("续锁汇率", "Renew FX lock")}</span>
@@ -395,7 +422,7 @@ export function QuotePiBuilder({
                         <button
                           type="button"
                           onClick={() => acceptMutation.mutate(activeQuote.id)}
-                          className="erp-btn bg-slate-800 text-white hover:bg-slate-900"
+                          className="erp-btn rounded-xl bg-slate-800 text-white hover:bg-slate-900"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           <span>Mark Accepted</span>
@@ -407,7 +434,7 @@ export function QuotePiBuilder({
                         data-testid={`convert-quote-btn-${activeQuote.id}`}
                         disabled={!canConvert || convertMutation.isPending}
                         onClick={() => convertMutation.mutate(activeQuote.id)}
-                        className="erp-btn erp-btn-primary disabled:opacity-50"
+                        className="erp-btn erp-btn-primary rounded-xl shadow-[0_2px_8px_-2px_rgba(37,99,235,0.55)] disabled:opacity-50"
                       >
                         <ArrowRightCircle className="h-3.5 w-3.5" />
                         <span>{bi("一键转批发订单", "1-Click Convert to Order")}</span>
@@ -423,16 +450,39 @@ export function QuotePiBuilder({
         </div>
       </Card>
 
-      <Card className="h-fit">
+      <Card className="h-fit overflow-hidden">
         <CardHeader
           title={bi("报价条款与合规提示", "Quote terms & compliance")}
           description={bi("生成 PI 前请确认以下商务要素", "Confirm these commercial terms before issuing the PI")}
+          icon={ScrollText}
         />
-        <ul className="space-y-2.5 p-4 text-[12px] leading-6 text-slate-600">
-          <li>{bi("贸易术语：FOB 深圳 / CIF 汉堡 / EXW 工厂交货，按客户习惯选择。", "Incoterms: FOB Shenzhen / CIF Hamburg / EXW ex-works, chosen per buyer.")}</li>
-          <li>{bi("付款方式：30% T/T 定金 + 70% 见提单副本付清，尾款未结清不出货。", "Payment: 30% T/T deposit plus 70% against B/L copy; no dispatch before balance.")}</li>
-          <li>{bi("汇率锁定 48 小时，超期需重新取价并生成新版本。", "FX is locked for 48 hours; after expiry reprice and issue a new version.")}</li>
-          <li>{bi("PI 中的 HS 编码、品牌与型号须与报关资料一致。", "HS code, brand and model on the PI must match customs documents.")}</li>
+        <ul className="space-y-2 p-4 text-[12px] leading-6 text-slate-700">
+          {[
+            bi(
+              "贸易术语：FOB 深圳 / CIF 汉堡 / EXW 工厂交货，按客户习惯选择。",
+              "Incoterms: FOB Shenzhen / CIF Hamburg / EXW ex-works, chosen per buyer."
+            ),
+            bi(
+              "付款方式：30% T/T 定金 + 70% 见提单副本付清，尾款未结清不出货。",
+              "Payment: 30% T/T deposit plus 70% against B/L copy; no dispatch before balance."
+            ),
+            bi(
+              "汇率锁定 48 小时，超期需重新取价并生成新版本。",
+              "FX is locked for 48 hours; after expiry reprice and issue a new version."
+            ),
+            bi(
+              "PI 中的 HS 编码、品牌与型号须与报关资料一致。",
+              "HS code, brand and model on the PI must match customs documents."
+            ),
+          ].map((item) => (
+            <li
+              key={item}
+              className="flex gap-2 rounded-xl bg-slate-50/80 px-3 py-2 ring-1 ring-slate-200/60"
+            >
+              <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+              <span>{item}</span>
+            </li>
+          ))}
         </ul>
       </Card>
     </div>
