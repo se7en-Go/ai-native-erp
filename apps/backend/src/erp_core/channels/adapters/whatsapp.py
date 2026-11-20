@@ -12,7 +12,7 @@ from typing import Annotated, Any, ClassVar, Literal, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -26,8 +26,13 @@ from erp_core.channels.adapters.base import (
     OutboundSendResult,
 )
 from erp_core.channels.consent_service import ConsentAndSuppressionService
+from erp_core.channels.ecommerce.base import CredentialVaultHelper
 from erp_core.channels.messaging_accounts import (
+    ConnectMessagingResponse,
+    MessagingConnectRoute,
     assert_channel_bind_allowed,
+    provider_token,
+    register_messaging_account,
     resolve_connect_ownership,
 )
 from erp_core.shared.config import get_settings
@@ -48,6 +53,8 @@ from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
 
 whatsapp_router = APIRouter(prefix="/api/v1/channels/whatsapp", tags=["whatsapp"])
+# Quick-connect carries a provider access token: validation errors must never reflect it.
+whatsapp_connect_router = APIRouter(route_class=MessagingConnectRoute, tags=["whatsapp"])
 _require_channel_connector = require_roles(
     UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.AGENT
 )
@@ -60,6 +67,12 @@ _STOP_KEYWORDS: frozenset[str] = frozenset(
 )
 _WA_FREE_MONTHLY_SERVICE_QUOTA = 1000
 _WA_RETRYABLE_CODES: frozenset[int] = frozenset({131056, 130429, 131049})
+# Embedded Signup and Direct Token Quick-Connect share this credential type: the outbound
+# worker decrypts the newest credential row of an account and reads ``access_token``.
+_WA_OAUTH_CREDENTIAL = "oauth_token"
+# Coexistence numbers are conversational support lines, official Cloud API numbers scale.
+_WA_COEXISTENCE_MPS = 20
+_WA_CLOUD_MPS = 80
 
 
 class WhatsAppSendPolicyDecision(BaseModel):
@@ -85,6 +98,23 @@ class EmbeddedSignupResponse(BaseModel):
     channel_account_id: uuid.UUID
     channel_type: ChannelType
     mps_cap: int
+
+
+class WhatsAppDirectConnectRequest(BaseModel):
+    """Direct token onboarding for Cloud API and Coexistence numbers.
+
+    ``access_token`` is an unconstrained ``SecretStr`` so a malformed token can never be
+    echoed back in a validation error; it is range-checked in the route via
+    ``provider_token``, which raises a problem detail that never repeats the input.
+    """
+
+    waba_id: str = Field(min_length=3, max_length=64)
+    phone_number_id: str = Field(min_length=3, max_length=64)
+    access_token: SecretStr
+    is_coexistence: bool = False
+    display_name: str | None = Field(default=None, max_length=150)
+    visibility_scope: Literal["shared", "personal"] | None = None
+    owner_user_id: uuid.UUID | None = None
 
 
 class ConsentOptInRequest(BaseModel):
@@ -493,7 +523,10 @@ class WhatsAppAdapter(MessagingChannelAdapter):
         channel_type = (
             ChannelType.WHATSAPP_COEXISTENCE if is_coexistence else ChannelType.WHATSAPP_CLOUD
         )
-        rate_profile = {"mps": 20 if is_coexistence else 80, "coexistence": is_coexistence}
+        rate_profile = {
+            "mps": _WA_COEXISTENCE_MPS if is_coexistence else _WA_CLOUD_MPS,
+            "coexistence": is_coexistence,
+        }
         cfg = {
             "waba_id": waba_id,
             "phone_number_id": phone_number_id,
@@ -551,7 +584,7 @@ class WhatsAppAdapter(MessagingChannelAdapter):
             session=session,
             tenant_id=tenant_id,
             account_id=upserted_id,
-            cred_type="oauth_token",
+            cred_type=_WA_OAUTH_CREDENTIAL,
             plaintext=json.dumps({"access_token": access_token, "waba_id": waba_id}),
         )
         await session.execute(
@@ -560,7 +593,7 @@ class WhatsAppAdapter(MessagingChannelAdapter):
                 "id, tenant_id, channel_account_id, credential_type, "
                 "ciphertext, nonce, auth_tag, key_version"
                 ") VALUES ("
-                ":id, :tid, :aid, 'oauth_token', :ct, :nonce, :tag, :kv"
+                ":id, :tid, :aid, :ctype, :ct, :nonce, :tag, :kv"
                 ") ON CONFLICT (tenant_id, channel_account_id, credential_type) "
                 "DO UPDATE SET ciphertext = EXCLUDED.ciphertext, nonce = EXCLUDED.nonce, "
                 "auth_tag = EXCLUDED.auth_tag, key_version = EXCLUDED.key_version, updated_at = "
@@ -570,6 +603,7 @@ class WhatsAppAdapter(MessagingChannelAdapter):
                 "id": uuid.uuid4(),
                 "tid": tenant_id,
                 "aid": upserted_id,
+                "ctype": _WA_OAUTH_CREDENTIAL,
                 "ct": ciphertext,
                 "nonce": nonce,
                 "tag": auth_tag,
@@ -878,8 +912,108 @@ async def complete_whatsapp_embedded_signup(
     return EmbeddedSignupResponse(
         channel_account_id=account_id,
         channel_type=ctype,
-        mps_cap=20 if payload.is_coexistence else 80,
+        mps_cap=_WA_COEXISTENCE_MPS if payload.is_coexistence else _WA_CLOUD_MPS,
     )
+
+
+@whatsapp_connect_router.post("/connect", response_model=ConnectMessagingResponse)
+async def connect_whatsapp_direct(
+    payload: WhatsAppDirectConnectRequest,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(_require_channel_connector)],
+) -> ConnectMessagingResponse:
+    """Direct Token Quick-Connect for WhatsApp Cloud API and Coexistence numbers.
+
+    Sales roles may self-bind a personal Coexistence number (their own business handset),
+    while official Cloud API onboarding stays admin-only. The access token only ever lands
+    in the envelope-encrypted credential vault, never in ``config``, logs, or the response.
+    """
+    token = provider_token(payload.access_token)
+    channel_type = (
+        ChannelType.WHATSAPP_COEXISTENCE if payload.is_coexistence else ChannelType.WHATSAPP_CLOUD
+    )
+    effective_name = (payload.display_name or "").strip() or (
+        f"WhatsApp Coexistence ({payload.phone_number_id})"
+        if payload.is_coexistence
+        else f"WhatsApp Cloud ({payload.phone_number_id})"
+    )
+    rate_limit_profile = {
+        "mps": _WA_COEXISTENCE_MPS if payload.is_coexistence else _WA_CLOUD_MPS,
+        "coexistence": payload.is_coexistence,
+    }
+    tenant = principal.tenant_id
+    async with tenant_session(_get_session_factory(request), tenant) as session:
+        owner_uid, vis_scope = await resolve_connect_ownership(
+            session,
+            principal,
+            payload.visibility_scope,
+            payload.owner_user_id,
+            allow_agent_self_bind=payload.is_coexistence,
+        )
+        aid = await register_messaging_account(
+            session,
+            tenant,
+            channel_type,
+            payload.phone_number_id,
+            effective_name,
+            owner_user_id=owner_uid,
+            visibility_scope=vis_scope,
+            actor_user_id=principal.user_id,
+            actor_is_admin=principal.role in (UserRole.OWNER, UserRole.ADMIN),
+            config_patch={
+                "waba_id": payload.waba_id,
+                "phone_number_id": payload.phone_number_id,
+            },
+        )
+        await session.execute(
+            text(
+                "UPDATE channel_accounts SET rate_limit_profile = CAST(:rate AS jsonb), "
+                "updated_at = now() WHERE tenant_id = :tid AND id = :aid"
+            ),
+            {
+                "rate": json.dumps(rate_limit_profile),
+                "tid": tenant,
+                "aid": aid,
+            },
+        )
+        await CredentialVaultHelper().save_secret_json(
+            session,
+            tenant,
+            aid,
+            _WA_OAUTH_CREDENTIAL,
+            {
+                "access_token": token,
+                "waba_id": payload.waba_id,
+                "phone_number_id": payload.phone_number_id,
+            },
+        )
+        await record_audit_event(
+            session=session,
+            tenant_id=tenant,
+            actor_type="human_user",
+            actor_id=str(principal.user_id),
+            action="channel.whatsapp_connected",
+            resource_type="channel_account",
+            resource_id=aid,
+            after_state={
+                "waba_id": payload.waba_id,
+                "phone_number_id": payload.phone_number_id,
+                "is_coexistence": payload.is_coexistence,
+                "credential_type": _WA_OAUTH_CREDENTIAL,
+                "owner_user_id": str(owner_uid) if owner_uid else None,
+                "visibility_scope": vis_scope,
+            },
+        )
+    return ConnectMessagingResponse(
+        channel_account_id=aid,
+        external_account_id=payload.phone_number_id,
+        display_name=effective_name,
+        owner_user_id=owner_uid,
+        visibility_scope=vis_scope,
+    )
+
+
+whatsapp_router.include_router(whatsapp_connect_router)
 
 
 @whatsapp_router.post("/consent/opt-in")
