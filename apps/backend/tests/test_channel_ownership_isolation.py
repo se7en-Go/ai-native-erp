@@ -1232,3 +1232,278 @@ async def test_whatsapp_coexistence_self_bind_but_cloud_requires_admin(
             )
         ).one()
         assert row == (None, "shared")
+
+
+# --------------------------------------------------------------------------------------
+# 8. WhatsApp Direct Token Quick-Connect (Cloud API admin-only, Coexistence self-bind)
+# --------------------------------------------------------------------------------------
+
+
+async def test_whatsapp_direct_connect_scopes_rate_limits_and_encrypts_token(
+    runtime_session_factory: RuntimeFactory,
+) -> None:
+    tenant_id = await create_workspace(runtime_session_factory)
+    agent_a_id, _ = await add_member(runtime_session_factory, tenant_id, UserRole.AGENT)
+    agent_b_id, _ = await add_member(runtime_session_factory, tenant_id, UserRole.AGENT)
+    owner_id, owner_email = await add_member(runtime_session_factory, tenant_id, UserRole.OWNER)
+    coexistence_phone = f"pn_{uuid4().hex[:10]}"
+    cloud_phone = f"pn_{uuid4().hex[:10]}"
+    waba_id = f"waba_{uuid4().hex[:10]}"
+    agent_token = "EAAG_agent_coexistence_token_2026"
+    owner_token = "EAAG_owner_cloud_token_2026"
+    harness = build_harness(runtime_session_factory)
+
+    async with harness.client() as client:
+        # A salesperson self-binds their own Coexistence number without any admin help.
+        harness.act_as(principal(tenant_id, agent_a_id, UserRole.AGENT))
+        coexistence = await client.post(
+            "/api/v1/channels/whatsapp/connect",
+            json={
+                "waba_id": waba_id,
+                "phone_number_id": coexistence_phone,
+                "access_token": agent_token,
+                "is_coexistence": True,
+            },
+        )
+        assert coexistence.status_code == 200, coexistence.text
+        coexistence_body = coexistence.json()
+        assert coexistence_body["external_account_id"] == coexistence_phone
+        assert coexistence_body["display_name"] == f"WhatsApp Coexistence ({coexistence_phone})"
+        assert coexistence_body["owner_user_id"] == str(agent_a_id)
+        assert coexistence_body["visibility_scope"] == "personal"
+        assert agent_token not in coexistence.text
+
+        # Official Cloud API onboarding stays admin-only.
+        cloud_denied = await client.post(
+            "/api/v1/channels/whatsapp/connect",
+            json={
+                "waba_id": waba_id,
+                "phone_number_id": cloud_phone,
+                "access_token": agent_token,
+                "is_coexistence": False,
+            },
+        )
+        assert cloud_denied.status_code == 403, cloud_denied.text
+        assert cloud_denied.json()["code"] == "ERR_INSUFFICIENT_ROLE"
+
+        # A peer salesperson can never hijack the same phone number id.
+        harness.act_as(principal(tenant_id, agent_b_id, UserRole.AGENT))
+        hijack = await client.post(
+            "/api/v1/channels/whatsapp/connect",
+            json={
+                "waba_id": waba_id,
+                "phone_number_id": coexistence_phone,
+                "access_token": agent_token,
+                "is_coexistence": True,
+            },
+        )
+        assert hijack.status_code == 409, hijack.text
+        assert hijack.json()["code"] == "ERR_CHANNEL_ROUTING_CONFLICT"
+
+        # An oversized token is rejected without ever echoing the credential.
+        oversized_token = "EAAG" + "x" * 2100
+        bad_token = await client.post(
+            "/api/v1/channels/whatsapp/connect",
+            json={
+                "waba_id": waba_id,
+                "phone_number_id": f"pn_{uuid4().hex[:10]}",
+                "access_token": oversized_token,
+                "is_coexistence": True,
+            },
+        )
+        assert bad_token.status_code == 422, bad_token.text
+        assert bad_token.json()["code"] == "ERR_INVALID_CHANNEL_CONNECTION"
+        assert oversized_token not in bad_token.text
+        assert "x" * 64 not in bad_token.text
+
+        # Owners bind the official Cloud API number as a shared company channel.
+        harness.act_as(principal(tenant_id, owner_id, UserRole.OWNER, owner_email))
+        cloud = await client.post(
+            "/api/v1/channels/whatsapp/connect",
+            json={
+                "waba_id": waba_id,
+                "phone_number_id": cloud_phone,
+                "access_token": owner_token,
+                "is_coexistence": False,
+            },
+        )
+        assert cloud.status_code == 200, cloud.text
+        cloud_body = cloud.json()
+        assert cloud_body["external_account_id"] == cloud_phone
+        assert cloud_body["display_name"] == f"WhatsApp Cloud ({cloud_phone})"
+        assert cloud_body["owner_user_id"] is None
+        assert cloud_body["visibility_scope"] == "shared"
+        assert owner_token not in cloud.text
+
+    async with tenant_session(runtime_session_factory, tenant_id) as session:
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT id, channel_type, external_account_id, config, rate_limit_profile, "
+                    "owner_user_id, visibility_scope FROM channel_accounts "
+                    "WHERE tenant_id = :tid ORDER BY external_account_id"
+                ),
+                {"tid": tenant_id},
+            )
+        ).all()
+        assert len(rows) == 2
+        by_phone = {row.external_account_id: row for row in rows}
+
+        coexistence_row = by_phone[coexistence_phone]
+        assert coexistence_row.channel_type == "whatsapp_coexistence"
+        assert coexistence_row.rate_limit_profile["mps"] == 20
+        assert coexistence_row.rate_limit_profile["coexistence"] is True
+        assert coexistence_row.owner_user_id == agent_a_id
+        assert coexistence_row.visibility_scope == "personal"
+        assert coexistence_row.config["waba_id"] == waba_id
+        assert coexistence_row.config["phone_number_id"] == coexistence_phone
+        assert agent_token not in json.dumps(coexistence_row.config)
+
+        cloud_row = by_phone[cloud_phone]
+        assert cloud_row.channel_type == "whatsapp_cloud"
+        assert cloud_row.rate_limit_profile["mps"] == 80
+        assert cloud_row.rate_limit_profile["coexistence"] is False
+        assert cloud_row.owner_user_id is None
+        assert cloud_row.visibility_scope == "shared"
+        assert owner_token not in json.dumps(cloud_row.config)
+
+        # Both tokens live only in the envelope-encrypted vault under the adapter's type.
+        for row, expected_token in (
+            (coexistence_row, agent_token),
+            (cloud_row, owner_token),
+        ):
+            credentials, _ = await CredentialVaultHelper().load_secret_json(
+                session, tenant_id, row.id, "oauth_token"
+            )
+            assert credentials["access_token"] == expected_token
+            assert credentials["phone_number_id"] == row.external_account_id
+
+        assert await resolve_routing_tenant(session, "whatsapp_coexistence", coexistence_phone) == (
+            tenant_id,
+            coexistence_row.id,
+        )
+        assert await resolve_routing_tenant(session, "whatsapp_cloud", cloud_phone) == (
+            tenant_id,
+            cloud_row.id,
+        )
+        audit_actions = [
+            row[0]
+            for row in (
+                await session.execute(
+                    text(
+                        "SELECT action FROM audit_events WHERE tenant_id = :tid "
+                        "AND action = 'channel.whatsapp_connected'"
+                    ),
+                    {"tid": tenant_id},
+                )
+            ).all()
+        ]
+        assert len(audit_actions) == 2
+
+
+# --------------------------------------------------------------------------------------
+# 9. Website LiveChat quick-connect (domain normalization, shared/personal scoping)
+# --------------------------------------------------------------------------------------
+
+
+async def test_web_livechat_connect_normalizes_domain_and_requires_admin(
+    runtime_session_factory: RuntimeFactory,
+) -> None:
+    tenant_id = await create_workspace(runtime_session_factory)
+    agent_id, _ = await add_member(runtime_session_factory, tenant_id, UserRole.AGENT)
+    owner_id, owner_email = await add_member(runtime_session_factory, tenant_id, UserRole.OWNER)
+    harness = build_harness(runtime_session_factory)
+    # The site key is the globally unique routing key, so each run claims fresh domains.
+    suffix = f"qzled-{uuid4().hex[:8]}.example.com"
+    company_domain = f"www.{suffix}"
+    personal_domain = f"shop.{suffix}"
+
+    async with harness.client() as client:
+        harness.act_as(principal(tenant_id, owner_id, UserRole.OWNER, owner_email))
+        company = await client.post(
+            "/api/v1/channels/web-livechat/connect",
+            json={"site_domain": f"https://{company_domain}/"},
+        )
+        assert company.status_code == 200, company.text
+        company_body = company.json()
+        assert company_body["external_account_id"] == company_domain
+        assert company_body["display_name"] == f"LiveChat · {company_domain}"
+        assert company_body["visibility_scope"] == "shared"
+        assert company_body["owner_user_id"] is None
+
+        # Admins may also hand a widget to a named salesperson; scheme, port, case, path,
+        # query, fragment, and trailing slash are all normalized away.
+        personal = await client.post(
+            "/api/v1/channels/web-livechat/connect",
+            json={
+                "site_domain": f"HTTP://{personal_domain.upper()}/products?utm_source=qr#top",
+                "display_name": "Rep Demo Store",
+                "owner_user_id": str(agent_id),
+            },
+        )
+        assert personal.status_code == 200, personal.text
+        personal_body = personal.json()
+        assert personal_body["external_account_id"] == personal_domain
+        assert personal_body["display_name"] == "Rep Demo Store"
+        assert personal_body["owner_user_id"] == str(agent_id)
+        assert personal_body["visibility_scope"] == "personal"
+
+        invalid = await client.post(
+            "/api/v1/channels/web-livechat/connect",
+            json={"site_domain": "not a domain/with space"},
+        )
+        assert invalid.status_code == 422, invalid.text
+        assert invalid.json()["code"] == "ERR_INVALID_CHANNEL_CONNECTION"
+
+        # Sales roles cannot register website channels at all.
+        harness.act_as(principal(tenant_id, agent_id, UserRole.AGENT))
+        agent_attempt = await client.post(
+            "/api/v1/channels/web-livechat/connect",
+            json={"site_domain": "https://agent-store.example.com"},
+        )
+        assert agent_attempt.status_code == 403, agent_attempt.text
+        assert agent_attempt.json()["code"] == "ERR_INSUFFICIENT_ROLE"
+
+    async with tenant_session(runtime_session_factory, tenant_id) as session:
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT id, channel_type, external_account_id, display_name, config, "
+                    "owner_user_id, visibility_scope FROM channel_accounts "
+                    "WHERE tenant_id = :tid ORDER BY external_account_id"
+                ),
+                {"tid": tenant_id},
+            )
+        ).all()
+        assert len(rows) == 2
+        personal_row, company_row = rows
+        assert personal_row.external_account_id == personal_domain
+        assert personal_row.channel_type == "web_livechat"
+        assert personal_row.config["site_domain"] == personal_domain
+        assert personal_row.owner_user_id == agent_id
+        assert personal_row.visibility_scope == "personal"
+        assert company_row.external_account_id == company_domain
+        assert company_row.config["site_domain"] == company_domain
+        assert company_row.owner_user_id is None
+        assert company_row.visibility_scope == "shared"
+        assert await resolve_routing_tenant(session, "web_livechat", company_domain) == (
+            tenant_id,
+            company_row.id,
+        )
+        assert await resolve_routing_tenant(session, "web_livechat", personal_domain) == (
+            tenant_id,
+            personal_row.id,
+        )
+        audit_actions = [
+            row[0]
+            for row in (
+                await session.execute(
+                    text(
+                        "SELECT action FROM audit_events WHERE tenant_id = :tid "
+                        "AND action = 'channel.web_livechat_connected'"
+                    ),
+                    {"tid": tenant_id},
+                )
+            ).all()
+        ]
+        assert len(audit_actions) == 2
