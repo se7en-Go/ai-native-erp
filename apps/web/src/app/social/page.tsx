@@ -2,7 +2,17 @@
 
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Globe2, Library, MessageCircle, Send, Sparkles } from "lucide-react";
+import {
+  CalendarClock,
+  Globe2,
+  Layers,
+  Library,
+  MessageCircle,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Target,
+} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
@@ -24,6 +34,12 @@ import { fetchCatalogVariants, fetchPendingProposalsCount } from "@/lib/data-sou
 import { useI18n } from "@/lib/i18n";
 import { isProviderUnavailable } from "@/lib/phase3b-data";
 import {
+  fetchSocialPlaybooks,
+  SOCIAL_PLAYBOOK_REGIONS,
+  type SocialPlaybookItem,
+  type SocialPlaybookRegion,
+} from "@/lib/api-client/pack-d-patrol";
+import {
   connectSocialAccount,
   convertSocialMention,
   disconnectSocialAccount,
@@ -36,14 +52,210 @@ import {
   saveSocialPosts,
 } from "@/lib/phase3d-data";
 
-type TabId = "matrix" | "calendar" | "editor" | "listening";
+type TabId = "matrix" | "playbooks" | "calendar" | "editor" | "listening";
 
 const TABS: ReadonlyArray<{ id: TabId; label: string; icon: typeof Globe2 }> = [
   { id: "matrix", label: "平台矩阵", icon: Globe2 },
+  { id: "playbooks", label: "平台玩法矩阵", icon: Layers },
   { id: "calendar", label: "发布中心与内容日历", icon: CalendarClock },
   { id: "editor", label: "贴文编辑器与 AI 文案工坊", icon: Sparkles },
   { id: "listening", label: "舆情监听与转线索", icon: MessageCircle },
 ];
+
+const REGION_LABEL: Record<Exclude<SocialPlaybookRegion, "all">, string> = {
+  overseas: "海外",
+  domestic: "国内",
+};
+
+const PLAYBOOK_TONE: Record<Exclude<SocialPlaybookRegion, "all">, string> = {
+  overseas: "border-blue-200 bg-blue-50 text-blue-800",
+  domestic: "border-rose-200 bg-rose-50 text-rose-800",
+};
+
+/** 14 平台玩法矩阵：每张卡片都是可直接执行的运营配方，不是宣传语。 */
+function SocialPlaybooksBoard() {
+  const { bi, locale } = useI18n();
+  const [region, setRegion] = useState<SocialPlaybookRegion>("all");
+
+  // Counts come from the unfiltered call so the pills can show the real split.
+  const allQuery = useQuery({
+    queryKey: ["social", "playbooks", "all"],
+    queryFn: () => fetchSocialPlaybooks("all"),
+  });
+  const regionQuery = useQuery({
+    queryKey: ["social", "playbooks", region],
+    queryFn: () => fetchSocialPlaybooks(region),
+    enabled: region !== "all",
+  });
+
+  const all = allQuery.data ?? [];
+  const items: readonly SocialPlaybookItem[] = region === "all" ? all : regionQuery.data ?? [];
+  const counts: Record<SocialPlaybookRegion, number> = {
+    all: all.length,
+    overseas: all.filter((row) => row.region === "overseas").length,
+    domestic: all.filter((row) => row.region === "domestic").length,
+  };
+  const error = allQuery.error ?? regionQuery.error;
+  const loading = region === "all" ? allQuery.isPending : regionQuery.isPending;
+
+  return (
+    <section aria-label="平台玩法矩阵" data-testid="social-playbooks-board" className="space-y-4">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+              <Layers aria-hidden="true" size={15} />
+            </span>
+            {bi("平台玩法矩阵", "Platform playbooks")}
+          </h2>
+          <p className="mt-1 max-w-3xl text-[12.5px] leading-6 text-slate-600">
+            {bi(
+              "海外 7 个 + 国内 7 个平台的受众画像、获客漏斗与实战要点；能否官方 API 直发由平台授权决定，其余一律导出后在官方后台人工发布。",
+              "Audience, acquisition funnel and hands-on practices for 7 overseas and 7 domestic platforms; whether a platform supports direct publishing is decided by its official API, everything else is exported and published manually in the official console."
+            )}
+          </p>
+        </div>
+
+        <div role="group" aria-label={bi("玩法地区筛选", "Playbook region filter")} className="flex flex-wrap items-center gap-2">
+          {SOCIAL_PLAYBOOK_REGIONS.map((option) => {
+            const active = option.value === region;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                data-testid={`playbooks-region-${option.value}`}
+                aria-pressed={active}
+                onClick={() => setRegion(option.value)}
+                className={
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors " +
+                  (active
+                    ? "border-[#18181B] bg-[#18181B] text-[#FAFAF9]"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50")
+                }
+              >
+                {bi(option.label_zh, option.label_en)}
+                <span
+                  className={
+                    "rounded-full px-1.5 py-0.2 text-[10.5px] font-bold tabular-nums " +
+                    (active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700")
+                  }
+                >
+                  ({counts[option.value]})
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </header>
+
+      {error ? (
+        <p role="alert" data-testid="social-playbooks-error" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          {bi("平台玩法加载失败，请稍后重试。", "Failed to load platform playbooks. Please retry.")}
+        </p>
+      ) : null}
+
+      {loading && !items.length ? (
+        <p data-testid="social-playbooks-loading" className="text-sm text-slate-500">
+          {bi("正在加载平台玩法…", "Loading platform playbooks…")}
+        </p>
+      ) : null}
+
+      {!loading && !items.length ? (
+        <p data-testid="social-playbooks-empty" className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+          {bi("该地区暂无平台玩法。", "No playbook for this region yet.")}
+        </p>
+      ) : null}
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {items.map((row) => (
+          <article
+            key={row.platform}
+            data-testid={`playbook-card-${row.platform}`}
+            className="flex min-w-0 flex-col rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-[0_6px_20px_-8px_rgba(5,150,105,0.28)]"
+          >
+            <header className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="truncate text-[14.5px] font-bold tracking-tight text-slate-950">
+                  {bi(row.name_zh, row.name_en)}
+                </h3>
+                <p className="mt-0.5 truncate text-[11.5px] text-slate-600">
+                  {bi(row.category_zh, row.category_en)}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span
+                  className={
+                    "rounded-full border px-2 py-0.5 text-[10.5px] font-semibold " +
+                    PLAYBOOK_TONE[row.region]
+                  }
+                >
+                  {REGION_LABEL[row.region]}
+                </span>
+                <span
+                  className={
+                    "rounded-full border px-2 py-0.5 text-[10.5px] font-semibold " +
+                    (row.official_api_supported
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-amber-200 bg-amber-50 text-amber-900")
+                  }
+                >
+                  {row.official_api_supported
+                    ? bi("官方 API 直发", "Official API publish")
+                    : bi("导出发布", "Export & publish")}
+                </span>
+              </div>
+            </header>
+
+            <dl className="mt-3 space-y-2.5 text-[11.5px] leading-5">
+              <div>
+                <dt className="flex items-center gap-1 font-semibold text-emerald-800">
+                  <Target aria-hidden="true" size={12} />
+                  {bi("受众画像", "Audience")}
+                </dt>
+                <dd className="mt-0.5 text-slate-700">{bi(row.audience_zh, row.audience_en)}</dd>
+              </div>
+              <div>
+                <dt className="flex items-center gap-1 font-semibold text-blue-800">
+                  <Send aria-hidden="true" size={12} />
+                  {bi("获客漏斗", "Lead funnel")}
+                </dt>
+                <dd className="mt-0.5 text-slate-700">{bi(row.lead_funnel_zh, row.lead_funnel_en)}</dd>
+              </div>
+              <div>
+                <dt className="flex items-center gap-1 font-semibold text-slate-800">
+                  <Sparkles aria-hidden="true" size={12} />
+                  {bi("实战要点", "Hands-on practices")}
+                </dt>
+                <dd className="mt-1">
+                  <ul className="space-y-1">
+                    {(locale === "zh" ? row.best_practices_zh : row.best_practices_en).map(
+                      (practice) => (
+                        <li key={practice} className="flex items-start gap-1.5 text-slate-700">
+                          <span
+                            aria-hidden="true"
+                            className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-500"
+                          />
+                          <span>{practice}</span>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </dd>
+              </div>
+            </dl>
+
+            <footer className="mt-auto border-t border-slate-100 pt-2.5">
+              <p className="flex items-start gap-1 text-[10.5px] leading-4 text-slate-500">
+                <ShieldCheck aria-hidden="true" size={12} className="mt-0.5 shrink-0 text-slate-400" />
+                <span>{bi(row.compliance_note_zh, row.compliance_note_en)}</span>
+              </p>
+            </footer>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /** Domestic networks without a publishing API register the brand account only. */
 function suggestedHandle(platform: SocialPlatform): string {
@@ -301,6 +513,7 @@ export default function SocialMarketingPage() {
             onChange={setTab}
             options={TABS.map(({ id, label, icon: Icon }) => ({
               value: id,
+              testId: id === "playbooks" ? "social-playbooks-tab" : undefined,
               label: (
                 <span className="inline-flex items-center gap-1.5">
                   <Icon aria-hidden="true" size={15} />
@@ -323,6 +536,8 @@ export default function SocialMarketingPage() {
               pendingPlatforms={pendingPlatforms}
             />
           ) : null}
+
+          {tab === "playbooks" ? <SocialPlaybooksBoard /> : null}
 
           {tab === "calendar" ? (
             <div className="space-y-4">
