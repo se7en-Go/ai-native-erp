@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, Edit3, XCircle, AlertTriangle, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, Edit3, ShieldCheck, XCircle } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 import type { AiCapability, ProposalStatus, ProposalType } from "@/lib/contracts";
+import { Badge, Card } from "@/components/ui/page";
 
 export interface AiProposalItem {
   id: string;
@@ -19,6 +21,24 @@ export interface AiProposalItem {
   created_at: string;
 }
 
+const CAPABILITY_COPY: Record<AiCapability, { zh: string; en: string }> = {
+  cs_support: { zh: "客服支持", en: "CS support" },
+  sales_quoting: { zh: "销售报价", en: "Sales & quoting" },
+  order_logistics: { zh: "订单物流", en: "Order logistics" },
+  content_studio: { zh: "内容工坊", en: "Content studio" },
+  biz_analytics: { zh: "经营分析", en: "Business analytics" },
+  finance_recon: { zh: "财务对账", en: "Finance recon" },
+};
+
+const STATUS_COPY: Record<ProposalStatus, { zh: string; en: string }> = {
+  pending: { zh: "待审核", en: "Pending" },
+  approved: { zh: "已批准", en: "Approved" },
+  edited_and_approved: { zh: "编辑后批准", en: "Edited & approved" },
+  rejected: { zh: "已驳回", en: "Rejected" },
+  expired: { zh: "已过期", en: "Expired" },
+  failed: { zh: "执行失败", en: "Failed" },
+};
+
 export function ProposalReviewCard({
   proposal,
   canReview,
@@ -32,6 +52,7 @@ export function ProposalReviewCard({
   onEditApprove: (id: string, editedPayload: Record<string, unknown>) => void;
   onReject: (id: string, reason: string) => void;
 }) {
+  const { bi } = useI18n();
   const [editing, setEditing] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [jsonDraft, setJsonDraft] = useState(() =>
@@ -45,6 +66,14 @@ export function ProposalReviewCard({
     proposal.estimated_margin_pct !== null &&
     proposal.estimated_margin_pct !== undefined &&
     proposal.estimated_margin_pct < marginFloor;
+  const capabilityCopy = CAPABILITY_COPY[proposal.capability] ?? {
+    zh: proposal.capability,
+    en: proposal.capability,
+  };
+  const statusCopy = STATUS_COPY[proposal.status] ?? {
+    zh: proposal.status,
+    en: proposal.status,
+  };
 
   function submitEdit() {
     try {
@@ -53,38 +82,34 @@ export function ProposalReviewCard({
       onEditApprove(proposal.id, parsed);
       setEditing(false);
     } catch {
-      setJsonError("Invalid JSON syntax. Please check braces and quotes.");
+      setJsonError(bi("JSON 格式有误，请检查括号与引号。", "Invalid JSON syntax. Check braces and quotes."));
     }
   }
 
   return (
-    <div
-      data-testid={`proposal-card-${proposal.id}`}
-      className="rounded-lg border border-slate-200 bg-white p-4 shadow-xs"
-    >
+    <Card data-testid={`proposal-card-${proposal.id}`} className="p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="rounded bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">
-            {proposal.capability}
-          </span>
-          <span className="rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-800">
+        <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+          <Badge tone="info">{bi(capabilityCopy.zh, capabilityCopy.en)}</Badge>
+          {/* 技术码保留原文：E2E 依赖精确的 quote_draft 文本 */}
+          <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-700">
             {proposal.proposal_type}
           </span>
-          <span className="text-slate-500">
-            Confidence: {(proposal.confidence_score * 100).toFixed(1)}%
+          <span className="tabular-nums text-slate-500">
+            {bi("置信度", "Confidence")} {(proposal.confidence_score * 100).toFixed(1)}%
           </span>
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-600">
-            {proposal.status}
-          </span>
+          <Badge tone={proposal.status === "pending" ? "warning" : "neutral"}>
+            {bi(statusCopy.zh, statusCopy.en)}
+          </Badge>
         </div>
 
         {proposal.estimated_margin_pct !== null && proposal.estimated_margin_pct !== undefined && (
           <div
             data-testid={`proposal-margin-${proposal.id}`}
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
               belowMarginFloor
-                ? "bg-rose-100 text-rose-800"
-                : "bg-emerald-100 text-emerald-800"
+                ? "border-rose-200 bg-rose-50 text-rose-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
             }`}
           >
             {belowMarginFloor ? (
@@ -92,16 +117,16 @@ export function ProposalReviewCard({
             ) : (
               <ShieldCheck className="h-3.5 w-3.5" />
             )}
-            <span>
-              Est. Margin: {proposal.estimated_margin_pct.toFixed(1)}% (Floor:{" "}
-              {marginFloor.toFixed(1)}%)
+            <span className="tabular-nums">
+              {bi("预估毛利率", "Est. margin")} {proposal.estimated_margin_pct.toFixed(1)}% (
+              {bi("底线", "floor")} {marginFloor.toFixed(1)}%)
             </span>
           </div>
         )}
       </div>
 
       {!editing ? (
-        <pre className="mt-3 overflow-x-auto rounded-md bg-slate-50 p-3 text-xs text-slate-800">
+        <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-[12px] leading-5 text-slate-800">
           {JSON.stringify(proposal.proposed_payload, null, 2)}
         </pre>
       ) : (
@@ -111,35 +136,37 @@ export function ProposalReviewCard({
             rows={6}
             value={jsonDraft}
             onChange={(e) => setJsonDraft(e.target.value)}
-            className="w-full rounded-md border border-indigo-300 bg-white p-2.5 font-mono text-xs"
+            aria-label={bi("编辑提案 JSON", "Edit proposal JSON")}
+            className="w-full rounded-lg border border-blue-300 bg-white p-2.5 font-mono text-[12px] focus:border-blue-500 focus:outline-none"
           />
-          {jsonError && <div className="text-xs text-rose-600">{jsonError}</div>}
+          {jsonError && <div className="text-[12px] text-rose-600">{jsonError}</div>}
           <div className="flex gap-2">
             <button
               type="button"
               data-testid={`proposal-edit-submit-${proposal.id}`}
               onClick={submitEdit}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+              className="erp-btn erp-btn-primary"
             >
-              Save Edit & Approve
+              {bi("保存并批准", "Save edit & approve")}
             </button>
             <button
               type="button"
               onClick={() => setEditing(false)}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium"
+              className="erp-btn erp-btn-secondary"
             >
-              Cancel
+              {bi("取消", "Cancel")}
             </button>
           </div>
         </div>
       )}
 
       {proposal.citations.length > 0 && (
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-slate-400">{bi("证据溯源", "Evidence")}</span>
           {proposal.citations.map((cit) => (
             <span
               key={`${cit.doc_id}-${cit.chunk_id}`}
-              className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800"
+              className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] text-emerald-700 tabular-nums"
             >
               [{cit.doc_id}#{cit.chunk_id}] · {cit.score.toFixed(2)}
             </span>
@@ -154,9 +181,10 @@ export function ProposalReviewCard({
             disabled={!canReview || belowMarginFloor}
             data-testid={`proposal-approve-${proposal.id}`}
             onClick={() => onApprove(proposal.id)}
-            className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            className="erp-btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"
           >
             <Check className="h-3.5 w-3.5" />
+            {/* E2E 以 "Approve" 精确匹配按钮名，保持英文原文 */}
             <span>Approve</span>
           </button>
 
@@ -165,10 +193,10 @@ export function ProposalReviewCard({
             disabled={!canReview}
             data-testid={`proposal-edit-toggle-${proposal.id}`}
             onClick={() => setEditing((prev) => !prev)}
-            className="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+            className="erp-btn border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40"
           >
             <Edit3 className="h-3.5 w-3.5" />
-            <span>Edit & Approve</span>
+            <span>{bi("编辑后批准", "Edit & approve")}</span>
           </button>
 
           <button
@@ -176,23 +204,33 @@ export function ProposalReviewCard({
             disabled={!canReview}
             data-testid={`proposal-reject-toggle-${proposal.id}`}
             onClick={() => setRejecting((prev) => !prev)}
-            className="inline-flex items-center gap-1 rounded-md border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+            className="erp-btn border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40"
           >
             <XCircle className="h-3.5 w-3.5" />
-            <span>Reject</span>
+            <span>{bi("驳回", "Reject")}</span>
           </button>
+
+          {belowMarginFloor && (
+            <span className="text-[11px] text-rose-600">
+              {bi(
+                "预估毛利低于底线，需先编辑价格再批准。",
+                "Estimated margin is below the floor; edit the price before approving."
+              )}
+            </span>
+          )}
         </div>
       )}
 
       {rejecting && (
-        <div className="mt-2.5 flex gap-2">
+        <div className="mt-2.5 flex flex-wrap gap-2">
           <input
             type="text"
             data-testid={`proposal-reject-reason-${proposal.id}`}
             value={rejectionReason}
             onChange={(e) => setRejectionReason(e.target.value)}
-            placeholder="Reason for rejecting AI proposal..."
-            className="flex-1 rounded border border-slate-300 px-2.5 py-1 text-xs"
+            placeholder={bi("请填写驳回原因…", "Reason for rejecting…")}
+            aria-label={bi("驳回原因", "Rejection reason")}
+            className="erp-input flex-1"
           />
           <button
             type="button"
@@ -202,12 +240,12 @@ export function ProposalReviewCard({
               onReject(proposal.id, rejectionReason.trim());
               setRejecting(false);
             }}
-            className="rounded bg-rose-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+            className="erp-btn bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40"
           >
-            Confirm Reject
+            {bi("确认驳回", "Confirm reject")}
           </button>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

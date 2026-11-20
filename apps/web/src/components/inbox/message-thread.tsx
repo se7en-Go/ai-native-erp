@@ -38,13 +38,13 @@ export function MessageThread({
   messages: InboxMessage[];
   onToggleDrawer: () => void;
 }) {
-  const { locale, t } = useI18n();
+  const { locale, t, bi } = useI18n();
   const [expandedTranslations, setExpandedTranslations] = useState<Record<string, boolean>>({});
 
   if (!conversation) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-slate-50 text-sm text-slate-400">
-        Select a conversation to begin.
+      <div className="flex flex-1 items-center justify-center bg-slate-50 text-[13px] text-slate-400">
+        {bi("选择左侧一条会话开始沟通。", "Select a conversation to begin.")}
       </div>
     );
   }
@@ -56,30 +56,26 @@ export function MessageThread({
   }
 
   return (
-    <div data-testid="inbox-message-thread" className="flex flex-1 flex-col bg-slate-50">
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <h2 className="text-sm font-bold text-slate-900">{conversation.customer_name}</h2>
-          {conversation.country_code && (
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700">
-              {conversation.country_code}
-            </span>
-          )}
+    <div data-testid="inbox-message-thread" className="flex min-h-0 flex-1 flex-col bg-slate-50">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-900">{conversation.customer_name}</h2>
+          {conversation.country_code && <span className="text-[11px] text-slate-400">{conversation.country_code}</span>}
           {localTimeInfo && (
             <span
               data-testid="buyer-local-time-badge"
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-700"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] tabular-nums text-slate-600"
             >
-              <Clock className="h-3 w-3 text-slate-500" />
+              <Clock className="h-3 w-3 text-slate-400" />
               <span>
-                {t("localTime")}: {localTimeInfo.formattedTime} ({localTimeInfo.ianaTimezone})
+                {t("localTime")} {localTimeInfo.formattedTime} ({localTimeInfo.ianaTimezone})
               </span>
             </span>
           )}
           {localTimeInfo?.isQuietHours && (
             <span
               data-testid="quiet-hours-pill"
-              className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
+              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
             >
               {t("quietHours")} (21:00–08:00)
             </span>
@@ -89,10 +85,10 @@ export function MessageThread({
         <button
           type="button"
           onClick={onToggleDrawer}
-          className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+          className="erp-btn erp-btn-secondary py-1 text-[12px]"
         >
           <PanelRight className="h-3.5 w-3.5" />
-          <span>Context</span>
+          <span>{bi("客户上下文", "Context")}</span>
         </button>
       </div>
 
@@ -111,24 +107,26 @@ export function MessageThread({
               className={`flex flex-col ${isOutbound ? "items-end" : "items-start"}`}
             >
               <div
-                className={`max-w-2xl rounded-lg border px-3.5 py-2.5 text-sm shadow-xs ${
+                className={`max-w-2xl rounded-xl border px-3.5 py-2.5 text-[13px] leading-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${
                   isInternalNote
-                    ? "border-amber-300 bg-amber-50 text-amber-950"
+                    ? "border-amber-200 bg-amber-50 text-amber-950"
                     : isOutbound
-                    ? "border-indigo-600 bg-indigo-600 text-white"
-                    : "border-slate-200 bg-white text-slate-900"
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-slate-200 bg-white text-slate-900"
                 }`}
               >
-                <div className="mb-1 flex items-center gap-2 text-[11px] opacity-80">
+                <div className="mb-1 flex items-center gap-2 text-[11px] opacity-75">
                   {isInternalNote && <StickyNote className="h-3 w-3" />}
-                  <span className="font-semibold">{msg.sender_type}</span>
+                  <span className="font-medium">{msg.sender_type}</span>
                   {msg.detected_language && (
-                    <span className="inline-flex items-center gap-0.5 rounded bg-black/10 px-1 py-0.2">
+                    <span className="inline-flex items-center gap-0.5 rounded bg-black/10 px-1 py-px">
                       <Globe className="h-2.5 w-2.5" />
                       [{msg.detected_language}]
                     </span>
                   )}
-                  <span>{new Date(msg.source_timestamp).toLocaleTimeString()}</span>
+                  <span className="tabular-nums">
+                    {new Date(msg.source_timestamp).toLocaleTimeString()}
+                  </span>
                 </div>
 
                 <p className="whitespace-pre-wrap">{msg.body_text}</p>
@@ -139,17 +137,17 @@ export function MessageThread({
                       type="button"
                       data-testid={`toggle-msg-translation-${msg.id}`}
                       onClick={() => toggleTranslation(msg.id)}
-                      className="inline-flex items-center gap-1 text-xs font-medium underline"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium underline decoration-dotted"
                     >
                       {isExpanded ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                       <span>{isExpanded ? t("hideTranslation") : t("showTranslation")}</span>
                     </button>
-                    {isExpanded && <p className="mt-1 text-xs opacity-90">{translationText}</p>}
+                    {isExpanded && <p className="mt-1 text-[12px] opacity-90">{translationText}</p>}
                   </div>
                 )}
 
                 {isOutbound && (
-                  <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-80">
+                  <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
                     <Lock className="h-2.5 w-2.5" />
                     <span>{msg.delivery_status}</span>
                   </div>
@@ -158,6 +156,11 @@ export function MessageThread({
             </div>
           );
         })}
+        {messages.length === 0 && (
+          <p className="py-8 text-center text-[12px] text-slate-400">
+            {bi("该会话还没有消息。", "No messages in this conversation yet.")}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ export function InboxComposer({
   conversation: ConversationSummary | null;
   messages?: readonly InboxMessage[];
 }) {
-  const { t } = useI18n();
+  const { t, bi } = useI18n();
   const queryClient = useQueryClient();
 
   const [bodyText, setBodyText] = useState("");
@@ -139,7 +139,7 @@ export function InboxComposer({
       if (err instanceof BffApiError) {
         setComplianceError(`${err.code}: ${err.detail}`);
       } else {
-        setComplianceError("Failed to deliver message.");
+        setComplianceError(bi("消息发送失败，请重试。", "Failed to deliver message."));
       }
     },
   });
@@ -177,7 +177,7 @@ export function InboxComposer({
           <button
             type="button"
             onClick={() => aiAssistMutation.mutate("draft")}
-            className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px] font-medium text-slate-600 hover:bg-slate-50"
           >
             <Sparkles className="h-3 w-3" />
             <span>{t("aiDraft")}</span>
@@ -207,7 +207,7 @@ export function InboxComposer({
       {assistNotice && (
         <p
           data-testid="composer-assist-notice"
-          className="mb-2 rounded border border-indigo-100 bg-indigo-50 px-2.5 py-1.5 text-xs text-indigo-900"
+          className="mb-2 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[12px] text-blue-900"
         >
           {assistNotice}
         </p>
@@ -217,7 +217,7 @@ export function InboxComposer({
         <p
           role="alert"
           data-testid="composer-assist-error"
-          className="mb-2 flex items-start gap-1.5 rounded border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900"
+          className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-900"
         >
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{assistError}</span>
@@ -227,7 +227,7 @@ export function InboxComposer({
       {complianceError && (
         <div
           role="alert"
-          className="mb-2 rounded border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-800"
+          className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] text-rose-800"
         >
           {complianceError}
         </div>
@@ -240,20 +240,21 @@ export function InboxComposer({
         onChange={(e) => setBodyText(e.target.value)}
         placeholder={
           mode === "internal_note"
-            ? "Write an internal note (never sent to buyer)..."
-            : "Type reply (enable Live Translate for Chinese -> Foreign language preview)..."
+            ? bi("写一条内部备注（不会发送给买家）…", "Write an internal note (never sent to buyer)…")
+            : bi("输入回复内容；开启实时翻译可预览外文效果…", "Type a reply; enable Live Translate to preview the foreign-language text…")
         }
-        className={`w-full rounded-md border p-2.5 text-sm focus:outline-none ${
+        aria-label={bi("消息输入框", "Message composer")}
+        className={`w-full rounded-lg border p-2.5 text-[13px] leading-6 focus:outline-none ${
           mode === "internal_note"
-            ? "border-amber-300 bg-amber-50/50"
-            : "border-slate-300 focus:border-indigo-500"
+            ? "border-amber-300 bg-amber-50/50 focus:border-amber-500"
+            : "border-slate-300 focus:border-blue-500"
         }`}
       />
 
       {liveTranslate && mode === "outbound" && translatedPreview && (
         <div
           data-testid="live-translation-preview"
-          className="mt-1.5 rounded border border-indigo-100 bg-indigo-50 px-2.5 py-1.5 text-xs text-indigo-900"
+          className="mt-1.5 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[12px] text-blue-900"
         >
           <span className="font-semibold">Preview ({targetLang.toUpperCase()}): </span>
           {translatedPreview}
@@ -262,16 +263,16 @@ export function InboxComposer({
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <div className="inline-flex rounded-md border border-slate-200 p-0.5 text-xs">
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-[12px]">
             <button
               type="button"
               data-testid="composer-mode-outbound"
               onClick={() => setMode("outbound")}
               className={`rounded px-2 py-1 font-medium ${
-                mode === "outbound" ? "bg-indigo-600 text-white" : "text-slate-600"
+                mode === "outbound" ? "bg-blue-600 text-white" : "text-slate-600"
               }`}
             >
-              {t("send")}
+              {bi("回复", "Reply")}
             </button>
             <button
               type="button"
@@ -293,12 +294,12 @@ export function InboxComposer({
               checked={liveTranslate}
               onChange={(e) => setLiveTranslate(e.target.checked)}
             />
-            <Languages className="h-3.5 w-3.5 text-indigo-600" />
+            <Languages className="h-3.5 w-3.5 text-blue-600" />
             <span>{t("liveTranslate")}</span>
           </label>
 
           <select
-            aria-label="Target translation language"
+            aria-label={bi("目标翻译语言", "Target translation language")}
             value={targetLang}
             onChange={(e) => setTargetLang(e.target.value as typeof targetLang)}
             className="rounded border border-slate-300 px-1.5 py-0.5 text-xs"
@@ -316,10 +317,10 @@ export function InboxComposer({
           data-testid="composer-submit-btn"
           disabled={!bodyText.trim() || sendMutation.isPending}
           onClick={() => sendMutation.mutate()}
-          className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-50 ${
             mode === "internal_note"
               ? "bg-amber-600 hover:bg-amber-700"
-              : "bg-indigo-600 hover:bg-indigo-700"
+              : "bg-blue-600 hover:bg-blue-700"
           }`}
         >
           <Send className="h-3.5 w-3.5" />
