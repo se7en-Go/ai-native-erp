@@ -7,10 +7,12 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.finance.fx_service import LiveFxRateService
 from erp_core.finance.payment_service import PaymentService
 from erp_core.finance.profit_service import OrderProfitService
 from erp_core.finance.schemas import (
     FinanceOverviewRead,
+    LiveFxRatesRead,
     OrderProfitSnapshotRead,
     PaymentCreate,
     PaymentRecordRead,
@@ -23,11 +25,13 @@ from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import OrderMode, UserRole
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.shared.storage import ObjectStorageService
-from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
+from erp_core.tenancy.dependencies import CurrentPrincipal, get_current_principal, require_roles
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+_fx_service = LiveFxRateService()
 _payment_service = PaymentService()
 _profit_service = OrderProfitService()
+_any_principal = Depends(get_current_principal)
 _read_roles = Depends(
     require_roles(UserRole.OWNER, UserRole.FINANCE, UserRole.ADMIN, UserRole.MANAGER)
 )
@@ -39,6 +43,17 @@ _verify_roles = Depends(require_roles(UserRole.OWNER, UserRole.FINANCE))
 def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
     factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
     return factory
+
+
+@router.get("/fx-rates/live", response_model=LiveFxRatesRead)
+async def get_live_fx_rates(
+    request: Request,
+    base: str = Query(default="USD", min_length=3, max_length=3),
+    force_refresh: bool = Query(default=False),
+    _principal: CurrentPrincipal = _any_principal,
+) -> LiveFxRatesRead:
+    redis = getattr(request.app.state, "redis", None)
+    return await _fx_service.get_live_rates(redis, base=base, force_refresh=force_refresh)
 
 
 @router.get("/overview", response_model=FinanceOverviewRead)

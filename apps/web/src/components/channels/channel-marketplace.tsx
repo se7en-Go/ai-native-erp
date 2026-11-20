@@ -198,8 +198,8 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     descriptionEn: "Seller BYOK with shop ID and cipher in one authorization.",
     category: "commerce",
     icon: Music2,
-    tile: "bg-zinc-900/5 text-zinc-900 ring-zinc-200",
-    accent: "bg-zinc-800",
+    tile: "bg-zinc-900/5 text-zinc-900 ring-zinc-200 dark:bg-zinc-100/10 dark:text-zinc-100 dark:ring-zinc-700",
+    accent: "bg-zinc-700 dark:bg-zinc-500",
     channelTypes: ["tiktok_shop"],
     adminOnly: true,
   },
@@ -346,7 +346,7 @@ export function ChannelMarketplaceGrid({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         {isAdmin && (
-        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-[#E5E2DC] bg-[#EFECE6]/90 p-1">
+        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-100/90 p-1 dark:border-slate-700 dark:bg-slate-800/70">
           {categoryOptions.map((option) => {
             const active = category === option.value;
             return (
@@ -358,14 +358,16 @@ export function ChannelMarketplaceGrid({
                 onClick={() => setCategory(option.value)}
                 className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors ${
                   active
-                    ? "bg-[#18181B] text-[#FAFAF9] shadow-xs"
-                    : "text-stone-600 hover:bg-white/80 hover:text-zinc-950"
+                    ? "bg-blue-600 text-white shadow-xs dark:bg-blue-600"
+                    : "text-slate-600 hover:bg-white/80 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-700/70 dark:hover:text-slate-100"
                 }`}
               >
                 <span>{bi(CATEGORY_COPY[option.value].zh, CATEGORY_COPY[option.value].en)}</span>
                 <span
                   className={`rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums ${
-                    active ? "bg-white/20 text-white" : "bg-stone-200/80 text-stone-700"
+                    active
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-200/80 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
                   }`}
                 >
                   {option.count}
@@ -377,7 +379,7 @@ export function ChannelMarketplaceGrid({
         )}
 
         <label className="relative block w-full sm:w-64">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             type="search"
             value={query}
@@ -385,7 +387,7 @@ export function ChannelMarketplaceGrid({
             onChange={(event) => setQuery(event.target.value)}
             placeholder={bi("搜索渠道名称…", "Search channels…")}
             aria-label={bi("搜索渠道名称", "Search channels")}
-            className="w-full rounded-xl border border-[#E5E2DC] bg-white py-1.5 pr-2.5 pl-8 text-[12.5px] text-zinc-950 placeholder:text-stone-400 focus:border-[#059669] focus:outline-none focus:ring-[3px] focus:ring-emerald-500/15"
+            className="w-full rounded-xl border border-slate-200 bg-white py-1.5 pr-2.5 pl-8 text-[12.5px] text-slate-950 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
           />
         </label>
       </div>
@@ -401,7 +403,7 @@ export function ChannelMarketplaceGrid({
             <article
               key={item.key}
               data-testid={`marketplace-card-${item.key}`}
-              className="group flex flex-col rounded-2xl border border-[#E5E2DC] bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_2px_rgba(24,24,27,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#D4CFC6] hover:shadow-[0_10px_26px_-16px_rgba(24,24,27,0.24)]"
+              className="group flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-[0_10px_26px_-16px_rgba(37,99,235,0.28)] dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700"
             >
               <div className="flex items-start gap-3">
                 <span
@@ -412,21 +414,21 @@ export function ChannelMarketplaceGrid({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="truncate text-[13.5px] font-bold text-zinc-950">
+                    <h3 className="truncate text-[13.5px] font-bold text-slate-950 dark:text-slate-100">
                       {bi(item.titleZh, item.titleEn)}
                     </h3>
                     <span
                       data-testid={`marketplace-status-${item.key}`}
                       className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${
                         connected > 0
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                          : "border-stone-200 bg-stone-100 text-stone-600"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
                       }`}
                     >
                       <span
                         aria-hidden="true"
                         className={`h-1.5 w-1.5 rounded-full ${
-                          connected > 0 ? "bg-emerald-500" : "bg-stone-400"
+                          connected > 0 ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-500"
                         }`}
                       />
                       {connected > 0
@@ -434,7 +436,7 @@ export function ChannelMarketplaceGrid({
                         : bi("未接入", "Not connected")}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11.5px] leading-5 text-stone-600">
+                  <p className="mt-1 text-[11.5px] leading-5 text-slate-600 dark:text-slate-400">
                     {!isAdmin && item.key === "whatsapp"
                       ? bi(
                           "手机 WhatsApp App 共存号，限速 20 mps，一键接入个人号。",
@@ -450,8 +452,8 @@ export function ChannelMarketplaceGrid({
                 className={`mt-3 h-[3px] w-9 rounded-full ${item.accent}`}
               />
 
-              <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#EFECE6] pt-3">
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#E5E2DC] bg-[#FAF8F5] px-2 py-0.5 text-[10.5px] font-medium text-stone-600">
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+                <span className="inline-flex min-w-0 items-center gap-1 truncate rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10.5px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
                   {item.adminOnly
                     ? bi("仅公司公海 / 指派", "Company-shared / assignable")
                     : isAdmin
@@ -464,8 +466,8 @@ export function ChannelMarketplaceGrid({
                   onClick={() => onOpen(item.key)}
                   className={`erp-btn shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold ${
                     connected > 0
-                      ? "border border-[#DCD8D0] bg-white text-zinc-900 hover:border-[#C7C2B8] hover:bg-[#FAF8F5]"
-                      : "bg-[#059669] text-white shadow-xs hover:bg-[#047857]"
+                      ? "border border-slate-300 bg-white text-slate-900 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                      : "bg-blue-600 text-white shadow-xs hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
                   }`}
                 >
                   {connected > 0 ? <Plus className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
@@ -475,12 +477,53 @@ export function ChannelMarketplaceGrid({
             </article>
           );
         })}
+
+        {/* 第 12 张纯静态引导卡：只在「全部分类 + 无搜索词」时出现，
+            不参与已接入计数，也不复用 marketplace-card-* testid。
+            11 个渠道 + 1 张引导卡 → 3/4 列网格完全齐平，不留空洞。 */}
+        {category === "all" && query.trim() === "" ? (
+          <article
+            data-testid="marketplace-custom-channel-card"
+            className="group flex min-w-0 flex-col rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/40 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-blue-700 dark:hover:bg-blue-950/30"
+          >
+            <div className="flex items-start gap-3">
+              <span
+                aria-hidden="true"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60"
+              >
+                <Plus className="h-[18px] w-[18px]" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-[13.5px] font-bold text-slate-950 dark:text-slate-100">
+                  {bi("自定义 Webhook / API 渠道", "Custom webhook / API channel")}
+                </h3>
+                <p className="mt-1 text-[11.5px] leading-5 text-slate-600 dark:text-slate-400">
+                  {bi(
+                    "自有系统或尚未覆盖的平台：提供入站 Webhook 与出站 API，原始报文验签后统一进 Inbox。",
+                    "Your own system or a platform not covered yet: inbound webhook plus outbound API, verified raw bodies land in Inbox."
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <span aria-hidden="true" className="mt-3 h-[3px] w-9 rounded-full bg-blue-500/80" />
+
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+              <span className="inline-flex min-w-0 items-center gap-1 truncate rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10.5px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                {bi("需技术人员接入", "Needs an engineer to wire it")}
+              </span>
+              <span className="erp-btn shrink-0 cursor-default rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
+                {bi("联系管理员开通", "Ask an admin")}
+              </span>
+            </div>
+          </article>
+        ) : null}
       </div>
 
       {filtered.length === 0 && (
         <div
           data-testid="marketplace-empty"
-          className="rounded-2xl border border-dashed border-[#DCD8D0] bg-white/70 px-4 py-10 text-center text-[12.5px] font-medium text-stone-500"
+          className="rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-10 text-center text-[12.5px] font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-400"
         >
           {bi("没有匹配的渠道，换个关键词试试。", "No channel matches — try another keyword.")}
         </div>

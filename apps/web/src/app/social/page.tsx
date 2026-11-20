@@ -68,8 +68,10 @@ const REGION_LABEL: Record<Exclude<SocialPlaybookRegion, "all">, string> = {
 };
 
 const PLAYBOOK_TONE: Record<Exclude<SocialPlaybookRegion, "all">, string> = {
-  overseas: "border-blue-200 bg-blue-50 text-blue-800",
-  domestic: "border-rose-200 bg-rose-50 text-rose-800",
+  overseas:
+    "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-300",
+  domestic:
+    "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300",
 };
 
 /** 14 平台玩法矩阵：每张卡片都是可直接执行的运营配方，不是宣传语。 */
@@ -102,13 +104,13 @@ function SocialPlaybooksBoard() {
     <section aria-label="平台玩法矩阵" data-testid="social-playbooks-board" className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60">
               <Layers aria-hidden="true" size={15} />
             </span>
             {bi("平台玩法矩阵", "Platform playbooks")}
           </h2>
-          <p className="mt-1 max-w-3xl text-[12.5px] leading-6 text-slate-600">
+          <p className="mt-1 max-w-3xl text-[12.5px] leading-6 text-slate-600 dark:text-slate-400">
             {bi(
               "海外 7 个 + 国内 7 个平台的受众画像、获客漏斗与实战要点；能否官方 API 直发由平台授权决定，其余一律导出后在官方后台人工发布。",
               "Audience, acquisition funnel and hands-on practices for 7 overseas and 7 domestic platforms; whether a platform supports direct publishing is decided by its official API, everything else is exported and published manually in the official console."
@@ -129,15 +131,17 @@ function SocialPlaybooksBoard() {
                 className={
                   "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors " +
                   (active
-                    ? "border-[#18181B] bg-[#18181B] text-[#FAFAF9]"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50")
+                    ? "border-blue-600 bg-blue-600 text-white shadow-xs dark:border-blue-500 dark:bg-blue-600"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800")
                 }
               >
                 {bi(option.label_zh, option.label_en)}
                 <span
                   className={
                     "rounded-full px-1.5 py-0.2 text-[10.5px] font-bold tabular-nums " +
-                    (active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700")
+                    (active
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300")
                   }
                 >
                   ({counts[option.value]})
@@ -149,36 +153,37 @@ function SocialPlaybooksBoard() {
       </header>
 
       {error ? (
-        <p role="alert" data-testid="social-playbooks-error" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+        <p role="alert" data-testid="social-playbooks-error" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300">
           {bi("平台玩法加载失败，请稍后重试。", "Failed to load platform playbooks. Please retry.")}
         </p>
       ) : null}
 
       {loading && !items.length ? (
-        <p data-testid="social-playbooks-loading" className="text-sm text-slate-500">
+        <p data-testid="social-playbooks-loading" className="text-sm text-slate-500 dark:text-slate-400">
           {bi("正在加载平台玩法…", "Loading platform playbooks…")}
         </p>
       ) : null}
 
       {!loading && !items.length ? (
-        <p data-testid="social-playbooks-empty" className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+        <p data-testid="social-playbooks-empty" className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
           {bi("该地区暂无平台玩法。", "No playbook for this region yet.")}
         </p>
       ) : null}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {/* 14 张玩法卡：两列 7×2 刚好齐平，三列会导致末行留 1 个空洞。 */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {items.map((row) => (
           <article
             key={row.platform}
             data-testid={`playbook-card-${row.platform}`}
-            className="flex min-w-0 flex-col rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-[0_6px_20px_-8px_rgba(5,150,105,0.28)]"
+            className="flex min-w-0 flex-col rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-[0_6px_20px_-8px_rgba(37,99,235,0.28)] dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700"
           >
             <header className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="truncate text-[14.5px] font-bold tracking-tight text-slate-950">
+                <h3 className="truncate text-[14.5px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
                   {bi(row.name_zh, row.name_en)}
                 </h3>
-                <p className="mt-0.5 truncate text-[11.5px] text-slate-600">
+                <p className="mt-0.5 truncate text-[11.5px] text-slate-600 dark:text-slate-400">
                   {bi(row.category_zh, row.category_en)}
                 </p>
               </div>
@@ -195,8 +200,8 @@ function SocialPlaybooksBoard() {
                   className={
                     "rounded-full border px-2 py-0.5 text-[10.5px] font-semibold " +
                     (row.official_api_supported
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-amber-200 bg-amber-50 text-amber-900")
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-300")
                   }
                 >
                   {row.official_api_supported
@@ -208,21 +213,25 @@ function SocialPlaybooksBoard() {
 
             <dl className="mt-3 space-y-2.5 text-[11.5px] leading-5">
               <div>
-                <dt className="flex items-center gap-1 font-semibold text-emerald-800">
+                <dt className="flex items-center gap-1 font-semibold text-emerald-800 dark:text-emerald-400">
                   <Target aria-hidden="true" size={12} />
                   {bi("受众画像", "Audience")}
                 </dt>
-                <dd className="mt-0.5 text-slate-700">{bi(row.audience_zh, row.audience_en)}</dd>
+                <dd className="mt-0.5 text-slate-700 dark:text-slate-300">
+                  {bi(row.audience_zh, row.audience_en)}
+                </dd>
               </div>
               <div>
-                <dt className="flex items-center gap-1 font-semibold text-blue-800">
+                <dt className="flex items-center gap-1 font-semibold text-blue-800 dark:text-blue-400">
                   <Send aria-hidden="true" size={12} />
                   {bi("获客漏斗", "Lead funnel")}
                 </dt>
-                <dd className="mt-0.5 text-slate-700">{bi(row.lead_funnel_zh, row.lead_funnel_en)}</dd>
+                <dd className="mt-0.5 text-slate-700 dark:text-slate-300">
+                  {bi(row.lead_funnel_zh, row.lead_funnel_en)}
+                </dd>
               </div>
               <div>
-                <dt className="flex items-center gap-1 font-semibold text-slate-800">
+                <dt className="flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
                   <Sparkles aria-hidden="true" size={12} />
                   {bi("实战要点", "Hands-on practices")}
                 </dt>
@@ -230,7 +239,10 @@ function SocialPlaybooksBoard() {
                   <ul className="space-y-1">
                     {(locale === "zh" ? row.best_practices_zh : row.best_practices_en).map(
                       (practice) => (
-                        <li key={practice} className="flex items-start gap-1.5 text-slate-700">
+                        <li
+                          key={practice}
+                          className="flex items-start gap-1.5 text-slate-700 dark:text-slate-300"
+                        >
                           <span
                             aria-hidden="true"
                             className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-500"
@@ -244,9 +256,13 @@ function SocialPlaybooksBoard() {
               </div>
             </dl>
 
-            <footer className="mt-auto border-t border-slate-100 pt-2.5">
-              <p className="flex items-start gap-1 text-[10.5px] leading-4 text-slate-500">
-                <ShieldCheck aria-hidden="true" size={12} className="mt-0.5 shrink-0 text-slate-400" />
+            <footer className="mt-auto border-t border-slate-100 pt-2.5 dark:border-slate-800">
+              <p className="flex items-start gap-1 text-[10.5px] leading-4 text-slate-500 dark:text-slate-400">
+                <ShieldCheck
+                  aria-hidden="true"
+                  size={12}
+                  className="mt-0.5 shrink-0 text-slate-400 dark:text-slate-500"
+                />
                 <span>{bi(row.compliance_note_zh, row.compliance_note_en)}</span>
               </p>
             </footer>
@@ -464,7 +480,7 @@ export default function SocialMarketingPage() {
             "A 14-platform matrix, content calendar, AI copywriting and social listening to CRM leads. Scheduled publishing is only enabled for platforms with an API; Xiaohongshu, Douyin, Kuaishou, Bilibili, Channels and Weibo use export plus manual publishing in the official console."
           )}
           badge={
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-300">
               <Send className="h-3.5 w-3.5" aria-hidden="true" />
               {bi("授权令牌信封加密 · 零未授权外网发帖", "Envelope-encrypted tokens · zero unauthorised posts")}
             </span>
@@ -488,7 +504,7 @@ export default function SocialMarketingPage() {
         </section>
 
         {error ? (
-          <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300">
             {bi("社媒数据加载失败，请稍后重试。", "Failed to load social data. Please retry.")}
           </p>
         ) : null}
@@ -498,8 +514,8 @@ export default function SocialMarketingPage() {
             className={
               "rounded-xl border p-3 text-sm " +
               (feedback.error
-                ? "border-rose-200 bg-rose-50 text-rose-800"
-                : "border-blue-200 bg-blue-50 text-blue-900")
+                ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300"
+                : "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-200")
             }
           >
             {feedback.text}
@@ -522,7 +538,7 @@ export default function SocialMarketingPage() {
               ),
             }))}
           />
-          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700">
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
             {queue.length} 条待发布
           </span>
         </div>
@@ -550,20 +566,23 @@ export default function SocialMarketingPage() {
                 }}
                 onCreatePost={() => setTab("editor")}
               />
-              <section aria-label="待发布队列" className={panel}>
+              <section
+                aria-label="待发布队列"
+                className={panel + " dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"}
+              >
                 <header className="mb-3">
-                  <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900">
-                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                  <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900 dark:text-slate-100">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60">
                       <Library aria-hidden="true" size={15} />
                     </span>
                     发布中心
                   </h2>
-                  <p className="mt-1 text-[12.5px] leading-6 text-slate-600">
+                  <p className="mt-1 text-[12.5px] leading-6 text-slate-600 dark:text-slate-400">
                     标记发布只登记真实回执，不会代你在任何平台发起未授权发帖；人工发布平台需先在官方后台完成发布。
                   </p>
                 </header>
                 {!queue.length ? (
-                  <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600">
+                  <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
                     当前没有待发布内容。
                   </p>
                 ) : (
@@ -571,11 +590,11 @@ export default function SocialMarketingPage() {
                     {queue.map((post) => (
                       <li
                         key={post.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-800/60"
                       >
                         <div className="min-w-0">
-                          <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
-                            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-800">
+                          <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-800 dark:bg-slate-700 dark:text-slate-200">
                               {platformLabel(post.platform)}
                             </span>
                             <span className={"rounded-full border px-2 py-0.5 font-medium " + postStatusTone[post.status]}>
@@ -583,7 +602,9 @@ export default function SocialMarketingPage() {
                             </span>
                             <span>{getPlaybook(post.platform).publish_mode === "api" ? "API 发布" : "人工发布"}</span>
                           </p>
-                          <p className="mt-1 break-words text-sm text-slate-800">{post.caption}</p>
+                          <p className="mt-1 break-words text-sm text-slate-800 dark:text-slate-200">
+                            {post.caption}
+                          </p>
                         </div>
                         <button
                           type="button"

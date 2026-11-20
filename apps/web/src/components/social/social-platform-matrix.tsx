@@ -96,7 +96,7 @@ export function SocialPlatformMatrix({ accounts, playbooks = PLATFORM_PLAYBOOKS,
           </div>
         </header>
         {!visible.length ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-4 text-[12.5px] font-medium text-slate-600">没有匹配的平台。</p> : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2">
             {visible.map((playbook) => {
               const account = accountByPlatform.get(playbook.platform);
               const busy = pendingPlatforms.includes(playbook.platform);

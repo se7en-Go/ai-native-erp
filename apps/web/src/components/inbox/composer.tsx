@@ -110,7 +110,7 @@ export function InboxComposer({
 
   const phrasesQuery = useQuery({
     queryKey: ["ai", "quick-replies"],
-    queryFn: fetchQuickReplies,
+    queryFn: async () => (await fetchQuickReplies()) ?? [],
     enabled: Boolean(conversation),
   });
 
@@ -286,17 +286,17 @@ export function InboxComposer({
   }
 
   return (
-    <div className="border-t border-slate-200/80 bg-slate-50/60 px-3 py-3">
+    <div className="border-t border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-950">
       <div
         data-testid="inbox-composer"
-        className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.16)]"
+        className="rounded-2xl border border-gray-200 bg-white p-3 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.16)] dark:border-gray-800 dark:bg-gray-900"
       >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onClick={() => aiAssistMutation.mutate("draft")}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px] font-semibold text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[12px] font-semibold text-gray-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
             >
               <Sparkles className="h-3 w-3" />
               <span>{t("aiDraft")}</span>
@@ -313,22 +313,22 @@ export function InboxComposer({
               data-testid="propose-grounded-reply-btn"
               disabled={proposeMutation.isPending}
               onClick={() => proposeMutation.mutate()}
-              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[12px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[12px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/15"
             >
               <DatabaseZap className="h-3 w-3" />
               <span>{bi("AI 查库生成提案", "AI grounded proposal")}</span>
             </button>
           </div>
 
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-50/70 px-2 py-1 text-[11.5px] font-semibold text-emerald-900 ring-1 ring-emerald-200/70">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-gray-100 px-2 py-1 text-[11.5px] font-semibold text-gray-900 ring-1 ring-gray-200/70 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700">
             <input
               type="checkbox"
               data-testid="composer-strict-rag-toggle"
               checked={strictRag}
               onChange={(e) => setStrictRag(e.target.checked)}
-              className="rounded border-slate-300"
+              className="rounded border-gray-300 dark:border-gray-600"
             />
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
             <span>{t("strictRag")}</span>
           </label>
         </div>
@@ -336,13 +336,13 @@ export function InboxComposer({
         {proposalNotice && (
           <div
             data-testid="propose-grounded-reply-success"
-            className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[12px] font-semibold text-emerald-900"
+            className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[12px] font-semibold text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100"
           >
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-blue-600" />
             <Link
               data-testid="propose-grounded-reply-link"
               href="/ai/proposals"
-              className="inline-flex items-center gap-1 underline decoration-emerald-400 underline-offset-2 hover:text-emerald-700"
+              className="inline-flex items-center gap-1 underline decoration-blue-400 underline-offset-2 hover:text-blue-700 dark:hover:text-blue-300"
             >
               <span>
                 {bi(
@@ -387,9 +387,9 @@ export function InboxComposer({
         {attachmentNotice && (
           <p
             data-testid="composer-attachment-notice"
-            className="mb-2 flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[12px] font-medium text-emerald-900"
+            className="mb-2 flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[12px] font-medium text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100"
           >
-            <Paperclip className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <Paperclip className="h-3.5 w-3.5 shrink-0 text-blue-600" />
             <span>{attachmentNotice}</span>
           </p>
         )}
@@ -407,11 +407,11 @@ export function InboxComposer({
         {selectedFile && (
           <div
             data-testid="attach-preview-pill"
-            className="mb-2 flex w-fit max-w-full items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-900"
+            className="mb-2 flex w-fit max-w-full items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/80 px-2.5 py-1 text-[11.5px] font-semibold text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100"
           >
-            <FileText className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
+            <FileText className="h-3.5 w-3.5 shrink-0 text-blue-700" />
             <span className="max-w-[220px] truncate">{selectedFile.name}</span>
-            <span className="shrink-0 tabular-nums text-emerald-700/80">
+            <span className="shrink-0 tabular-nums text-blue-700/80 dark:text-blue-300/80">
               {formatAttachmentSize(selectedFile.size)}
             </span>
             <button
@@ -422,7 +422,7 @@ export function InboxComposer({
                 setSelectedFile(null);
                 if (fileInputRef.current) fileInputRef.current.value = "";
               }}
-              className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-emerald-700 transition-colors hover:bg-emerald-200/80 hover:text-emerald-900"
+              className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-blue-700 transition-colors hover:bg-blue-200/80 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-blue-500/15 dark:hover:text-blue-200"
             >
               <X className="h-3 w-3" />
             </button>
@@ -440,10 +440,10 @@ export function InboxComposer({
               : bi("输入回复内容；开启实时翻译可预览外文效果…", "Type a reply; enable Live Translate to preview the foreign-language text…")
           }
           aria-label={bi("消息输入框", "Message composer")}
-          className={`w-full resize-y rounded-xl border p-3 text-[13px] leading-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-[3px] ${
+          className={`w-full resize-y rounded-xl border p-3 text-[13px] leading-6 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] dark:text-gray-100 dark:placeholder:text-gray-500 ${
             mode === "internal_note"
-              ? "border-amber-300 bg-amber-50/50 focus:border-amber-500 focus:ring-amber-500/12"
-              : "border-slate-200 bg-slate-50/60 focus:border-blue-500 focus:bg-white focus:ring-blue-500/12"
+              ? "border-amber-300 bg-amber-50/50 focus:border-amber-500 focus:ring-amber-500/12 dark:border-amber-500/30 dark:bg-amber-500/10"
+              : "border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-blue-500/12 dark:border-gray-700 dark:bg-gray-800 dark:focus:bg-gray-900"
           }`}
         />
 
@@ -459,7 +459,7 @@ export function InboxComposer({
 
         <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100/80 p-0.5 text-[12px]">
+            <div className="inline-flex rounded-xl border border-gray-200 bg-gray-100 p-0.5 text-[12px] dark:border-gray-700 dark:bg-gray-800">
               <button
                 type="button"
                 data-testid="composer-mode-outbound"
@@ -467,8 +467,8 @@ export function InboxComposer({
                 onClick={() => setMode("outbound")}
                 className={`rounded-lg px-2.5 py-1 font-semibold transition-colors ${
                   mode === "outbound"
-                    ? "bg-white text-blue-700 shadow-xs ring-1 ring-slate-200/80"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? "bg-white text-blue-700 shadow-xs ring-1 ring-gray-200/80 dark:bg-gray-900 dark:ring-gray-700"
+                    : "text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
                 }`}
               >
                 {bi("回复", "Reply")}
@@ -481,7 +481,7 @@ export function InboxComposer({
                 className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 font-semibold transition-colors ${
                   mode === "internal_note"
                     ? "bg-amber-500 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
+                    : "text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
                 }`}
               >
                 <StickyNote className="h-3 w-3" />
@@ -489,7 +489,7 @@ export function InboxComposer({
               </button>
             </div>
 
-            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11.5px] font-medium text-slate-700">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11.5px] font-medium text-gray-700 dark:text-gray-300">
               <input
                 type="checkbox"
                 data-testid="live-translate-toggle"
@@ -505,7 +505,7 @@ export function InboxComposer({
               data-testid="composer-target-language"
               value={targetLang}
               onChange={(e) => setTargetLang(e.target.value as TargetLanguageCode)}
-              className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-[11.5px] font-semibold text-slate-700"
+              className="rounded-lg border border-gray-200 bg-white px-1.5 py-1 text-[11.5px] font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
             >
               {TARGET_LANGUAGES.map((language) => (
                 <option key={language.code} value={language.code}>
@@ -532,7 +532,7 @@ export function InboxComposer({
               data-testid="attach-file-btn"
               aria-label={bi("发图片 / PDF", "Attach image or PDF")}
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#E5E2DC] bg-[#FAF8F5] px-2 py-1 text-[11.5px] font-semibold text-stone-700 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[11.5px] font-semibold text-gray-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
             >
               <Paperclip className="h-3.5 w-3.5" />
               <span>{bi("发图片 / PDF", "Attach image / PDF")}</span>

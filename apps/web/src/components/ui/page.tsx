@@ -4,17 +4,22 @@ import React from "react";
 
 /**
  * 企业级工作台基础原语。全部为纯展示组件，不含数据逻辑，
- * 让 25 个页面共享同一套 spacing / 边框 / 字号节奏。
+ * 让全站页面共享同一套 21st.dev 冷灰白/科技蓝 spacing、边框、字号与深浅色节奏。
  */
 
 export type Tone = "neutral" | "success" | "warning" | "danger" | "info";
 
 const TONE_CLASS: Record<Tone, string> = {
-  neutral: "border-slate-300 bg-slate-100 text-slate-700",
-  success: "border-emerald-300 bg-emerald-50 text-emerald-800",
-  warning: "border-amber-300 bg-amber-50 text-amber-900",
-  danger: "border-rose-300 bg-rose-50 text-rose-800",
-  info: "border-blue-300 bg-blue-50 text-blue-800",
+  neutral:
+    "border-gray-200 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  success:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/70 dark:bg-emerald-900/30 dark:text-emerald-300",
+  warning:
+    "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/70 dark:bg-amber-900/30 dark:text-amber-300",
+  danger:
+    "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800/70 dark:bg-rose-900/30 dark:text-rose-300",
+  info:
+    "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800/70 dark:bg-blue-900/30 dark:text-blue-300",
 };
 
 export function Badge({
@@ -33,7 +38,7 @@ export function Badge({
   );
 }
 
-/** 普通工作台页面：宽屏流式容器，替代历史 `max-w-5xl` / `max-w-6xl`。 */
+/** 普通工作台页面：宽屏流式容器。 */
 export function Page({
   children,
   full = false,
@@ -45,7 +50,7 @@ export function Page({
   className?: string;
 }) {
   return (
-    <div className={`${full ? "erp-page-full" : "erp-page"} space-y-4 ${className}`}>
+    <div className={`${full ? "erp-page-full" : "erp-page"} min-w-0 space-y-5 ${className}`}>
       {children}
     </div>
   );
@@ -68,15 +73,19 @@ export function PageHeader({
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-[22px] font-bold tracking-tight text-slate-950">{title}</h1>
+          <h1 className="text-[22px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
+            {title}
+          </h1>
           {badge}
         </div>
         {description && (
-          <p className="mt-1 max-w-5xl text-[13.5px] leading-6 text-slate-700">{description}</p>
+          <p className="mt-1 max-w-5xl text-[13.5px] leading-6 text-gray-600 dark:text-gray-400">
+            {description}
+          </p>
         )}
         {meta && <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }
@@ -87,7 +96,7 @@ export function Card({
   ...rest
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div {...rest} className={`erp-card ${className}`}>
+    <div {...rest} className={`erp-card min-w-0 ${className}`}>
       {children}
     </div>
   );
@@ -107,12 +116,14 @@ export function CardHeader({
   return (
     <div className="erp-card-header">
       <div className="min-w-0">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-950">
-          {Icon && <Icon className="h-4 w-4 text-slate-600" />}
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-gray-900 dark:text-gray-100">
+          {Icon && <Icon className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
           {title}
         </h2>
         {description && (
-          <p className="mt-1 text-[12.5px] leading-5 text-slate-600">{description}</p>
+          <p className="mt-1 text-[12.5px] leading-5 text-gray-500 dark:text-gray-400">
+            {description}
+          </p>
         )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -136,22 +147,20 @@ export function StatCard({
   testId?: string;
 }) {
   const accent: Record<Tone, string> = {
-    neutral: "text-slate-900",
-    success: "text-emerald-700",
-    warning: "text-amber-700",
-    danger: "text-rose-700",
-    info: "text-blue-700",
+    neutral: "text-gray-900 dark:text-gray-100",
+    success: "text-emerald-600 dark:text-emerald-400",
+    warning: "text-amber-600 dark:text-amber-400",
+    danger: "text-rose-600 dark:text-rose-400",
+    info: "text-blue-600 dark:text-blue-400",
   };
   return (
-    <div data-testid={testId} className="erp-card p-4">
+    <div data-testid={testId} className="erp-card min-w-0 p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] font-semibold text-slate-700">{label}</span>
-        {Icon && <Icon className="h-4 w-4 text-slate-500" />}
+        <span className="text-[13px] font-medium text-gray-600 dark:text-gray-400">{label}</span>
+        {Icon && <Icon className="h-4 w-4 text-gray-400 dark:text-gray-500" />}
       </div>
-      <div className={`mt-1.5 text-[24px] font-bold tabular-nums ${accent[tone]}`}>
-        {value}
-      </div>
-      {hint && <div className="mt-1 text-[12px] text-slate-600">{hint}</div>}
+      <div className={`mt-1.5 text-[24px] font-bold tabular-nums ${accent[tone]}`}>{value}</div>
+      {hint && <div className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{hint}</div>}
     </div>
   );
 }
@@ -168,7 +177,7 @@ export function EmptyState({
   return (
     <div
       data-testid={testId}
-      className={`rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-[13px] font-medium text-slate-600 ${className}`}
+      className={`rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-[13px] font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400 ${className}`}
     >
       {children}
     </div>
@@ -184,7 +193,9 @@ export function TableWrap({
   className?: string;
 }) {
   return (
-    <div className={`overflow-x-auto rounded-xl border border-slate-300 bg-white shadow-xs ${className}`}>
+    <div
+      className={`overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900 ${className}`}
+    >
       {children}
     </div>
   );
@@ -192,6 +203,8 @@ export function TableWrap({
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[12px] font-semibold tracking-wide text-slate-600">{children}</div>
+    <div className="text-[12px] font-semibold tracking-wide text-gray-600 dark:text-gray-400">
+      {children}
+    </div>
   );
 }

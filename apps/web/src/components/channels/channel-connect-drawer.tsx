@@ -225,7 +225,9 @@ function Field({
         onChange={(event) => onChange(event.target.value)}
         className="erp-input mt-1 rounded-xl"
       />
-      {hint && <span className="mt-1 block text-[11px] text-stone-500">{hint}</span>}
+      {hint && (
+        <span className="mt-1 block text-[11px] text-slate-500 dark:text-slate-400">{hint}</span>
+      )}
     </label>
   );
 }
@@ -271,16 +273,16 @@ export function ChannelConnectDrawer(props: ChannelConnectDrawerProps) {
         aria-label={bi("关闭快捷绑定", "Close quick connect")}
         data-testid="channel-drawer-backdrop"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-zinc-950/35 backdrop-blur-[1px]"
+        className="absolute inset-0 cursor-default bg-slate-950/35 backdrop-blur-[1px] dark:bg-slate-950/60"
       />
       <aside
         role="dialog"
         aria-modal="true"
         aria-labelledby="channel-drawer-title"
         data-testid={`channel-connect-drawer-${channelKey}`}
-        className="relative flex h-full w-full max-w-[480px] flex-col border-l border-[#E5E2DC] bg-[#FAF8F5] shadow-[-24px_0_60px_-24px_rgba(24,24,27,0.4)]"
+        className="relative flex h-full w-full max-w-[480px] flex-col border-l border-slate-200 bg-slate-50 shadow-[-24px_0_60px_-24px_rgba(15,23,42,0.4)] dark:border-slate-800 dark:bg-slate-950"
       >
-        <header className="flex items-start justify-between gap-2 border-b border-[#E5E2DC] bg-white px-5 py-4">
+        <header className="flex items-start justify-between gap-2 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden="true"
@@ -291,11 +293,11 @@ export function ChannelConnectDrawer(props: ChannelConnectDrawerProps) {
             <div className="min-w-0">
               <h2
                 id="channel-drawer-title"
-                className="truncate text-[15px] font-bold text-zinc-950"
+                className="truncate text-[15px] font-bold text-slate-950 dark:text-slate-100"
               >
                 {bi(`快捷绑定 ${item.titleZh}`, `Quick connect ${item.titleEn}`)}
               </h2>
-              <p className="mt-0.5 text-[11.5px] leading-5 text-stone-600">
+              <p className="mt-0.5 text-[11.5px] leading-5 text-slate-600 dark:text-slate-400">
                 {bi(item.descriptionZh, item.descriptionEn)}
               </p>
             </div>
@@ -304,14 +306,14 @@ export function ChannelConnectDrawer(props: ChannelConnectDrawerProps) {
             type="button"
             data-testid="channel-drawer-close"
             onClick={onClose}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[#E5E2DC] bg-white text-stone-500 transition-colors hover:bg-[#F4F2EE] hover:text-zinc-950"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </header>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-          <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800">
+          <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-300">
             <ShieldCheck className="h-3 w-3" />
             {bi("令牌信封加密 · 原始报文验签", "Envelope-encrypted tokens · signed raw bodies")}
           </div>
@@ -643,13 +645,13 @@ function ChannelConnectForm({
       onSubmit={submit}
       className="flex flex-col space-y-3"
     >
-      <div className="rounded-xl border border-[#E5E2DC] bg-white">
+      <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
         <button
           type="button"
           data-testid="connect-guide-toggle"
           aria-expanded={guideOpen}
           onClick={() => setGuideOpen((prev) => !prev)}
-          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-[11.5px] font-semibold text-stone-700"
+          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-[11.5px] font-semibold text-slate-700 dark:text-slate-300"
         >
           <span className="inline-flex items-center gap-1.5">
             <KeyRound className="h-3 w-3 text-emerald-700" />
@@ -662,11 +664,12 @@ function ChannelConnectForm({
         {guideOpen && (
           <ol
             data-testid="connect-guide-steps"
-            className="space-y-1 border-t border-[#EFECE6] px-3 py-2 text-[11px] leading-5 text-stone-600"
+            className="space-y-1 border-t border-slate-200 px-3 py-2 text-[11px] leading-5 text-slate-600 dark:border-slate-800 dark:text-slate-400"
           >
             {guide.map((step, index) => (
               <li key={step.en}>
-                <strong className="text-zinc-900">{index + 1}.</strong> {bi(step.zh, step.en)}
+                <strong className="text-slate-900 dark:text-slate-100">{index + 1}.</strong>{" "}
+                {bi(step.zh, step.en)}
               </li>
             ))}
           </ol>
@@ -698,14 +701,16 @@ function ChannelConnectForm({
 
       {channelKey === "whatsapp" && (
         <>
-          <div className="inline-flex items-center gap-0.5 self-start rounded-lg border border-[#E5E2DC] bg-[#EFECE6]/90 p-0.5">
+          <div className="inline-flex items-center gap-0.5 self-start rounded-lg border border-slate-200 bg-slate-100/90 p-0.5 dark:border-slate-700 dark:bg-slate-800/70">
             <button
               type="button"
               data-testid="whatsapp-mode-direct"
               aria-pressed={waMode === "direct"}
               onClick={() => setWaMode("direct")}
               className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors ${
-                waMode === "direct" ? "bg-[#18181B] text-[#FAFAF9]" : "text-stone-600"
+                waMode === "direct"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400"
               }`}
             >
               {bi("直连 Token 快捷绑定", "Direct token")}
@@ -716,7 +721,9 @@ function ChannelConnectForm({
               aria-pressed={waMode === "embedded"}
               onClick={() => setWaMode("embedded")}
               className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors ${
-                waMode === "embedded" ? "bg-[#18181B] text-[#FAFAF9]" : "text-stone-600"
+                waMode === "embedded"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400"
               }`}
             >
               {bi("Meta Embedded Signup 授权码", "Embedded Signup")}
@@ -766,7 +773,7 @@ function ChannelConnectForm({
           <label
             className={`flex items-start gap-2 rounded-xl border px-2.5 py-2 text-[11.5px] ${
               isAdmin
-                ? "border-[#E5E2DC] bg-white text-stone-700"
+                ? "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                 : "border-emerald-200 bg-emerald-50/70 text-emerald-900"
             }`}
           >
@@ -776,13 +783,13 @@ function ChannelConnectForm({
               checked={isCoexistence}
               disabled={!isAdmin}
               onChange={(event) => setIsCoexistence(event.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 rounded border-stone-300 text-emerald-600 disabled:opacity-70"
+              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 disabled:opacity-70 dark:border-slate-600"
             />
             <span>
               <strong className="font-semibold">
                 {bi("手机 WhatsApp App 共存模式", "Phone app coexistence")}
               </strong>
-              <span className="text-stone-500"> · </span>
+              <span className="text-slate-500 dark:text-slate-400"> · </span>
               {bi("限速 20 mps", "20 mps limit")}
               {!isAdmin && (
                 <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
@@ -805,14 +812,16 @@ function ChannelConnectForm({
             placeholder="sales@company.com"
             type="email"
           />
-          <div className="inline-flex items-center gap-0.5 self-start rounded-lg border border-[#E5E2DC] bg-[#EFECE6]/90 p-0.5">
+          <div className="inline-flex items-center gap-0.5 self-start rounded-lg border border-slate-200 bg-slate-100/90 p-0.5 dark:border-slate-700 dark:bg-slate-800/70">
             <button
               type="button"
               data-testid="email-provider-resend"
               aria-pressed={emailProvider === "resend"}
               onClick={() => setEmailProvider("resend")}
               className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors ${
-                emailProvider === "resend" ? "bg-[#18181B] text-[#FAFAF9]" : "text-stone-600"
+                emailProvider === "resend"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400"
               }`}
             >
               Resend API
@@ -823,7 +832,9 @@ function ChannelConnectForm({
               aria-pressed={emailProvider === "smtp_imap"}
               onClick={() => setEmailProvider("smtp_imap")}
               className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors ${
-                emailProvider === "smtp_imap" ? "bg-[#18181B] text-[#FAFAF9]" : "text-stone-600"
+                emailProvider === "smtp_imap"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400"
               }`}
             >
               SMTP / IMAP
@@ -872,7 +883,7 @@ function ChannelConnectForm({
             </div>
           )}
           {displayNameField}
-          <p className="rounded-xl border border-[#E5E2DC] bg-white px-2.5 py-2 text-[11px] leading-5 text-stone-600">
+          <p className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[11px] leading-5 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
             {bi(
               "阿里国际站 / 中国制造网询盘可转发到该邮箱，绑定后自动归集进 Inbox。",
               "Alibaba / Made-in-China inquiries can be forwarded to this mailbox and land in the inbox."
@@ -1098,7 +1109,7 @@ function ChannelConnectForm({
             onChange={(value) => update("access_token", value)}
             secret
           />
-          <p className="rounded-xl border border-[#E5E2DC] bg-white px-2.5 py-2 text-[11px] leading-5 text-stone-600">
+          <p className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[11px] leading-5 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
             {bi("接入模式：卖家自备应用（seller_byok）", "Mode: seller BYOK (seller_byok)")}
           </p>
         </>
@@ -1126,7 +1137,7 @@ function ChannelConnectForm({
         ))}
 
       <div className="flex items-center justify-between gap-2 pt-1">
-        <span className="text-[11px] font-medium text-stone-500">
+        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
           {connectedCount > 0
             ? bi(`当前已接入 ${connectedCount} 个账号`, `${connectedCount} account(s) connected`)
             : bi("尚未接入该渠道", "No account yet")}
@@ -1135,7 +1146,7 @@ function ChannelConnectForm({
           type="submit"
           data-testid={`connect-${channelKey}-btn`}
           disabled={!valid || submitting}
-          className="erp-btn rounded-xl bg-[#059669] px-4 py-2 font-semibold text-white shadow-xs transition-colors hover:bg-[#047857] disabled:bg-stone-300 disabled:shadow-none"
+          className="erp-btn rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:bg-slate-300 disabled:shadow-none dark:bg-blue-600 dark:hover:bg-blue-500 dark:disabled:bg-slate-700"
         >
           {submitting ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1193,12 +1204,12 @@ function ChannelConnectForm({
 
           {channelKey === "web_livechat" && (
             <div className="space-y-1.5 rounded-xl border border-emerald-200 bg-white/85 p-2">
-              <div className="text-[10.5px] font-semibold text-stone-600">
+              <div className="text-[10.5px] font-semibold text-slate-600 dark:text-slate-400">
                 {bi("网站嵌入代码（放到 </body> 前）", "Embed snippet (before </body>)")}
               </div>
               <code
                 data-testid="livechat-embed-snippet"
-                className="block overflow-x-auto rounded-lg bg-[#18181B] px-2 py-1.5 font-mono text-[10px] leading-5 whitespace-pre-wrap text-emerald-100"
+                className="block overflow-x-auto rounded-lg bg-slate-900 px-2 py-1.5 font-mono text-[10px] leading-5 break-all whitespace-pre-wrap text-emerald-100 dark:bg-slate-950 dark:text-emerald-200"
               >
                 {embedSnippet}
               </code>
@@ -1223,7 +1234,7 @@ function ChannelConnectForm({
               type="button"
               data-testid="drawer-view-accounts"
               onClick={onViewAccounts}
-              className="erp-btn rounded-lg bg-[#18181B] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#065F46]"
+              className="erp-btn rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
             >
               {bi("查看已接入账号", "View connected accounts")}
             </button>
@@ -1231,7 +1242,7 @@ function ChannelConnectForm({
               href="/inbox"
               data-testid="drawer-back-to-inbox"
               onClick={onClose}
-              className="erp-btn rounded-lg border border-[#DCD8D0] bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-[#FAF8F5]"
+              className="erp-btn rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               <ArrowLeft className="h-3 w-3" />
               <span>{bi("返回收件箱", "Back to inbox")}</span>
@@ -1240,7 +1251,7 @@ function ChannelConnectForm({
         </div>
       )}
 
-      <div className="pt-1 text-[10.5px] leading-5 text-stone-500">
+      <div className="pt-1 text-[10.5px] leading-5 text-slate-500 dark:text-slate-400">
         {bi(
           "所有令牌使用信封加密保存，只用于该账号；Webhook 均按原始报文验签。",
           "Every token is envelope-encrypted per account and webhooks verify raw bodies."

@@ -109,6 +109,13 @@ function validateSkuForm(form: SkuFormState): string | null {
   return null;
 }
 
+/**
+ * PageHeader / CardHeader 为共享原语（无 dark 变体），
+ * 此处以任意变体在页面层补齐深色模式下的标题对比度。
+ */
+const PAGE_DARK_HEADER =
+  "dark:[&_header_h1]:text-gray-100 dark:[&_header_p]:text-gray-400 dark:[&_.erp-card-header_h2]:text-gray-100 dark:[&_.erp-card-header_p]:text-gray-400";
+
 export default function CatalogPage() {
   const { principal } = useAuthSession();
   const { bi } = useI18n();
@@ -181,7 +188,7 @@ export default function CatalogPage() {
       currentPath="/catalog"
       pendingProposalsCount={pendingProposalsQuery.data?.total ?? 0}
     >
-      <Page>
+      <Page className={PAGE_DARK_HEADER}>
         <PageHeader
           title={bi("商品主档与多平台 SKU 映射", "Product master & multi-platform SKU mapping")}
           description={bi(
@@ -191,7 +198,7 @@ export default function CatalogPage() {
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative">
-                <Search className="pointer-events-none absolute top-2.5 left-2.5 h-4 w-4 text-slate-400" />
+                <Search className="pointer-events-none absolute top-2.5 left-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <input
                   type="text"
                   value={search}
@@ -211,7 +218,7 @@ export default function CatalogPage() {
                       setFormError(null);
                       setCreateOpen(true);
                     }}
-                    className="erp-btn rounded-xl bg-[#18181B] text-[13px] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46]"
+                    className="erp-btn rounded-xl bg-blue-600 text-[13px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>{bi("新建商品 / SKU", "New product / SKU")}</span>
@@ -251,7 +258,7 @@ export default function CatalogPage() {
         {createdSku && (
           <div
             data-testid="create-sku-success"
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-emerald-900"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
           >
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
             <span>
@@ -312,7 +319,7 @@ export default function CatalogPage() {
               : bi("没有匹配的商品，请调整关键词。", "No matching products. Try another keyword.")}
           </EmptyState>
         ) : (
-          <TableWrap className="rounded-2xl">
+          <TableWrap className="rounded-2xl border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <table className="erp-table">
               <thead>
                 <tr>
@@ -341,17 +348,17 @@ export default function CatalogPage() {
                           <Boxes className="h-3.5 w-3.5" />
                         </span>
                         <div className="min-w-0">
-                          <div className="font-mono text-[12.5px] font-semibold text-slate-900">
+                          <div className="font-mono text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
                             {v.sku}
                           </div>
-                          <div className="text-[11px] font-medium text-slate-500">{v.spu_code}</div>
+                          <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{v.spu_code}</div>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <div className="font-medium text-slate-800">{v.category}</div>
+                      <div className="font-medium text-gray-800 dark:text-gray-200">{v.category}</div>
                       {v.hs_code && (
-                        <div className="font-mono text-[11px] text-slate-500">HS {v.hs_code}</div>
+                        <div className="font-mono text-[11px] text-gray-500 dark:text-gray-400">HS {v.hs_code}</div>
                       )}
                     </td>
                     <td>
@@ -363,15 +370,15 @@ export default function CatalogPage() {
                         ))}
                       </div>
                     </td>
-                    <td className="text-right font-semibold tabular-nums text-slate-900">
+                    <td className="text-right font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                       {formatMoney(v.retail_price_usd, "USD")}
                     </td>
                     {canViewCost && (
-                      <td className="text-right tabular-nums text-slate-700">
+                      <td className="text-right tabular-nums text-gray-700 dark:text-gray-300">
                         {formatMoney(v.cost_price_base, v.base_currency)}
                       </td>
                     )}
-                    <td className="tabular-nums text-[12px] text-slate-700">
+                    <td className="tabular-nums text-[12px] text-gray-700 dark:text-gray-300">
                       <div className="flex flex-wrap gap-1">
                         {v.b2b_moq_tiers.map((t) => (
                           <span
@@ -497,11 +504,11 @@ export default function CatalogPage() {
               />
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-              <h4 className="text-[12.5px] font-semibold text-slate-900">
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60/70 p-3">
+              <h4 className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
                 {bi("出口包装与安全库存", "Export packing & safety stock")}
               </h4>
-              <p className="mt-0.5 text-[11.5px] leading-5 text-slate-600">
+              <p className="mt-0.5 text-[11.5px] leading-5 text-gray-600 dark:text-gray-400">
                 {bi(
                   "单箱数量用于换算单件毛净重；安全库存阈值直接决定低库存补货预警。",
                   "Carton quantity converts to per-unit weights; the safety-stock threshold drives the replenishment alerts."
@@ -558,13 +565,13 @@ export default function CatalogPage() {
               <p
                 role="alert"
                 data-testid="create-sku-error"
-                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800"
+                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
               >
                 {formError ?? createSkuMutation.error?.message}
               </p>
             )}
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 dark:border-gray-800 pt-3">
               <button
                 type="button"
                 onClick={() => setCreateOpen(false)}
@@ -576,7 +583,7 @@ export default function CatalogPage() {
                 type="submit"
                 data-testid="create-sku-submit"
                 disabled={createSkuMutation.isPending}
-                className="erp-btn rounded-xl bg-[#18181B] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46] disabled:opacity-40"
+                className="erp-btn rounded-xl bg-blue-600 font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
               >
                 {createSkuMutation.isPending
                   ? bi("正在创建…", "Creating…")
@@ -636,7 +643,7 @@ export default function CatalogPage() {
                   setCsvError(null);
                 }}
               />
-              <span className="text-[11.5px] text-slate-500">
+              <span className="text-[11.5px] text-gray-500 dark:text-gray-400">
                 {bi("也可以直接粘贴 CSV 文本", "Or paste the CSV text directly")}
               </span>
             </div>
@@ -659,7 +666,7 @@ export default function CatalogPage() {
               <p
                 role="alert"
                 data-testid="csv-import-error"
-                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800"
+                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
               >
                 {csvError ?? importCsvMutation.error?.message}
               </p>
@@ -668,7 +675,7 @@ export default function CatalogPage() {
             {csvResult && (
               <div
                 data-testid="csv-import-summary"
-                className="space-y-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-emerald-900"
+                className="space-y-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
               >
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
@@ -683,7 +690,7 @@ export default function CatalogPage() {
                 {(csvResult.errors ?? []).length > 0 && (
                   <ul
                     data-testid="csv-import-errors"
-                    className="max-h-32 list-disc space-y-0.5 overflow-y-auto pl-5 text-[11.5px] font-medium text-rose-800"
+                    className="max-h-32 list-disc space-y-0.5 overflow-y-auto pl-5 text-[11.5px] font-medium text-rose-800 dark:text-rose-300"
                   >
                     {(csvResult.errors ?? []).map((rowError) => (
                       <li key={rowError}>{rowError}</li>
@@ -693,7 +700,7 @@ export default function CatalogPage() {
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 dark:border-gray-800 pt-3">
               <button
                 type="button"
                 onClick={() => setCsvOpen(false)}
@@ -706,7 +713,7 @@ export default function CatalogPage() {
                 data-testid="csv-import-submit"
                 disabled={importCsvMutation.isPending || csvText.trim().length < 5}
                 onClick={() => importCsvMutation.mutate(csvText)}
-                className="erp-btn rounded-xl bg-[#18181B] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46] disabled:opacity-40"
+                className="erp-btn rounded-xl bg-blue-600 font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
               >
                 {importCsvMutation.isPending
                   ? bi("正在导入…", "Importing…")
@@ -767,18 +774,18 @@ function ModalHeading({
   onClose: () => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+    <div className="flex items-start justify-between gap-3 border-b border-gray-200 dark:border-gray-800 pb-3">
       <div className="min-w-0">
-        <h3 id={id} className="text-[15px] font-bold text-slate-950">
+        <h3 id={id} className="text-[15px] font-bold text-gray-900 dark:text-gray-100">
           {title}
         </h3>
-        <p className="mt-1 text-[12px] leading-5 text-slate-600">{description}</p>
+        <p className="mt-1 text-[12px] leading-5 text-gray-600 dark:text-gray-400">{description}</p>
       </div>
       <button
         type="button"
         onClick={onClose}
         aria-label={closeLabel}
-        className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-xs transition-colors hover:bg-slate-100"
+        className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1.5 text-gray-600 dark:text-gray-400 shadow-xs transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
       >
         <X className="h-4 w-4" />
       </button>
@@ -802,7 +809,7 @@ function Field({
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
   return (
     <label className="block">
-      <span className="mb-1 flex items-center gap-1 text-[11.5px] font-semibold text-slate-700">
+      <span className="mb-1 flex items-center gap-1 text-[11.5px] font-semibold text-gray-700 dark:text-gray-300">
         {label}
         {required && <span className="text-rose-600">*</span>}
       </span>

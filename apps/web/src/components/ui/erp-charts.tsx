@@ -164,8 +164,12 @@ export function ChannelDonutChart({
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-[20px] font-bold tabular-nums text-slate-950">{centerValue}</span>
-          <span className="text-[11px] font-medium text-slate-600">{centerLabel}</span>
+          <span className="text-[20px] font-bold tabular-nums text-gray-900 dark:text-gray-100">
+            {centerValue}
+          </span>
+          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+            {centerLabel}
+          </span>
         </div>
       </div>
 
@@ -173,18 +177,22 @@ export function ChannelDonutChart({
         {data.map((slice) => (
           <li
             key={slice.name}
-            className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 hover:bg-slate-50"
+            className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             <span className="flex min-w-0 items-center gap-2">
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: slice.color }}
               />
-              <span className="truncate font-medium text-slate-800">{slice.name}</span>
+              <span className="truncate font-medium text-gray-700 dark:text-gray-300">
+                {slice.name}
+              </span>
             </span>
             <span className="flex shrink-0 items-center gap-2 tabular-nums">
-              <span className="font-bold text-slate-950">{slice.value}</span>
-              {slice.meta && <span className="text-[11.5px] text-slate-500">{slice.meta}</span>}
+              <span className="font-bold text-gray-900 dark:text-gray-100">{slice.value}</span>
+              {slice.meta && (
+                <span className="text-[11.5px] text-gray-500 dark:text-gray-400">{slice.meta}</span>
+              )}
             </span>
           </li>
         ))}
@@ -213,23 +221,25 @@ export function HorizontalFunnelBars({ items }: { items: FunnelItem[] }) {
         const pct = item.count > 0 ? Math.max(12, Math.round((item.count / max) * 100)) : 4;
         const barColor =
           item.tone === "emerald"
-            ? "bg-gradient-to-r from-[#065F46] to-[#10B981]"
+            ? "bg-emerald-500"
             : item.tone === "slate"
-              ? "bg-stone-400"
-              : "bg-gradient-to-r from-[#18181B] to-[#3F3F46]";
+              ? "bg-gray-400 dark:bg-gray-600"
+              : "bg-blue-600";
 
         return (
           <div key={item.key} className="space-y-1.5">
             <div className="flex items-center justify-between gap-2 text-[12.5px]">
-              <span className="font-semibold text-slate-800">{item.label}</span>
-              <span className="tabular-nums font-bold text-slate-950">
+              <span className="font-semibold text-gray-700 dark:text-gray-300">{item.label}</span>
+              <span className="tabular-nums font-bold text-gray-900 dark:text-gray-100">
                 {item.count}
                 {item.sublabel && (
-                  <span className="ml-1.5 font-normal text-slate-500">{item.sublabel}</span>
+                  <span className="ml-1.5 font-normal text-gray-500 dark:text-gray-400">
+                    {item.sublabel}
+                  </span>
                 )}
               </span>
             </div>
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${barColor}`}
                 style={{ width: `${pct}%` }}

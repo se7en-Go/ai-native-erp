@@ -303,7 +303,7 @@ export default function OnboardingPage() {
             </div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
               <div
-                className="h-1.5 rounded-full bg-gradient-to-r from-[#065F46] to-[#10B981] transition-[width] duration-300"
+                className="h-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-[width] duration-300"
                 style={{ width: `${progressPct}%` }}
               />
             </div>

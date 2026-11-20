@@ -23,47 +23,43 @@ const STAGES: OpportunityStage[] = [
   "closed_lost",
 ];
 
+/** 阶段配色：颜色只作用于状态点，底板统一为纯净白 / 深灰卡片。 */
 const STAGE_ACCENT: Record<
   OpportunityStage,
-  { dot: string; bar: string; column: string; label: { zh: string; en: string } }
+  { dot: string; label: { zh: string; en: string } }
 > = {
   discovery: {
     dot: "bg-slate-400",
-    bar: "bg-slate-300",
-    column: "bg-slate-50/70",
     label: { zh: "需求挖掘", en: "Discovery" },
   },
   sampling: {
     dot: "bg-violet-500",
-    bar: "bg-violet-400",
-    column: "bg-violet-50/40",
     label: { zh: "寄样确认", en: "Sampling" },
   },
   quoting: {
-    dot: "bg-blue-600",
-    bar: "bg-blue-500",
-    column: "bg-blue-50/40",
+    dot: "bg-blue-600 dark:bg-blue-500",
     label: { zh: "报价中", en: "Quoting" },
   },
   negotiating: {
     dot: "bg-amber-500",
-    bar: "bg-amber-400",
-    column: "bg-amber-50/40",
     label: { zh: "商务谈判", en: "Negotiating" },
   },
   closed_won: {
     dot: "bg-emerald-500",
-    bar: "bg-emerald-500",
-    column: "bg-emerald-50/40",
     label: { zh: "已成交", en: "Closed won" },
   },
   closed_lost: {
     dot: "bg-rose-500",
-    bar: "bg-rose-400",
-    column: "bg-rose-50/40",
     label: { zh: "已丢单", en: "Closed lost" },
   },
 };
+
+/**
+ * PageHeader / CardHeader 为共享原语（无 dark 变体），
+ * 此处以任意变体在页面层补齐深色模式下的标题对比度。
+ */
+const PAGE_DARK_HEADER =
+  "dark:[&_header_h1]:text-gray-100 dark:[&_header_p]:text-gray-400 dark:[&_.erp-card-header_h2]:text-gray-100 dark:[&_.erp-card-header_p]:text-gray-400";
 
 export default function CrmOpportunitiesPage() {
   const { bi } = useI18n();
@@ -104,7 +100,7 @@ export default function CrmOpportunitiesPage() {
       currentPath="/crm/opportunities"
       pendingProposalsCount={proposalsQuery.data?.total ?? 0}
     >
-      <Page>
+      <Page className={PAGE_DARK_HEADER}>
         <PageHeader
           title={bi("商机阶段看板", "Opportunity board")}
           description={bi(
@@ -143,7 +139,7 @@ export default function CrmOpportunitiesPage() {
         {(opportunitiesQuery.isError ?? false) && (
           <p
             role="alert"
-            className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[12px] font-medium text-rose-800"
+            className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
           >
             {opportunitiesQuery.error?.message}
           </p>
@@ -151,7 +147,7 @@ export default function CrmOpportunitiesPage() {
 
         <div
           data-testid="opportunity-board"
-          className="grid gap-3 overflow-x-auto pb-1 md:grid-cols-3 2xl:grid-cols-6"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
         >
           {STAGES.map((stage) => {
             const cards = byStage(stage);
@@ -160,16 +156,16 @@ export default function CrmOpportunitiesPage() {
               <section
                 key={stage}
                 data-testid={`opportunity-column-${stage}`}
-                className={`min-w-[200px] rounded-2xl border border-slate-200/80 p-2.5 ${accent.column}`}
+                className="flex min-w-0 flex-col rounded-2xl border border-gray-200 bg-white p-2.5 dark:border-gray-800 dark:bg-gray-900"
               >
                 <header className="flex items-center justify-between gap-2 px-1 pb-2">
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
-                    <span className="truncate text-[11.5px] font-semibold text-slate-800">
+                    <span className="truncate text-[11.5px] font-semibold text-gray-900 dark:text-gray-100">
                       {bi(accent.label.zh, accent.label.en)}
                     </span>
                   </span>
-                  <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-slate-700">
+                  <span className="shrink-0 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
                     {cards.length}
                   </span>
                 </header>
@@ -178,29 +174,23 @@ export default function CrmOpportunitiesPage() {
                     <article
                       key={opportunity.id}
                       data-testid={`opportunity-card-${opportunity.id}`}
-                      className="rounded-xl border border-slate-200/90 border-l-[3px] bg-white p-2.5 text-[12px] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_6px_16px_-6px_rgba(15,23,42,0.22)]"
+                      className="rounded-xl border border-gray-200 bg-gray-50/70 p-2.5 text-[12px] transition-colors duration-200 hover:border-blue-300 hover:bg-white dark:border-gray-800 dark:bg-gray-800/40 dark:hover:border-blue-500/50 dark:hover:bg-gray-800"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex min-w-0 items-start gap-2">
-                          <CrmAvatar
-                            name={opportunity.company_name ?? opportunity.title}
-                            size="sm"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-slate-900">
-                              {opportunity.title}
-                            </p>
-                            <p className="truncate text-[10.5px] font-medium text-slate-500">
-                              {opportunity.company_name ?? opportunity.customer_id.slice(0, 8)}
-                            </p>
-                          </div>
-                        </div>
-                        <span
-                          aria-hidden="true"
-                          className={`mt-0.5 h-6 w-[3px] shrink-0 rounded-full ${accent.bar}`}
+                      <div className="flex min-w-0 items-start gap-2">
+                        <CrmAvatar
+                          name={opportunity.company_name ?? opportunity.title}
+                          size="sm"
                         />
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-gray-900 dark:text-gray-100">
+                            {opportunity.title}
+                          </p>
+                          <p className="truncate text-[10.5px] font-medium text-gray-500 dark:text-gray-400">
+                            {opportunity.company_name ?? opportunity.customer_id.slice(0, 8)}
+                          </p>
+                        </div>
                       </div>
-                      <p className="mt-1.5 text-[12.5px] font-bold tabular-nums text-slate-800">
+                      <p className="mt-1.5 text-[12.5px] font-bold tabular-nums text-blue-700 dark:text-blue-400">
                         {formatMoney(opportunity.expected_amount, opportunity.currency)}
                       </p>
                       <select
@@ -212,7 +202,7 @@ export default function CrmOpportunitiesPage() {
                             stage: event.target.value as OpportunityStage,
                           })
                         }
-                        className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-1 text-[10.5px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none"
+                        className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10.5px] font-medium text-gray-700 transition-colors hover:border-gray-300 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600"
                       >
                         {STAGES.map((option) => (
                           <option key={option} value={option}>
@@ -223,7 +213,7 @@ export default function CrmOpportunitiesPage() {
                     </article>
                   ))}
                   {cards.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-slate-300/80 bg-white/60 px-2 py-4 text-center text-[11px] font-medium text-slate-500">
+                    <p className="rounded-xl border border-dashed border-gray-200 bg-gray-50/60 px-2 py-5 text-center text-[11px] font-medium text-gray-400 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-500">
                       {bi("暂无商机", "No deals")}
                     </p>
                   )}

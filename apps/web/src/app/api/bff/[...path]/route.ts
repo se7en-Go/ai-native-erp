@@ -251,6 +251,25 @@ async function handleMockMode(
     });
   }
 
+  if (method === "GET" && upstreamPath === "/api/v1/finance/fx-rates/live") {
+    return NextResponse.json({
+      base: "USD",
+      quote: "CNY",
+      usd_cny: "7.2410",
+      rates: [
+        { pair: "USD/CNY", base: "USD", quote: "CNY", rate: "7.2410" },
+        { pair: "EUR/CNY", base: "EUR", quote: "CNY", rate: "7.8520" },
+        { pair: "GBP/CNY", base: "GBP", quote: "CNY", rate: "9.1640" },
+        { pair: "USD/HKD", base: "USD", quote: "HKD", rate: "7.7820" },
+      ],
+      source: "ECB (Frankfurter)",
+      as_of_date: "2026-11-20",
+      fetched_at: new Date().toISOString(),
+      is_live: true,
+      refresh_interval_seconds: 3600,
+    });
+  }
+
   if (method === "GET" && upstreamPath === "/api/v1/orders/warehouses") {
     return NextResponse.json({
       default_warehouse_id: "wh-sz",

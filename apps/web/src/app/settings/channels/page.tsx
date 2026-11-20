@@ -86,7 +86,7 @@ function ChannelsHubFallback() {
   return (
     <AppShell currentPath="/settings/channels">
       <Page>
-        <div className="erp-card animate-pulse p-8 text-[13px] font-medium text-stone-500">
+        <div className="erp-card animate-pulse p-8 text-[13px] font-medium text-slate-500 dark:text-slate-400">
           正在加载渠道中心…
         </div>
       </Page>
@@ -363,7 +363,7 @@ function ChannelsHub() {
             options={tabs}
             className="flex-wrap"
           />
-          <span className="text-[11px] font-medium text-stone-500">
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
             {bi(
               "令牌一律信封加密，从不以明文回显",
               "Tokens stay envelope-encrypted and are never echoed back"
@@ -438,13 +438,13 @@ function ChannelsHub() {
                   dlqItems.map((ev) => (
                     <div
                       key={ev.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2.5"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2.5 dark:border-rose-800/60 dark:bg-rose-950/30"
                     >
                       <div className="min-w-0">
-                        <div className="text-[13px] font-medium text-zinc-900">
+                        <div className="text-[13px] font-medium text-slate-900 dark:text-slate-100">
                           {ev.channel_type} · {ev.external_event_id}
                         </div>
-                        <div className="text-[12px] text-rose-700">
+                        <div className="text-[12px] text-rose-700 dark:text-rose-300">
                           {ev.error_message} ({bi("重试", "retries")} {ev.retry_count})
                         </div>
                       </div>
@@ -452,7 +452,7 @@ function ChannelsHub() {
                         type="button"
                         data-testid={`dlq-replay-btn-${ev.id}`}
                         onClick={() => replayMutation.mutate(ev.id)}
-                        className="erp-btn rounded-xl bg-[#18181B] text-white shadow-xs hover:bg-[#065F46]"
+                        className="erp-btn rounded-xl bg-blue-600 text-white shadow-xs transition-colors hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
                       >
                         <RefreshCw className="h-3 w-3" />
                         <span>{bi("重放", "Replay")}</span>
@@ -464,7 +464,7 @@ function ChannelsHub() {
             </Card>
 
             <Card>
-              <div className="flex flex-wrap items-center gap-2 border-b border-[#EFECE6] bg-[#FAF8F5]/80 p-3">
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-800/60">
                 <SegmentedTabs
                   ariaLabel={bi("合规台账视图", "Compliance ledger view")}
                   value={logTab}
@@ -493,7 +493,7 @@ function ChannelsHub() {
                     },
                   ]}
                 />
-                <span className="ml-auto text-[11px] font-medium text-stone-600">
+                <span className="ml-auto text-[11px] font-medium text-slate-600 dark:text-slate-400">
                   {bi(
                     "静默时段 21:00–08:00 不发送任何营销消息",
                     "Quiet hours 21:00–08:00 block all marketing sends"
@@ -521,13 +521,15 @@ function ChannelsHub() {
                         <tbody>
                           {(consentsQuery.data?.items ?? []).map((c) => (
                             <tr key={c.id}>
-                              <td className="font-semibold text-zinc-900">{c.customer_name}</td>
+                              <td className="font-semibold text-slate-900 dark:text-slate-100">
+                                {c.customer_name}
+                              </td>
                               <td>
-                                <span className="rounded-md bg-[#FAF8F5] px-1.5 py-0.5 text-[11px] font-medium text-stone-700 ring-1 ring-[#E5E2DC]">
+                                <span className="rounded-md bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
                                   {c.channel_type}
                                 </span>
                               </td>
-                              <td className="text-stone-600">{c.proof_source}</td>
+                              <td className="text-slate-600 dark:text-slate-400">{c.proof_source}</td>
                               <td>
                                 <Badge tone="success">{c.consent_status}</Badge>
                               </td>
@@ -554,10 +556,12 @@ function ChannelsHub() {
                       <tbody>
                         {(suppressionsQuery.data?.items ?? []).map((r) => (
                           <tr key={r.id}>
-                            <td className="font-semibold text-zinc-900">{r.normalized_address}</td>
-                            <td className="text-stone-600">{r.channel_type}</td>
+                            <td className="font-semibold text-slate-900 dark:text-slate-100">
+                              {r.normalized_address}
+                            </td>
+                            <td className="text-slate-600 dark:text-slate-400">{r.channel_type}</td>
                             <td>
-                              <span className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700">
+                              <span className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300">
                                 {r.reason}
                               </span>
                             </td>

@@ -116,51 +116,48 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-screen bg-[#F4F2EE] lg:grid-cols-[1.15fr_0.85fr]">
-      {/* 左侧：21st.dev 深森曜石指挥舱视觉展板 */}
-      <section className="relative flex flex-col justify-between overflow-hidden bg-[#081311] p-8 text-stone-200 lg:p-14">
-        {/* 层次氛围光晕 + 微点阵纹理 */}
+    <div className="grid min-h-screen bg-gray-50 lg:grid-cols-[1.15fr_0.85fr] dark:bg-gray-950">
+      {/* 左侧：21st.dev 深海蓝曜石指挥舱视觉展板 */}
+      <section className="relative flex flex-col justify-between overflow-hidden bg-[#0B1220] p-8 text-gray-200 lg:p-14">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
           style={{
             backgroundImage:
-              "radial-gradient(circle at 18% 18%, rgba(16,185,129,0.24) 0, transparent 42%), radial-gradient(circle at 82% 76%, rgba(13,148,136,0.22) 0, transparent 45%), radial-gradient(circle at 55% 40%, rgba(217,119,6,0.10) 0, transparent 40%)",
+              "radial-gradient(circle at 18% 18%, rgba(37,99,235,0.28) 0, transparent 44%), radial-gradient(circle at 82% 76%, rgba(79,70,229,0.22) 0, transparent 45%), radial-gradient(circle at 55% 40%, rgba(16,185,129,0.10) 0, transparent 40%)",
           }}
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-[0.14]"
+          className="pointer-events-none absolute inset-0 opacity-[0.12]"
           style={{
             backgroundImage: "radial-gradient(rgba(255,255,255,0.45) 1px, transparent 1px)",
             backgroundSize: "24px 24px",
           }}
         />
 
-        {/* 顶部品牌标识 */}
         <div className="relative flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="relative grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(16,185,129,0.35)]">
+            <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(37,99,235,0.38)]">
               QZ
-              <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-300 ring-2 ring-[#081311]" />
+              <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-[#0B1220]" />
             </span>
             <div>
               <div className="text-[15px] font-bold tracking-tight text-white">
                 {bi("工贸全渠道外贸工作台", "Hybrid Foreign Trade Command Center")}
               </div>
-              <div className="text-[11.5px] font-medium text-emerald-200/70">
+              <div className="text-[11.5px] font-medium text-blue-200/75">
                 Quanzhou Smart LED Lighting · AI-Native ERP
               </div>
             </div>
           </div>
 
-          <span className="hidden items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-[11.5px] font-semibold text-emerald-200 backdrop-blur-md sm:inline-flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <span className="hidden items-center gap-1.5 rounded-full border border-blue-400/25 bg-blue-500/15 px-3 py-1 text-[11.5px] font-semibold text-blue-200 backdrop-blur-md sm:inline-flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
             {bi("PG17 RLS 租户硬隔离", "PG17 FORCE RLS")}
           </span>
         </div>
 
-        {/* 中部核心叙事 + 21st.dev 风格实时玻璃预览卡片 */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -168,8 +165,8 @@ export default function LoginPage() {
           className="relative my-10 max-w-2xl space-y-8"
         >
           <div className="space-y-4">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[12px] font-medium text-emerald-200">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[12px] font-medium text-blue-200">
+              <Sparkles className="h-3.5 w-3.5 text-blue-400" />
               {bi("专为中国工贸一体出海团队打造", "Built for Chinese export manufacturers")}
             </span>
             <h1 className="text-[32px] leading-[1.22] font-bold tracking-tight text-white lg:text-[40px]">
@@ -178,7 +175,7 @@ export default function LoginPage() {
                 "Inquiries, tiered PI quotes, 17TRACK logistics, CVP margins & AI employees in one command center."
               )}
             </h1>
-            <p className="max-w-xl text-[14px] leading-7 text-stone-300/90">
+            <p className="max-w-xl text-[14px] leading-7 text-gray-300/90">
               {bi(
                 "打通 WhatsApp、外贸邮件、阿里/MIC 与海外社媒，70% 尾款未核销强制阻断出库，每一笔毛利精确到 Decimal，AI 提案人工确认再落单。",
                 "Unify WhatsApp, Email, Meta & Telegram with deterministic SQL grounding, Decimal CVP margin tracking, and human-in-the-loop L0/L1 approvals."
@@ -186,26 +183,25 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* 玻璃拟态实时指标预览（21st.dev Command Center 招牌质感） */}
-          <div className="rounded-3xl border border-white/12 bg-white/[0.06] p-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl">
+          <div className="rounded-2xl border border-white/12 bg-white/[0.06] p-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3.5">
-              <div className="flex items-center gap-2 text-[12px] font-semibold text-emerald-200">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-blue-200">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
                 {bi("实时经营快照 · 泉州 LED 演示工贸租户", "Live Workspace Preview · Quanzhou LED")}
               </div>
-              <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
-                USD/CNY 7.1200
+              <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                {bi("ECB 实时汇率联动", "Live ECB FX Sync")}
               </span>
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-600/35 to-teal-700/25 p-3.5">
-                <div className="flex items-center justify-between text-[11px] font-medium text-emerald-100/90">
+              <div className="rounded-xl border border-blue-400/25 bg-gradient-to-br from-blue-600/40 to-indigo-700/30 p-3.5">
+                <div className="flex items-center justify-between text-[11px] font-medium text-blue-100/90">
                   <span>{bi("CVP 平均毛利率", "Avg CVP Margin")}</span>
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-300" />
+                  <TrendingUp className="h-3.5 w-3.5 text-blue-300" />
                 </div>
                 <div className="mt-2 text-[22px] font-bold tabular-nums text-white">35.39%</div>
-                <div className="mt-1 text-[11px] text-emerald-200/80">
+                <div className="mt-1 text-[11px] text-blue-200/85">
                   {bi("净毛利 $11,346.62", "Net $11,346.62")}
                 </div>
               </div>
@@ -279,18 +275,18 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={toggleLocale}
-              className="inline-flex items-center rounded-full border border-[#E5E2DC] bg-white p-0.5 text-[12px] font-semibold shadow-xs"
+              className="inline-flex items-center rounded-lg border border-gray-200 bg-white p-0.5 text-[12px] font-semibold shadow-xs dark:border-gray-700 dark:bg-gray-900"
             >
               <span
-                className={`rounded-full px-2.5 py-1 transition-all ${
-                  locale === "zh" ? "bg-[#18181B] text-white" : "text-stone-500"
+                className={`rounded-md px-2.5 py-1 transition-all ${
+                  locale === "zh" ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400"
                 }`}
               >
                 中
               </span>
               <span
-                className={`rounded-full px-2.5 py-1 transition-all ${
-                  locale === "en" ? "bg-[#18181B] text-white" : "text-stone-500"
+                className={`rounded-md px-2.5 py-1 transition-all ${
+                  locale === "en" ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400"
                 }`}
               >
                 EN
@@ -298,7 +294,7 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <div className="rounded-3xl border border-[#E5E2DC] bg-white p-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_20px_50px_-24px_rgba(24,24,27,0.18)]">
+          <div className="rounded-2xl border border-gray-200 bg-white p-7 shadow-lg dark:border-gray-800 dark:bg-gray-900">
             {error && (
               <div
                 role="alert"
@@ -368,7 +364,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="group flex w-full items-center justify-center gap-2 rounded-xl bg-[#18181B] px-4 py-3 text-[13.5px] font-semibold text-[#FAFAF9] shadow-[0_8px_20px_-8px_rgba(24,24,27,0.5)] transition-all hover:bg-[#065F46] disabled:opacity-60"
+                className="group flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-[13.5px] font-semibold text-white shadow-sm transition-all hover:bg-blue-700 disabled:opacity-60"
               >
                 <span>
                   {submitting
@@ -379,12 +375,12 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 border-t border-[#EFECE6] pt-5">
+            <div className="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800">
               <div className="flex items-center justify-between">
-                <p className="text-[11.5px] font-semibold text-stone-600">
+                <p className="text-[11.5px] font-semibold text-gray-600 dark:text-gray-400">
                   {bi("演示角色 · 点击一键填充", "Demo roles · click to autofill")}
                 </p>
-                <code className="rounded-md bg-[#F4F2EE] px-2 py-0.5 font-mono text-[11px] font-medium text-stone-700">
+                <code className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-[11px] font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
                   {DEMO_PASSWORD}
                 </code>
               </div>
@@ -399,22 +395,22 @@ export default function LoginPage() {
                         onClick={() => fillDemoAccount(account.email)}
                         className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-all ${
                           selected
-                            ? "border-emerald-400 bg-emerald-50/70 shadow-xs"
-                            : "border-[#E5E2DC] bg-[#FAF8F5]/70 hover:border-stone-300 hover:bg-white"
+                            ? "border-blue-400 bg-blue-50/70 shadow-xs dark:border-blue-600 dark:bg-blue-900/30"
+                            : "border-gray-200 bg-gray-50/70 hover:border-gray-300 hover:bg-white dark:border-gray-700 dark:bg-gray-800/60 dark:hover:bg-gray-800"
                         }`}
                       >
                         <span className="flex min-w-0 items-center gap-2.5">
                           <span className={`h-2 w-2 shrink-0 rounded-full ${account.dot}`} />
                           <span className="min-w-0">
-                            <span className="block truncate text-[12.5px] font-semibold text-zinc-900">
+                            <span className="block truncate text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
                               {bi(account.zh, account.en)}
                             </span>
-                            <span className="block truncate text-[11px] text-stone-500">
+                            <span className="block truncate text-[11px] text-gray-500 dark:text-gray-400">
                               {account.email}
                             </span>
                           </span>
                         </span>
-                        <span className="shrink-0 rounded-full border border-[#E5E2DC] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-stone-700">
+                        <span className="shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
                           {bi(account.badgeZh, account.badgeEn)}
                         </span>
                       </button>

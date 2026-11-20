@@ -7,30 +7,38 @@ import { ArrowRight } from "lucide-react";
 export type BentoAccent = "blue" | "emerald" | "amber" | "rose" | "violet" | "slate";
 
 const ACCENT_ICON_BG: Record<BentoAccent, string> = {
-  blue: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80",
-  emerald: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80",
-  amber: "bg-amber-50 text-amber-700 ring-1 ring-amber-200/80",
-  rose: "bg-rose-50 text-rose-700 ring-1 ring-rose-200/80",
-  violet: "bg-stone-100 text-stone-800 ring-1 ring-stone-200/90",
-  slate: "bg-stone-100 text-stone-700 ring-1 ring-stone-200/90",
+  blue: "bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60",
+  emerald:
+    "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-800/60",
+  amber:
+    "bg-amber-50 text-amber-600 ring-1 ring-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-800/60",
+  rose: "bg-rose-50 text-rose-600 ring-1 ring-rose-100 dark:bg-rose-900/30 dark:text-rose-400 dark:ring-rose-800/60",
+  violet:
+    "bg-purple-50 text-purple-600 ring-1 ring-purple-100 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-800/60",
+  slate:
+    "bg-gray-100 text-gray-600 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700",
 };
 
 const ACCENT_BADGE: Record<BentoAccent, string> = {
-  blue: "bg-emerald-50 text-emerald-800 border-emerald-200/90",
-  emerald: "bg-emerald-50 text-emerald-800 border-emerald-200/90",
-  amber: "bg-amber-50 text-amber-800 border-amber-200/90",
-  rose: "bg-rose-50 text-rose-800 border-rose-200/90",
-  violet: "bg-stone-100 text-stone-800 border-stone-200/90",
-  slate: "bg-stone-100 text-stone-700 border-stone-200/90",
+  blue: "bg-blue-50 text-blue-700 border-blue-200/80 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
+  emerald:
+    "bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800",
+  amber:
+    "bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800",
+  rose: "bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800",
+  violet:
+    "bg-purple-50 text-purple-700 border-purple-200/80 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800",
+  slate:
+    "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
 };
 
 const ACCENT_SPARK: Record<BentoAccent, string> = {
-  blue: "#059669",
-  emerald: "#059669",
+  blue: "#2563EB",
+  emerald: "#10B981",
   amber: "#D97706",
   rose: "#E11D48",
-  violet: "#18181B",
-  slate: "#57534E",
+  violet: "#7C3AED",
+  slate: "#64748B",
 };
 
 function MiniSparkline({
@@ -55,7 +63,7 @@ function MiniSparkline({
   });
   const d = `M ${coords.join(" L ")}`;
   const area = `${d} L ${w},${h} L 0,${h} Z`;
-  const stroke = hero ? "#A7F3D0" : color;
+  const stroke = hero ? "#BFDBFE" : color;
   const gradId = `spark-${stroke.replace("#", "")}-${points.length}-${hero ? "h" : "n"}`;
 
   return (
@@ -84,9 +92,7 @@ function MiniSparkline({
 }
 
 /**
- * 21st.dev Command Center 风格 Bento 指标卡：
- * - `variant="hero"` 启用深玉翡翠渐变焦点卡（整屏视觉锚点，告别平平无奇）
- * - `variant="default"` 为暖陶石浮雕白卡 + 曜石墨 CTA
+ * 21st.dev Clean Cool Gray + Tech Blue KPI Card (full light & dark mode support).
  */
 export function BentoStatCard({
   label,
@@ -95,7 +101,7 @@ export function BentoStatCard({
   badgeTone,
   hint,
   icon: Icon,
-  accent = "emerald",
+  accent = "blue",
   variant = "default",
   sparkline,
   ctaLabel,
@@ -121,26 +127,19 @@ export function BentoStatCard({
   return (
     <div
       data-testid={testId}
-      className={`group relative flex flex-col justify-between overflow-hidden rounded-[20px] p-5 transition-all duration-200 hover:-translate-y-0.5 ${
+      className={`group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-xl p-5 transition-all duration-200 ${
         isHero
-          ? "border border-emerald-700/40 bg-gradient-to-br from-[#064E3B] via-[#065F46] to-[#0F766E] text-white shadow-[0_14px_34px_-12px_rgba(6,95,70,0.48),inset_0_1px_0_rgba(255,255,255,0.22)]"
-          : "border border-[#E5E2DC] bg-white/95 text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_2px_rgba(24,24,27,0.05),0_10px_26px_-14px_rgba(24,24,27,0.09)] hover:border-[#D4CFC6]"
+          ? "border border-blue-500/40 bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20"
+          : "border border-gray-200 bg-white text-gray-900 shadow-sm hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
       }`}
     >
-      {isHero && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-10 -right-10 h-36 w-36 rounded-full bg-emerald-300/20 blur-2xl"
-        />
-      )}
-
       <div className="relative flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           {Icon && (
             <span
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
                 isHero
-                  ? "bg-white/15 text-emerald-100 ring-1 ring-white/25 backdrop-blur-sm"
+                  ? "bg-white/15 text-white ring-1 ring-white/25 backdrop-blur-sm"
                   : ACCENT_ICON_BG[accent]
               }`}
             >
@@ -148,8 +147,8 @@ export function BentoStatCard({
             </span>
           )}
           <span
-            className={`truncate text-[13px] font-semibold ${
-              isHero ? "text-emerald-50" : "text-stone-700"
+            className={`min-w-0 truncate text-[13px] font-medium ${
+              isHero ? "text-blue-50" : "text-gray-600 dark:text-gray-400"
             }`}
           >
             {label}
@@ -157,7 +156,7 @@ export function BentoStatCard({
         </div>
         {badge && (
           <span
-            className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
               isHero
                 ? "border-white/25 bg-white/15 text-white backdrop-blur-sm"
                 : ACCENT_BADGE[pillTone]
@@ -168,10 +167,10 @@ export function BentoStatCard({
         )}
       </div>
 
-      <div className="relative mt-4 flex items-end justify-between gap-3">
+      <div className="relative mt-3.5 flex items-end justify-between gap-3">
         <div
-          className={`min-w-0 text-[30px] font-bold leading-none tracking-tight tabular-nums ${
-            isHero ? "text-white" : "text-zinc-950"
+          className={`min-w-0 truncate text-2xl font-bold leading-tight tracking-tight tabular-nums ${
+            isHero ? "text-white" : "text-gray-900 dark:text-gray-100"
           }`}
         >
           {value}
@@ -183,17 +182,17 @@ export function BentoStatCard({
 
       {(hint || (ctaLabel && ctaHref)) && (
         <div
-          className={`relative mt-4 border-t pt-3 ${
-            isHero ? "border-white/15" : "border-[#EFECE6]"
+          className={`relative mt-3.5 border-t pt-2.5 ${
+            isHero ? "border-white/15" : "border-gray-100 dark:border-gray-800"
           }`}
         >
           {ctaLabel && ctaHref ? (
             <Link
               href={ctaHref}
-              className={`flex w-full items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-[12.5px] font-semibold transition-all ${
+              className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
                 isHero
-                  ? "bg-white text-emerald-950 hover:bg-emerald-50"
-                  : "bg-[#18181B] text-[#FAFAF9] shadow-xs hover:bg-[#065F46]"
+                  ? "bg-white text-blue-700 hover:bg-blue-50"
+                  : "bg-blue-600 text-white shadow-xs hover:bg-blue-700"
               }`}
             >
               <span>{ctaLabel}</span>
@@ -202,7 +201,7 @@ export function BentoStatCard({
           ) : (
             <div
               className={`truncate text-[12px] font-medium ${
-                isHero ? "text-emerald-100/90" : "text-stone-600"
+                isHero ? "text-blue-100/90" : "text-gray-500 dark:text-gray-400"
               }`}
             >
               {hint}

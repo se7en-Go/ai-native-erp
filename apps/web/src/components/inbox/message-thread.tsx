@@ -90,8 +90,8 @@ export function MessageThread({
 
   if (!conversation) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-slate-50/60 text-[13px] font-medium text-slate-600">
-        <span className="grid h-12 w-12 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white text-slate-400">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-gray-50 text-[13px] font-medium text-gray-600 dark:bg-gray-950 dark:text-gray-400">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl border border-dashed border-gray-300 bg-white text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
           <PanelRight className="h-5 w-5" />
         </span>
         {bi("选择左侧一条会话开始沟通。", "Select a conversation to begin.")}
@@ -135,33 +135,33 @@ export function MessageThread({
   return (
     <div
       data-testid="inbox-message-thread"
-      className="flex min-h-0 flex-1 flex-col bg-slate-50/60"
+      className="flex min-h-0 flex-1 flex-col bg-gray-50 dark:bg-gray-950"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5E2DC] bg-white px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span
             aria-hidden="true"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-[11.5px] font-bold text-emerald-800 ring-1 ring-emerald-200"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-100 text-[11.5px] font-bold text-blue-700 ring-1 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30"
           >
             {initialsOf(conversation.customer_name)}
           </span>
-          <h2 className="truncate text-[14px] font-bold text-stone-900">
+          <h2 className="truncate text-[14px] font-bold text-gray-900 dark:text-gray-100">
             {conversation.customer_name}
           </h2>
           {conversation.is_pinned && (
             <Pin
               aria-hidden="true"
               data-testid="conversation-header-pin"
-              className="h-3.5 w-3.5 shrink-0 rotate-45 text-emerald-700"
+              className="h-3.5 w-3.5 shrink-0 rotate-45 text-blue-600"
             />
           )}
           {conversation.country_code && (
-            <span className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-stone-700 ring-1 ring-stone-200/70">
+            <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-gray-700 ring-1 ring-gray-200/70 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">
               {conversation.country_code}
             </span>
           )}
           {conversation.channel_type && (
-            <span className="rounded-md bg-white px-1.5 py-0.5 text-[10.5px] font-medium text-stone-600 ring-1 ring-stone-200">
+            <span className="rounded-md bg-white px-1.5 py-0.5 text-[10.5px] font-medium text-gray-600 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700">
               {conversation.channel_type}
             </span>
           )}
@@ -171,7 +171,7 @@ export function MessageThread({
                 <span
                   key={tag}
                   data-testid={`conversation-header-tag-${tag}`}
-                  className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
+                  className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-blue-700 ring-1 ring-blue-200/80 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30"
                 >
                   <Tag className="h-2.5 w-2.5" />
                   {tag}
@@ -182,9 +182,9 @@ export function MessageThread({
           {localTimeInfo && (
             <span
               data-testid="buyer-local-time-badge"
-              className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-medium tabular-nums text-stone-700"
+              className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium tabular-nums text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
             >
-              <Clock className="h-3 w-3 text-stone-500" />
+              <Clock className="h-3 w-3 text-gray-500" />
               <span>
                 {t("localTime")} {localTimeInfo.formattedTime} ({localTimeInfo.ianaTimezone})
               </span>
@@ -193,7 +193,7 @@ export function MessageThread({
           {localTimeInfo?.isQuietHours && (
             <span
               data-testid="quiet-hours-pill"
-              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
             >
               {t("quietHours")} (21:00–08:00)
             </span>
@@ -205,7 +205,7 @@ export function MessageThread({
           <button
             type="button"
             onClick={onToggleDrawer}
-            className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
+            className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1 text-[12px] font-medium text-gray-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
           >
             <PanelRight className="h-3.5 w-3.5" />
             <span>{bi("客户上下文", "Context")}</span>
@@ -234,19 +234,19 @@ export function MessageThread({
               <div
                 className={`max-w-2xl rounded-2xl border px-3.5 py-2.5 text-[13px] leading-6 ${
                   isInternalNote
-                    ? "border-amber-200 bg-amber-50/90 text-amber-950 shadow-[0_1px_2px_rgba(180,83,9,0.08)]"
+                    ? "border-amber-200 bg-amber-50/90 text-amber-950 shadow-[0_1px_2px_rgba(180,83,9,0.08)] dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
                     : isOutbound
-                      ? "rounded-br-md border-[#18181B] bg-[#18181B] text-[#FAFAF9] shadow-[0_6px_18px_-8px_rgba(24,24,27,0.55)]"
-                      : "rounded-bl-md border-stone-200 bg-white text-stone-900 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.18)]"
+                      ? "rounded-br-md border-blue-600 bg-blue-600 text-white shadow-[0_6px_18px_-8px_rgba(37,99,235,0.45)]"
+                      : "rounded-bl-md border-gray-200 bg-white text-gray-900 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.18)] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 }`}
               >
                 <div
                   className={`mb-1 flex items-center gap-2 text-[10.5px] font-medium ${
                     isInternalNote
-                      ? "text-amber-800"
+                      ? "text-amber-800 dark:text-amber-300"
                       : isOutbound
-                        ? "text-emerald-100"
-                        : "text-stone-500"
+                        ? "text-blue-100"
+                        : "text-gray-500 dark:text-gray-400"
                   }`}
                 >
                   {isInternalNote && <StickyNote className="h-3 w-3" />}
@@ -255,8 +255,8 @@ export function MessageThread({
                     <span
                       className={`inline-flex items-center gap-0.5 rounded px-1 py-px ring-1 ${
                         isOutbound
-                          ? "bg-white/15 text-emerald-50 ring-white/25"
-                          : "bg-stone-100 text-stone-700 ring-stone-200"
+                          ? "bg-white/15 text-white ring-white/25"
+                          : "bg-gray-100 text-gray-700 ring-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600"
                       }`}
                     >
                       <Globe className="h-2.5 w-2.5" />
@@ -289,7 +289,7 @@ export function MessageThread({
                             target="_blank"
                             rel="noreferrer noopener"
                             title={bi("点击查看原图", "Open full image")}
-                            className="block w-fit overflow-hidden rounded-xl border border-stone-200/90 bg-stone-50 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.25)] transition-transform duration-150 hover:scale-[1.01]"
+                            className="block w-fit overflow-hidden rounded-xl border border-gray-200 bg-gray-50 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.25)] transition-transform duration-150 hover:scale-[1.01] dark:border-gray-700 dark:bg-gray-900"
                           >
                             {/* 契约附件地址需带 Cookie 走 BFF，故不用 next/image 优化器。 */}
                             <img
@@ -311,8 +311,8 @@ export function MessageThread({
                           rel="noreferrer noopener"
                           className={`inline-flex w-fit max-w-full items-center gap-1.5 rounded-xl border px-2 py-1 text-[11.5px] font-semibold transition-colors ${
                             isOutbound
-                              ? "border-white/25 bg-white/10 text-emerald-50 hover:bg-white/15"
-                              : "border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100"
+                              ? "border-white/25 bg-white/10 text-white hover:bg-white/15"
+                              : "border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                           }`}
                         >
                           <Download className="h-3 w-3 shrink-0" />
@@ -331,7 +331,7 @@ export function MessageThread({
                 {translationText && (
                   <div
                     className={`mt-2 border-t pt-1.5 ${
-                      isOutbound ? "border-white/25" : "border-stone-200"
+                      isOutbound ? "border-white/25" : "border-gray-200 dark:border-gray-700"
                     }`}
                   >
                     <button
@@ -346,7 +346,9 @@ export function MessageThread({
                     {isExpanded && (
                       <p
                         className={`mt-1 rounded-lg px-2 py-1.5 text-[12px] ${
-                          isOutbound ? "bg-white/12" : "bg-stone-50 text-stone-800"
+                          isOutbound
+                            ? "bg-white/12 text-white"
+                            : "bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
                         }`}
                       >
                         {translationText}
@@ -356,7 +358,7 @@ export function MessageThread({
                 )}
 
                 {isOutbound && (
-                  <div className="mt-1 flex items-center justify-end gap-1 text-[10px] font-medium text-emerald-100">
+                  <div className="mt-1 flex items-center justify-end gap-1 text-[10px] font-medium text-blue-100">
                     <Lock className="h-2.5 w-2.5" />
                     <span>{msg.delivery_status}</span>
                   </div>
@@ -371,7 +373,7 @@ export function MessageThread({
                     aria-label={bi("把这条买家消息译成中文", "Translate this buyer message to Chinese")}
                     disabled={translatingId === msg.id}
                     onClick={() => void runBubbleTranslation(msg)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-60"
+                    className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-60 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/15"
                   >
                     {translatingId === msg.id ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -385,7 +387,7 @@ export function MessageThread({
                     <p
                       role="alert"
                       data-testid={`translate-msg-error-${msg.id}`}
-                      className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700"
+                      className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
                     >
                       {translateError[msg.id]}
                     </p>
@@ -394,9 +396,9 @@ export function MessageThread({
                   {bubbleTranslation && !bubbleTranslationHidden && (
                     <div
                       data-testid={`translated-bubble-${msg.id}`}
-                      className="max-w-2xl rounded-2xl rounded-tl-md border border-emerald-200 bg-emerald-50/85 px-3 py-1.5 text-[12.5px] leading-6 text-emerald-950 shadow-[0_2px_8px_-4px_rgba(6,95,70,0.28)]"
+                      className="max-w-2xl rounded-2xl rounded-tl-md border border-blue-200 bg-blue-50/85 px-3 py-1.5 text-[12.5px] leading-6 text-blue-950 shadow-[0_2px_8px_-4px_rgba(37,99,235,0.25)] dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100"
                     >
-                      <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700">
+                      <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
                         <Languages className="h-2.5 w-2.5" />
                         <span>{bi("中文译文", "Chinese translation")}</span>
                         <button
@@ -408,7 +410,7 @@ export function MessageThread({
                               [msg.id]: true,
                             }))
                           }
-                          className="ml-auto inline-flex items-center gap-0.5 rounded px-1 py-px font-semibold text-emerald-700/80 hover:bg-emerald-100 hover:text-emerald-900"
+                          className="ml-auto inline-flex items-center gap-0.5 rounded px-1 py-px font-semibold text-blue-700/80 hover:bg-blue-100 hover:text-blue-900 dark:text-blue-300/90 dark:hover:bg-blue-500/15 dark:hover:text-blue-200"
                         >
                           <EyeOff className="h-2.5 w-2.5" />
                           {bi("隐藏", "Hide")}
@@ -428,7 +430,7 @@ export function MessageThread({
                           [msg.id]: false,
                         }))
                       }
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 underline decoration-dotted underline-offset-2"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 underline decoration-dotted underline-offset-2 dark:text-blue-300"
                     >
                       <Eye className="h-3 w-3" />
                       {bi("显示译文", "Show translation")}
@@ -440,7 +442,7 @@ export function MessageThread({
           );
         })}
         {messages.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-stone-300 bg-white/70 py-8 text-center text-[12px] font-medium text-stone-600">
+          <p className="rounded-2xl border border-dashed border-gray-300 bg-white/70 py-8 text-center text-[12px] font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-400">
             {bi("该会话还没有消息。", "No messages in this conversation yet.")}
           </p>
         )}
