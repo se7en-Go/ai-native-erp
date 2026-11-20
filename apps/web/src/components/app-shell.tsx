@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,13 +13,14 @@ import {
   Search,
   ShieldAlert,
   TrendingUp,
+  X,
 } from "lucide-react";
 import { useAuthSession } from "@/components/providers";
 import { CommandPalette, useCommandPalette } from "@/components/command-palette";
 import { useRealtimeInbox } from "@/hooks/use-realtime-inbox";
 import { canAccessRoute } from "@/lib/auth-cookie";
 import { useI18n } from "@/lib/i18n";
-import { ALL_NAV_ITEMS, NAV_SECTIONS, visibleNavSections } from "@/lib/nav-registry";
+import { ALL_NAV_ITEMS, NAV_SECTIONS, filterNavSections, visibleNavSections } from "@/lib/nav-registry";
 
 const ROLE_LABEL: Record<string, { zh: string; en: string }> = {
   owner: { zh: "企业所有者", en: "Owner" },
@@ -42,13 +43,15 @@ export function AppShell({
   const { principal, isLoading, logout } = useAuthSession();
   const { locale, toggleLocale, t, bi } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  // Manual section overrides: `{ [sectionId]: true }` = expanded, `false` = collapsed.
+  // Sections without an override fall back to their `defaultCollapsed` flag.
+  const [sectionOverrides, setSectionOverrides] = useState<Record<string, boolean>>({});
+  const [filterQuery, setFilterQuery] = useState("");
   const palette = useCommandPalette();
 
   useRealtimeInbox(Boolean(principal && canAccessRoute(principal.role, "/inbox")));
 
   const role = principal?.role ?? null;
-  const sections = visibleNavSections(role);
   const allowedCurrentRoute = !role || canAccessRoute(role, pathname);
 
   // 面包屑：当前路由命中的导航条目 + 所属分组，全部走 i18n，不出现中英斜杠。
@@ -58,6 +61,24 @@ export function AppShell({
   const activeSection = NAV_SECTIONS.find((section) =>
     section.items.some((item) => item.href === activeItem?.href)
   );
+  const activeSectionId = activeSection?.id;
+
+  // 默认折叠的分组（财务与增长 / AI 与设置）一旦被当前路由命中，必须自动展开，
+  // 否则用户会看不到自己所在的页面。手动折叠仍可在之后覆盖它。
+  useEffect(() => {
+    if (!activeSectionId) return;
+    setSectionOverrides((previous) =>
+      previous[activeSectionId] ? previous : { ...previous, [activeSectionId]: true }
+    );
+  }, [activeSectionId]);
+
+  const visibleSections = useMemo(() => visibleNavSections(role), [role]);
+  const isFiltering = filterQuery.trim().length > 0;
+  const sections = useMemo(
+    () => (isFiltering ? filterNavSections(visibleSections, filterQuery) : visibleSections),
+    [isFiltering, visibleSections, filterQuery]
+  );
+
   const pageTitle = activeItem ? t(activeItem.labelKey) : t("breadcrumbHome");
   const sectionTitle = activeSection ? t(activeSection.labelKey) : t("breadcrumbHome");
   const roleLabel = role ? ROLE_LABEL[role]?.[locale] ?? role : null;
@@ -105,33 +126,89 @@ export function AppShell({
           </button>
         </div>
 
+        {!collapsed && (
+          <div className="px-2.5 pt-3">
+            <div className="relative flex items-center">
+              <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-stone-400" />
+              <input
+                data-testid="sidebar-filter-input"
+                type="search"
+                value={filterQuery}
+                onChange={(event) => setFilterQuery(event.target.value)}
+                placeholder={bi("搜索功能模块…", "Filter modules…")}
+                aria-label={bi("搜索功能模块", "Filter modules")}
+                className="h-8 w-full rounded-lg border border-[#E5E2DC] bg-white/85 pr-7 pl-8 text-[12.5px] font-medium text-stone-800 outline-none transition-colors placeholder:text-stone-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100 [&::-webkit-search-cancel-button]:hidden"
+              />
+              {filterQuery.length > 0 && (
+                <button
+                  type="button"
+                  data-testid="sidebar-filter-clear"
+                  onClick={() => setFilterQuery("")}
+                  aria-label={bi("清除搜索", "Clear filter")}
+                  className="absolute right-1.5 grid h-5 w-5 place-items-center rounded-md text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-zinc-900"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <nav className="flex-1 space-y-2 overflow-y-auto px-2.5 py-3.5">
           {sections.map((section) => {
-            const sectionCollapsed = Boolean(collapsedSections[section.id]);
+            const containsActiveRoute = activeSectionId === section.id;
+            // 搜索时全部展开，方便一眼看完全部命中项；
+            // 图标栏模式（collapsed）也必须展开，否则被折叠的分组在侧栏里无法触达；
+            // 其它情况按「手动覆盖 -> 当前路由命中 -> 默认折叠」依次判定。
+            const expanded =
+              collapsed || isFiltering
+                ? true
+                : (sectionOverrides[section.id] ??
+                  (containsActiveRoute || !section.defaultCollapsed));
+            const showPendingBadge = section.id === "ai_system" && pendingProposalsCount > 0;
             return (
-              <div key={section.id} data-testid={`nav-section-${section.id}`} className="pb-0.5">
+              <div
+                key={section.id}
+                data-testid={`nav-section-${section.id}`}
+                data-expanded={expanded ? "true" : "false"}
+                className="pb-0.5"
+              >
                 {!collapsed && (
                   <button
                     type="button"
                     data-testid={`nav-section-toggle-${section.id}`}
-                    aria-expanded={!sectionCollapsed}
+                    aria-expanded={expanded}
                     onClick={() =>
-                      setCollapsedSections((prev) => ({
-                        ...prev,
-                        [section.id]: !prev[section.id],
-                      }))
+                      setSectionOverrides((previous) => ({ ...previous, [section.id]: !expanded }))
                     }
                     className="mb-1 flex w-full items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold tracking-wider text-stone-500 uppercase transition-colors hover:text-zinc-900"
                   >
-                    {sectionCollapsed ? (
-                      <ChevronRight className="h-3 w-3 text-stone-400" />
+                    {expanded ? (
+                      <ChevronDown className="h-3 w-3 shrink-0 text-stone-400" />
                     ) : (
-                      <ChevronDown className="h-3 w-3 text-stone-400" />
+                      <ChevronRight className="h-3 w-3 shrink-0 text-stone-400" />
                     )}
-                    {t(section.labelKey)}
+                    <span className="flex-1 truncate text-left">{t(section.labelKey)}</span>
+                    {!expanded && showPendingBadge && (
+                      <span
+                        data-testid="sidebar-group-pending-badge"
+                        title={bi("待审核 AI 提案", "Pending AI proposals")}
+                        className="rounded-full bg-rose-600/10 px-1.5 py-px text-[10px] font-bold tracking-normal text-rose-700 tabular-nums"
+                      >
+                        {pendingProposalsCount}
+                      </span>
+                    )}
+                    {!expanded && (
+                      <span
+                        data-testid={`nav-section-count-${section.id}`}
+                        className="rounded-full border border-[#E5E2DC] bg-white px-1.5 py-px text-[10px] font-semibold tracking-normal text-stone-500 tabular-nums"
+                      >
+                        {section.items.length}
+                      </span>
+                    )}
                   </button>
                 )}
-                {!sectionCollapsed && (
+                {expanded && (
                   <div className="space-y-0.5">
                     {section.items.map((item) => {
                       const Icon = item.icon;
@@ -178,6 +255,14 @@ export function AppShell({
               </div>
             );
           })}
+          {isFiltering && sections.length === 0 && (
+            <p
+              data-testid="sidebar-filter-empty"
+              className="px-3 py-6 text-center text-[12px] font-medium text-stone-500"
+            >
+              {bi("没有匹配的模块", "No matching modules")}
+            </p>
+          )}
         </nav>
 
         <div className="border-t border-[#E5E2DC] bg-white/80 p-3">
