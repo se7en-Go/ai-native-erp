@@ -10,7 +10,7 @@ AI caption generation is composed here through the `CaptionProvider` protocol so
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -33,6 +33,7 @@ from erp_core.social.schemas import (
     PostPublish,
     PostRead,
     PostUpdate,
+    SocialPlaybookItem,
     SocialSummary,
 )
 from erp_core.social.service import SocialService
@@ -79,6 +80,16 @@ async def social_summary(session: TenantDB, principal: Reader, service: Service)
 async def list_platforms(principal: Reader, service: Service) -> list[PlatformRead]:
     """The locked 14-platform matrix with honest publishing capability per platform."""
     return service.platforms()
+
+
+@router.get("/playbooks")
+async def list_playbooks(
+    principal: Reader,
+    service: Service,
+    region: Literal["all", "overseas", "domestic"] = "all",
+) -> list[SocialPlaybookItem]:
+    """Bilingual operating playbooks for all 14 platforms, filterable by region."""
+    return service.playbooks(region)
 
 
 @router.get("/accounts")
