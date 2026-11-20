@@ -222,6 +222,21 @@
       "AiEmployeeCreate": {
         "description": "Operator-supplied digital employee definition.",
         "properties": {
+          "allowed_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Tools"
+          },
           "autonomy_level": {
             "$ref": "#/components/schemas/AutonomyLevel",
             "default": "L1_proposal"
@@ -317,6 +332,13 @@
             "default": 0,
             "title": "Actions 7D",
             "type": "integer"
+          },
+          "allowed_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Tools",
+            "type": "array"
           },
           "autonomy_level": {
             "$ref": "#/components/schemas/AutonomyLevel"
@@ -1086,6 +1108,32 @@
           "l0_copilot"
         ],
         "title": "AutonomySummary",
+        "type": "object"
+      },
+      "Body_post_conversation_attachment_api_v1_inbox_conversations__conversation_id__attachments_post": {
+        "properties": {
+          "caption": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_post_conversation_attachment_api_v1_inbox_conversations__conversation_id__attachments_post",
         "type": "object"
       },
       "Body_submit_receivable_payment_api_v1_finance_receivables__rp_id__payments_post": {
@@ -1943,6 +1991,50 @@
         "title": "CaptionRead",
         "type": "object"
       },
+      "CatalogCsvImportRequest": {
+        "description": "Bulk catalog upload. Headers are matched case-insensitively by the service.",
+        "properties": {
+          "csv_text": {
+            "maxLength": 500000,
+            "minLength": 5,
+            "title": "Csv Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "csv_text"
+        ],
+        "title": "CatalogCsvImportRequest",
+        "type": "object"
+      },
+      "CatalogCsvImportResponse": {
+        "properties": {
+          "created_products": {
+            "default": 0,
+            "title": "Created Products",
+            "type": "integer"
+          },
+          "created_variants": {
+            "default": 0,
+            "title": "Created Variants",
+            "type": "integer"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "updated_variants": {
+            "default": 0,
+            "title": "Updated Variants",
+            "type": "integer"
+          }
+        },
+        "title": "CatalogCsvImportResponse",
+        "type": "object"
+      },
       "ChannelAccountRead": {
         "properties": {
           "bot_username": {
@@ -2587,6 +2679,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_pinned": {
+            "default": false,
+            "title": "Is Pinned",
+            "type": "boolean"
+          },
           "last_inbound_at": {
             "anyOf": [
               {
@@ -2647,6 +2744,13 @@
               }
             ],
             "title": "Subject"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
           },
           "tenant_id": {
             "format": "uuid",
@@ -3664,6 +3768,53 @@
         "title": "CustomerUpdateRequest",
         "type": "object"
       },
+      "DailyPatrolBriefRead": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/PatrolAlertItem"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "health_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Health Score",
+            "type": "integer"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "summary_en": {
+            "title": "Summary En",
+            "type": "string"
+          },
+          "summary_zh": {
+            "title": "Summary Zh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generated_at",
+          "health_score",
+          "summary_zh",
+          "summary_en",
+          "metrics",
+          "alerts"
+        ],
+        "title": "DailyPatrolBriefRead",
+        "type": "object"
+      },
       "DashboardRead": {
         "properties": {
           "b2c_orders": {
@@ -4031,6 +4182,136 @@
           "mps_cap"
         ],
         "title": "EmbeddedSignupResponse",
+        "type": "object"
+      },
+      "EnrichProspectEmailsRequest": {
+        "description": "Enrich selected prospects from the e-mail addresses their website publishes.",
+        "properties": {
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          },
+          "prospect_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Prospect Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "prospect_ids"
+        ],
+        "title": "EnrichProspectEmailsRequest",
+        "type": "object"
+      },
+      "EnrichProspectEmailsResponse": {
+        "properties": {
+          "checked_count": {
+            "title": "Checked Count",
+            "type": "integer"
+          },
+          "enriched_count": {
+            "title": "Enriched Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EnrichedProspectItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "checked_count",
+          "enriched_count",
+          "items"
+        ],
+        "title": "EnrichProspectEmailsResponse",
+        "type": "object"
+      },
+      "EnrichedProspectItem": {
+        "properties": {
+          "company_name": {
+            "title": "Company Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "grade": {
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ],
+            "title": "Grade",
+            "type": "string"
+          },
+          "previous_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Email"
+          },
+          "prospect_id": {
+            "format": "uuid",
+            "title": "Prospect Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "enriched",
+              "no_email_found",
+              "blocked",
+              "invalid_website",
+              "skipped_no_website",
+              "already_has_email",
+              "not_found"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website"
+          }
+        },
+        "required": [
+          "prospect_id",
+          "company_name",
+          "website",
+          "email",
+          "previous_email",
+          "grade",
+          "status"
+        ],
+        "title": "EnrichedProspectItem",
         "type": "object"
       },
       "FinanceOverviewRead": {
@@ -5066,7 +5347,39 @@
         "type": "object"
       },
       "LeadCollectionJobCreate": {
+        "description": "Create a collection job.\n\nTwo shapes are accepted and they stay fully backwards compatible:\n\n* legacy \u2014 `source_provider` pinned, e.g. `overpass_osm` + `target_region`; the\n  job stays `pending` until `POST /jobs/{id}/run` (unchanged behaviour);\n* batch \u2014 `cities`/`city` (one or many), `keywords`/`keyword`, and\n  `provider_mode`; the recipe is request-scoped, so it executes immediately.",
         "properties": {
+          "cities": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 10,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cities"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "csv_content": {
             "anyOf": [
               {
@@ -5078,6 +5391,19 @@
               }
             ],
             "title": "Csv Content"
+          },
+          "keyword": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword"
           },
           "keywords": {
             "items": {
@@ -5112,20 +5438,38 @@
             ],
             "title": "Min Rating"
           },
+          "provider_mode": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "overpass",
+              "google_places",
+              "synthetic"
+            ],
+            "title": "Provider Mode",
+            "type": "string"
+          },
           "require_phone": {
             "default": false,
             "title": "Require Phone",
             "type": "boolean"
           },
           "source_provider": {
-            "enum": [
-              "google_places",
-              "overpass_osm",
-              "overture_poi",
-              "csv_import"
+            "anyOf": [
+              {
+                "enum": [
+                  "google_places",
+                  "overpass_osm",
+                  "overture_poi",
+                  "csv_import"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Source Provider",
-            "type": "string"
+            "title": "Source Provider"
           },
           "target_region": {
             "anyOf": [
@@ -5140,9 +5484,6 @@
             "title": "Target Region"
           }
         },
-        "required": [
-          "source_provider"
-        ],
         "title": "LeadCollectionJobCreate",
         "type": "object"
       },
@@ -5229,6 +5570,13 @@
             ],
             "title": "Source Provider",
             "type": "string"
+          },
+          "sources": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Sources",
+            "type": "object"
           },
           "status": {
             "enum": [
@@ -5547,6 +5895,147 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "LowStockCreatePoRequest": {
+        "description": "One-click replenishment: convert a low-stock SKU into a real purchase order.",
+        "properties": {
+          "currency": {
+            "default": "USD",
+            "pattern": "^[A-Za-z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000.0,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "supplier_id": {
+            "format": "uuid",
+            "title": "Supplier Id",
+            "type": "string"
+          },
+          "unit_cost": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Unit Cost"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "supplier_id",
+          "variant_id",
+          "quantity",
+          "unit_cost"
+        ],
+        "title": "LowStockCreatePoRequest",
+        "type": "object"
+      },
+      "LowStockItemRead": {
+        "description": "One SKU/warehouse pair sitting below its configured safety stock.",
+        "properties": {
+          "available_qty": {
+            "title": "Available Qty",
+            "type": "integer"
+          },
+          "on_hand_qty": {
+            "title": "On Hand Qty",
+            "type": "integer"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "reserved_qty": {
+            "title": "Reserved Qty",
+            "type": "integer"
+          },
+          "safety_stock_qty": {
+            "title": "Safety Stock Qty",
+            "type": "integer"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "suggested_reorder_qty": {
+            "title": "Suggested Reorder Qty",
+            "type": "integer"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "format": "uuid",
+            "title": "Warehouse Id",
+            "type": "string"
+          },
+          "warehouse_name": {
+            "title": "Warehouse Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "sku",
+          "product_name",
+          "warehouse_id",
+          "warehouse_name",
+          "on_hand_qty",
+          "reserved_qty",
+          "available_qty",
+          "safety_stock_qty",
+          "suggested_reorder_qty"
+        ],
+        "title": "LowStockItemRead",
+        "type": "object"
+      },
+      "LowStockListRead": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LowStockItemRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LowStockListRead",
         "type": "object"
       },
       "MembershipItem": {
@@ -8334,6 +8823,194 @@
           "has_more"
         ],
         "title": "PaginatedResponse[VariantRead]",
+        "type": "object"
+      },
+      "PatrolAlertItem": {
+        "description": "One live, tenant-scoped patrol finding with the employee who owns the follow-up.",
+        "properties": {
+          "action_href": {
+            "title": "Action Href",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "detail_en": {
+            "title": "Detail En",
+            "type": "string"
+          },
+          "detail_zh": {
+            "title": "Detail Zh",
+            "type": "string"
+          },
+          "employee_code": {
+            "title": "Employee Code",
+            "type": "string"
+          },
+          "employee_name": {
+            "title": "Employee Name",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "high",
+              "medium",
+              "info"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "title_en": {
+            "title": "Title En",
+            "type": "string"
+          },
+          "title_zh": {
+            "title": "Title Zh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "title_zh",
+          "title_en",
+          "detail_zh",
+          "detail_en",
+          "employee_code",
+          "employee_name",
+          "action_href",
+          "count"
+        ],
+        "title": "PatrolAlertItem",
+        "type": "object"
+      },
+      "PatrolDispatchRead": {
+        "properties": {
+          "action_summary_en": {
+            "title": "Action Summary En",
+            "type": "string"
+          },
+          "action_summary_zh": {
+            "title": "Action Summary Zh",
+            "type": "string"
+          },
+          "created_task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created Task Id"
+          },
+          "employee_code": {
+            "title": "Employee Code",
+            "type": "string"
+          },
+          "employee_name": {
+            "title": "Employee Name",
+            "type": "string"
+          },
+          "employee_role_title": {
+            "title": "Employee Role Title",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/PatrolFindingItem"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "recommended_href": {
+            "title": "Recommended Href",
+            "type": "string"
+          }
+        },
+        "required": [
+          "employee_code",
+          "employee_name",
+          "employee_role_title",
+          "generated_at",
+          "action_summary_zh",
+          "action_summary_en",
+          "metrics",
+          "findings",
+          "recommended_href"
+        ],
+        "title": "PatrolDispatchRead",
+        "type": "object"
+      },
+      "PatrolFindingItem": {
+        "description": "A single live SQL finding returned by a dispatcher run.",
+        "properties": {
+          "action_href": {
+            "title": "Action Href",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "detail_en": {
+            "title": "Detail En",
+            "type": "string"
+          },
+          "detail_zh": {
+            "title": "Detail Zh",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "title_en": {
+            "title": "Title En",
+            "type": "string"
+          },
+          "title_zh": {
+            "title": "Title Zh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "title_zh",
+          "title_en",
+          "detail_zh",
+          "detail_en",
+          "count",
+          "action_href"
+        ],
+        "title": "PatrolFindingItem",
         "type": "object"
       },
       "PaymentCreate": {
@@ -11547,6 +12224,82 @@
         "title": "SendQuoteEmailResponse",
         "type": "object"
       },
+      "SendRealCampaignRequest": {
+        "description": "Really deliver a queued email campaign through the tenant's own mailbox.",
+        "properties": {
+          "channel_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Account Id"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "max_send": {
+            "default": 20,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Send",
+            "type": "integer"
+          }
+        },
+        "title": "SendRealCampaignRequest",
+        "type": "object"
+      },
+      "SendRealCampaignResponse": {
+        "description": "Counts of one real delivery run.\n\nOn a `dry_run` nothing is persisted and `sent_count` reports how many messages\n*would* have been delivered.",
+        "properties": {
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "failed_count": {
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "from_email": {
+            "title": "From Email",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "sent_count": {
+            "title": "Sent Count",
+            "type": "integer"
+          },
+          "suppressed_count": {
+            "title": "Suppressed Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "provider",
+          "from_email",
+          "sent_count",
+          "suppressed_count",
+          "failed_count",
+          "dry_run"
+        ],
+        "title": "SendRealCampaignResponse",
+        "type": "object"
+      },
       "ShipOrderRequest": {
         "properties": {
           "actual_shipping_cost_base": {
@@ -12099,6 +12852,116 @@
           "gross_margin"
         ],
         "title": "SkuMargin",
+        "type": "object"
+      },
+      "SocialPlaybookItem": {
+        "description": "Bilingual operating card for one platform: audience, funnel, practices, compliance.",
+        "properties": {
+          "audience_en": {
+            "title": "Audience En",
+            "type": "string"
+          },
+          "audience_zh": {
+            "title": "Audience Zh",
+            "type": "string"
+          },
+          "best_practices_en": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Best Practices En",
+            "type": "array"
+          },
+          "best_practices_zh": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Best Practices Zh",
+            "type": "array"
+          },
+          "category_en": {
+            "title": "Category En",
+            "type": "string"
+          },
+          "category_zh": {
+            "title": "Category Zh",
+            "type": "string"
+          },
+          "compliance_note_en": {
+            "title": "Compliance Note En",
+            "type": "string"
+          },
+          "compliance_note_zh": {
+            "title": "Compliance Note Zh",
+            "type": "string"
+          },
+          "lead_funnel_en": {
+            "title": "Lead Funnel En",
+            "type": "string"
+          },
+          "lead_funnel_zh": {
+            "title": "Lead Funnel Zh",
+            "type": "string"
+          },
+          "name_en": {
+            "title": "Name En",
+            "type": "string"
+          },
+          "name_zh": {
+            "title": "Name Zh",
+            "type": "string"
+          },
+          "official_api_supported": {
+            "title": "Official Api Supported",
+            "type": "boolean"
+          },
+          "platform": {
+            "enum": [
+              "instagram",
+              "tiktok",
+              "facebook",
+              "youtube",
+              "linkedin",
+              "pinterest",
+              "x",
+              "xiaohongshu",
+              "douyin",
+              "kuaishou",
+              "bilibili",
+              "wechat_video",
+              "wechat_oa",
+              "weibo"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "region": {
+            "enum": [
+              "overseas",
+              "domestic"
+            ],
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "region",
+          "name_zh",
+          "name_en",
+          "category_zh",
+          "category_en",
+          "audience_zh",
+          "audience_en",
+          "lead_funnel_zh",
+          "lead_funnel_en",
+          "best_practices_zh",
+          "best_practices_en",
+          "official_api_supported",
+          "compliance_note_zh",
+          "compliance_note_en"
+        ],
+        "title": "SocialPlaybookItem",
         "type": "object"
       },
       "SocialSummary": {
@@ -13375,6 +14238,17 @@
               }
             ]
           },
+          "is_pinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Pinned"
+          },
           "mark_read": {
             "anyOf": [
               {
@@ -13395,6 +14269,20 @@
                 "type": "null"
               }
             ]
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
           }
         },
         "title": "UpdateConversationRequest",
@@ -13991,6 +14879,40 @@
         "title": "VerifyEmailDnsRequest",
         "type": "object"
       },
+      "WarehouseCreateRequest": {
+        "properties": {
+          "city": {
+            "default": "",
+            "maxLength": 128,
+            "title": "City",
+            "type": "string"
+          },
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "country_code": {
+            "default": "CN",
+            "pattern": "^[A-Za-z]{2}$",
+            "title": "Country Code",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "WarehouseCreateRequest",
+        "type": "object"
+      },
       "WarehouseListRead": {
         "properties": {
           "default_warehouse_id": {
@@ -14424,6 +15346,40 @@
           "messages"
         ],
         "title": "WidgetSessionResponse",
+        "type": "object"
+      },
+      "WmsWarehouseRead": {
+        "properties": {
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "country_code": {
+            "title": "Country Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "country_code",
+          "city"
+        ],
+        "title": "WmsWarehouseRead",
         "type": "object"
       },
       "WooAuthCallbackPayload": {
@@ -15443,6 +16399,115 @@
         "summary": "Search Kb Hybrid",
         "tags": [
           "ai-kb"
+        ]
+      }
+    },
+    "/api/v1/ai/patrol/daily-brief": {
+      "get": {
+        "description": "Live operations patrol computed from tenant-scoped SQL, never hard-coded numbers.",
+        "operationId": "daily_patrol_brief_api_v1_ai_patrol_daily_brief_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyPatrolBriefRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Daily Patrol Brief",
+        "tags": [
+          "ai-workforce"
+        ]
+      }
+    },
+    "/api/v1/ai/patrol/dispatch/{employee_code}": {
+      "post": {
+        "description": "Dispatch a registered digital employee onto live ERP rows for one patrol action.",
+        "operationId": "dispatch_patrol_employee_api_v1_ai_patrol_dispatch__employee_code__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "employee_code",
+            "required": true,
+            "schema": {
+              "title": "Employee Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatrolDispatchRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dispatch Patrol Employee",
+        "tags": [
+          "ai-workforce"
         ]
       }
     },
@@ -18939,6 +20004,66 @@
         ]
       }
     },
+    "/api/v1/catalog/variants/import-csv": {
+      "post": {
+        "description": "Bulk upsert products and variants from a case-insensitive CSV sheet.",
+        "operationId": "import_variants_csv_api_v1_catalog_variants_import_csv_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogCsvImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogCsvImportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Variants Csv",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/v1/catalog/variants/{variant_id}": {
       "patch": {
         "operationId": "update_variant_api_v1_catalog_variants__variant_id__patch",
@@ -21965,6 +23090,76 @@
         ]
       }
     },
+    "/api/v1/growth/campaigns/{campaign_id}/send-real": {
+      "post": {
+        "description": "Really deliver the campaign through Resend/SMTP with zero-delay STOP suppression.",
+        "operationId": "send_campaign_real_api_v1_growth_campaigns__campaign_id__send_real_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendRealCampaignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendRealCampaignResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Campaign Real",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
     "/api/v1/growth/jobs": {
       "get": {
         "operationId": "list_jobs_api_v1_growth_jobs_get",
@@ -22037,7 +23232,7 @@
         ]
       },
       "post": {
-        "description": "Map/POI jobs stay `pending` until `/run`; a CSV payload runs immediately.\n\nThe uploaded CSV bytes are request-scoped and never persisted, so the import\nhas to execute while the payload is still in memory.",
+        "description": "Map/POI jobs stay `pending` until `/run`; a CSV payload or a batch recipe runs now.\n\nThe uploaded CSV bytes and the `cities`/`keywords`/`provider_mode` batch recipe are\nrequest-scoped and never persisted, so an import or a multi-city batch has to\nexecute while the payload is still in memory. A legacy job that pins\n`source_provider` + `target_region` keeps the two-step create/run flow.\n\n`source_provider` records the *requested* primary provider; the provider that\nactually produced each row is reported per prospect in `raw_metadata.provider`\nand aggregated on the job as `sources` (`overpass_osm` / `google_places` /\n`fallback_catalog`), so live map data is never confused with the fallback.",
         "operationId": "create_job_api_v1_growth_jobs_post",
         "parameters": [
           {
@@ -22353,6 +23548,66 @@
         ]
       }
     },
+    "/api/v1/growth/prospects/enrich-emails": {
+      "post": {
+        "description": "Fill missing prospect e-mails from the addresses their website publishes.",
+        "operationId": "enrich_prospect_emails_api_v1_growth_prospects_enrich_emails_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichProspectEmailsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichProspectEmailsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enrich Prospect Emails",
+        "tags": [
+          "growth"
+        ]
+      }
+    },
     "/api/v1/growth/prospects/export.csv": {
       "get": {
         "operationId": "export_prospects_api_v1_growth_prospects_export_csv_get",
@@ -22528,6 +23783,73 @@
         ]
       }
     },
+    "/api/v1/inbox/attachments/{message_id}/{attachment_index}": {
+      "get": {
+        "description": "Stream one stored attachment back through the tenant/agent isolation gate.",
+        "operationId": "get_inbox_attachment_api_v1_inbox_attachments__message_id___attachment_index__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attachment_index",
+            "required": true,
+            "schema": {
+              "title": "Attachment Index",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Inbox Attachment",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
     "/api/v1/inbox/conversations": {
       "get": {
         "operationId": "list_inbox_conversations_api_v1_inbox_conversations_get",
@@ -22610,6 +23932,23 @@
           },
           {
             "in": "query",
+            "name": "channel_account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel Account Id"
+            }
+          },
+          {
+            "in": "query",
             "name": "assigned_user_id",
             "required": false,
             "schema": {
@@ -22623,6 +23962,33 @@
                 }
               ],
               "title": "Assigned User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pinned_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Pinned Only",
+              "type": "boolean"
             }
           },
           {
@@ -22773,6 +24139,76 @@
           }
         },
         "summary": "Patch Conversation",
+        "tags": [
+          "inbox"
+        ]
+      }
+    },
+    "/api/v1/inbox/conversations/{conversation_id}/attachments": {
+      "post": {
+        "description": "Upload an image/PDF/CSV attachment and deliver it on the conversation's channel.",
+        "operationId": "post_conversation_attachment_api_v1_inbox_conversations__conversation_id__attachments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_conversation_attachment_api_v1_inbox_conversations__conversation_id__attachments_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendInboxMessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Conversation Attachment",
         "tags": [
           "inbox"
         ]
@@ -23854,6 +25290,140 @@
         ]
       }
     },
+    "/api/v1/orders/{order_id}/documents/commercial-invoice.pdf": {
+      "get": {
+        "description": "Render the export Commercial Invoice for this order as inline PDF bytes.",
+        "operationId": "download_commercial_invoice_pdf_api_v1_orders__order_id__documents_commercial_invoice_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "enum": [
+                "en",
+                "zh"
+              ],
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Commercial Invoice Pdf",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/documents/packing-list.pdf": {
+      "get": {
+        "description": "Render the export Packing List (cartons, weights, CBM) for this order as inline PDF.",
+        "operationId": "download_packing_list_pdf_api_v1_orders__order_id__documents_packing_list_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "enum": [
+                "en",
+                "zh"
+              ],
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Packing List Pdf",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
     "/api/v1/orders/{order_id}/ship": {
       "post": {
         "operationId": "ship_order_api_v1_orders__order_id__ship_post",
@@ -24851,6 +26421,75 @@
           }
         },
         "summary": "List Platforms",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/v1/social/playbooks": {
+      "get": {
+        "description": "Bilingual operating playbooks for all 14 platforms, filterable by region.",
+        "operationId": "list_playbooks_api_v1_social_playbooks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "overseas",
+                "domestic"
+              ],
+              "title": "Region",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SocialPlaybookItem"
+                  },
+                  "title": "Response List Playbooks Api V1 Social Playbooks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Playbooks",
         "tags": [
           "social"
         ]
@@ -27268,6 +28907,116 @@
         ]
       }
     },
+    "/api/v1/wms/low-stock": {
+      "get": {
+        "description": "Safety-stock breaches per warehouse, with a suggested reorder quantity.",
+        "operationId": "list_low_stock_api_v1_wms_low_stock_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LowStockListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Low Stock",
+        "tags": [
+          "wms"
+        ]
+      }
+    },
+    "/api/v1/wms/low-stock/create-po": {
+      "post": {
+        "description": "Convert one low-stock SKU into a draft purchase order in a single click.",
+        "operationId": "create_po_from_low_stock_api_v1_wms_low_stock_create_po_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LowStockCreatePoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Po From Low Stock",
+        "tags": [
+          "wms"
+        ]
+      }
+    },
     "/api/v1/wms/movements": {
       "get": {
         "operationId": "list_movements_api_v1_wms_movements_get",
@@ -27464,6 +29213,65 @@
           }
         },
         "summary": "List Stock",
+        "tags": [
+          "wms"
+        ]
+      }
+    },
+    "/api/v1/wms/warehouses": {
+      "post": {
+        "operationId": "create_warehouse_api_v1_wms_warehouses_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarehouseCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WmsWarehouseRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Warehouse",
         "tags": [
           "wms"
         ]
