@@ -9,16 +9,16 @@
   --font-sans:
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Inter",
     system-ui, -apple-system, "Segoe UI", sans-serif;
-  --color-canvas: #e8eef5;
-  --color-sidebar: #f8fafc;
+  --color-canvas: #f1f4f9;
+  --color-sidebar: #f6f8fb;
   --color-brand: #2563eb;
-  --radius-card: 0.75rem;
+  --radius-card: 1rem;
 }
 
 :root {
-  --bg-canvas: #e8eef5;
+  --bg-canvas: #f1f4f9;
   --fg-primary: #0f172a;
-  --sidebar-bg: #f8fafc;
+  --sidebar-bg: #f6f8fb;
   --brand: #2563eb;
 }
 
@@ -111,12 +111,12 @@ h4 {
   }
 
   .erp-card {
-    border-radius: 0.75rem;
-    border: 1px solid #cbd5e1;
+    border-radius: 1rem;
+    border: 1px solid rgb(226 232 240 / 0.95);
     background-color: #fff;
     box-shadow:
-      0 1px 3px rgb(15 23 42 / 0.08),
-      0 1px 2px rgb(15 23 42 / 0.04);
+      0 1px 3px rgb(15 23 42 / 0.05),
+      0 6px 16px -6px rgb(15 23 42 / 0.04);
   }
 
   .erp-card-header {
@@ -125,11 +125,11 @@ h4 {
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    border-bottom: 1px solid #cbd5e1;
-    background-color: #f8fafc;
-    border-top-left-radius: 0.75rem;
-    border-top-right-radius: 0.75rem;
-    padding: 0.875rem 1rem;
+    border-bottom: 1px solid rgb(226 232 240 / 0.9);
+    background-color: rgb(248 250 252 / 0.85);
+    border-top-left-radius: 1rem;
+    border-top-right-radius: 1rem;
+    padding: 0.95rem 1.25rem;
   }
 
   /* 表格统一排版：高对比表头与清晰行分割 */
