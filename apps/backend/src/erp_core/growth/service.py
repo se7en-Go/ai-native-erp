@@ -1506,8 +1506,12 @@ class GrowthService:
         transaction, so a suppression recorded a second ago still wins. A suppressed
         recipient is marked ``suppressed`` and is never handed to the provider.
         """
+        import json
+
         from erp_core.channels.adapters.email import EmailAdapter
-        from erp_core.channels.ecommerce.base import CredentialVaultHelper
+        from erp_core.shared.config import get_settings
+        from erp_core.shared.crypto import EnvelopeCryptoService
+        from erp_core.shared.errors import AppError
 
         campaign = await self.get_campaign(session, tenant_id, campaign_id, lock=True)
         if campaign.channel_type != "email":
@@ -1519,9 +1523,38 @@ class GrowthService:
         account = await self._select_email_account(
             session, tenant_id, principal, payload.channel_account_id
         )
-        credentials, _expires_at = await CredentialVaultHelper().load_secret_json(
-            session, tenant_id, account["id"], "messaging_provider"
+        cred_row = (
+            await session.execute(
+                sa.text(
+                    "SELECT ciphertext, nonce, auth_tag, key_version "
+                    "FROM channel_credentials "
+                    "WHERE tenant_id = :tid AND channel_account_id = :caid "
+                    "AND credential_type = 'messaging_provider'"
+                ),
+                {"tid": tenant_id, "caid": account["id"]},
+            )
+        ).one_or_none()
+        if cred_row is None:
+            raise AppError(
+                slug="credential-not-found",
+                status_code=404,
+                code="ERR_CREDENTIAL_NOT_FOUND",
+                title="Credential Not Found",
+                detail=(
+                    f"Missing 'messaging_provider' credential for account '{account['id']}'."
+                ),
+            )
+        plaintext = await EnvelopeCryptoService(get_settings()).decrypt_secret(
+            session,
+            tenant_id,
+            account["id"],
+            "messaging_provider",
+            bytes(cred_row.ciphertext),
+            bytes(cred_row.nonce),
+            bytes(cred_row.auth_tag),
+            int(cred_row.key_version),
         )
+        credentials: dict[str, Any] = json.loads(plaintext)
         config: dict[str, Any] = dict(account["config"] or {})
         provider: Literal["resend", "smtp_imap"] = (
             "smtp_imap"
