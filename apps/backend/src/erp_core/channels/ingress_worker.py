@@ -278,6 +278,24 @@ async def _persist_inbound_event(
         event.override_channel_type.value if event.override_channel_type else base_channel_type
     )
 
+    # Private channel ownership drives inbound auto-assignment and inbox visibility.
+    account_owner = (
+        (
+            await session.execute(
+                text(
+                    "SELECT owner_user_id, visibility_scope FROM channel_accounts "
+                    "WHERE tenant_id = :tid AND id = :aid"
+                ),
+                {"tid": tenant_id, "aid": channel_account_id},
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    owner_user_id: uuid.UUID | None = (
+        account_owner["owner_user_id"] if account_owner is not None else None
+    )
+
     # Link B2B company if inquiry parser extracted one
     if event.b2b_inquiry_data and event.b2b_inquiry_data.get("company_name"):
         try:
@@ -343,11 +361,12 @@ async def _persist_inbound_event(
             text(
                 "INSERT INTO conversations ("
                 "id, tenant_id, customer_id, channel_account_id, channel_type, external_thread_id, "
-                "subject, conversation_mode, status, csw_expires_at, fep_expires_at, ctwa_clid, "
+                "subject, conversation_mode, status, assigned_user_id, csw_expires_at, "
+                "fep_expires_at, ctwa_clid, "
                 "human_agent_window_expires_at, "
                 "last_inbound_at, last_message_preview, unread_count, updated_at"
                 ") VALUES ("
-                ":id, :tid, :cid, :aid, :ctype, :thread, :subj, :mode, :status, "
+                ":id, :tid, :cid, :aid, :ctype, :thread, :subj, :mode, :status, :assignee, "
                 ":csw, :fep, :ctwa, :human, :last_in, :preview, :unread, now()"
                 ")"
             ),
@@ -361,6 +380,7 @@ async def _persist_inbound_event(
                 "subj": event.subject,
                 "mode": event.conversation_mode.value,
                 "status": ConversationStatus.OPEN.value,
+                "assignee": owner_user_id,
                 "csw": csw_until,
                 "fep": fep_until,
                 "ctwa": event.ctwa_clid,
@@ -385,6 +405,7 @@ async def _persist_inbound_event(
                 "last_message_preview = :preview, "
                 "unread_count = unread_count + CASE WHEN :is_in THEN 1 ELSE 0 END, "
                 "status = CASE WHEN status = 'resolved' AND :is_in THEN 'open' ELSE status END, "
+                "assigned_user_id = COALESCE(assigned_user_id, :assignee), "
                 "updated_at = now() "
                 "WHERE tenant_id = :tid AND id = :cid"
             ),
@@ -399,6 +420,7 @@ async def _persist_inbound_event(
                 "is_out": event.direction == MessageDirection.OUTBOUND,
                 "ts": now_ts,
                 "preview": (event.body_text or "")[:180],
+                "assignee": owner_user_id,
             },
         )
 
@@ -673,6 +695,22 @@ async def process_raw_webhook_event(
                     event=inbound,
                 )
                 if msg_id is not None:
+                    scope_row = (
+                        (
+                            await t_sess.execute(
+                                text(
+                                    "SELECT c.assigned_user_id, a.visibility_scope "
+                                    "FROM conversations c JOIN channel_accounts a "
+                                    "ON a.tenant_id = c.tenant_id AND a.id = c.channel_account_id "
+                                    "WHERE c.tenant_id = :tid AND c.id = :cid"
+                                ),
+                                {"tid": tenant_id, "cid": conv_id},
+                            )
+                        )
+                        .mappings()
+                        .one_or_none()
+                    )
+                    assigned = scope_row["assigned_user_id"] if scope_row else None
                     published_events.append(
                         {
                             "event": "message.created",
@@ -682,6 +720,10 @@ async def process_raw_webhook_event(
                                 inbound.override_channel_type.value
                                 if inbound.override_channel_type
                                 else channel_type
+                            ),
+                            "assigned_user_id": str(assigned) if assigned else None,
+                            "visibility_scope": (
+                                scope_row["visibility_scope"] if scope_row else "shared"
                             ),
                         }
                     )

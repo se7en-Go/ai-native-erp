@@ -49,6 +49,10 @@ class ConversationRead(BaseModel):
     country_code: str | None = None
     iana_timezone: str | None = None
     customer: CustomerSummaryRead | None = None
+    assigned_user_name: str | None = None
+    channel_account_display_name: str | None = None
+    channel_visibility_scope: Literal["shared", "personal"] | None = None
+    channel_owner_user_id: UUID | None = None
 
 
 class MessageRead(BaseModel):

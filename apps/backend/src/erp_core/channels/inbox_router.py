@@ -20,7 +20,11 @@ from erp_core.channels.inbox_schemas import (
     SendInboxMessageResponse,
     UpdateConversationRequest,
 )
-from erp_core.channels.inbox_service import InboxService
+from erp_core.channels.inbox_service import (
+    ConversationAccessDeniedError,
+    InboxService,
+    event_visible_to_agent,
+)
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import ChannelType, UserRole
 from erp_core.shared.pagination import PaginatedResponse
@@ -76,6 +80,7 @@ async def list_inbox_conversations(
             q=q,
             limit=limit,
             offset=offset,
+            principal=principal,
         )
 
 
@@ -104,9 +109,15 @@ async def list_conversation_messages(
                 limit=limit,
                 offset=offset,
                 mark_read=mark_read,
+                principal=principal,
             )
         except LookupError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except ConversationAccessDeniedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ERR_CONVERSATION_ACCESS_DENIED",
+            ) from exc
 
 
 @inbox_router.post(
@@ -137,6 +148,11 @@ async def post_conversation_message(
             )
         except LookupError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except ConversationAccessDeniedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ERR_CONVERSATION_ACCESS_DENIED",
+            ) from exc
         except PermissionError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -168,6 +184,11 @@ async def patch_conversation(
             )
         except LookupError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except ConversationAccessDeniedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ERR_CONVERSATION_ACCESS_DENIED",
+            ) from exc
 
 
 @inbox_router.get("/stream")
@@ -197,6 +218,8 @@ async def stream_inbox_events(
                         raw_data.decode("utf-8") if isinstance(raw_data, bytes) else str(raw_data)
                     )
                     parsed = json.loads(data_str)
+                    if not event_visible_to_agent(principal, parsed):
+                        continue
                     event_name = parsed.get("event", "message")
                     yield f"event: {event_name}\ndata: {data_str}\n\n"
                     emitted += 1

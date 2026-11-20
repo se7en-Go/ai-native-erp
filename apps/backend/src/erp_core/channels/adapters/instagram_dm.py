@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, SecretStr
@@ -20,10 +21,11 @@ from erp_core.channels.messaging_accounts import (
     provider_token,
     provider_transport,
     register_messaging_account,
+    resolve_connect_ownership,
     save_messaging_credentials,
 )
 from erp_core.shared.db import tenant_session
-from erp_core.shared.enums import ChannelType, IdentityType
+from erp_core.shared.enums import ChannelType, IdentityType, UserRole
 
 
 def _story_fields(payload: dict[str, Any]) -> dict[str, str]:
@@ -60,6 +62,8 @@ class InstagramConnectRequest(BaseModel):
     ig_account_id: str = Field(pattern=r"^[0-9]{1,32}$")
     access_token: SecretStr
     display_name: str = Field(min_length=1, max_length=150)
+    visibility_scope: Literal["shared", "personal"] | None = None
+    owner_user_id: UUID | None = None
 
 
 instagram_router = APIRouter(
@@ -80,14 +84,31 @@ async def connect_instagram(
     await validate_graph_account(f"/{account}", account, token, provider_transport(request))
     tenant = principal.tenant_id
     async with tenant_session(messaging_sessions(request), tenant) as session:
+        owner_uid, vis_scope = await resolve_connect_ownership(
+            session,
+            principal,
+            payload.visibility_scope,
+            payload.owner_user_id,
+            allow_agent_self_bind=False,
+        )
         aid = await register_messaging_account(
             session,
             tenant,
             ChannelType.INSTAGRAM_DM,
             account,
             payload.display_name,
+            owner_user_id=owner_uid,
+            visibility_scope=vis_scope,
+            actor_user_id=principal.user_id,
+            actor_is_admin=principal.role in (UserRole.OWNER, UserRole.ADMIN),
         )
         await save_messaging_credentials(
             session, tenant, aid, {InstagramDMAdapter.token_key: token}
         )
-    return ConnectMessagingResponse(channel_account_id=aid, external_account_id=account)
+    return ConnectMessagingResponse(
+        channel_account_id=aid,
+        external_account_id=account,
+        display_name=payload.display_name,
+        owner_user_id=owner_uid,
+        visibility_scope=vis_scope,
+    )

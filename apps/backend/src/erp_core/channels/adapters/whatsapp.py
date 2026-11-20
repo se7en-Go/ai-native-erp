@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated, Any, ClassVar, cast
+from typing import Annotated, Any, ClassVar, Literal, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -26,6 +26,10 @@ from erp_core.channels.adapters.base import (
     OutboundSendResult,
 )
 from erp_core.channels.consent_service import ConsentAndSuppressionService
+from erp_core.channels.messaging_accounts import (
+    assert_channel_bind_allowed,
+    resolve_connect_ownership,
+)
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.db import tenant_session
@@ -44,7 +48,9 @@ from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
 
 whatsapp_router = APIRouter(prefix="/api/v1/channels/whatsapp", tags=["whatsapp"])
-_require_channel_admin = require_roles(UserRole.OWNER, UserRole.ADMIN)
+_require_channel_connector = require_roles(
+    UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.AGENT
+)
 _require_consent_writer = require_roles(
     UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.AGENT
 )
@@ -71,6 +77,8 @@ class EmbeddedSignupRequest(BaseModel):
     phone_number_id: str = Field(min_length=3)
     is_coexistence: bool = False
     display_name: str = "WhatsApp Business"
+    visibility_scope: Literal["shared", "personal"] | None = None
+    owner_user_id: uuid.UUID | None = None
 
 
 class EmbeddedSignupResponse(BaseModel):
@@ -440,6 +448,8 @@ class WhatsAppAdapter(MessagingChannelAdapter):
         phone_number_id: str,
         is_coexistence: bool = False,
         display_name: str = "WhatsApp Business",
+        owner_user_id: uuid.UUID | None = None,
+        visibility_scope: str = "shared",
     ) -> uuid.UUID:
         """Complete Embedded Signup v4 code exchange, WABA subscription, and Coexistence sync."""
         app_id = os.environ["WHATSAPP_APP_ID"]
@@ -498,13 +508,15 @@ class WhatsAppAdapter(MessagingChannelAdapter):
                 text(
                     "INSERT INTO channel_accounts ("
                     "id, tenant_id, channel_type, external_account_id, display_name, status, "
-                    "rate_limit_profile, config"
+                    "rate_limit_profile, config, owner_user_id, visibility_scope"
                     ") VALUES ("
                     ":id, :tid, :ctype, :ext, :dname, 'active', "
-                    "CAST(:rate AS jsonb), CAST(:cfg AS jsonb)"
+                    "CAST(:rate AS jsonb), CAST(:cfg AS jsonb), :owner, :scope"
                     ") ON CONFLICT (tenant_id, channel_type, external_account_id) "
                     "DO UPDATE SET display_name = EXCLUDED.display_name, status = 'active', "
                     "rate_limit_profile = EXCLUDED.rate_limit_profile, config = EXCLUDED.config, "
+                    "owner_user_id = EXCLUDED.owner_user_id, "
+                    "visibility_scope = EXCLUDED.visibility_scope, "
                     "updated_at = now() "
                     "RETURNING id"
                 ),
@@ -516,6 +528,8 @@ class WhatsAppAdapter(MessagingChannelAdapter):
                     "dname": display_name,
                     "rate": json.dumps(rate_profile),
                     "cfg": json.dumps(cfg),
+                    "owner": owner_user_id,
+                    "scope": visibility_scope,
                 },
             )
         ).scalar_one()
@@ -799,12 +813,29 @@ def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
 async def complete_whatsapp_embedded_signup(
     payload: EmbeddedSignupRequest,
     request: Request,
-    principal: Annotated[CurrentPrincipal, Depends(_require_channel_admin)],
+    principal: Annotated[CurrentPrincipal, Depends(_require_channel_connector)],
 ) -> EmbeddedSignupResponse:
     session_factory = _get_session_factory(request)
     crypto = EnvelopeCryptoService(get_settings())
     adapter = WhatsAppAdapter()
     async with tenant_session(session_factory, principal.tenant_id) as session:
+        owner_uid, vis_scope = await resolve_connect_ownership(
+            session,
+            principal,
+            payload.visibility_scope,
+            payload.owner_user_id,
+            allow_agent_self_bind=payload.is_coexistence,
+        )
+        await assert_channel_bind_allowed(
+            session,
+            principal.tenant_id,
+            ChannelType.WHATSAPP_COEXISTENCE
+            if payload.is_coexistence
+            else ChannelType.WHATSAPP_CLOUD,
+            payload.phone_number_id,
+            actor_user_id=principal.user_id,
+            actor_is_admin=principal.role in (UserRole.OWNER, UserRole.ADMIN),
+        )
         try:
             account_id = await adapter.complete_embedded_signup(
                 session=session,
@@ -815,6 +846,8 @@ async def complete_whatsapp_embedded_signup(
                 phone_number_id=payload.phone_number_id,
                 is_coexistence=payload.is_coexistence,
                 display_name=payload.display_name,
+                owner_user_id=owner_uid,
+                visibility_scope=vis_scope,
             )
         except httpx.HTTPError as exc:
             raise HTTPException(
@@ -834,6 +867,8 @@ async def complete_whatsapp_embedded_signup(
                 "waba_id": payload.waba_id,
                 "phone_number_id": payload.phone_number_id,
                 "is_coexistence": payload.is_coexistence,
+                "owner_user_id": str(owner_uid) if owner_uid else None,
+                "visibility_scope": vis_scope,
             },
         )
 
