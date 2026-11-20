@@ -171,161 +171,172 @@ export function InboxComposer({
   }
 
   return (
-    <div data-testid="inbox-composer" className="border-t border-slate-200 bg-white p-3">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => aiAssistMutation.mutate("draft")}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px] font-medium text-slate-600 hover:bg-slate-50"
-          >
-            <Sparkles className="h-3 w-3" />
-            <span>{t("aiDraft")}</span>
-          </button>
-          <InboxAiToolbar
-            phrases={phrases}
-            onAction={runAssist}
-            onInsertPhrase={insertPhrase}
-            disabled={assistMutation.isPending}
-            pendingAction={assistMutation.isPending ? assistMutation.variables.intent : null}
-          />
-        </div>
-
-        <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-700">
-          <input
-            type="checkbox"
-            data-testid="composer-strict-rag-toggle"
-            checked={strictRag}
-            onChange={(e) => setStrictRag(e.target.checked)}
-            className="rounded border-slate-300"
-          />
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-          <span>{t("strictRag")}</span>
-        </label>
-      </div>
-
-      {assistNotice && (
-        <p
-          data-testid="composer-assist-notice"
-          className="mb-2 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[12px] text-blue-900"
-        >
-          {assistNotice}
-        </p>
-      )}
-
-      {assistError && (
-        <p
-          role="alert"
-          data-testid="composer-assist-error"
-          className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-900"
-        >
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{assistError}</span>
-        </p>
-      )}
-
-      {complianceError && (
-        <div
-          role="alert"
-          className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] text-rose-800"
-        >
-          {complianceError}
-        </div>
-      )}
-
-      <textarea
-        data-testid="composer-textarea"
-        rows={3}
-        value={bodyText}
-        onChange={(e) => setBodyText(e.target.value)}
-        placeholder={
-          mode === "internal_note"
-            ? bi("写一条内部备注（不会发送给买家）…", "Write an internal note (never sent to buyer)…")
-            : bi("输入回复内容；开启实时翻译可预览外文效果…", "Type a reply; enable Live Translate to preview the foreign-language text…")
-        }
-        aria-label={bi("消息输入框", "Message composer")}
-        className={`w-full rounded-lg border p-2.5 text-[13px] leading-6 focus:outline-none ${
-          mode === "internal_note"
-            ? "border-amber-300 bg-amber-50/50 focus:border-amber-500"
-            : "border-slate-300 focus:border-blue-500"
-        }`}
-      />
-
-      {liveTranslate && mode === "outbound" && translatedPreview && (
-        <div
-          data-testid="live-translation-preview"
-          className="mt-1.5 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[12px] text-blue-900"
-        >
-          <span className="font-semibold">Preview ({targetLang.toUpperCase()}): </span>
-          {translatedPreview}
-        </div>
-      )}
-
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-[12px]">
+    <div className="border-t border-slate-200/80 bg-slate-50/60 px-3 py-3">
+      <div
+        data-testid="inbox-composer"
+        className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.16)]"
+      >
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              data-testid="composer-mode-outbound"
-              onClick={() => setMode("outbound")}
-              className={`rounded px-2 py-1 font-medium ${
-                mode === "outbound" ? "bg-blue-600 text-white" : "text-slate-600"
-              }`}
+              onClick={() => aiAssistMutation.mutate("draft")}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px] font-semibold text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
             >
-              {bi("回复", "Reply")}
+              <Sparkles className="h-3 w-3" />
+              <span>{t("aiDraft")}</span>
             </button>
-            <button
-              type="button"
-              data-testid="composer-mode-internal-note"
-              onClick={() => setMode("internal_note")}
-              className={`inline-flex items-center gap-1 rounded px-2 py-1 font-medium ${
-                mode === "internal_note" ? "bg-amber-500 text-white" : "text-slate-600"
-              }`}
-            >
-              <StickyNote className="h-3 w-3" />
-              <span>{t("internalNote")}</span>
-            </button>
+            <InboxAiToolbar
+              phrases={phrases}
+              onAction={runAssist}
+              onInsertPhrase={insertPhrase}
+              disabled={assistMutation.isPending}
+              pendingAction={assistMutation.isPending ? assistMutation.variables.intent : null}
+            />
           </div>
 
-          <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-50/70 px-2 py-1 text-[11.5px] font-semibold text-emerald-900 ring-1 ring-emerald-200/70">
             <input
               type="checkbox"
-              data-testid="live-translate-toggle"
-              checked={liveTranslate}
-              onChange={(e) => setLiveTranslate(e.target.checked)}
+              data-testid="composer-strict-rag-toggle"
+              checked={strictRag}
+              onChange={(e) => setStrictRag(e.target.checked)}
+              className="rounded border-slate-300"
             />
-            <Languages className="h-3.5 w-3.5 text-blue-600" />
-            <span>{t("liveTranslate")}</span>
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            <span>{t("strictRag")}</span>
           </label>
-
-          <select
-            aria-label={bi("目标翻译语言", "Target translation language")}
-            value={targetLang}
-            onChange={(e) => setTargetLang(e.target.value as typeof targetLang)}
-            className="rounded border border-slate-300 px-1.5 py-0.5 text-xs"
-          >
-            <option value="en">EN</option>
-            <option value="es">ES</option>
-            <option value="de">DE</option>
-            <option value="fr">FR</option>
-            <option value="ja">JA</option>
-          </select>
         </div>
 
-        <button
-          type="button"
-          data-testid="composer-submit-btn"
-          disabled={!bodyText.trim() || sendMutation.isPending}
-          onClick={() => sendMutation.mutate()}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-50 ${
+        {assistNotice && (
+          <p
+            data-testid="composer-assist-notice"
+            className="mb-2 rounded-xl border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[12px] font-medium text-blue-900"
+          >
+            {assistNotice}
+          </p>
+        )}
+
+        {assistError && (
+          <p
+            role="alert"
+            data-testid="composer-assist-error"
+            className="mb-2 flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-900"
+          >
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{assistError}</span>
+          </p>
+        )}
+
+        {complianceError && (
+          <div
+            role="alert"
+            className="mb-2 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] font-medium text-rose-800"
+          >
+            {complianceError}
+          </div>
+        )}
+
+        <textarea
+          data-testid="composer-textarea"
+          rows={3}
+          value={bodyText}
+          onChange={(e) => setBodyText(e.target.value)}
+          placeholder={
             mode === "internal_note"
-              ? "bg-amber-600 hover:bg-amber-700"
-              : "bg-blue-600 hover:bg-blue-700"
+              ? bi("写一条内部备注（不会发送给买家）…", "Write an internal note (never sent to buyer)…")
+              : bi("输入回复内容；开启实时翻译可预览外文效果…", "Type a reply; enable Live Translate to preview the foreign-language text…")
+          }
+          aria-label={bi("消息输入框", "Message composer")}
+          className={`w-full resize-y rounded-xl border p-3 text-[13px] leading-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-[3px] ${
+            mode === "internal_note"
+              ? "border-amber-300 bg-amber-50/50 focus:border-amber-500 focus:ring-amber-500/12"
+              : "border-slate-200 bg-slate-50/60 focus:border-blue-500 focus:bg-white focus:ring-blue-500/12"
           }`}
-        >
-          <Send className="h-3.5 w-3.5" />
-          <span>{mode === "internal_note" ? t("internalNote") : t("send")}</span>
-        </button>
+        />
+
+        {liveTranslate && mode === "outbound" && translatedPreview && (
+          <div
+            data-testid="live-translation-preview"
+            className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[12px] text-blue-900"
+          >
+            <span className="font-semibold">Preview ({targetLang.toUpperCase()}): </span>
+            {translatedPreview}
+          </div>
+        )}
+
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100/80 p-0.5 text-[12px]">
+              <button
+                type="button"
+                data-testid="composer-mode-outbound"
+                aria-pressed={mode === "outbound"}
+                onClick={() => setMode("outbound")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition-colors ${
+                  mode === "outbound"
+                    ? "bg-white text-blue-700 shadow-xs ring-1 ring-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {bi("回复", "Reply")}
+              </button>
+              <button
+                type="button"
+                data-testid="composer-mode-internal-note"
+                aria-pressed={mode === "internal_note"}
+                onClick={() => setMode("internal_note")}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 font-semibold transition-colors ${
+                  mode === "internal_note"
+                    ? "bg-amber-500 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <StickyNote className="h-3 w-3" />
+                <span>{t("internalNote")}</span>
+              </button>
+            </div>
+
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11.5px] font-medium text-slate-700">
+              <input
+                type="checkbox"
+                data-testid="live-translate-toggle"
+                checked={liveTranslate}
+                onChange={(e) => setLiveTranslate(e.target.checked)}
+              />
+              <Languages className="h-3.5 w-3.5 text-blue-600" />
+              <span>{t("liveTranslate")}</span>
+            </label>
+
+            <select
+              aria-label={bi("目标翻译语言", "Target translation language")}
+              value={targetLang}
+              onChange={(e) => setTargetLang(e.target.value as typeof targetLang)}
+              className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-[11.5px] font-semibold text-slate-700"
+            >
+              <option value="en">EN</option>
+              <option value="es">ES</option>
+              <option value="de">DE</option>
+              <option value="fr">FR</option>
+              <option value="ja">JA</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            data-testid="composer-submit-btn"
+            disabled={!bodyText.trim() || sendMutation.isPending}
+            onClick={() => sendMutation.mutate()}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-[12.5px] font-semibold text-white shadow-[0_2px_8px_-2px_rgba(37,99,235,0.55)] transition-colors disabled:shadow-none disabled:opacity-50 ${
+              mode === "internal_note"
+                ? "bg-amber-600 hover:bg-amber-700"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
+          >
+            <Send className="h-3.5 w-3.5" />
+            <span>{mode === "internal_note" ? t("internalNote") : t("send")}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
