@@ -16,6 +16,8 @@ from erp_core.supply_chain import procurement, warehouse
 from erp_core.supply_chain.models import Supplier
 from erp_core.supply_chain.schemas import (
     CreateStocktake,
+    LowStockCreatePoRequest,
+    LowStockListRead,
     MovementRead,
     PurchaseOrderCreate,
     PurchaseOrderRead,
@@ -27,6 +29,8 @@ from erp_core.supply_chain.schemas import (
     SupplierRead,
     SupplierStatus,
     SupplierUpdate,
+    WarehouseCreateRequest,
+    WmsWarehouseRead,
 )
 from erp_core.tenancy.dependencies import CurrentPrincipal, get_tenant_db, require_roles
 
@@ -37,6 +41,18 @@ _MANAGERS = (UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
 Operator = Annotated[CurrentPrincipal, Depends(require_roles(*_MANAGERS))]
 Buyer = Annotated[CurrentPrincipal, Depends(require_roles(*_MANAGERS, UserRole.FINANCE))]
 Reader = Annotated[CurrentPrincipal, Depends(require_roles(*UserRole))]
+AlertReader = Annotated[
+    CurrentPrincipal,
+    Depends(
+        require_roles(
+            UserRole.OWNER,
+            UserRole.ADMIN,
+            UserRole.MANAGER,
+            UserRole.AGENT,
+            UserRole.FINANCE,
+        )
+    ),
+]
 TenantDB = Annotated[AsyncSession, Depends(get_tenant_db, scope="function")]
 Limit = Annotated[int, Query(ge=1, le=100)]
 Offset = Annotated[int, Query(ge=0)]
@@ -210,3 +226,30 @@ async def list_stock(
     offset: Offset = 0,
 ) -> PaginatedResponse[StockRead]:
     return await warehouse.list_stock(session, principal.tenant_id, limit, offset)
+
+
+@wms_router.get("/low-stock")
+async def list_low_stock(principal: AlertReader, session: TenantDB) -> LowStockListRead:
+    """Safety-stock breaches per warehouse, with a suggested reorder quantity."""
+    return await warehouse.list_low_stock(session, principal.tenant_id)
+
+
+@wms_router.post("/low-stock/create-po", status_code=201)
+async def create_po_from_low_stock(
+    principal: Operator,
+    session: TenantDB,
+    payload: LowStockCreatePoRequest,
+) -> PurchaseOrderRead:
+    """Convert one low-stock SKU into a draft purchase order in a single click."""
+    return await warehouse.create_purchase_order_from_low_stock(
+        session, principal.tenant_id, principal.user_id, payload
+    )
+
+
+@wms_router.post("/warehouses", status_code=201)
+async def create_warehouse(
+    principal: Operator,
+    session: TenantDB,
+    payload: WarehouseCreateRequest,
+) -> WmsWarehouseRead:
+    return await warehouse.create_warehouse(session, principal.tenant_id, payload)

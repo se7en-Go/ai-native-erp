@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from typing import Annotated
+import asyncio
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.orders.documents import (
+    ExportDocumentService,
+    render_commercial_invoice_pdf,
+    render_packing_list_pdf,
+    safe_filename,
+)
 from erp_core.orders.order_service import OrderService
 from erp_core.orders.schemas import (
     CancelOrderRequest,
@@ -38,6 +45,8 @@ _MANAGER_ROLES = (UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
 ReaderPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_READER_ROLES))]
 WriterPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_WRITER_ROLES))]
 ManagerPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_MANAGER_ROLES))]
+DocumentPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_READER_ROLES))]
+_documents = ExportDocumentService()
 
 
 def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -128,6 +137,54 @@ async def create_order(
 ) -> OrderRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
         return await _service.create_manual_order(session, principal.tenant_id, principal, payload)
+
+
+@router.get("/{order_id}/documents/commercial-invoice.pdf", response_class=Response)
+async def download_commercial_invoice_pdf(
+    request: Request,
+    principal: DocumentPrincipal,
+    order_id: UUID,
+    language: Literal["en", "zh"] = Query(default="en"),
+) -> Response:
+    """Render the export Commercial Invoice for this order as inline PDF bytes."""
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        ctx = await _documents.build_context(
+            session, principal.tenant_id, order_id, language=language
+        )
+    pdf_bytes = await asyncio.to_thread(render_commercial_invoice_pdf, ctx)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{safe_filename("CI", ctx.order_no)}"'
+            )
+        },
+    )
+
+
+@router.get("/{order_id}/documents/packing-list.pdf", response_class=Response)
+async def download_packing_list_pdf(
+    request: Request,
+    principal: DocumentPrincipal,
+    order_id: UUID,
+    language: Literal["en", "zh"] = Query(default="en"),
+) -> Response:
+    """Render the export Packing List (cartons, weights, CBM) for this order as inline PDF."""
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        ctx = await _documents.build_context(
+            session, principal.tenant_id, order_id, language=language
+        )
+    pdf_bytes = await asyncio.to_thread(render_packing_list_pdf, ctx)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{safe_filename("PL", ctx.order_no)}"'
+            )
+        },
+    )
 
 
 @router.post("/{order_id}/cancel", response_model=OrderRead)

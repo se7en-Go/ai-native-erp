@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from decimal import ROUND_HALF_UP, Decimal
+import csv
+import io
+from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -10,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.catalog.models import PlatformSkuMapping, Product, ProductVariant
 from erp_core.catalog.schemas import (
+    CatalogCsvImportResponse,
     LiveSkuCheckRead,
     MoqTierInput,
     ProductCreate,
@@ -29,6 +33,149 @@ from erp_core.shared.enums import UserRole
 from erp_core.shared.errors import AppError
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.tenancy.audit import record_audit_event
+
+_CSV_REQUIRED_COLUMNS = ("spu_code", "product_name", "sku", "retail_price_usd")
+_CSV_MAX_REPORTED_ERRORS = 50
+_SAFETY_STOCK_DEFAULT = 50
+_CARTON_QTY_DEFAULT = 1
+_CENT = Decimal("0.01")
+
+
+class _CsvRowError(ValueError):
+    """Raised inside a single CSV row so the rest of the upload keeps processing."""
+
+
+@dataclass(slots=True)
+class _ParsedCsvRow:
+    """One validated CSV line. Optional cells stay ``None`` when the sheet omits them."""
+
+    spu_code: str
+    product_name: str
+    sku: str
+    retail_price_usd: Decimal
+    category: str = "uncategorized"
+    hs_code: str | None = None
+    cost_price_base: Decimal | None = None
+    lead_time_days: int | None = None
+    carton_qty: int | None = None
+    gross_weight_kg: Decimal | None = None
+    net_weight_kg: Decimal | None = None
+    cbm_per_carton: Decimal | None = None
+    safety_stock_qty: int | None = None
+    image_url: str | None = None
+    moq_100_price: Decimal | None = None
+    moq_500_price: Decimal | None = None
+    packing_updates: dict[str, Any] = field(default_factory=dict)
+
+
+def _csv_decimal(raw: str, column: str) -> Decimal:
+    cleaned = raw.replace(",", "").strip()
+    try:
+        value = Decimal(cleaned)
+    except InvalidOperation as exc:
+        raise _CsvRowError(f"'{column}' value '{raw.strip()}' is not a valid decimal") from exc
+    if not value.is_finite():
+        raise _CsvRowError(f"'{column}' value '{raw.strip()}' is not a finite decimal")
+    if value < 0:
+        raise _CsvRowError(f"'{column}' must not be negative")
+    return value
+
+
+def _csv_int(raw: str, column: str) -> int:
+    cleaned = raw.replace(",", "").strip()
+    try:
+        value = int(Decimal(cleaned))
+    except (InvalidOperation, ValueError) as exc:
+        raise _CsvRowError(f"'{column}' value '{raw.strip()}' is not a valid integer") from exc
+    if value < 0:
+        raise _CsvRowError(f"'{column}' must not be negative")
+    return value
+
+
+def _parse_row(raw: dict[str, str]) -> _ParsedCsvRow:
+    def cell(column: str) -> str:
+        return (raw.get(column) or "").strip()
+
+    spu_code = cell("spu_code")
+    product_name = cell("product_name")
+    sku = cell("sku")
+    retail_raw = cell("retail_price_usd")
+    for column, value in (
+        ("spu_code", spu_code),
+        ("product_name", product_name),
+        ("sku", sku),
+        ("retail_price_usd", retail_raw),
+    ):
+        if not value:
+            raise _CsvRowError(f"'{column}' is required")
+
+    row = _ParsedCsvRow(
+        spu_code=spu_code,
+        product_name=product_name,
+        sku=sku,
+        retail_price_usd=_csv_decimal(retail_raw, "retail_price_usd"),
+    )
+    if row.retail_price_usd <= 0:
+        raise _CsvRowError("'retail_price_usd' must be greater than zero")
+    if cell("category"):
+        row.category = cell("category")
+    if cell("hs_code"):
+        row.hs_code = cell("hs_code")
+    if cell("cost_price_base"):
+        row.cost_price_base = _csv_decimal(cell("cost_price_base"), "cost_price_base")
+    if cell("lead_time_days"):
+        row.lead_time_days = _csv_int(cell("lead_time_days"), "lead_time_days")
+    if cell("carton_qty"):
+        carton_qty = _csv_int(cell("carton_qty"), "carton_qty")
+        if carton_qty < 1:
+            raise _CsvRowError("'carton_qty' must be at least 1")
+        row.carton_qty = carton_qty
+        row.packing_updates["carton_qty"] = carton_qty
+    for column in ("gross_weight_kg", "net_weight_kg", "cbm_per_carton"):
+        if cell(column):
+            measurement = _csv_decimal(cell(column), column)
+            setattr(row, column, measurement)
+            row.packing_updates[column] = str(measurement)
+    if cell("safety_stock_qty"):
+        safety_stock_qty = _csv_int(cell("safety_stock_qty"), "safety_stock_qty")
+        row.safety_stock_qty = safety_stock_qty
+        row.packing_updates["safety_stock_qty"] = safety_stock_qty
+    if cell("image_url"):
+        row.image_url = cell("image_url")
+        row.packing_updates["image_url"] = row.image_url
+    if cell("moq_100_price"):
+        row.moq_100_price = _csv_decimal(cell("moq_100_price"), "moq_100_price")
+    if cell("moq_500_price"):
+        row.moq_500_price = _csv_decimal(cell("moq_500_price"), "moq_500_price")
+    return row
+
+
+def _default_packing() -> dict[str, Any]:
+    return {
+        "carton_qty": _CARTON_QTY_DEFAULT,
+        "gross_weight_kg": "0",
+        "net_weight_kg": "0",
+        "cbm_per_carton": "0",
+        "safety_stock_qty": _SAFETY_STOCK_DEFAULT,
+    }
+
+
+def _weight_grams(row: _ParsedCsvRow) -> int:
+    """Derive the legacy per-unit gram weight from carton net weight when available."""
+    if row.net_weight_kg is None:
+        return 0
+    per_carton = row.carton_qty or _CARTON_QTY_DEFAULT
+    grams = row.net_weight_kg * 1000 / per_carton
+    return int(grams.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _moq_tiers(row: _ParsedCsvRow) -> list[dict[str, Any]]:
+    tiers: list[dict[str, Any]] = []
+    if row.moq_100_price is not None:
+        tiers.append({"min_qty": 100, "unit_price_usd": str(row.moq_100_price)})
+    if row.moq_500_price is not None:
+        tiers.append({"min_qty": 500, "unit_price_usd": str(row.moq_500_price)})
+    return tiers
 
 
 class CatalogService:
@@ -622,6 +769,198 @@ class CatalogService:
             },
         )
         return SkuMappingRead.model_validate(mapping)
+
+    async def import_variants_csv(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        actor_id: str,
+        csv_text: str,
+    ) -> CatalogCsvImportResponse:
+        """Upsert products + variants from a bulk CSV sheet in one transaction.
+
+        Headers are case-insensitive. ``spu_code``, ``product_name``, ``sku`` and
+        ``retail_price_usd`` are mandatory; every other column degrades to a sane default so
+        an operator can upload a minimal price list and enrich packing data later.
+        """
+        sheet = csv.DictReader(io.StringIO(csv_text.lstrip("\ufeff").strip()))
+        headers = {(name or "").strip().lower() for name in (sheet.fieldnames or [])}
+        missing = [column for column in _CSV_REQUIRED_COLUMNS if column not in headers]
+        if missing:
+            raise AppError(
+                slug="invalid-catalog-csv",
+                status_code=422,
+                code="ERR_INVALID_CATALOG_CSV",
+                title="Invalid Catalog CSV",
+                detail=f"CSV header is missing required column(s): {', '.join(missing)}.",
+            )
+
+        errors: list[str] = []
+        parsed: list[_ParsedCsvRow] = []
+        for row_no, raw_row in enumerate(sheet, start=2):
+            normalized = {
+                (key or "").strip().lower(): (value or "")
+                for key, value in raw_row.items()
+                if key is not None
+            }
+            if not any(value.strip() for value in normalized.values()):
+                continue
+            try:
+                parsed.append(_parse_row(normalized))
+            except _CsvRowError as exc:
+                if len(errors) < _CSV_MAX_REPORTED_ERRORS:
+                    errors.append(f"Row {row_no}: {exc}")
+        if not parsed:
+            errors.append("No importable rows were found in the uploaded CSV.")
+            return CatalogCsvImportResponse(errors=errors)
+
+        spu_codes = {row.spu_code for row in parsed}
+        skus = {row.sku for row in parsed}
+        products = {
+            product.spu_code: product
+            for product in (
+                await session.execute(
+                    select(Product).where(
+                        Product.tenant_id == tenant_id, Product.spu_code.in_(spu_codes)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
+        variants = {
+            variant.sku: variant
+            for variant in (
+                await session.execute(
+                    select(ProductVariant).where(
+                        ProductVariant.tenant_id == tenant_id, ProductVariant.sku.in_(skus)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
+
+        created_products = 0
+        created_variants = 0
+        updated_variants = 0
+        for row in parsed:
+            product = products.get(row.spu_code)
+            if product is None:
+                specs: dict[str, Any] = {"en": {"title": row.product_name}}
+                product = Product(
+                    tenant_id=tenant_id,
+                    spu_code=row.spu_code,
+                    category=row.category,
+                    hs_code=row.hs_code,
+                    origin_country="CN",
+                    i18n_specs=specs,
+                    certifications=[],
+                    ai_faq_facts={},
+                )
+                session.add(product)
+                try:
+                    await session.flush()
+                except IntegrityError as exc:
+                    raise AppError(
+                        slug="duplicate-spu",
+                        status_code=409,
+                        code="ERR_DUPLICATE_SPU",
+                        title="Duplicate SPU",
+                        detail=f"Product with spu_code '{row.spu_code}' already exists.",
+                    ) from exc
+                products[row.spu_code] = product
+                created_products += 1
+            else:
+                specs = dict(product.i18n_specs or {})
+                english = dict(specs.get("en") or {})
+                english["title"] = row.product_name
+                specs["en"] = english
+                product.i18n_specs = specs
+                product.category = row.category or product.category
+                if row.hs_code:
+                    product.hs_code = row.hs_code
+                await session.flush()
+
+            variant = variants.get(row.sku)
+            if variant is None:
+                attributes = dict(_default_packing())
+                attributes.update(row.packing_updates)
+                variant = ProductVariant(
+                    tenant_id=tenant_id,
+                    product_id=product.id,
+                    sku=row.sku,
+                    attributes=attributes,
+                    cost_price_base=(row.cost_price_base or Decimal("0")).quantize(
+                        Decimal("0.0001"), rounding=ROUND_HALF_UP
+                    ),
+                    base_currency="CNY",
+                    min_margin_floor_pct=Decimal("15.00"),
+                    retail_price_usd=row.retail_price_usd.quantize(
+                        _CENT, rounding=ROUND_HALF_UP
+                    ),
+                    b2b_moq_tiers=_moq_tiers(row),
+                    weight_grams=_weight_grams(row),
+                    carton_dims_cm=None,
+                    lead_time_days=row.lead_time_days if row.lead_time_days is not None else 7,
+                )
+                session.add(variant)
+                try:
+                    await session.flush()
+                except IntegrityError as exc:
+                    raise AppError(
+                        slug="duplicate-sku",
+                        status_code=409,
+                        code="ERR_DUPLICATE_SKU",
+                        title="Duplicate SKU",
+                        detail=f"Variant with sku '{row.sku}' already exists.",
+                    ) from exc
+                variants[row.sku] = variant
+                created_variants += 1
+                continue
+
+            attributes = dict(variant.attributes or {})
+            attributes.update(row.packing_updates)
+            variant.attributes = attributes
+            variant.retail_price_usd = row.retail_price_usd.quantize(
+                _CENT, rounding=ROUND_HALF_UP
+            )
+            if row.cost_price_base is not None:
+                variant.cost_price_base = row.cost_price_base.quantize(
+                    Decimal("0.0001"), rounding=ROUND_HALF_UP
+                )
+            if row.lead_time_days is not None:
+                variant.lead_time_days = row.lead_time_days
+            tiers = _moq_tiers(row)
+            if tiers:
+                variant.b2b_moq_tiers = tiers
+            grams = _weight_grams(row)
+            if grams:
+                variant.weight_grams = grams
+            await session.flush()
+            updated_variants += 1
+
+        await record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_type="human_user",
+            actor_id=actor_id,
+            action="catalog.variants.csv_imported",
+            resource_type="catalog_csv_import",
+            resource_id=uuid4(),
+            after_state={
+                "created_products": created_products,
+                "created_variants": created_variants,
+                "updated_variants": updated_variants,
+                "error_count": len(errors),
+            },
+        )
+        return CatalogCsvImportResponse(
+            created_products=created_products,
+            created_variants=created_variants,
+            updated_variants=updated_variants,
+            errors=errors,
+        )
 
     async def live_check_sku(
         self,

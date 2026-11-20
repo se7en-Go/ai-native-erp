@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from erp_core.catalog.schemas import (
+    CatalogCsvImportRequest,
+    CatalogCsvImportResponse,
     LiveSkuCheckRead,
     ProductCreate,
     ProductRead,
@@ -121,6 +123,19 @@ async def create_variant(
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
         return await _service.create_variant(
             session, principal.tenant_id, str(principal.user_id), payload, role=principal.role
+        )
+
+
+@router.post("/variants/import-csv", response_model=CatalogCsvImportResponse)
+async def import_variants_csv(
+    request: Request,
+    payload: CatalogCsvImportRequest,
+    principal: WriterPrincipal,
+) -> CatalogCsvImportResponse:
+    """Bulk upsert products and variants from a case-insensitive CSV sheet."""
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await _service.import_variants_csv(
+            session, principal.tenant_id, str(principal.user_id), payload.csv_text
         )
 
 
