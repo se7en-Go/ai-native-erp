@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -113,6 +114,31 @@ class EmailConnectRequest(BaseModel):
     imap_port: int | None = Field(default=993, ge=1, le=65535)
     visibility_scope: Literal["shared", "personal"] | None = None
     owner_user_id: UUID | None = None
+
+
+class WebLivechatConnectRequest(BaseModel):
+    site_domain: str = Field(min_length=3, max_length=255)
+    display_name: str | None = Field(default=None, max_length=150)
+    visibility_scope: Literal["shared", "personal"] | None = None
+    owner_user_id: UUID | None = None
+
+
+# Host/port characters only: the widget resolves its tenant from this normalized site key.
+_SITE_DOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9._:-]{1,250}$")
+
+
+def normalize_site_domain(raw: str) -> str:
+    """Reduce a pasted website URL to the host used as the LiveChat ``site_key``."""
+    candidate = raw.strip().lower()
+    for scheme in ("https://", "http://"):
+        if candidate.startswith(scheme):
+            candidate = candidate[len(scheme) :]
+            break
+    candidate = candidate.split("/", 1)[0]
+    candidate = candidate.split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    if not _SITE_DOMAIN_RE.fullmatch(candidate):
+        raise invalid_connection("Enter a valid website domain.")
+    return candidate
 
 
 def _account_columns() -> list[Any]:
@@ -411,6 +437,62 @@ async def connect_email(
 
 
 router.include_router(email_router)
+
+
+@router.post("/web-livechat/connect", response_model=ConnectMessagingResponse)
+async def connect_web_livechat(
+    payload: WebLivechatConnectRequest,
+    request: Request,
+    principal: Admin,
+) -> ConnectMessagingResponse:
+    """Register a website LiveChat widget so the UI can render the embed snippet.
+
+    The normalized domain doubles as the ``site_key`` the widget resolves its tenant from.
+    """
+    normalized_domain = normalize_site_domain(payload.site_domain)
+    effective_name = (payload.display_name or "").strip() or f"LiveChat · {normalized_domain}"
+    tenant = principal.tenant_id
+    async with tenant_session(messaging_sessions(request), tenant) as session:
+        owner_uid, vis_scope = await resolve_connect_ownership(
+            session,
+            principal,
+            payload.visibility_scope,
+            payload.owner_user_id,
+            allow_agent_self_bind=False,
+        )
+        aid = await register_messaging_account(
+            session,
+            tenant,
+            ChannelType.WEB_LIVECHAT,
+            normalized_domain,
+            effective_name,
+            owner_user_id=owner_uid,
+            visibility_scope=vis_scope,
+            actor_user_id=principal.user_id,
+            actor_is_admin=True,
+            config_patch={"site_domain": normalized_domain},
+        )
+        await record_audit_event(
+            session=session,
+            tenant_id=tenant,
+            actor_type="human_user",
+            actor_id=str(principal.user_id),
+            action="channel.web_livechat_connected",
+            resource_type="channel_account",
+            resource_id=aid,
+            after_state={
+                "site_domain": normalized_domain,
+                "owner_user_id": str(owner_uid) if owner_uid else None,
+                "visibility_scope": vis_scope,
+            },
+        )
+    return ConnectMessagingResponse(
+        channel_account_id=aid,
+        external_account_id=normalized_domain,
+        display_name=effective_name,
+        owner_user_id=owner_uid,
+        visibility_scope=vis_scope,
+    )
 
 
 @router.get("/dlq")

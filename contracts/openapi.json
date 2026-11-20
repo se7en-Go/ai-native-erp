@@ -13819,6 +13819,134 @@
         "title": "WarehouseRead",
         "type": "object"
       },
+      "WebLivechatConnectRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "site_domain": {
+            "maxLength": 255,
+            "minLength": 3,
+            "title": "Site Domain",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "personal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
+          }
+        },
+        "required": [
+          "site_domain"
+        ],
+        "title": "WebLivechatConnectRequest",
+        "type": "object"
+      },
+      "WhatsAppDirectConnectRequest": {
+        "description": "Direct token onboarding for Cloud API and Coexistence numbers.\n\n``access_token`` is an unconstrained ``SecretStr`` so a malformed token can never be\nechoed back in a validation error; it is range-checked in the route via\n``provider_token``, which raises a problem detail that never repeats the input.",
+        "properties": {
+          "access_token": {
+            "format": "password",
+            "title": "Access Token",
+            "type": "string",
+            "writeOnly": true
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "is_coexistence": {
+            "default": false,
+            "title": "Is Coexistence",
+            "type": "boolean"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "phone_number_id": {
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Phone Number Id",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "personal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
+          },
+          "waba_id": {
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Waba Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "waba_id",
+          "phone_number_id",
+          "access_token"
+        ],
+        "title": "WhatsAppDirectConnectRequest",
+        "type": "object"
+      },
       "WidgetIdentifyRequest": {
         "properties": {
           "display_name": {
@@ -19267,6 +19395,127 @@
         "summary": "Connect Telegram",
         "tags": [
           "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/web-livechat/connect": {
+      "post": {
+        "description": "Register a website LiveChat widget so the UI can render the embed snippet.\n\nThe normalized domain doubles as the ``site_key`` the widget resolves its tenant from.",
+        "operationId": "connect_web_livechat_api_v1_channels_web_livechat_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebLivechatConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectMessagingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Web Livechat",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/whatsapp/connect": {
+      "post": {
+        "description": "Direct Token Quick-Connect for WhatsApp Cloud API and Coexistence numbers.\n\nSales roles may self-bind a personal Coexistence number (their own business handset),\nwhile official Cloud API onboarding stays admin-only. The access token only ever lands\nin the envelope-encrypted credential vault, never in ``config``, logs, or the response.",
+        "operationId": "connect_whatsapp_direct_api_v1_channels_whatsapp_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppDirectConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectMessagingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Whatsapp Direct",
+        "tags": [
+          "whatsapp",
+          "whatsapp"
         ]
       }
     },

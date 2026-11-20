@@ -6,6 +6,10 @@ import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { ChannelRail, type ChannelFilterKey } from "@/components/inbox/channel-rail";
 import {
+  marketplaceChannel,
+  marketplaceKeyForChannelFilter,
+} from "@/components/channels/channel-marketplace";
+import {
   ConversationList,
   type ConversationFilterTab,
 } from "@/components/inbox/conversation-list";
@@ -79,6 +83,19 @@ export default function InboxPage() {
     queryFn: () => fetchPendingProposalsCount(),
   });
 
+  // 渠道筛选 → 渠道中心深链：直接打开对应渠道的快捷绑定抽屉。
+  const quickConnectKey =
+    selectedChannel === "all" ? null : marketplaceKeyForChannelFilter(selectedChannel);
+  const quickConnectHref = quickConnectKey
+    ? `/settings/channels?connect=${quickConnectKey}`
+    : "/settings/channels";
+  const quickConnectLabel = quickConnectKey
+    ? bi(
+        `快捷绑定 ${marketplaceChannel(quickConnectKey).titleZh} →`,
+        `Quick connect ${marketplaceChannel(quickConnectKey).titleEn} →`,
+      )
+    : undefined;
+
   const ownershipSlot = canOverseeOwnership ? (
     <div
       role="group"
@@ -124,6 +141,8 @@ export default function InboxPage() {
           onSearchChange={setSearchQuery}
           onSelectConversation={setSelectedConversationId}
           headerSlot={ownershipSlot}
+          quickConnectHref={quickConnectHref}
+          quickConnectLabel={quickConnectLabel}
         />
         <div className="flex min-w-0 flex-1 flex-col">
           <MessageThread

@@ -286,7 +286,7 @@ function toPayload(
 }
 
 export type OwnershipSelectorProps = {
-  kind: MessagingProviderKind | "email";
+  kind: MessagingProviderKind | "email" | "whatsapp" | "web_livechat";
   scope: ChannelVisibilityScope;
   ownerId: string;
   members: TeamMemberApiItem[];
