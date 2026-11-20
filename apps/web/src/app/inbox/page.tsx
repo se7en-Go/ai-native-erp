@@ -19,6 +19,7 @@ import {
 import { MessageThread } from "@/components/inbox/message-thread";
 import { InboxComposer } from "@/components/inbox/composer";
 import { ContextDrawer } from "@/components/inbox/context-drawer";
+import { FloatingCopilot } from "@/components/ai/floating-copilot";
 import {
   fetchChannelAccounts,
   fetchPendingProposalsCount,
@@ -451,6 +452,7 @@ export default function InboxPage() {
           </div>
         </div>
       </div>
+      <FloatingCopilot conversationId={activeConversation?.id ?? null} />
     </AppShell>
   );
 }
