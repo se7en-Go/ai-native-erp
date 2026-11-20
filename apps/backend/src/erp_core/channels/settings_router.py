@@ -377,9 +377,13 @@ async def connect_email(
     else:
         if payload.smtp_host is None or payload.smtp_password is None:
             raise invalid_connection("SMTP host and password are required for SMTP/IMAP.")
+        # Everything the delivery engine needs is stored in the encrypted envelope so a
+        # send never has to re-resolve the account config before talking to the MTA.
+        credentials["provider"] = "smtp_imap"
+        credentials["smtp_host"] = payload.smtp_host
+        credentials["smtp_port"] = payload.smtp_port
+        credentials["smtp_username"] = payload.smtp_username or normalized_email
         credentials["smtp_password"] = payload.smtp_password.get_secret_value()
-        if payload.smtp_username is not None:
-            credentials["smtp_username"] = payload.smtp_username
     display_name = (payload.display_name or "").strip() or normalized_email
 
     config_patch = {

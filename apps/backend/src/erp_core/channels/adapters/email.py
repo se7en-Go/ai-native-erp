@@ -6,18 +6,22 @@ import hashlib
 import hmac
 import os
 import re
+import smtplib
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from email import policy
+from email.message import EmailMessage
 from email.parser import BytesParser
 from email.utils import parseaddr, parsedate_to_datetime
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import boto3  # type: ignore[import-untyped]
 import httpx
 import nh3
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.channels.adapters.base import (
@@ -131,6 +135,21 @@ def _payload_bytes(payload: Any) -> bytes:
     if isinstance(payload, str):
         return payload.encode("utf-8")
     return b""
+
+
+@dataclass(slots=True)
+class EmailAttachment:
+    """A binary outbound attachment (typically the rendered PI PDF)."""
+
+    filename: str
+    content_bytes: bytes
+    content_type: str = "application/pdf"
+
+    def as_resend_payload(self) -> dict[str, str]:
+        return {
+            "filename": self.filename,
+            "content": base64.b64encode(self.content_bytes).decode("ascii"),
+        }
 
 
 class EmailAdapter(MessagingChannelAdapter):
@@ -460,6 +479,220 @@ class EmailAdapter(MessagingChannelAdapter):
         )
         return NormalizedWebhookBatch(inbound_events=[inbound_event])
 
+    async def send_direct_email(
+        self,
+        *,
+        provider: Literal["resend", "smtp_imap"],
+        credentials: dict[str, Any],
+        from_address: str,
+        to_address: str,
+        subject: str,
+        body_text: str,
+        body_html: str | None = None,
+        reply_to: str | None = None,
+        headers: dict[str, str] | None = None,
+        attachments: list[EmailAttachment] | None = None,
+        smtp_config: dict[str, Any] | None = None,
+    ) -> OutboundSendResult:
+        """Dual-engine transactional email delivery: Resend HTTP API or generic SMTP+STARTTLS."""
+        if provider == "smtp_imap":
+            return await self._send_via_smtp(
+                credentials=credentials,
+                from_address=from_address,
+                to_address=to_address,
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html,
+                reply_to=reply_to,
+                headers=headers,
+                attachments=attachments,
+                smtp_config=smtp_config or {},
+            )
+        return await self._send_via_resend(
+            credentials=credentials,
+            from_address=from_address,
+            to_address=to_address,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html,
+            reply_to=reply_to,
+            headers=headers,
+            attachments=attachments,
+        )
+
+    async def _send_via_resend(
+        self,
+        *,
+        credentials: dict[str, Any],
+        from_address: str,
+        to_address: str,
+        subject: str,
+        body_text: str,
+        body_html: str | None,
+        reply_to: str | None,
+        headers: dict[str, str] | None,
+        attachments: list[EmailAttachment] | None,
+    ) -> OutboundSendResult:
+        api_key = str(credentials.get("api_key") or os.environ.get("RESEND_API_KEY", ""))
+        if not api_key:
+            return OutboundSendResult(
+                success=False,
+                error_message="ERR_RESEND_API_KEY_MISSING",
+            )
+
+        payload: dict[str, Any] = {
+            "from": from_address,
+            "to": [to_address],
+            "subject": subject,
+            "text": body_text,
+        }
+        if body_html:
+            payload["html"] = body_html
+        if reply_to:
+            payload["reply_to"] = reply_to
+        if headers:
+            payload["headers"] = {str(k): str(v) for k, v in headers.items()}
+        if attachments:
+            payload["attachments"] = [att.as_resend_payload() for att in attachments]
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0, transport=self._http_transport) as client:
+                resp = await client.post(
+                    f"{self._resend_base_url}/emails",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json=payload,
+                )
+        except httpx.HTTPError as exc:
+            return OutboundSendResult(
+                success=False,
+                error_message=f"ERR_RESEND_REQUEST_FAILED: {type(exc).__name__}",
+                retryable=True,
+            )
+
+        if resp.status_code >= 400:
+            return OutboundSendResult(
+                success=False,
+                error_code=resp.status_code,
+                error_message=resp.text[:500],
+                retryable=resp.status_code >= 500 or resp.status_code == 429,
+            )
+        try:
+            message_id = str(resp.json().get("id") or "")
+        except ValueError:
+            message_id = ""
+        return OutboundSendResult(
+            success=True,
+            external_message_id=message_id or f"resend_{uuid.uuid4().hex[:16]}",
+        )
+
+    async def _send_via_smtp(
+        self,
+        *,
+        credentials: dict[str, Any],
+        from_address: str,
+        to_address: str,
+        subject: str,
+        body_text: str,
+        body_html: str | None,
+        reply_to: str | None,
+        headers: dict[str, str] | None,
+        attachments: list[EmailAttachment] | None,
+        smtp_config: dict[str, Any],
+    ) -> OutboundSendResult:
+        host = str(smtp_config.get("smtp_host") or credentials.get("smtp_host") or "").strip()
+        raw_port = smtp_config.get("smtp_port") or credentials.get("smtp_port") or 587
+        password = str(credentials.get("smtp_password") or "")
+        username = str(
+            credentials.get("smtp_username")
+            or smtp_config.get("smtp_username")
+            or parseaddr(from_address)[1]
+        )
+        if not host or not password:
+            return OutboundSendResult(
+                success=False,
+                error_message="ERR_SMTP_CREDENTIALS_MISSING",
+            )
+        try:
+            port = int(raw_port)
+        except (TypeError, ValueError):
+            port = 587
+
+        message = EmailMessage()
+        message["From"] = from_address
+        message["To"] = to_address
+        message["Subject"] = subject
+        if reply_to:
+            message["Reply-To"] = reply_to
+        for key, value in (headers or {}).items():
+            message[str(key)] = str(value)
+        message.set_content(body_text or "")
+        if body_html:
+            message.add_alternative(body_html, subtype="html")
+        for attachment in attachments or []:
+            maintype, _, subtype = attachment.content_type.partition("/")
+            message.add_attachment(
+                attachment.content_bytes,
+                maintype=maintype or "application",
+                subtype=subtype or "octet-stream",
+                filename=attachment.filename,
+            )
+
+        def _send() -> None:
+            if port == 465:
+                client: smtplib.SMTP = smtplib.SMTP_SSL(host, port, timeout=20)
+            else:
+                client = smtplib.SMTP(host, port, timeout=20)
+            try:
+                client.ehlo()
+                if port != 465:
+                    client.starttls()
+                    client.ehlo()
+                client.login(username, password)
+                client.send_message(message)
+            finally:
+                try:
+                    client.quit()
+                except (smtplib.SMTPException, OSError):
+                    client.close()
+
+        try:
+            await asyncio.to_thread(_send)
+        except (smtplib.SMTPException, OSError) as exc:
+            # Never echo credentials: redact the password from any server echo of it.
+            detail = str(exc)
+            if password:
+                detail = detail.replace(password, "***")
+            return OutboundSendResult(
+                success=False,
+                error_message=f"ERR_SMTP_SEND_FAILED: {type(exc).__name__}: {detail}"[:500],
+                retryable=True,
+            )
+        return OutboundSendResult(
+            success=True,
+            external_message_id=str(message.get("Message-ID") or uuid.uuid4().hex),
+        )
+
+    async def _smtp_config_from_account(
+        self,
+        session: AsyncSession,
+        tenant_id: uuid.UUID,
+        channel_account_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        """Backwards-compatible fallback when credentials predate the full SMTP tuple."""
+        try:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT config FROM channel_accounts "
+                        "WHERE tenant_id = :tid AND id = :aid"
+                    ),
+                    {"tid": tenant_id, "aid": channel_account_id},
+                )
+            ).scalar_one_or_none()
+        except (DBAPIError, LookupError):  # pragma: no cover - DB is best effort here
+            return {}
+        return dict(row or {})
+
     async def send_message(
         self,
         session: AsyncSession,
@@ -467,7 +700,6 @@ class EmailAdapter(MessagingChannelAdapter):
         credentials: dict[str, Any],
         request: OutboundMessageRequest,
     ) -> OutboundSendResult:
-        api_key = str(credentials.get("api_key") or os.environ.get("RESEND_API_KEY", ""))
         inbound_domain = os.environ.get("INBOUND_EMAIL_DOMAIN", "inbound.mail.example.com")
         generated_message_id = f"<{uuid.uuid4()}@{inbound_domain}>"
         if "@" in request.external_account_id:
@@ -483,30 +715,32 @@ class EmailAdapter(MessagingChannelAdapter):
         if request.references:
             headers_dict["References"] = " ".join(request.references)
 
-        payload = {
-            "from": request.from_address or f"Support <support@{inbound_domain}>",
-            "to": [request.recipient_id],
-            "reply_to": reply_to,
-            "subject": request.subject or "Re: Your Inquiry",
-            "text": request.body_text or "",
-            "html": request.body_html,
-            "headers": headers_dict,
-        }
-        async with httpx.AsyncClient(timeout=15.0, transport=self._http_transport) as client:
-            resp = await client.post(
-                f"{self._resend_base_url}/emails",
-                headers={"Authorization": f"Bearer {api_key}"},
-                json=payload,
+        provider: Literal["resend", "smtp_imap"] = "resend"
+        if credentials.get("smtp_password") or credentials.get("provider") == "smtp_imap":
+            provider = "smtp_imap"
+
+        smtp_config: dict[str, Any] = {}
+        if provider == "smtp_imap" and not credentials.get("smtp_host"):
+            smtp_config = await self._smtp_config_from_account(
+                session, tenant_id, request.channel_account_id
             )
 
-        if resp.status_code >= 400:
-            return OutboundSendResult(
-                success=False,
-                error_code=resp.status_code,
-                error_message=resp.text,
-                retryable=resp.status_code >= 500 or resp.status_code == 429,
-            )
-        return OutboundSendResult(
-            success=True,
-            external_message_id=generated_message_id,
+        if request.from_address:
+            from_address = request.from_address
+        elif "@" in request.external_account_id:
+            from_address = request.external_account_id
+        else:
+            from_address = f"Support <support@{inbound_domain}>"
+
+        return await self.send_direct_email(
+            provider=provider,
+            credentials=credentials,
+            from_address=from_address,
+            to_address=request.recipient_id,
+            subject=request.subject or "Re: Your Inquiry",
+            body_text=request.body_text or "",
+            body_html=request.body_html,
+            reply_to=reply_to,
+            headers=headers_dict,
+            smtp_config=smtp_config,
         )

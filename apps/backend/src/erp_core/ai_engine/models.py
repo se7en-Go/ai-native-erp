@@ -137,6 +137,8 @@ class AiProposal(Base):
     citations: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
+    # Verified ErpToolRegistry provenance; NULL means the claims are ungrounded.
+    source_tool_call_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     confidence_score: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False)
     estimated_margin_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
@@ -160,6 +162,12 @@ class AiProposal(Base):
             postgresql_where=text("status = 'pending'"),
         ),
         Index("idx_ai_proposals_tenant_capability", "tenant_id", "capability", desc("created_at")),
+        Index(
+            "idx_ai_proposals_tenant_source_tool",
+            "tenant_id",
+            "source_tool_call_id",
+            postgresql_where=text("source_tool_call_id IS NOT NULL"),
+        ),
     )
 
 
