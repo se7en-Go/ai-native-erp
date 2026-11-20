@@ -488,6 +488,21 @@ async def send_widget_message(
                 "preview": payload.body_text[:180],
             },
         )
+        scope_row = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT c.assigned_user_id, a.visibility_scope "
+                        "FROM conversations c JOIN channel_accounts a "
+                        "ON a.tenant_id = c.tenant_id AND a.id = c.channel_account_id "
+                        "WHERE c.tenant_id = :tid AND c.id = :conv_id"
+                    ),
+                    {"tid": claims.tenant_id, "conv_id": claims.conversation_id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
 
     await redis.publish(
         f"inbox:events:{claims.tenant_id}",
@@ -497,6 +512,14 @@ async def send_widget_message(
                 "conversation_id": str(claims.conversation_id),
                 "message_id": str(msg_id),
                 "channel_type": ChannelType.WEB_LIVECHAT.value,
+                "assigned_user_id": (
+                    str(scope_row["assigned_user_id"])
+                    if scope_row and scope_row["assigned_user_id"]
+                    else None
+                ),
+                "visibility_scope": (
+                    scope_row["visibility_scope"] if scope_row else "shared"
+                ),
             }
         ),
     )

@@ -44,6 +44,11 @@ class ChannelType(StrEnum):
     LAZADA = "lazada"
 
 
+class ChannelVisibilityScope(StrEnum):
+    SHARED = "shared"
+    PERSONAL = "personal"
+
+
 class ChannelStatus(StrEnum):
     ACTIVE = "active"
     TOKEN_EXPIRED = "token_expired"

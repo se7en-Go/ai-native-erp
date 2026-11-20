@@ -6,7 +6,7 @@ import re
 import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import httpx
@@ -26,7 +26,7 @@ from erp_core.channels.consent_service import ConsentAndSuppressionService
 from erp_core.channels.ecommerce.base import CredentialVaultHelper
 from erp_core.channels.messaging_accounts import (
     MESSAGING_CREDENTIAL,
-    ChannelAdmin,
+    ChannelConnectorPrincipal,
     ConnectMessagingResponse,
     MessagingConnectRoute,
     invalid_connection,
@@ -35,10 +35,11 @@ from erp_core.channels.messaging_accounts import (
     provider_token,
     provider_transport,
     register_messaging_account,
+    resolve_connect_ownership,
     save_messaging_credentials,
 )
 from erp_core.shared.db import tenant_session
-from erp_core.shared.enums import ChannelType, MessageContentType
+from erp_core.shared.enums import ChannelType, MessageContentType, UserRole
 from erp_core.shared.errors import AppError
 
 TELEGRAM_SECRET_HEADER = "x-telegram-bot-api-secret-token"
@@ -215,7 +216,10 @@ class TelegramAdapter(MessagingChannelAdapter):
             raise TelegramAPIError(_positive_id(payload.get("error_code")) or 502)
         return payload.get("result")
 
-    async def identify_bot(self, token: str) -> str:
+    async def identify_bot_profile(
+        self, token: str
+    ) -> tuple[str, str | None, str | None]:
+        """Return ``(bot_id, username, first_name)`` for a single-paste connect flow."""
         match = _BOT_TOKEN.fullmatch(token)
         if not match:
             raise invalid_connection("The Telegram bot token is invalid.")
@@ -228,7 +232,11 @@ class TelegramAdapter(MessagingChannelAdapter):
         bot_id = _positive_id(bot.get("id"))
         if not bot.get("is_bot") or bot_id is None or str(bot_id) != match[1]:
             raise invalid_connection("The token does not match a Telegram bot account.")
-        return str(bot_id)
+        return str(bot_id), _string(bot.get("username")), _string(bot.get("first_name"))
+
+    async def identify_bot(self, token: str) -> str:
+        bot_id, _, _ = await self.identify_bot_profile(token)
+        return bot_id
 
     async def set_webhook(self, token: str, url: str, secret: str) -> None:
         try:
@@ -332,7 +340,9 @@ def _webhook_url(bot: str) -> str:
 
 class TelegramConnectRequest(BaseModel):
     bot_token: SecretStr
-    display_name: str = Field(min_length=1, max_length=150)
+    display_name: str | None = Field(default=None, max_length=150)
+    visibility_scope: Literal["shared", "personal"] | None = None
+    owner_user_id: UUID | None = None
 
 
 telegram_router = APIRouter(
@@ -340,20 +350,50 @@ telegram_router = APIRouter(
 )
 
 
+def _display_name(payload: TelegramConnectRequest, username: str | None, first: str | None,
+                  bot_id: str) -> str:
+    """One-paste connect: never force a human to type a name Telegram already knows."""
+    requested = (payload.display_name or "").strip()
+    if requested:
+        return requested
+    if first:
+        return first[:150]
+    if username:
+        return f"@{username}"[:150]
+    return f"Telegram Bot {bot_id}"[:150]
+
+
 @telegram_router.post("/connect")
 async def connect_telegram(
     payload: TelegramConnectRequest,
     request: Request,
-    principal: ChannelAdmin,
+    principal: ChannelConnectorPrincipal,
 ) -> ConnectMessagingResponse:
     token = provider_token(payload.bot_token)
     adapter = TelegramAdapter(http_transport=provider_transport(request))
-    bot = await adapter.identify_bot(token)
+    bot, username, first_name = await adapter.identify_bot_profile(token)
     url = _webhook_url(bot)
     tenant = principal.tenant_id
+    effective_display_name = _display_name(payload, username, first_name, bot)
     async with tenant_session(messaging_sessions(request), tenant) as session:
+        owner_uid, vis_scope = await resolve_connect_ownership(
+            session,
+            principal,
+            payload.visibility_scope,
+            payload.owner_user_id,
+            allow_agent_self_bind=True,
+        )
         aid = await register_messaging_account(
-            session, tenant, ChannelType.TELEGRAM, bot, payload.display_name
+            session,
+            tenant,
+            ChannelType.TELEGRAM,
+            bot,
+            effective_display_name,
+            owner_user_id=owner_uid,
+            visibility_scope=vis_scope,
+            actor_user_id=principal.user_id,
+            actor_is_admin=principal.role in (UserRole.OWNER, UserRole.ADMIN),
+            config_patch={"bot_username": username} if username else None,
         )
         vault = CredentialVaultHelper()
         try:
@@ -368,4 +408,11 @@ async def connect_telegram(
         )
         # Provider mutation must occur only after this transaction has proven routing ownership.
         await adapter.set_webhook(token, url, secret)
-    return ConnectMessagingResponse(channel_account_id=aid, external_account_id=bot)
+    return ConnectMessagingResponse(
+        channel_account_id=aid,
+        external_account_id=bot,
+        display_name=effective_display_name,
+        owner_user_id=owner_uid,
+        visibility_scope=vis_scope,
+        bot_username=username,
+    )
