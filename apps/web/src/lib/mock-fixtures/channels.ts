@@ -1,4 +1,51 @@
 // Structural mirrors of the channel settings shapes (app/settings/channels).
+
+/**
+ * 渠道应用市场接入结果的本地镜像：没有后端时演示 11 个渠道的完整接入闭环。
+ * key 与 `MarketplaceChannelKey` 对齐，`externalAccountId` 由调用方按表单回填。
+ */
+export const mockChannelConnectResults: Record<
+  | "whatsapp"
+  | "telegram"
+  | "messenger"
+  | "instagram_dm"
+  | "email"
+  | "web_livechat"
+  | "shopify"
+  | "woocommerce"
+  | "shopline"
+  | "shoplazza"
+  | "tiktok_shop",
+  { channel_account_id: string; external_account_id: string }
+> = {
+  whatsapp: {
+    channel_account_id: "mock-whatsapp-account",
+    external_account_id: "mock_phone_number_id",
+  },
+  telegram: { channel_account_id: "mock-telegram-account", external_account_id: "7012345678" },
+  messenger: { channel_account_id: "mock-messenger-account", external_account_id: "1010101010" },
+  instagram_dm: {
+    channel_account_id: "mock-instagram-account",
+    external_account_id: "17841400000000000",
+  },
+  email: { channel_account_id: "mock-email-account", external_account_id: "sales@qzled.example.com" },
+  web_livechat: {
+    channel_account_id: "mock-web-livechat-account",
+    external_account_id: "sk_live_demo_qzled",
+  },
+  shopify: { channel_account_id: "mock-shopify-account", external_account_id: "qzled.myshopify.com" },
+  woocommerce: {
+    channel_account_id: "mock-woocommerce-account",
+    external_account_id: "shop.qzled.example.com",
+  },
+  shopline: { channel_account_id: "mock-shopline-account", external_account_id: "qzled.myshopline.com" },
+  shoplazza: {
+    channel_account_id: "mock-shoplazza-account",
+    external_account_id: "qzled.myshoplazza.com",
+  },
+  tiktok_shop: { channel_account_id: "mock-tiktok-account", external_account_id: "7480000000000000000" },
+};
+
 export const mockChannelAccounts = {
   items: [
     {

@@ -6,6 +6,8 @@ afterEach(() => {
   cleanup();
 });
 
+// `useSearchParams` stays a vi.fn so individual suites can simulate deep links
+// such as `/settings/channels?connect=whatsapp`.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: vi.fn(),
@@ -14,5 +16,5 @@ vi.mock("next/navigation", () => ({
     back: vi.fn(),
   }),
   usePathname: () => "/inbox",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));

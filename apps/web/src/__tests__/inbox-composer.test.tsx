@@ -233,4 +233,47 @@ describe("Task 5.2 4-Column Inbox & Composer", () => {
       });
     });
   });
+
+  it("deep-links the empty-state CTA straight to the active channel drawer", () => {
+    wrap(
+      <ConversationList
+        conversations={[]}
+        selectedConversationId={null}
+        activeFilter="all"
+        searchQuery=""
+        onSelectFilter={vi.fn()}
+        onSearchChange={vi.fn()}
+        onSelectConversation={vi.fn()}
+        quickConnectHref="/settings/channels?connect=shopify"
+        quickConnectLabel="快捷绑定 Shopify →"
+      />,
+      "zh"
+    );
+
+    const link = screen.getByTestId("inbox-quick-connect-link") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/settings/channels?connect=shopify");
+    expect(link.textContent).toContain("Shopify");
+  });
+
+  it("keeps the channel rail settings link contextual to the selected channel", () => {
+    wrap(
+      <ChannelRail selectedChannel="whatsapp" onSelectChannel={vi.fn()} unreadByChannel={{}} />,
+      "zh"
+    );
+
+    expect(
+      (screen.getByTestId("inbox-channel-settings-link") as HTMLAnchorElement).getAttribute("href")
+    ).toBe("/settings/channels?connect=whatsapp");
+  });
+
+  it("sends the all-channels rail link to the plain channel hub", () => {
+    wrap(
+      <ChannelRail selectedChannel="all" onSelectChannel={vi.fn()} unreadByChannel={{}} />,
+      "zh"
+    );
+
+    expect(
+      (screen.getByTestId("inbox-channel-settings-link") as HTMLAnchorElement).getAttribute("href")
+    ).toBe("/settings/channels");
+  });
 });

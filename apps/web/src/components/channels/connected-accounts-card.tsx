@@ -2,18 +2,22 @@
 
 import React, { useMemo, useState } from "react";
 import {
+  Check,
   CheckCircle2,
+  Copy,
   ExternalLink,
   Link2,
   Loader2,
   LockKeyhole,
   Pencil,
+  Plus,
   Unplug,
   Users,
   X,
 } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
+import { livechatEmbedSnippet } from "@/components/channels/channel-marketplace";
 import type {
   ChannelAccountApiItem,
   ChannelVisibilityScope,
@@ -49,8 +53,12 @@ export type ConnectedAccountsCardProps = {
   isAdmin: boolean;
   currentUserId?: string | null;
   members?: TeamMemberApiItem[];
+  /** 官网客服嵌入脚本需要的租户 slug。 */
+  tenantSlug?: string | null;
   filter: AccountsFilter;
   onFilterChange: (filter: AccountsFilter) => void;
+  /** 顶栏「+ 快捷绑定新渠道」：回到渠道应用市场。 */
+  onQuickConnect?: () => void;
   onChangeOwnership: (
     accountId: string,
     payload: UpdateChannelOwnershipPayload,
@@ -67,12 +75,15 @@ export function ConnectedAccountsCard({
   isAdmin,
   currentUserId,
   members = [],
+  tenantSlug,
   filter,
   onFilterChange,
+  onQuickConnect,
   onChangeOwnership,
   onDisconnect,
 }: ConnectedAccountsCardProps) {
   const { bi } = useI18n();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editScope, setEditScope] = useState<ChannelVisibilityScope>("shared");
   const [editOwner, setEditOwner] = useState("");
@@ -127,6 +138,15 @@ export function ConnectedAccountsCard({
     }
   }
 
+  async function copySnippet(accountId: string, snippet: string) {
+    try {
+      await navigator.clipboard?.writeText(snippet);
+      setCopiedId(accountId);
+    } catch {
+      setCopiedId(null);
+    }
+  }
+
   async function disconnect(accountId: string) {
     setPendingId(accountId);
     setError(null);
@@ -162,29 +182,42 @@ export function ConnectedAccountsCard({
                 )}
           </p>
         </div>
-        <div
-          role="tablist"
-          aria-label={bi("渠道归属筛选", "Ownership filter")}
-          className="inline-flex items-center gap-0.5 rounded-xl border border-[#E5E2DC] bg-[#EFECE6]/90 p-1"
-        >
-          {FILTERS.map((option) => {
-            const active = filter === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                data-testid={`accounts-filter-${option.value}`}
-                onClick={() => onFilterChange(option.value)}
-                className={`rounded-lg px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${
-                  active ? "bg-[#18181B] text-[#FAFAF9]" : "text-stone-600 hover:text-zinc-950"
-                }`}
-              >
-                {bi(option.zh, option.en)}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2">
+          {onQuickConnect && (
+            <button
+              type="button"
+              data-testid="accounts-quick-connect-btn"
+              onClick={onQuickConnect}
+              className="erp-btn rounded-xl bg-[#059669] text-[11.5px] font-semibold text-white shadow-xs hover:bg-[#047857]"
+            >
+              <Plus className="h-3 w-3" />
+              <span>{bi("快捷绑定新渠道", "Quick connect a channel")}</span>
+            </button>
+          )}
+          <div
+            role="tablist"
+            aria-label={bi("渠道归属筛选", "Ownership filter")}
+            className="inline-flex items-center gap-0.5 rounded-xl border border-[#E5E2DC] bg-[#EFECE6]/90 p-1"
+          >
+            {FILTERS.map((option) => {
+              const active = filter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  data-testid={`accounts-filter-${option.value}`}
+                  onClick={() => onFilterChange(option.value)}
+                  className={`rounded-lg px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${
+                    active ? "bg-[#18181B] text-[#FAFAF9]" : "text-stone-600 hover:text-zinc-950"
+                  }`}
+                >
+                  {bi(option.zh, option.en)}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -288,6 +321,42 @@ export function ConnectedAccountsCard({
                   )}
                 </div>
               </div>
+
+              {account.channel_type === "web_livechat" && (
+                <div className="mt-2 space-y-1.5 rounded-xl border border-[#E5E2DC] bg-white px-2.5 py-2">
+                  <div className="text-[10.5px] font-semibold text-stone-600">
+                    {bi("网站嵌入代码（放到 </body> 前）", "Embed snippet (before </body>)")}
+                  </div>
+                  <code
+                    data-testid={`livechat-snippet-${account.id}`}
+                    className="block overflow-x-auto rounded-lg bg-[#18181B] px-2 py-1.5 font-mono text-[10px] leading-5 whitespace-pre-wrap text-emerald-100"
+                  >
+                    {livechatEmbedSnippet(account.external_account_id, tenantSlug)}
+                  </code>
+                  <button
+                    type="button"
+                    data-testid={`copy-livechat-snippet-${account.id}`}
+                    onClick={() =>
+                      void copySnippet(
+                        account.id,
+                        livechatEmbedSnippet(account.external_account_id, tenantSlug),
+                      )
+                    }
+                    className="erp-btn rounded-lg border border-emerald-300 bg-white px-2 py-1 text-[10.5px] font-semibold text-emerald-800 hover:bg-emerald-50"
+                  >
+                    {copiedId === account.id ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                    <span>
+                      {copiedId === account.id
+                        ? bi("已复制", "Copied")
+                        : bi("一键复制嵌入代码", "Copy embed snippet")}
+                    </span>
+                  </button>
+                </div>
+              )}
 
               {editing && (
                 <div className="mt-2 space-y-2 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/40 px-2.5 py-2">

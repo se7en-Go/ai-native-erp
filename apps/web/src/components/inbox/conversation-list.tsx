@@ -130,6 +130,8 @@ export function ConversationList({
   onSearchChange,
   onSelectConversation,
   headerSlot,
+  quickConnectHref = "/settings/channels",
+  quickConnectLabel,
 }: {
   conversations: ConversationSummary[];
   selectedConversationId: string | null;
@@ -140,6 +142,9 @@ export function ConversationList({
   onSelectConversation: (conversationId: string) => void;
   /** 管层专用的归属筛选条（全部会话 / 只看我的 / 公司公海）。 */
   headerSlot?: React.ReactNode;
+  /** 当前渠道筛选对应的渠道中心深链（`?connect=<channel>` 直达抽屉）。 */
+  quickConnectHref?: string;
+  quickConnectLabel?: string;
 }) {
   const { bi } = useI18n();
   const unreadTotal = conversations.reduce((total, conv) => total + conv.unread_count, 0);
@@ -210,11 +215,11 @@ export function ConversationList({
               )}
             </div>
             <Link
-              href="/settings/channels"
+              href={quickConnectHref}
               data-testid="inbox-quick-connect-link"
               className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
             >
-              {bi("快捷绑定渠道 →", "Quick connect a channel →")}
+              {quickConnectLabel ?? bi("快捷绑定渠道 →", "Quick connect a channel →")}
             </Link>
           </div>
         ) : (

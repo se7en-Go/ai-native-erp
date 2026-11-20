@@ -283,9 +283,15 @@ describe("Task 5.7 Onboarding Wizard & Channel Settings", () => {
 
     wrap(<ChannelsSettingsPage />);
 
+    // 4-Tab 渠道中心：已接入账号在第二个 tab，运维与合规在第四个 tab。
+    fireEvent.click(await screen.findByTestId("hub-tab-accounts"));
     await waitFor(() => {
       expect(screen.getByText("QZ LED WA Business (+86)")).toBeInTheDocument();
       expect(screen.getByText(/20 mps/)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("hub-tab-compliance"));
+    await waitFor(() => {
       expect(screen.getByText(/131056 Pair rate limit exceeded/)).toBeInTheDocument();
     });
 

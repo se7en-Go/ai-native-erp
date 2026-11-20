@@ -1527,6 +1527,216 @@ export async function connectEmailChannel(
   });
 }
 
+// ---------------------------------------------------------------------------
+// 渠道应用市场（11 个渠道）：WhatsApp 直连/Embedded Signup、网页客服、独立站连接器。
+// 契约端点尚未生成 SDK 的部分全部走 bffFetch，Backend 合并后无需改动调用方。
+// ---------------------------------------------------------------------------
+
+/** 渠道应用市场的 11 个渠道键（Telegram / 邮箱 / Meta 之外含 5 个建站连接器）。 */
+export type MarketplaceChannelKey =
+  | "whatsapp"
+  | "telegram"
+  | "messenger"
+  | "instagram_dm"
+  | "email"
+  | "web_livechat"
+  | "shopify"
+  | "woocommerce"
+  | "shopline"
+  | "shoplazza"
+  | "tiktok_shop";
+
+export type WhatsAppDirectConnectPayload = {
+  waba_id: string;
+  phone_number_id: string;
+  access_token: string;
+  is_coexistence: boolean;
+  display_name?: string | null;
+  visibility_scope?: ChannelVisibilityScope;
+  owner_user_id?: string | null;
+};
+
+export type WhatsAppEmbeddedSignupPayload = {
+  code: string;
+  waba_id: string;
+  phone_number_id: string;
+  is_coexistence: boolean;
+  display_name: string;
+  visibility_scope?: ChannelVisibilityScope;
+  owner_user_id?: string | null;
+};
+
+export type WebLivechatConnectPayload = {
+  site_domain: string;
+  display_name?: string | null;
+  visibility_scope?: ChannelVisibilityScope;
+  owner_user_id?: string | null;
+};
+
+export type ShopifyCustomAppConnectPayload = {
+  shop_domain: string;
+  client_id: string;
+  client_secret: string;
+  access_token?: string | null;
+};
+
+export type WooCommerceConnectPayload = {
+  store_url: string;
+  consumer_key: string;
+  consumer_secret: string;
+  webhook_secret?: string | null;
+};
+
+export type ShoplineConnectPayload = {
+  store_domain: string;
+  access_token: string;
+  app_secret: string;
+};
+
+export type ShoplazzaConnectPayload = {
+  store_domain: string;
+  access_token: string;
+  client_secret: string;
+};
+
+export type TikTokShopConnectPayload = {
+  shop_id: string;
+  shop_cipher: string;
+  app_key: string;
+  app_secret: string;
+  access_token: string;
+  app_mode: "seller_byok";
+};
+
+/**
+ * 一次接入请求：抽屉按渠道构造，数据层按 `channel` 分发到对应端点。
+ * WhatsApp 有直连 Token 与 Meta Embedded Signup 两种模式。
+ */
+export type MarketplaceConnectRequest =
+  | { channel: "whatsapp"; mode: "direct"; body: WhatsAppDirectConnectPayload }
+  | { channel: "whatsapp"; mode: "embedded"; body: WhatsAppEmbeddedSignupPayload }
+  | { channel: "telegram"; body: TelegramConnectPayload }
+  | { channel: "messenger"; body: MessengerConnectPayload }
+  | { channel: "instagram_dm"; body: InstagramConnectPayload }
+  | { channel: "email"; body: EmailConnectPayload }
+  | { channel: "web_livechat"; body: WebLivechatConnectPayload }
+  | { channel: "shopify"; body: ShopifyCustomAppConnectPayload }
+  | { channel: "woocommerce"; body: WooCommerceConnectPayload }
+  | { channel: "shopline"; body: ShoplineConnectPayload }
+  | { channel: "shoplazza"; body: ShoplazzaConnectPayload }
+  | { channel: "tiktok_shop"; body: TikTokShopConnectPayload };
+
+/**
+ * 连接器的响应字段尚未进入契约：`channel_account_id` / `external_account_id`
+ * 之外一律按可选读取，避免连接成功却因字段差异抛错。
+ */
+function mapConnectorConnectResult(raw: Record<string, unknown>): MessagingConnectResult {
+  return mapConnectResult({
+    ...raw,
+    channel_account_id: String(raw.channel_account_id ?? raw.id ?? ""),
+    external_account_id: String(raw.external_account_id ?? raw.site_key ?? raw.shop_domain ?? ""),
+  });
+}
+
+async function postChannelConnect(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<MessagingConnectResult> {
+  const raw = await bffFetch<Record<string, unknown>>(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapConnectorConnectResult(raw);
+}
+
+/** WhatsApp Cloud API 直连 Token 快捷绑定（WABA + 手机号 + 永久令牌）。 */
+export async function connectWhatsAppDirect(
+  body: WhatsAppDirectConnectPayload,
+): Promise<MessagingConnectResult> {
+  return postChannelConnect("/v1/channels/whatsapp/connect", body);
+}
+
+/** WhatsApp Meta Embedded Signup 授权码换令牌。 */
+export async function connectWhatsAppEmbedded(
+  body: WhatsAppEmbeddedSignupPayload,
+): Promise<MessagingConnectResult> {
+  return postChannelConnect("/v1/channels/whatsapp/embedded-signup", body);
+}
+
+/** 官网网页客服：一个域名即生成可复制的嵌入脚本。 */
+export async function connectWebLivechat(
+  body: WebLivechatConnectPayload,
+): Promise<MessagingConnectResult> {
+  return postChannelConnect("/v1/channels/web-livechat/connect", body);
+}
+
+/** Shopify 自定义应用（Client ID / Secret，可选 Admin API Token）。 */
+export async function connectShopifyCustomApp(
+  body: ShopifyCustomAppConnectPayload,
+): Promise<MessagingConnectResult> {
+  return postChannelConnect("/v1/connectors/shopify/custom-app", body);
+}
+
+/** WooCommerce REST 凭证回调（Consumer Key / Secret）。 */
+export async function connectWooCommerce(
+  body: WooCommerceConnectPayload,
+): Promise<MessagingConnectResult> {
+  return postChannelConnect("/v1/connectors/woocommerce/auth-callback", body);
+}
+
+/** SHOPLINE 开放平台连接器。 */
+export async function connectShopline(
+  body: ShoplineConnectPayload,
+): Promise<MessagingConnectResult> {
+  return postChannelConnect("/v1/connectors/shopline/connect", body);
+}
+
+/** Shoplazza 开放平台连接器。 */
+export async function connectShoplazza(
+  body: ShoplazzaConnectPayload,
+): Promise<MessagingConnectResult> {
+  return postChannelConnect("/v1/connectors/shoplazza/connect", body);
+}
+
+/** TikTok Shop 卖家自备应用（seller_byok）连接器。 */
+export async function connectTikTokShop(
+  body: TikTokShopConnectPayload,
+): Promise<MessagingConnectResult> {
+  return postChannelConnect("/v1/connectors/tiktok/connect", body);
+}
+
+/** 按渠道键分发一次接入请求（抽屉只负责收集字段）。 */
+export async function connectMarketplaceChannel(
+  request: MarketplaceConnectRequest,
+): Promise<MessagingConnectResult> {
+  switch (request.channel) {
+    case "whatsapp":
+      return request.mode === "embedded"
+        ? connectWhatsAppEmbedded(request.body)
+        : connectWhatsAppDirect(request.body);
+    case "telegram":
+      return connectTelegramChannel(request.body);
+    case "messenger":
+      return connectMessengerChannel(request.body);
+    case "instagram_dm":
+      return connectInstagramChannel(request.body);
+    case "email":
+      return connectEmailChannel(request.body);
+    case "web_livechat":
+      return connectWebLivechat(request.body);
+    case "shopify":
+      return connectShopifyCustomApp(request.body);
+    case "woocommerce":
+      return connectWooCommerce(request.body);
+    case "shopline":
+      return connectShopline(request.body);
+    case "shoplazza":
+      return connectShoplazza(request.body);
+    case "tiktok_shop":
+      return connectTikTokShop(request.body);
+  }
+}
+
 /** 切换归属：公司公海 ↔ 指定业务员个人专属（owner/admin）。 */
 export async function updateChannelOwnership(
   accountId: string,

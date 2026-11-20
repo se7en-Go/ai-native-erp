@@ -32,7 +32,15 @@ import {
   connectEmailChannel as liveConnectEmailChannel,
   connectInstagramChannel as liveConnectInstagramChannel,
   connectMessengerChannel as liveConnectMessengerChannel,
+  connectShopifyCustomApp as liveConnectShopifyCustomApp,
+  connectShopline as liveConnectShopline,
+  connectShoplazza as liveConnectShoplazza,
   connectTelegramChannel as liveConnectTelegramChannel,
+  connectTikTokShop as liveConnectTikTokShop,
+  connectWebLivechat as liveConnectWebLivechat,
+  connectWhatsAppDirect as liveConnectWhatsAppDirect,
+  connectWhatsAppEmbedded as liveConnectWhatsAppEmbedded,
+  connectWooCommerce as liveConnectWooCommerce,
   disconnectChannelAccount as liveDisconnectChannelAccount,
   fetchChannelAccounts as liveFetchChannelAccounts,
   fetchChannelConsents as liveFetchChannelConsents,
@@ -59,6 +67,7 @@ import type {
 import {
   mockCapabilities,
   mockChannelAccounts,
+  mockChannelConnectResults,
   mockChannelConsents,
   mockChannelDlq,
   mockChannelSuppressions,
@@ -80,17 +89,28 @@ import {
   mockWallet,
 } from "@/lib/mock-fixtures";
 import type {
+  ChannelVisibilityScope,
   DisconnectChannelResponse,
   EmailConnectPayload,
   InstagramConnectPayload,
   InviteTeamMemberPayload,
+  MarketplaceChannelKey,
+  MarketplaceConnectRequest,
   MessengerConnectPayload,
   MessagingConnectPayload,
   MessagingConnectResult,
   MessagingProviderKind,
+  ShopifyCustomAppConnectPayload,
+  ShoplineConnectPayload,
+  ShoplazzaConnectPayload,
   TeamMemberApiItem,
   TelegramConnectPayload,
+  TikTokShopConnectPayload,
   UpdateChannelOwnershipPayload,
+  WebLivechatConnectPayload,
+  WhatsAppDirectConnectPayload,
+  WhatsAppEmbeddedSignupPayload,
+  WooCommerceConnectPayload,
 } from "@/lib/api-client/live-client";
 import type { AiProposalItem } from "@/components/ai/proposal-review-card";
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
@@ -321,6 +341,141 @@ export async function connectMessagingChannel(
     return liveConnectInstagramChannel(payload as InstagramConnectPayload);
   }
   return liveConnectTelegramChannel(payload as TelegramConnectPayload);
+}
+
+// ---------------------------------------------------------------------------
+// 渠道应用市场（11 个渠道）：mock 模式返回本地镜像结果，线上全部走 bffFetch。
+// WhatsApp 分开直连 Token 与 Meta Embedded Signup 两种接入模式。
+// ---------------------------------------------------------------------------
+
+/** mock 结果：优先用表单里的真实外部 ID，否则用内置演示值，保证演示闭环。 */
+function mockMarketplaceResult(
+  key: MarketplaceChannelKey,
+  externalAccountId?: string | null,
+  ownership: {
+    visibility_scope?: ChannelVisibilityScope;
+    owner_user_id?: string | null;
+  } = {},
+): MessagingConnectResult {
+  const base = mockChannelConnectResults[key];
+  const external = (externalAccountId ?? "").trim();
+  return {
+    channel_account_id: base.channel_account_id,
+    external_account_id: external || base.external_account_id,
+    ...(ownership.visibility_scope ? { visibility_scope: ownership.visibility_scope } : {}),
+    ...(ownership.visibility_scope === "personal"
+      ? { owner_user_id: ownership.owner_user_id ?? null }
+      : {}),
+  };
+}
+
+/** WhatsApp Cloud API 直连 Token 快捷绑定。 */
+export async function connectWhatsAppDirect(
+  body: WhatsAppDirectConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mockMarketplaceResult("whatsapp", body.phone_number_id, {
+      visibility_scope: body.visibility_scope ?? "shared",
+      owner_user_id: body.owner_user_id ?? null,
+    });
+  }
+  return liveConnectWhatsAppDirect(body);
+}
+
+/** WhatsApp Meta Embedded Signup 授权码换令牌。 */
+export async function connectWhatsAppEmbedded(
+  body: WhatsAppEmbeddedSignupPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mockMarketplaceResult("whatsapp", body.phone_number_id, {
+      visibility_scope: body.visibility_scope ?? "shared",
+      owner_user_id: body.owner_user_id ?? null,
+    });
+  }
+  return liveConnectWhatsAppEmbedded(body);
+}
+
+/** 官网网页客服：一个域名即生成可复制的嵌入脚本。 */
+export async function connectWebLivechat(
+  body: WebLivechatConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mockMarketplaceResult("web_livechat", null, {
+      visibility_scope: body.visibility_scope ?? "shared",
+      owner_user_id: body.owner_user_id ?? null,
+    });
+  }
+  return liveConnectWebLivechat(body);
+}
+
+/** Shopify 自定义应用。 */
+export async function connectShopifyCustomApp(
+  body: ShopifyCustomAppConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) return mockMarketplaceResult("shopify", body.shop_domain);
+  return liveConnectShopifyCustomApp(body);
+}
+
+/** WooCommerce REST 凭证回调。 */
+export async function connectWooCommerce(
+  body: WooCommerceConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) return mockMarketplaceResult("woocommerce", body.store_url);
+  return liveConnectWooCommerce(body);
+}
+
+/** SHOPLINE 开放平台连接器。 */
+export async function connectShopline(
+  body: ShoplineConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) return mockMarketplaceResult("shopline", body.store_domain);
+  return liveConnectShopline(body);
+}
+
+/** Shoplazza 开放平台连接器。 */
+export async function connectShoplazza(
+  body: ShoplazzaConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) return mockMarketplaceResult("shoplazza", body.store_domain);
+  return liveConnectShoplazza(body);
+}
+
+/** TikTok Shop 卖家自备应用（seller_byok）连接器。 */
+export async function connectTikTokShop(
+  body: TikTokShopConnectPayload,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) return mockMarketplaceResult("tiktok_shop", body.shop_id);
+  return liveConnectTikTokShop(body);
+}
+
+/** 抽屉提交入口：按渠道键分发到 mock 感知的具体接入函数。 */
+export async function connectMarketplaceChannel(
+  request: MarketplaceConnectRequest,
+): Promise<MessagingConnectResult> {
+  switch (request.channel) {
+    case "whatsapp":
+      return request.mode === "embedded"
+        ? connectWhatsAppEmbedded(request.body)
+        : connectWhatsAppDirect(request.body);
+    case "telegram":
+    case "messenger":
+    case "instagram_dm":
+      return connectMessagingChannel(request.channel, request.body);
+    case "email":
+      return connectEmailChannel(request.body);
+    case "web_livechat":
+      return connectWebLivechat(request.body);
+    case "shopify":
+      return connectShopifyCustomApp(request.body);
+    case "woocommerce":
+      return connectWooCommerce(request.body);
+    case "shopline":
+      return connectShopline(request.body);
+    case "shoplazza":
+      return connectShoplazza(request.body);
+    case "tiktok_shop":
+      return connectTikTokShop(request.body);
+  }
 }
 
 // ---------------------------------------------------------------------------
