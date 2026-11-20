@@ -174,3 +174,51 @@ class StockRead(BaseModel):
     on_hand_qty: int
     reserved_qty: int
     available_qty: int
+
+
+class LowStockItemRead(BaseModel):
+    """One SKU/warehouse pair sitting below its configured safety stock."""
+
+    variant_id: UUID
+    sku: str
+    product_name: str
+    warehouse_id: UUID
+    warehouse_name: str
+    on_hand_qty: int
+    reserved_qty: int
+    available_qty: int
+    safety_stock_qty: int
+    suggested_reorder_qty: int
+
+
+class LowStockListRead(BaseModel):
+    items: list[LowStockItemRead]
+    total: int = 0
+
+
+class LowStockCreatePoRequest(BaseModel):
+    """One-click replenishment: convert a low-stock SKU into a real purchase order."""
+
+    supplier_id: UUID
+    variant_id: UUID
+    quantity: Quantity
+    unit_cost: UnitCost
+    currency: Currency = "USD"
+    notes: Note | None = None
+
+
+class WarehouseCreateRequest(BaseModel):
+    code: Code
+    name: Name
+    country_code: Country = "CN"
+    city: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
+
+
+class WmsWarehouseRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    code: str
+    name: str
+    country_code: str
+    city: str

@@ -134,6 +134,19 @@ class VariantMappingsBundleRead(BaseModel):
     mappings: list[VariantMappingWithLabelRead]
 
 
+class CatalogCsvImportRequest(BaseModel):
+    """Bulk catalog upload. Headers are matched case-insensitively by the service."""
+
+    csv_text: str = Field(min_length=5, max_length=500_000)
+
+
+class CatalogCsvImportResponse(BaseModel):
+    created_products: int = 0
+    created_variants: int = 0
+    updated_variants: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
 class LiveSkuCheckRead(BaseModel):
     sku: str
     available_qty: int
