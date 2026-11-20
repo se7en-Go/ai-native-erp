@@ -332,7 +332,7 @@ export default function OnboardingPage() {
               )}
             />
             <div className="grid gap-3 p-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
+              <div>
                 <label className="erp-label" htmlFor="onboarding-preset-select">
                   {bi("业务预设", "Business preset")}
                 </label>
