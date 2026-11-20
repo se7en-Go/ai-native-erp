@@ -392,7 +392,7 @@ export function ChannelMarketplaceGrid({
 
       <div
         data-testid="marketplace-grid"
-        className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3"
+        className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
       >
         {filtered.map((item) => {
           const Icon = item.icon;

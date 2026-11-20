@@ -298,7 +298,7 @@ function ChannelsHub() {
         <section
           aria-label={bi("渠道关键指标", "Channel key metrics")}
           data-testid="channel-kpi-strip"
-          className={`grid gap-3 sm:grid-cols-2 ${isAdmin ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
         >
           <BentoStatCard
             label={bi("已接入账号", "Connected accounts")}
@@ -360,7 +360,7 @@ function ChannelsHub() {
         </div>
 
         {tab === "marketplace" && (
-          <div className="mx-auto w-full max-w-[1280px]">
+          <div className="w-full">
             <ChannelMarketplaceGrid
               accounts={accounts}
               isAdmin={isAdmin}
@@ -370,7 +370,7 @@ function ChannelsHub() {
         )}
 
         {tab === "accounts" && (
-          <div className="mx-auto w-full max-w-[1080px]">
+          <div className="w-full">
             <ConnectedAccountsCard
               accounts={accounts}
               isAdmin={isAdmin}
@@ -391,7 +391,7 @@ function ChannelsHub() {
         )}
 
         {tab === "team" && isAdmin && (
-          <div className="mx-auto w-full max-w-[1080px]">
+          <div className="w-full">
             <TeamMembersCard
               members={members}
               accounts={accounts}
@@ -402,7 +402,7 @@ function ChannelsHub() {
         )}
 
         {tab === "compliance" && isAdmin && (
-          <div className="mx-auto w-full max-w-[1280px] space-y-3">
+          <div className="w-full space-y-3">
             <Card>
               <CardHeader
                 title={bi("死信队列（DLQ）重放", "Dead-letter queue (DLQ) replay")}
