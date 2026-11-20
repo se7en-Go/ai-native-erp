@@ -4,13 +4,13 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: "Hybrid Omnichannel AI Workbench & ERP",
-  description: "Multi-tenant B2C + B2B Cross-Border Omnichannel AI Workbench",
+  title: "工贸全渠道外贸工作台 · Omnichannel ERP",
+  description: "多租户 B2B + B2C 跨境电商与工贸一体企业全渠道 AI 工作台",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body>
         <Providers>{children}</Providers>
       </body>

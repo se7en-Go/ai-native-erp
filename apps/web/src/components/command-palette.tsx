@@ -48,7 +48,7 @@ export function useCommandPalette(): CommandPaletteState {
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const { principal } = useAuthSession();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -143,7 +143,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                   onClick={() => go(entry.href)}
                   className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40"
                 >
-                  <span>{labels[entry.href] ?? entry.label}</span>
+                  <span>
+                    {labels[entry.href] ?? (locale === "zh" ? entry.label : entry.labelEn ?? entry.label)}
+                  </span>
                   <span className="text-[10px] uppercase text-slate-400">{entry.group}</span>
                 </button>
               ))}
