@@ -6,16 +6,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   DatabaseZap,
+  FileText,
+  Paperclip,
   Sparkles,
   Send,
   StickyNote,
   Languages,
   ShieldCheck,
   Info,
+  X,
 } from "lucide-react";
 import { sendConversationMessage } from "@/lib/api-client/live-client";
 import { aiAssist } from "@/lib/api-client/plan04-bridge";
 import { translateText } from "@/lib/api-client/live-client";
+import {
+  formatAttachmentSize,
+  uploadInboxAttachment,
+} from "@/lib/api-client/pack-b-inbox";
 import { BffApiError } from "@/lib/contracts";
 import { InboxAiToolbar } from "@/components/ai-workforce/inbox-ai-toolbar";
 import type { InboxToolbarIntent, QuickReplyTemplate } from "@/components/ai-workforce/types";
@@ -24,6 +31,28 @@ import type { InboxMessage } from "@/components/inbox/message-thread";
 import { fetchInboxAssist, fetchQuickReplies } from "@/lib/phase3b-data";
 import { proposeGroundedReply } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
+
+/**
+ * 实时翻译目标语言：覆盖外贸询盘最常用的语种。
+ * 码位与 `/v1/ai/translate` 的 `target_lang`（ISO 639-1）一致。
+ */
+export const TARGET_LANGUAGES = [
+  { code: "zh", zh: "中文 (ZH)", en: "Chinese (ZH)" },
+  { code: "en", zh: "英语 (EN)", en: "English (EN)" },
+  { code: "es", zh: "西班牙语 (ES)", en: "Spanish (ES)" },
+  { code: "de", zh: "德语 (DE)", en: "German (DE)" },
+  { code: "fr", zh: "法语 (FR)", en: "French (FR)" },
+  { code: "ja", zh: "日语 (JA)", en: "Japanese (JA)" },
+  { code: "ru", zh: "俄语 (RU)", en: "Russian (RU)" },
+  { code: "ar", zh: "阿拉伯语 (AR)", en: "Arabic (AR)" },
+  { code: "pt", zh: "葡语 (PT)", en: "Portuguese (PT)" },
+  { code: "ko", zh: "韩语 (KO)", en: "Korean (KO)" },
+] as const;
+
+export type TargetLanguageCode = (typeof TARGET_LANGUAGES)[number]["code"];
+
+/** Pack B：发图片 / PDF 的文件选择器接受的类型。 */
+export const ATTACHMENT_ACCEPT = "image/*,.pdf,.xlsx,.csv,.txt";
 
 export function InboxComposer({
   conversation,
@@ -41,13 +70,18 @@ export function InboxComposer({
   const [bodyText, setBodyText] = useState("");
   const [mode, setMode] = useState<"outbound" | "internal_note">("outbound");
   const [liveTranslate, setLiveTranslate] = useState(false);
-  const [targetLang, setTargetLang] = useState<"zh" | "en" | "es" | "de" | "fr" | "ja">("en");
+  const [targetLang, setTargetLang] = useState<TargetLanguageCode>("en");
   const [translatedPreview, setTranslatedPreview] = useState<string>("");
   const [strictRag, setStrictRag] = useState(false);
   const [complianceError, setComplianceError] = useState<string | null>(null);
   const [assistNotice, setAssistNotice] = useState<string | null>(null);
   const [assistError, setAssistError] = useState<string | null>(null);
   const [proposalNotice, setProposalNotice] = useState(false);
+  // Pack B 附件上传状态：选中文件先以预览胶囊展示，点发送才真正上传。
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // 抽屉里点「插入报价/库存」：直接追加到当前草稿，发送仍需人工确认。
   // 用对象身份而非 nonce 判重，语言切换重渲染不会重复插入同一段文本。
@@ -167,6 +201,38 @@ export function InboxComposer({
       } else {
         setComplianceError(bi("消息发送失败，请重试。", "Failed to deliver message."));
       }
+    },
+  });
+
+  // Pack B：图片 / PDF 附件上传（multipart，成功后刷新消息流）。
+  const attachmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!conversation || !selectedFile) return null;
+      return uploadInboxAttachment(conversation.id, selectedFile, bodyText);
+    },
+    onSuccess: () => {
+      setSelectedFile(null);
+      setAttachmentError(null);
+      setAttachmentNotice(
+        bi("附件已上传并进入发送队列", "Attachment uploaded to the outbound queue")
+      );
+      setBodyText("");
+      setTranslatedPreview("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (conversation) {
+        void queryClient.invalidateQueries({
+          queryKey: ["inbox", "messages", conversation.id],
+        });
+        void queryClient.invalidateQueries({ queryKey: ["inbox", "conversations"] });
+      }
+    },
+    onError: (error) => {
+      setAttachmentNotice(null);
+      setAttachmentError(
+        error instanceof BffApiError
+          ? `${error.code}: ${error.detail}`
+          : bi("附件上传失败，请重试。", "Attachment upload failed. Please retry.")
+      );
     },
   });
 
@@ -318,6 +384,51 @@ export function InboxComposer({
           </div>
         )}
 
+        {attachmentNotice && (
+          <p
+            data-testid="composer-attachment-notice"
+            className="mb-2 flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[12px] font-medium text-emerald-900"
+          >
+            <Paperclip className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <span>{attachmentNotice}</span>
+          </p>
+        )}
+
+        {attachmentError && (
+          <p
+            role="alert"
+            data-testid="composer-attachment-error"
+            className="mb-2 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] font-medium text-rose-800"
+          >
+            {attachmentError}
+          </p>
+        )}
+
+        {selectedFile && (
+          <div
+            data-testid="attach-preview-pill"
+            className="mb-2 flex w-fit max-w-full items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-900"
+          >
+            <FileText className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
+            <span className="max-w-[220px] truncate">{selectedFile.name}</span>
+            <span className="shrink-0 tabular-nums text-emerald-700/80">
+              {formatAttachmentSize(selectedFile.size)}
+            </span>
+            <button
+              type="button"
+              data-testid="attach-preview-remove"
+              aria-label={bi("移除待发送附件", "Remove pending attachment")}
+              onClick={() => {
+                setSelectedFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
+              className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-emerald-700 transition-colors hover:bg-emerald-200/80 hover:text-emerald-900"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
         <textarea
           data-testid="composer-textarea"
           rows={3}
@@ -391,24 +502,59 @@ export function InboxComposer({
 
             <select
               aria-label={bi("目标翻译语言", "Target translation language")}
+              data-testid="composer-target-language"
               value={targetLang}
-              onChange={(e) => setTargetLang(e.target.value as typeof targetLang)}
+              onChange={(e) => setTargetLang(e.target.value as TargetLanguageCode)}
               className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-[11.5px] font-semibold text-slate-700"
             >
-              <option value="zh">{bi("中文 (ZH)", "Chinese (ZH)")}</option>
-              <option value="en">EN</option>
-              <option value="es">ES</option>
-              <option value="de">DE</option>
-              <option value="fr">FR</option>
-              <option value="ja">JA</option>
+              {TARGET_LANGUAGES.map((language) => (
+                <option key={language.code} value={language.code}>
+                  {bi(language.zh, language.en)}
+                </option>
+              ))}
             </select>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              hidden
+              data-testid="attach-file-input"
+              accept={ATTACHMENT_ACCEPT}
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setSelectedFile(file);
+                setAttachmentError(null);
+                setAttachmentNotice(null);
+              }}
+            />
+            <button
+              type="button"
+              data-testid="attach-file-btn"
+              aria-label={bi("发图片 / PDF", "Attach image or PDF")}
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#E5E2DC] bg-[#FAF8F5] px-2 py-1 text-[11.5px] font-semibold text-stone-700 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+              <span>{bi("发图片 / PDF", "Attach image / PDF")}</span>
+            </button>
           </div>
 
           <button
             type="button"
             data-testid="composer-submit-btn"
-            disabled={!bodyText.trim() || sendMutation.isPending}
-            onClick={() => sendMutation.mutate()}
+            disabled={
+              (!bodyText.trim() && !selectedFile) ||
+              sendMutation.isPending ||
+              attachmentMutation.isPending
+            }
+            onClick={() => {
+              // 选中文件时发送即上传（可带 textarea 里的说明作为 caption）。
+              if (selectedFile) {
+                attachmentMutation.mutate();
+                return;
+              }
+              sendMutation.mutate();
+            }}
             className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-[12.5px] font-semibold text-white shadow-[0_2px_8px_-2px_rgba(37,99,235,0.55)] transition-colors disabled:shadow-none disabled:opacity-50 ${
               mode === "internal_note"
                 ? "bg-amber-600 hover:bg-amber-700"
