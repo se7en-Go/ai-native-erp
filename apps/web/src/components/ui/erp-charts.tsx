@@ -40,26 +40,26 @@ export function RevenueMarginAreaChart({
         <AreaChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="erpRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#18181B" stopOpacity={0.16} />
-              <stop offset="95%" stopColor="#18181B" stopOpacity={0.01} />
+              <stop offset="5%" stopColor="#2563EB" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#2563EB" stopOpacity={0.01} />
             </linearGradient>
             <linearGradient id="erpMarginGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#059669" stopOpacity={0.28} />
-              <stop offset="95%" stopColor="#059669" stopOpacity={0.02} />
+              <stop offset="5%" stopColor="#10B981" stopOpacity={0.26} />
+              <stop offset="95%" stopColor="#10B981" stopOpacity={0.02} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E2DC" />
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" strokeOpacity={0.65} />
           <XAxis
             dataKey="label"
             axisLine={false}
             tickLine={false}
-            tick={{ fill: "#57534E", fontSize: 12 }}
+            tick={{ fill: "#6B7280", fontSize: 12 }}
             dy={8}
           />
           <YAxis
             axisLine={false}
             tickLine={false}
-            tick={{ fill: "#57534E", fontSize: 12 }}
+            tick={{ fill: "#6B7280", fontSize: 12 }}
             tickFormatter={(v: number) =>
               v >= 1000 ? `${currencyPrefix}${(v / 1000).toFixed(0)}k` : `${currencyPrefix}${v}`
             }
@@ -67,15 +67,15 @@ export function RevenueMarginAreaChart({
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#18181B",
-              borderColor: "#27272A",
-              borderRadius: "14px",
-              color: "#FAFAF9",
+              backgroundColor: "#111827",
+              borderColor: "#1F2937",
+              borderRadius: "10px",
+              color: "#F9FAFB",
               fontSize: "12px",
-              boxShadow: "0 12px 30px rgba(24, 24, 27, 0.28)",
+              boxShadow: "0 12px 30px rgba(15, 23, 42, 0.28)",
             }}
-            itemStyle={{ color: "#FAFAF9", fontWeight: 600 }}
-            labelStyle={{ color: "#A8A29E", marginBottom: "4px" }}
+            itemStyle={{ color: "#F9FAFB", fontWeight: 600 }}
+            labelStyle={{ color: "#9CA3AF", marginBottom: "4px" }}
             formatter={(value, name) => [
               `${currencyPrefix}${Number(value ?? 0).toLocaleString("en-US", {
                 minimumFractionDigits: 2,
@@ -88,19 +88,19 @@ export function RevenueMarginAreaChart({
             type="monotone"
             dataKey="revenue"
             name="revenue"
-            stroke="#18181B"
-            strokeWidth={2.5}
+            stroke="#2563EB"
+            strokeWidth={2.4}
             fill="url(#erpRevenueGrad)"
-            activeDot={{ r: 5, fill: "#18181B", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 5, fill: "#2563EB", stroke: "#fff", strokeWidth: 2 }}
           />
           <Area
             type="monotone"
             dataKey="margin"
             name="margin"
-            stroke="#059669"
-            strokeWidth={2.6}
+            stroke="#10B981"
+            strokeWidth={2.4}
             fill="url(#erpMarginGrad)"
-            activeDot={{ r: 5, fill: "#059669", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 5, fill: "#10B981", stroke: "#fff", strokeWidth: 2 }}
           />
         </AreaChart>
       </ResponsiveContainer>

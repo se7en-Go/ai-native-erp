@@ -4,14 +4,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bell,
   ChevronDown,
   ChevronRight,
+  ChevronsRight,
   LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Moon,
   Plus,
   Search,
   ShieldAlert,
+  Sun,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -21,6 +23,7 @@ import { useRealtimeInbox } from "@/hooks/use-realtime-inbox";
 import { canAccessRoute } from "@/lib/auth-cookie";
 import { useI18n } from "@/lib/i18n";
 import { ALL_NAV_ITEMS, NAV_SECTIONS, filterNavSections, visibleNavSections } from "@/lib/nav-registry";
+import { useTheme } from "@/lib/theme";
 
 const ROLE_LABEL: Record<string, { zh: string; en: string }> = {
   owner: { zh: "企业所有者", en: "Owner" },
@@ -42,6 +45,7 @@ export function AppShell({
   const pathname = currentPath ?? usePathname();
   const { principal, isLoading, logout } = useAuthSession();
   const { locale, toggleLocale, t, bi } = useI18n();
+  const { isDark, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   // Manual section overrides: `{ [sectionId]: true }` = expanded, `false` = collapsed.
   // Sections without an override fall back to their `defaultCollapsed` flag.
@@ -54,7 +58,6 @@ export function AppShell({
   const role = principal?.role ?? null;
   const allowedCurrentRoute = !role || canAccessRoute(role, pathname);
 
-  // 面包屑：当前路由命中的导航条目 + 所属分组，全部走 i18n，不出现中英斜杠。
   const activeItem = ALL_NAV_ITEMS.filter((item) => pathname.startsWith(item.href)).sort(
     (a, b) => b.href.length - a.href.length
   )[0];
@@ -63,8 +66,7 @@ export function AppShell({
   );
   const activeSectionId = activeSection?.id;
 
-  // 默认折叠的分组（财务与增长 / AI 与设置）一旦被当前路由命中，必须自动展开，
-  // 否则用户会看不到自己所在的页面。手动折叠仍可在之后覆盖它。
+  // 默认折叠的分组（财务与增长 / AI 与设置）一旦被当前路由命中，自动展开。
   useEffect(() => {
     if (!activeSectionId) return;
     setSectionOverrides((previous) =>
@@ -84,52 +86,47 @@ export function AppShell({
   const roleLabel = role ? ROLE_LABEL[role]?.[locale] ?? role : null;
   const userInitial = (principal?.email?.[0] ?? "Q").toUpperCase();
   const canCreateQuote = !role || canAccessRoute(role, "/b2b/quotes");
+  const canViewProposals = !role || canAccessRoute(role, "/ai/proposals");
 
   return (
-    <div className="flex min-h-screen bg-[#F4F2EE] text-zinc-950">
+    <div className="flex min-h-screen w-full bg-gray-50 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100">
       <aside
         data-testid="sidebar-nav"
         data-collapsed={collapsed ? "true" : "false"}
-        className={`flex shrink-0 flex-col border-r border-[#E5E2DC] bg-[#FAF8F5]/95 text-stone-800 backdrop-blur-md transition-[width] duration-200 ${
+        className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-gray-200 bg-white text-gray-700 shadow-xs transition-[width] duration-300 ease-in-out dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 ${
           collapsed ? "w-16" : "w-64"
         }`}
       >
-        <div className="flex h-16 items-center justify-between gap-2 border-b border-[#ECE9E2] px-3.5">
-          {!collapsed && (
-            <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
-              <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#18181B] text-[13px] font-bold text-[#FAFAF9] shadow-sm">
-                QZ
-                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#FAF8F5]" />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-[14px] font-bold tracking-tight text-zinc-950">
+        {/* Brand Header (21st.dev clean gradient mark + workspace title) */}
+        <div className="border-b border-gray-200 px-3 py-3.5 dark:border-gray-800">
+          <Link
+            href="/dashboard"
+            className={`flex items-center rounded-lg p-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${
+              collapsed ? "justify-center" : "gap-3"
+            }`}
+          >
+            <span className="relative grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-[13px] font-bold text-white shadow-sm">
+              QZ
+              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-gray-900" />
+            </span>
+            {!collapsed && (
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13.5px] font-semibold text-gray-900 dark:text-gray-100">
                   {t("brandTitle")}
                 </span>
-                <span className="block truncate text-[11px] font-medium text-stone-500">
+                <span className="block truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">
                   {t("brandSubtitle")}
                 </span>
               </span>
-            </Link>
-          )}
-          <button
-            type="button"
-            data-testid="sidebar-collapse-btn"
-            onClick={() => setCollapsed((prev) => !prev)}
-            className="rounded-lg p-1.5 text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-zinc-950"
-            aria-label={bi("收起或展开侧边栏", "Toggle sidebar")}
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
             )}
-          </button>
+          </Link>
         </div>
 
+        {/* Live Module Search */}
         {!collapsed && (
-          <div className="px-2.5 pt-3">
+          <div className="px-3 pt-3">
             <div className="relative flex items-center">
-              <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-stone-400" />
+              <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
               <input
                 data-testid="sidebar-filter-input"
                 type="search"
@@ -137,7 +134,7 @@ export function AppShell({
                 onChange={(event) => setFilterQuery(event.target.value)}
                 placeholder={bi("搜索功能模块…", "Filter modules…")}
                 aria-label={bi("搜索功能模块", "Filter modules")}
-                className="h-8 w-full rounded-lg border border-[#E5E2DC] bg-white/85 pr-7 pl-8 text-[12.5px] font-medium text-stone-800 outline-none transition-colors placeholder:text-stone-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100 [&::-webkit-search-cancel-button]:hidden"
+                className="h-8 w-full rounded-lg border border-gray-200 bg-gray-50 pr-7 pl-8 text-[12.5px] font-medium text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-gray-700 dark:bg-gray-800/80 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-blue-500 dark:focus:bg-gray-900 dark:focus:ring-blue-900/40 [&::-webkit-search-cancel-button]:hidden"
               />
               {filterQuery.length > 0 && (
                 <button
@@ -145,7 +142,7 @@ export function AppShell({
                   data-testid="sidebar-filter-clear"
                   onClick={() => setFilterQuery("")}
                   aria-label={bi("清除搜索", "Clear filter")}
-                  className="absolute right-1.5 grid h-5 w-5 place-items-center rounded-md text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-zinc-900"
+                  className="absolute right-1.5 grid h-5 w-5 place-items-center rounded-md text-gray-400 transition-colors hover:bg-gray-200/70 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-gray-100"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -154,12 +151,10 @@ export function AppShell({
           </div>
         )}
 
-        <nav className="flex-1 space-y-2 overflow-y-auto px-2.5 py-3.5">
+        {/* 5-Group Navigation */}
+        <nav className="flex-1 space-y-2 overflow-y-auto px-2 py-3">
           {sections.map((section) => {
             const containsActiveRoute = activeSectionId === section.id;
-            // 搜索时全部展开，方便一眼看完全部命中项；
-            // 图标栏模式（collapsed）也必须展开，否则被折叠的分组在侧栏里无法触达；
-            // 其它情况按「手动覆盖 -> 当前路由命中 -> 默认折叠」依次判定。
             const expanded =
               collapsed || isFiltering
                 ? true
@@ -181,19 +176,19 @@ export function AppShell({
                     onClick={() =>
                       setSectionOverrides((previous) => ({ ...previous, [section.id]: !expanded }))
                     }
-                    className="mb-1 flex w-full items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold tracking-wider text-stone-500 uppercase transition-colors hover:text-zinc-900"
+                    className="mb-1 flex w-full items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold tracking-wider text-gray-400 uppercase transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
                   >
                     {expanded ? (
-                      <ChevronDown className="h-3 w-3 shrink-0 text-stone-400" />
+                      <ChevronDown className="h-3 w-3 shrink-0 text-gray-400 dark:text-gray-500" />
                     ) : (
-                      <ChevronRight className="h-3 w-3 shrink-0 text-stone-400" />
+                      <ChevronRight className="h-3 w-3 shrink-0 text-gray-400 dark:text-gray-500" />
                     )}
                     <span className="flex-1 truncate text-left">{t(section.labelKey)}</span>
                     {!expanded && showPendingBadge && (
                       <span
                         data-testid="sidebar-group-pending-badge"
                         title={bi("待审核 AI 提案", "Pending AI proposals")}
-                        className="rounded-full bg-rose-600/10 px-1.5 py-px text-[10px] font-bold tracking-normal text-rose-700 tabular-nums"
+                        className="rounded-full bg-blue-500 px-1.5 py-px text-[10px] font-bold tracking-normal text-white tabular-nums dark:bg-blue-600"
                       >
                         {pendingProposalsCount}
                       </span>
@@ -201,7 +196,7 @@ export function AppShell({
                     {!expanded && (
                       <span
                         data-testid={`nav-section-count-${section.id}`}
-                        className="rounded-full border border-[#E5E2DC] bg-white px-1.5 py-px text-[10px] font-semibold tracking-normal text-stone-500 tabular-nums"
+                        className="rounded-full border border-gray-200 bg-gray-50 px-1.5 py-px text-[10px] font-semibold tracking-normal text-gray-500 tabular-nums dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
                       >
                         {section.items.length}
                       </span>
@@ -219,33 +214,35 @@ export function AppShell({
                           href={item.href}
                           aria-current={active ? "page" : undefined}
                           title={collapsed ? t(item.labelKey) : undefined}
-                          className={`group relative flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-[13.5px] transition-all duration-150 ${
+                          className={`group relative flex h-10 items-center justify-between gap-2 rounded-md px-2.5 text-[13.5px] transition-all duration-150 ${
                             active
-                              ? "bg-[#ECFDF5] font-semibold text-[#065F46] shadow-[inset_0_0_0_1px_rgba(5,150,105,0.22)]"
-                              : "font-medium text-stone-700 hover:bg-[#EFECE6] hover:text-zinc-950"
-                          }`}
+                              ? "border-l-2 border-blue-500 bg-blue-50 font-semibold text-blue-700 shadow-xs dark:bg-blue-900/40 dark:text-blue-300"
+                              : "font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                          } ${collapsed ? "justify-center px-0" : ""}`}
                         >
-                          <span className="flex min-w-0 items-center gap-2.5">
+                          <span
+                            className={`flex min-w-0 items-center ${
+                              collapsed ? "justify-center" : "gap-2.5"
+                            }`}
+                          >
                             <Icon
                               className={`h-4 w-4 shrink-0 transition-colors ${
                                 active
-                                  ? "text-emerald-700"
-                                  : "text-stone-500 group-hover:text-zinc-900"
+                                  ? "text-blue-600 dark:text-blue-400"
+                                  : "text-gray-400 group-hover:text-gray-700 dark:text-gray-500 dark:group-hover:text-gray-200"
                               }`}
                             />
                             {!collapsed && <span className="truncate">{t(item.labelKey)}</span>}
                           </span>
                           {!collapsed &&
-                            item.badgeKey === "proposals" &&
-                            pendingProposalsCount > 0 ? (
+                          item.badgeKey === "proposals" &&
+                          pendingProposalsCount > 0 ? (
                             <span
                               data-testid="sidebar-pending-proposals-badge"
-                              className="rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-bold tabular-nums text-white shadow-xs"
+                              className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[11px] font-semibold text-white tabular-nums dark:bg-blue-600"
                             >
                               {pendingProposalsCount}
                             </span>
-                          ) : !collapsed && active ? (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600" />
                           ) : null}
                         </Link>
                       );
@@ -258,26 +255,27 @@ export function AppShell({
           {isFiltering && sections.length === 0 && (
             <p
               data-testid="sidebar-filter-empty"
-              className="px-3 py-6 text-center text-[12px] font-medium text-stone-500"
+              className="px-3 py-6 text-center text-[12px] font-medium text-gray-500 dark:text-gray-400"
             >
               {bi("没有匹配的模块", "No matching modules")}
             </p>
           )}
         </nav>
 
-        <div className="border-t border-[#E5E2DC] bg-white/80 p-3">
+        {/* Compact Account Footer */}
+        <div className="border-t border-gray-200 p-2.5 dark:border-gray-800">
           {!collapsed && principal && (
-            <div className="mb-2.5 flex items-center gap-2.5">
-              <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#18181B] text-[13px] font-bold text-[#FAFAF9] shadow-xs">
+            <div className="mb-2 flex items-center gap-2.5 px-1">
+              <div className="relative grid h-8 w-8 shrink-0 place-content-center rounded-full bg-blue-600 text-[12px] font-bold text-white shadow-xs">
                 {userInitial}
-                <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-gray-900" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-semibold text-zinc-900">
+                <div className="truncate text-[12px] font-semibold text-gray-900 dark:text-gray-100">
                   {principal.email}
                 </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-stone-500">
-                  <span className="text-emerald-700">{bi("在线", "Online")}</span>
+                <div className="flex items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                  <span className="text-emerald-600 dark:text-emerald-400">{bi("在线", "Online")}</span>
                   <span>·</span>
                   <span>{roleLabel}</span>
                 </div>
@@ -287,107 +285,166 @@ export function AppShell({
           <button
             type="button"
             onClick={() => void logout()}
-            className={`flex w-full items-center gap-2 rounded-xl border border-[#E5E2DC] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-stone-700 transition-colors hover:border-stone-300 hover:bg-[#FAF8F5] hover:text-zinc-950 ${
+            className={`flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 ${
               collapsed ? "justify-center" : ""
             }`}
             aria-label={t("logout")}
           >
-            <LogOut className="h-3.5 w-3.5 text-stone-500" />
+            <LogOut className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
             {!collapsed && <span>{t("logout")}</span>}
           </button>
         </div>
+
+        {/* 21st.dev Bottom Collapsible Toggle */}
+        <button
+          type="button"
+          data-testid="sidebar-collapse-btn"
+          onClick={() => setCollapsed((prev) => !prev)}
+          aria-label={bi("收起或展开侧边栏", "Toggle sidebar")}
+          className="flex items-center border-t border-gray-200 px-3 py-2.5 text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+        >
+          <span className="grid h-7 w-10 shrink-0 place-content-center">
+            <ChevronsRight
+              className={`h-4 w-4 text-gray-500 transition-transform duration-300 dark:text-gray-400 ${
+                collapsed ? "" : "rotate-180"
+              }`}
+            />
+          </span>
+          {!collapsed && (
+            <span className="text-[13px] font-medium">{bi("收起侧栏", "Hide")}</span>
+          )}
+        </button>
       </aside>
 
+      {/* Main Content Shell */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-30 px-4 pt-3 lg:px-7">
-          <header className="flex h-14 items-center justify-between gap-3 rounded-2xl border border-[#E5E2DC] bg-white/85 px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_6px_22px_-12px_rgba(24,24,27,0.14)] backdrop-blur-xl">
-            <div className="flex min-w-0 items-center gap-2 text-[13.5px]">
-              <span className="hidden font-medium text-stone-500 sm:inline">{sectionTitle}</span>
-              <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-stone-400 sm:block" />
-              <span className="truncate font-bold text-zinc-950">{pageTitle}</span>
-              <span className="ml-1.5 hidden items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/80 px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-emerald-900 xl:inline-flex">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>USD/CNY</span>
-                <span className="text-emerald-700">7.1200</span>
-                <TrendingUp className="h-3 w-3 text-emerald-600" />
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-4 backdrop-blur-md lg:px-7 dark:border-gray-800 dark:bg-gray-900/90">
+          <div className="flex min-w-0 items-center gap-2 text-[13.5px]">
+            <span className="hidden font-medium text-gray-500 sm:inline dark:text-gray-400">
+              {sectionTitle}
+            </span>
+            <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-gray-400 sm:block dark:text-gray-600" />
+            <span className="truncate font-semibold text-gray-900 dark:text-gray-100">
+              {pageTitle}
+            </span>
+            <span className="ml-2 hidden items-center gap-1.5 rounded-full border border-blue-200/80 bg-blue-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-blue-700 tabular-nums xl:inline-flex dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+              <span>USD/CNY</span>
+              <span>7.1200</span>
+              <TrendingUp className="h-3 w-3 text-blue-500 dark:text-blue-400" />
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="open-command-palette-btn"
+              onClick={palette.toggle}
+              aria-label={bi("打开全局搜索", "Open global search")}
+              className="flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 text-[12.5px] font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-white hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+            >
+              <Search className="h-3.5 w-3.5 text-gray-400" />
+              <span className="hidden md:inline">{t("commandPaletteTitle")}</span>
+              <kbd className="hidden rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 md:inline dark:border-gray-600 dark:bg-gray-900 dark:text-gray-400">
+                ⌘K
+              </kbd>
+            </button>
+
+            {canViewProposals && (
+              <Link
+                href="/ai/proposals"
+                data-testid="header-notifications-link"
+                aria-label={bi("通知提醒", "Notifications")}
+                title={bi("审批与巡检通知", "Approval & patrol notifications")}
+                className="relative grid h-9 w-9 place-content-center rounded-lg border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              >
+                <Bell className="h-4 w-4" />
+                {pendingProposalsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-gray-900" />
+                )}
+              </Link>
+            )}
+
+            <button
+              type="button"
+              data-testid="theme-toggle-btn"
+              onClick={toggleTheme}
+              aria-label={bi(
+                isDark ? "切换浅色主题" : "切换深色主题",
+                isDark ? "Switch to light mode" : "Switch to dark mode"
+              )}
+              title={bi(
+                isDark ? "切换浅色主题" : "切换深色主题",
+                isDark ? "Switch to light mode" : "Switch to dark mode"
+              )}
+              className="grid h-9 w-9 place-content-center rounded-lg border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+
+            <button
+              type="button"
+              data-testid="locale-toggle-btn"
+              onClick={toggleLocale}
+              aria-label={bi("切换语言", "Switch language")}
+              className="inline-flex h-9 items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-[12px] font-semibold transition-colors hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800"
+            >
+              <span
+                className={`rounded-md px-2 py-1 transition-all ${
+                  locale === "zh"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                中
               </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                data-testid="open-command-palette-btn"
-                onClick={palette.toggle}
-                aria-label={bi("打开全局搜索", "Open global search")}
-                className="flex items-center gap-2.5 rounded-full border border-[#E5E2DC] bg-[#F7F5F0] px-3.5 py-1.5 text-[12.5px] font-medium text-stone-600 transition-colors hover:border-stone-300 hover:bg-white hover:text-zinc-950"
+              <span
+                className={`rounded-md px-2 py-1 transition-all ${
+                  locale === "en"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-gray-500 dark:text-gray-400"
+                }`}
               >
-                <Search className="h-3.5 w-3.5 text-stone-500" />
-                <span className="hidden md:inline">{t("commandPaletteTitle")}</span>
-                <kbd className="hidden rounded-md border border-[#E5E2DC] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-stone-500 md:inline">
-                  ⌘K
-                </kbd>
-              </button>
+                EN
+              </span>
+            </button>
 
-              <button
-                type="button"
-                data-testid="locale-toggle-btn"
-                onClick={toggleLocale}
-                aria-label={bi("切换语言", "Switch language")}
-                className="inline-flex items-center rounded-full border border-[#E5E2DC] bg-[#F7F5F0] p-0.5 text-[12px] font-semibold transition-colors hover:border-stone-300"
+            {canCreateQuote && (
+              <Link
+                href="/b2b/quotes"
+                className="hidden h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 text-[12.5px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 sm:inline-flex"
               >
-                <span
-                  className={`rounded-full px-2.5 py-1 transition-all ${
-                    locale === "zh"
-                      ? "bg-[#18181B] text-[#FAFAF9] shadow-xs"
-                      : "text-stone-500"
-                  }`}
-                >
-                  中
-                </span>
-                <span
-                  className={`rounded-full px-2.5 py-1 transition-all ${
-                    locale === "en"
-                      ? "bg-[#18181B] text-[#FAFAF9] shadow-xs"
-                      : "text-stone-500"
-                  }`}
-                >
-                  EN
-                </span>
-              </button>
+                <Plus className="h-3.5 w-3.5" />
+                <span>{bi("新建报价 / PI", "New quote / PI")}</span>
+              </Link>
+            )}
 
-              {canCreateQuote && (
-                <Link
-                  href="/b2b/quotes"
-                  className="hidden items-center gap-1.5 rounded-full bg-[#18181B] px-3.5 py-1.5 text-[12.5px] font-semibold text-[#FAFAF9] shadow-xs transition-colors hover:bg-[#065F46] sm:inline-flex"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>{bi("新建报价 / PI", "New quote / PI")}</span>
-                </Link>
-              )}
-
-              {roleLabel && (
-                <span className="hidden items-center gap-1.5 rounded-full border border-[#E5E2DC] bg-[#FAF8F5] px-3 py-1.5 text-[12px] font-semibold text-stone-700 2xl:inline-flex">
-                  {roleLabel}
-                </span>
-              )}
-            </div>
-          </header>
-        </div>
+            {roleLabel && (
+              <span className="hidden items-center rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[12px] font-medium text-gray-600 2xl:inline-flex dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                {roleLabel}
+              </span>
+            )}
+          </div>
+        </header>
 
         <main className="min-w-0 flex-1">
           {isLoading ? (
-            <div className="p-6 text-[13px] font-medium text-slate-700">{t("loadingWorkspace")}</div>
+            <div className="p-6 text-[13px] font-medium text-gray-600 dark:text-gray-300">
+              {t("loadingWorkspace")}
+            </div>
           ) : !allowedCurrentRoute ? (
             <div className="erp-page">
               <div
                 data-testid="rbac-forbidden-guard"
-                className="mx-auto mt-16 max-w-lg rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-900"
+                className="mx-auto mt-16 max-w-lg rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/50 dark:text-rose-200"
               >
                 <div className="flex items-center gap-2 text-base font-semibold">
-                  <ShieldAlert className="h-5 w-5 text-rose-600" />
+                  <ShieldAlert className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                   <span>{t("accessDeniedTitle")}</span>
                 </div>
-                <p className="mt-2 text-[13px] leading-6 text-rose-800">{t("accessDeniedDesc")}</p>
+                <p className="mt-2 text-[13px] leading-6 text-rose-800 dark:text-rose-300">
+                  {t("accessDeniedDesc")}
+                </p>
               </div>
             </div>
           ) : (

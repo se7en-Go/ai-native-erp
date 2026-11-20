@@ -1,44 +1,65 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* ──────────────────────────────────────────────────────────────────────────
-   ai-native-erp · 21st.dev Emerald Slate + Command Center 统一设计令牌
-   主色：深玉翡翠 (#059669 / #065F46) + 曜石墨 (#18181B) + 暖陶灰画布 (#F4F2EE)
+   ai-native-erp · 21st.dev Clean Cool Gray + Tech Blue 设计令牌（支持深浅色）
+   主色：科技蓝 (#2563EB / #1D4ED8) + 碳黑 (#111827) + 纯净冷灰白 (#F9FAFB)
    ────────────────────────────────────────────────────────────────────────── */
 
 @theme {
   --font-sans:
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Inter",
     system-ui, -apple-system, "Segoe UI", sans-serif;
-  --color-canvas: #f4f2ee;
-  --color-sidebar: #faf8f5;
-  --color-brand: #059669;
-  --color-ink: #18181b;
-  --radius-card: 1.25rem;
+  --color-canvas: #f9fafb;
+  --color-sidebar: #ffffff;
+  --color-brand: #2563eb;
+  --color-ink: #111827;
+  --radius-card: 0.75rem;
 }
 
 :root {
-  --background: #f4f2ee;
-  --foreground: #18181b;
+  --background: #f9fafb;
+  --foreground: #111827;
   --card: #ffffff;
-  --card-foreground: #18181b;
-  --primary: #059669;
-  --primary-deep: #065f46;
+  --card-foreground: #111827;
+  --primary: #2563eb;
+  --primary-deep: #1d4ed8;
   --primary-foreground: #ffffff;
-  --ink: #18181b;
-  --ink-foreground: #fafaf9;
-  --muted: #ece9e2;
-  --muted-foreground: #57534e;
-  --border: #e5e2dc;
-  --ring: #059669;
-  --sidebar-bg: #faf8f5;
-  --chart-1: #059669;
-  --chart-2: #18181b;
-  --chart-3: #d97706;
-  --chart-4: #0d9488;
+  --ink: #111827;
+  --ink-foreground: #f9fafb;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --border: #e5e7eb;
+  --ring: #2563eb;
+  --sidebar-bg: #ffffff;
+  --chart-1: #2563eb;
+  --chart-2: #10b981;
+  --chart-3: #8b5cf6;
+  --chart-4: #f59e0b;
   --chart-5: #e11d48;
-  --bg-canvas: #f4f2ee;
-  --fg-primary: #18181b;
-  --brand: #059669;
+  --bg-canvas: #f9fafb;
+  --fg-primary: #111827;
+  --brand: #2563eb;
+}
+
+.dark {
+  --background: #030712;
+  --foreground: #f3f4f6;
+  --card: #111827;
+  --card-foreground: #f3f4f6;
+  --primary: #3b82f6;
+  --primary-deep: #2563eb;
+  --primary-foreground: #ffffff;
+  --ink: #f3f4f6;
+  --ink-foreground: #111827;
+  --muted: #1f2937;
+  --muted-foreground: #9ca3af;
+  --border: #1f2937;
+  --ring: #3b82f6;
+  --sidebar-bg: #111827;
+  --bg-canvas: #030712;
+  --fg-primary: #f3f4f6;
+  --brand: #3b82f6;
 }
 
 * {
@@ -52,32 +73,12 @@ body {
 
 body {
   background-color: var(--bg-canvas);
-  background-image:
-    radial-gradient(circle at 12% 0%, rgb(16 185 129 / 0.055), transparent 36%),
-    radial-gradient(circle at 88% 12%, rgb(217 119 6 / 0.04), transparent 32%);
-  background-attachment: fixed;
   color: var(--fg-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "tnum" 1, "cv02" 1, "cv03" 1;
   text-rendering: optimizeLegibility;
-}
-
-/* 工作区内保持高对比可读性，同时将所有既有中性灰对齐暖陶石色系 */
-main {
-  --color-slate-400: #78716c;
-  --color-slate-500: #57534e;
-  --color-slate-600: #44403c;
-  --color-blue-50: #ecfdf5;
-  --color-blue-100: #d1fae5;
-  --color-blue-200: #a7f3d0;
-  --color-blue-500: #10b981;
-  --color-blue-600: #059669;
-  --color-blue-700: #047857;
-  --color-indigo-50: #ecfdf5;
-  --color-indigo-600: #059669;
-  --color-indigo-700: #065f46;
 }
 
 h1,
@@ -94,24 +95,24 @@ h4 {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: rgb(120 113 108 / 0.28);
+  background-color: rgb(156 163 175 / 0.35);
   border-radius: 9999px;
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(87 83 78 / 0.5);
+  background-color: rgb(107 114 128 / 0.55);
 }
 
 :focus-visible {
-  outline: 2px solid rgb(5 150 105 / 0.55);
+  outline: 2px solid rgb(37 99 235 / 0.55);
   outline-offset: 2px;
 }
 
@@ -122,7 +123,7 @@ h4 {
   }
   @media (min-width: 1024px) {
     .erp-page {
-      padding: 1.35rem 1.75rem 2rem;
+      padding: 1.5rem 1.75rem 2.25rem;
     }
   }
 
@@ -136,15 +137,12 @@ h4 {
     }
   }
 
-  /* 21st.dev Command Center 风格触感浮雕卡片 */
+  /* 21st.dev 极简纯净卡片 */
   .erp-card {
-    border-radius: 1.25rem;
-    border: 1px solid #e5e2dc;
-    background-color: rgb(255 255 255 / 0.94);
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.95),
-      0 1px 2px rgb(24 24 27 / 0.05),
-      0 10px 26px -14px rgb(24 24 27 / 0.09);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background-color: var(--card);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
   }
 
   .erp-card-header {
@@ -153,43 +151,43 @@ h4 {
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    border-bottom: 1px solid #ece9e2;
-    background-color: rgb(250 248 245 / 0.85);
-    border-top-left-radius: 1.25rem;
-    border-top-right-radius: 1.25rem;
-    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background-color: color-mix(in srgb, var(--muted) 55%, var(--card));
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
+    padding: 0.95rem 1.25rem;
   }
 
-  /* 统一高对比编辑风表格 */
+  /* 统一高对比清爽表格 */
   .erp-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     text-align: left;
     font-size: 13px;
-    color: #18181b;
+    color: var(--foreground);
   }
   .erp-table thead th {
     position: sticky;
     top: 0;
     z-index: 1;
-    background-color: #f6f4ef;
+    background-color: var(--muted);
     padding: 0.7rem 0.95rem;
     font-size: 11.5px;
     font-weight: 600;
     letter-spacing: 0.02em;
-    color: #57534e;
+    color: var(--muted-foreground);
     white-space: nowrap;
-    border-bottom: 1px solid #e5e2dc;
+    border-bottom: 1px solid var(--border);
   }
   .erp-table tbody td {
     padding: 0.75rem 0.95rem;
     vertical-align: middle;
-    color: #27272a;
-    border-bottom: 1px solid #efede8;
+    color: var(--foreground);
+    border-bottom: 1px solid var(--border);
   }
   .erp-table tbody tr:hover {
-    background-color: rgb(236 253 245 / 0.48);
+    background-color: rgb(37 99 235 / 0.045);
   }
   .erp-table tbody tr:last-child td {
     border-bottom: 0;
@@ -197,28 +195,28 @@ h4 {
 
   .erp-input {
     width: 100%;
-    border-radius: 0.75rem;
-    border: 1px solid #dcd8d0;
-    background-color: #fff;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--card);
     padding: 0.45rem 0.75rem;
     font-size: 13px;
-    color: #18181b;
+    color: var(--foreground);
     transition: border-color 140ms ease, box-shadow 140ms ease;
   }
   .erp-input::placeholder {
-    color: #a8a29e;
+    color: var(--muted-foreground);
   }
   .erp-input:focus {
-    border-color: #059669;
+    border-color: var(--primary);
     outline: none;
-    box-shadow: 0 0 0 3px rgb(5 150 105 / 0.14);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.14);
   }
 
   .erp-label {
     display: block;
     font-size: 12px;
     font-weight: 600;
-    color: #44403c;
+    color: var(--muted-foreground);
   }
 
   .erp-btn {
@@ -226,29 +224,27 @@ h4 {
     align-items: center;
     justify-content: center;
     gap: 0.375rem;
-    border-radius: 0.75rem;
+    border-radius: 0.5rem;
     padding: 0.45rem 0.9rem;
     font-size: 13px;
     font-weight: 600;
     transition: all 150ms ease;
   }
-  /* 曜石墨主操作按钮：21st.dev Command Center 招牌质感 */
   .erp-btn-primary {
-    background-color: #18181b;
-    color: #fafaf9;
-    box-shadow: 0 1px 2px rgb(24 24 27 / 0.2);
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+    box-shadow: 0 1px 2px rgb(37 99 235 / 0.22);
   }
   .erp-btn-primary:hover {
-    background-color: #065f46;
+    background-color: var(--primary-deep);
   }
   .erp-btn-secondary {
-    border: 1px solid #dcd8d0;
-    background-color: #fff;
-    color: #27272a;
+    border: 1px solid var(--border);
+    background-color: var(--card);
+    color: var(--foreground);
   }
   .erp-btn-secondary:hover {
-    border-color: #c7c2b8;
-    background-color: #faf8f5;
+    background-color: var(--muted);
   }
 
   .erp-badge {
