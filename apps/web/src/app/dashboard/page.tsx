@@ -4,116 +4,83 @@ import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   AlertTriangle,
-  ArrowRight,
-  ArrowUpRight,
-  Boxes,
+  BarChart3,
   Bot,
+  Boxes,
+  CheckCircle2,
   ClipboardList,
+  DollarSign,
   Download,
   Inbox,
-  Layers,
   LineChart,
   Package,
-  ShieldCheck,
   Sparkles,
-  Store,
   Target,
   TrendingUp,
-  Users,
 } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
-import { BentoStatCard } from "@/components/ui/bento-stat-card";
+import {
+  DashboardActivityRow,
+  DashboardCard,
+  DashboardKpiCard,
+  DashboardProgressStat,
+  type DashboardAccent,
+} from "@/components/ui/dashboard-primitives";
+import { RevenueMarginAreaChart } from "@/components/ui/erp-charts";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
-import { ChannelDonutChart, HorizontalFunnelBars, RevenueMarginAreaChart } from "@/components/ui/erp-charts";
-import { buildCvpTrend, sumDecimalStrings, type CvpTrendWindow } from "@/components/finance/revenue-trend";
+import {
+  buildCvpTrend,
+  sumDecimalStrings,
+  type CvpTrendWindow,
+} from "@/components/finance/revenue-trend";
 import { isPrivilegedCostViewer } from "@/lib/auth-cookie";
 import { formatMoney } from "@/lib/contracts";
 import { fetchFinanceOverview, fetchPendingProposalsCount } from "@/lib/data-source";
+import { fetchLowStockAlerts } from "@/lib/api-client/pack-a-erp";
+import { fetchDailyPatrolBrief, patrolHealthDescriptor } from "@/lib/api-client/pack-d-patrol";
 import { fetchPhase3aDashboard } from "@/lib/phase3a-data";
 import { fetchWorkforceEmployees } from "@/lib/phase3b-data";
 import { useI18n } from "@/lib/i18n";
 
-const FUNNEL_STAGE_LABEL: Record<string, { zh: string; en: string }> = {
-  discovery: { zh: "需求挖掘", en: "Discovery" },
-  sampling: { zh: "寄样确认", en: "Sampling" },
-  quoting: { zh: "报价中", en: "Quoting" },
-  negotiating: { zh: "商务谈判", en: "Negotiating" },
-  closed_won: { zh: "已赢单", en: "Closed won" },
-  closed_lost: { zh: "已输单", en: "Closed lost" },
+const FUNNEL_STAGE_LABEL: Record<string, { zh: string; en: string; accent: DashboardAccent }> = {
+  discovery: { zh: "需求挖掘", en: "Discovery", accent: "blue" },
+  sampling: { zh: "寄样确认", en: "Sampling", accent: "purple" },
+  quoting: { zh: "报价中", en: "Quoting", accent: "blue" },
+  negotiating: { zh: "商务谈判", en: "Negotiating", accent: "orange" },
+  closed_won: { zh: "已赢单", en: "Closed won", accent: "green" },
+  closed_lost: { zh: "已输单", en: "Closed lost", accent: "slate" },
 };
 
-const CHANNEL_LABEL: Record<string, { zh: string; en: string }> = {
-  web_livechat: { zh: "官网在线客服", en: "Web LiveChat" },
-  whatsapp: { zh: "WhatsApp", en: "WhatsApp" },
-  email: { zh: "外贸邮件", en: "Email" },
-  facebook_messenger: { zh: "Facebook Messenger", en: "Facebook Messenger" },
-  instagram_dm: { zh: "Instagram 私信", en: "Instagram DM" },
-  telegram: { zh: "Telegram", en: "Telegram" },
-  shopify: { zh: "Shopify 独立站", en: "Shopify storefront" },
+const CHANNEL_LABEL: Record<string, { zh: string; en: string; dot: string }> = {
+  web_livechat: { zh: "官网在线客服", en: "Web LiveChat", dot: "bg-blue-500" },
+  whatsapp: { zh: "WhatsApp", en: "WhatsApp", dot: "bg-emerald-500" },
+  email: { zh: "外贸邮件", en: "Email", dot: "bg-indigo-500" },
+  facebook_messenger: { zh: "Facebook Messenger", en: "Facebook Messenger", dot: "bg-sky-500" },
+  instagram_dm: { zh: "Instagram 私信", en: "Instagram DM", dot: "bg-rose-500" },
+  telegram: { zh: "Telegram", en: "Telegram", dot: "bg-cyan-500" },
+  shopify: { zh: "Shopify 独立站", en: "Shopify storefront", dot: "bg-violet-500" },
 };
 
-const CHANNEL_COLOR: Record<string, string> = {
-  web_livechat: "#059669",
-  whatsapp: "#0D9488",
-  email: "#18181B",
-  facebook_messenger: "#D97706",
-  instagram_dm: "#E11D48",
-  telegram: "#047857",
-  shopify: "#57534E",
-};
-
-const FALLBACK_COLORS = ["#059669", "#18181B", "#0D9488", "#D97706", "#E11D48", "#57534E"];
-
-const WORKBENCH_LINKS = [
-  {
-    href: "/crm/leads",
-    icon: Target,
-    accent: "bg-blue-50 text-blue-600 ring-1 ring-blue-100",
-    zh: "线索池",
-    en: "Lead pool",
-    descZh: "未分配询盘与线索评分",
-    descEn: "Unassigned inquiries & scoring",
-  },
-  {
-    href: "/crm/opportunities",
-    icon: TrendingUp,
-    accent: "bg-violet-50 text-violet-600 ring-1 ring-violet-100",
-    zh: "商机看板",
-    en: "Opportunity board",
-    descZh: "阶段推进与预计金额",
-    descEn: "Stage progression & value",
-  },
-  {
-    href: "/supply-chain/purchase-orders",
-    icon: Package,
-    accent: "bg-amber-50 text-amber-600 ring-1 ring-amber-100",
-    zh: "采购收货",
-    en: "Purchasing",
-    descZh: "供应商交期与入库",
-    descEn: "Supplier ETAs & receiving",
-  },
-  {
-    href: "/wms",
-    icon: Boxes,
-    accent: "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
-    zh: "WMS 库存",
-    en: "WMS stock",
-    descZh: "在手、占用与盘点流水",
-    descEn: "On-hand, reserved & stocktakes",
-  },
-  {
-    href: "/ai/employees",
-    icon: Bot,
-    accent: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
-    zh: "AI 数字员工",
-    en: "AI employees",
-    descZh: "自治级别与近 7 天动作",
-    descEn: "Autonomy levels & 7-day actions",
-  },
+const QUICK_WORKBENCH_CHIPS = [
+  { href: "/crm/leads", icon: Target, zh: "线索池", en: "Leads" },
+  { href: "/catalog", icon: Package, zh: "产品库与 SKU", en: "Catalog" },
+  { href: "/orders", icon: ClipboardList, zh: "订单与单证", en: "Orders" },
+  { href: "/wms", icon: Boxes, zh: "WMS 库存", en: "WMS" },
+  { href: "/ai/employees", icon: Bot, zh: "AI 员工", en: "AI Staff" },
 ] as const;
+
+const PATROL_CATEGORY_ROUTE: Record<string, string> = {
+  expiring_quotes: "/b2b/quotes",
+  low_stock: "/wms",
+  stalled_shipments: "/orders",
+  pending_receivables: "/finance",
+  pending_proposals: "/ai/proposals",
+  unread_chats: "/inbox",
+};
 
 export default function DashboardPage() {
   const { principal } = useAuthSession();
@@ -138,6 +105,14 @@ export default function DashboardPage() {
     queryKey: ["ai", "workforce", "employees"],
     queryFn: fetchWorkforceEmployees,
   });
+  const patrolQuery = useQuery({
+    queryKey: ["ai", "patrol", "daily-brief"],
+    queryFn: () => fetchDailyPatrolBrief(),
+  });
+  const lowStockQuery = useQuery({
+    queryKey: ["wms", "low-stock", "dashboard-summary"],
+    queryFn: () => fetchLowStockAlerts(),
+  });
 
   const data = dashboardQuery.data;
   const pipelineCurrency = data?.pipeline_value?.[0]?.currency ?? "USD";
@@ -157,459 +132,489 @@ export default function DashboardPage() {
   const cogsTotal = primaryFinancial
     ? sumDecimalStrings(financials.map((entry) => String(entry.cost)))
     : null;
-  const marginSparkline = useMemo(
-    () =>
-      [...snapshots]
-        .slice(0, 8)
-        .reverse()
-        .map((snap) => Number(snap.net_contribution_margin_base))
-        .filter((value) => Number.isFinite(value)),
-    [snapshots]
-  );
+
   const enabledEmployees = (workforceQuery.data ?? []).filter((row) => row.is_enabled).length;
-  const channelRows = data?.channels ?? [];
+  const channelRows = useMemo(
+    () => [...(data?.channels ?? [])].sort((a, b) => b.conversations - a.conversations),
+    [data?.channels]
+  );
   const channelTotal = channelRows.reduce((sum, row) => sum + row.conversations, 0);
-  const highPriorityTasks = (data?.upcoming_tasks ?? []).filter(
-    (task) => task.priority === "high"
-  ).length;
+
+  const funnelRows = data?.funnel ?? [];
+  const funnelMax = Math.max(...funnelRows.map((s) => s.count), 1);
+  const patrolBrief = patrolQuery.data;
+  const healthScore = patrolBrief?.health_score ?? null;
+  const healthDescriptor = healthScore !== null ? patrolHealthDescriptor(healthScore) : null;
+  const lowStockCount = lowStockQuery.data?.total ?? lowStockQuery.data?.items?.length ?? 0;
+
+  // Merge real AI patrol alerts + real upcoming trade tasks into one clean 21st Recent Activity stream.
+  const activityItems = useMemo(() => {
+    const rows: Array<{
+      id: string;
+      icon: typeof Activity;
+      accent: DashboardAccent;
+      title: string;
+      description: string;
+      meta: string;
+      href: string;
+    }> = [];
+
+    for (const alert of (patrolBrief?.alerts ?? []).slice(0, 3)) {
+      const severityAccent: DashboardAccent =
+        alert.severity === "high"
+          ? "rose"
+          : alert.severity === "medium"
+            ? "orange"
+            : "blue";
+      rows.push({
+        id: `patrol-${alert.code}`,
+        icon: alert.severity === "high" ? AlertTriangle : Activity,
+        accent: severityAccent,
+        title: bi(alert.title_zh, alert.title_en),
+        description: bi(alert.detail_zh, alert.detail_en),
+        meta: alert.employee_name || bi("AI 巡检", "AI patrol"),
+        href: alert.action_href || PATROL_CATEGORY_ROUTE[alert.code] || "/ai/employees",
+      });
+    }
+
+    for (const task of (data?.upcoming_tasks ?? []).slice(0, 4)) {
+      rows.push({
+        id: `task-${task.id}`,
+        icon: task.priority === "high" ? ClipboardList : CheckCircle2,
+        accent: task.priority === "high" ? "orange" : "green",
+        title: task.title,
+        description:
+          task.priority === "high"
+            ? bi("高优先级待办 · 建议当日处理", "High priority task · handle today")
+            : bi("外贸常规跟进任务", "Routine trade follow-up"),
+        meta: task.priority === "high" ? bi("高优", "Urgent") : bi("待办", "To-do"),
+        href: "/tasks",
+      });
+    }
+
+    return rows;
+  }, [patrolBrief?.alerts, data?.upcoming_tasks, bi]);
 
   return (
     <AppShell currentPath="/dashboard" pendingProposalsCount={proposalsQuery.data?.total ?? 0}>
-      <div className="erp-page space-y-4">
-        {/* ── 顶部问候与态势横幅 ───────────────────────────────── */}
-        <section className="relative overflow-hidden rounded-[20px] border border-[#E5E2DC] bg-white/95 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_2px_rgba(24,24,27,0.05),0_10px_26px_-14px_rgba(24,24,27,0.09)]">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -top-24 -right-16 h-56 w-56 rounded-full bg-emerald-200/35 blur-3xl"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-amber-100/40 blur-3xl"
-          />
-          <div className="relative flex flex-wrap items-start justify-between gap-4">
-            <div className="flex min-w-0 items-start gap-3.5">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#18181B] to-[#065F46] text-white shadow-lg shadow-emerald-950/20">
-                <Layers className="h-6 w-6" aria-hidden="true" />
+      <div className="erp-page space-y-6">
+        {/* ── 21st.dev Clean Header ─────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl dark:text-gray-100">
+              {bi("经营总览", "Dashboard")}
+            </h1>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-gray-500 dark:text-gray-400">
+              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                {bi(
+                  `${enabledEmployees || "—"} 位 AI 员工在线`,
+                  `${enabledEmployees || "—"} AI staff online`
+                )}
               </span>
-              <div className="min-w-0">
-                <h1 className="text-[22px] font-bold tracking-tight text-slate-950">
-                  {bi("外贸执行总览", "Trade execution overview")}
-                </h1>
-                <p className="mt-1 max-w-2xl text-[13px] leading-6 text-slate-600">
-                  {bi(
-                    "租户隔离的实时经营态势：询盘、管道、CVP 边际毛利、商机漏斗与 AI 协同全在同一屏。",
-                    "Tenant-isolated live picture: inquiries, pipeline, CVP margin, funnel and AI collaboration on one screen."
-                  )}
-                </p>
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-emerald-800">
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
-                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                    </span>
-                    {bi(
-                      `${enabledEmployees || "—"} 位 AI 数字员工在线`,
-                      `${enabledEmployees || "—"} AI employees online`
-                    )}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
-                    <ShieldCheck className="h-3 w-3 text-slate-500" aria-hidden="true" />
-                    {bi("租户隔离 · RLS 强制", "Tenant-isolated · RLS forced")}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
-                    <Users className="h-3 w-3 text-slate-500" aria-hidden="true" />
-                    {bi("当前角色", "Role")} {principal?.role ?? "—"}
-                  </span>
-                </div>
-              </div>
-            </div>
+              <span aria-hidden="true">·</span>
+              <span>
+                {bi(
+                  "实时外贸询盘、管道、CVP 边际毛利与巡检动态",
+                  "Live inquiries, B2B pipeline, CVP margin & AI patrol"
+                )}
+              </span>
+            </p>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {showFinancials && (
               <Link
                 href="/finance"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-xs transition-colors hover:bg-slate-800"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12.5px] font-semibold text-gray-700 shadow-xs transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
               >
-                <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
-                {bi("跳转财务对账", "Open finance")}
+                <LineChart className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <span>{bi("财务对账", "Finance")}</span>
               </Link>
-              <Link
-                href="/analytics"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-slate-700 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50"
-              >
-                <TrendingUp className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
-                {bi("统计分析", "Analytics")}
-              </Link>
+            )}
+            <Link
+              href="/analytics"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12.5px] font-semibold text-gray-700 shadow-xs transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+            >
+              <BarChart3 className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+              <span>{bi("统计分析", "Analytics")}</span>
+            </Link>
+            {showFinancials && (
               <a
                 href="/api/bff/v1/finance/cvp/export.csv"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-slate-700 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12.5px] font-semibold text-gray-700 shadow-xs transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
               >
-                <Download className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
-                {bi("导出对账", "Export")}
+                <Download className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+                <span>{bi("导出对账", "Export")}</span>
               </a>
-            </div>
+            )}
           </div>
-        </section>
+        </div>
 
         {dashboardQuery.isError && (
           <p
             role="alert"
-            className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[12.5px] font-medium text-rose-800"
+            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[12.5px] font-medium text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200"
           >
             {dashboardQuery.error.message}
           </p>
         )}
 
-        {/* ── 4 列 Bento KPI ──────────────────────────────────── */}
-        <div data-testid="dashboard-kpi-grid" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <BentoStatCard
+        {/* ── 4-Column 21st.dev KPI Grid ───────────────────────── */}
+        <div
+          data-testid="dashboard-kpi-grid"
+          className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4"
+        >
+          <DashboardKpiCard
             label={bi("待处理询盘", "Open inquiries")}
             value={String(data?.open_inquiries ?? "—")}
             icon={Inbox}
             accent="blue"
-            badge={bi("实时", "Live")}
-            hint={bi("B2B / 混合模式会话待人工跟进", "B2B and mixed-mode threads awaiting a human")}
+            subtext={bi("B2B / 混合会话待跟进", "Threads awaiting reply")}
+            href="/inbox"
+            ctaLabel={bi("进入沟通", "Inbox")}
           />
-          <BentoStatCard
+
+          <DashboardKpiCard
             label={bi("B2B 管道金额", "B2B pipeline value")}
             value={formatMoney(pipelineTotal, pipelineCurrency)}
-            icon={TrendingUp}
-            accent="violet"
-            badge={bi(`${pipelineCurrencies} 个币种`, `${pipelineCurrencies} ccy`)}
-            badgeTone="violet"
-            hint={bi("未关单商机预计金额（按币种汇总）", "Open opportunity value grouped by currency")}
+            icon={DollarSign}
+            accent="green"
+            badge={bi(`${pipelineCurrencies} 币种`, `${pipelineCurrencies} ccy`)}
+            subtext={bi("未关单商机汇总", "Open deals value")}
+            href="/crm/opportunities"
+            ctaLabel={bi("商机", "Deals")}
           />
 
           {showFinancials ? (
-            <BentoStatCard
-              variant="hero"
+            <DashboardKpiCard
+              testId="dashboard-financials"
               label={bi("净贡献毛利", "Net contribution margin")}
               value={formatMoney(netMarginTotal, primaryFinancial?.currency ?? "CNY")}
-              icon={Sparkles}
-              accent="emerald"
-              badge={bi("已扣全成本", "Net of costs")}
-              sparkline={marginSparkline.length >= 2 ? marginSparkline : undefined}
-              hint={bi(
-                `成本 ${formatMoney(cogsTotal, primaryFinancial?.currency ?? "CNY")} · B2C 订单 ${data?.b2c_orders ?? 0}`,
-                `COGS ${formatMoney(cogsTotal, primaryFinancial?.currency ?? "CNY")} · B2C orders ${data?.b2c_orders ?? 0}`
+              icon={TrendingUp}
+              accent="purple"
+              badge={bi("已扣全成本", "Net CVP")}
+              subtext={bi(
+                `成本 ${formatMoney(cogsTotal, primaryFinancial?.currency ?? "CNY")} · B2C ${data?.b2c_orders ?? 0} 单`,
+                `COGS ${formatMoney(cogsTotal, primaryFinancial?.currency ?? "CNY")} · B2C ${data?.b2c_orders ?? 0}`
               )}
-              testId="dashboard-financials"
             />
           ) : (
             <div
               data-testid="dashboard-financials-masked"
-              className="flex flex-col justify-between rounded-2xl border border-amber-200/90 bg-amber-50/70 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]"
+              className="flex flex-col justify-between rounded-xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30"
             >
-              <div className="flex items-start gap-2.5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-amber-600 ring-1 ring-amber-200">
-                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+              <div className="mb-3 flex items-center justify-between">
+                <div className="grid h-9 w-9 place-content-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                  <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                  RBAC
                 </span>
-                <span className="text-[13px] font-semibold text-amber-900">
+              </div>
+              <div>
+                <h3 className="text-[13px] font-medium text-amber-900 dark:text-amber-200">
                   {bi("净贡献毛利已脱敏", "Net margin masked")}
-                </span>
+                </h3>
+                <p className="mt-1 text-2xl font-bold text-amber-900/60 dark:text-amber-300/60">
+                  • • •
+                </p>
+                <p className="mt-2 text-[12px] text-amber-800 dark:text-amber-300/90">
+                  {bi(
+                    `当前角色（${principal?.role ?? "—"}）不展示成本与毛利。`,
+                    `Hidden for role (${principal?.role ?? "—"}).`
+                  )}
+                </p>
               </div>
-              <div className="mt-4 text-[26px] font-bold leading-none tracking-tight text-amber-900/60">
-                • • •
-              </div>
-              <p className="mt-4 border-t border-amber-200/70 pt-3 text-[12px] font-medium text-amber-900">
-                {bi(
-                  `当前角色（${principal?.role ?? "—"}）不可查看成本与毛利，KPI 已自动脱敏。`,
-                  `Your role (${principal?.role ?? "—"}) cannot view costs and margins; KPIs are masked automatically.`
-                )}
-              </p>
             </div>
           )}
 
-          <BentoStatCard
+          <DashboardKpiCard
             label={bi("待审 AI 提案", "Pending AI proposals")}
             value={String(data?.pending_proposals ?? "—")}
             icon={Bot}
-            accent="amber"
+            accent="orange"
             badge={
               (data?.pending_proposals ?? 0) > 0
-                ? bi("高优待核", "High priority")
-                : bi("队列已清空", "Queue clear")
+                ? bi("待确认", "Review")
+                : bi("已清空", "Clear")
             }
-            ctaLabel={bi("立即审阅与审批", "Review & approve now")}
-            ctaHref="/ai/proposals"
-            hint={bi("L1 提案需人工确认后才回写 ERP", "L1 proposals write back only after human approval")}
+            subtext={bi("L1 人工确认后回写 ERP", "Human-approved writeback")}
+            href="/ai/proposals"
+            ctaLabel={bi("去审批", "Approve")}
           />
         </div>
 
-        {/* ── 主分析行：8 / 4 ─────────────────────────────────── */}
-        <div className="grid gap-4 lg:grid-cols-12">
-          <section className="rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] lg:col-span-8">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 p-5">
-              <div className="min-w-0">
-                <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
-                  <TrendingUp className="h-4 w-4 text-blue-600" aria-hidden="true" />
-                  {bi("营收与 CVP 边际毛利趋势", "Revenue & CVP margin trend")}
-                </h2>
-                <p className="mt-1 text-[12px] leading-5 text-slate-600">
-                  {bi(
-                    "逐笔订单取自订单利润快照（本位币），不做任何时间插值或模拟数据。",
-                    "One point per real order profit snapshot in base currency — no interpolation, no synthetic data."
-                  )}
-                </p>
-              </div>
-              {showFinancials && (
-                <SegmentedTabs<CvpTrendWindow>
-                  ariaLabel={bi("趋势范围", "Trend range")}
-                  value={trendWindow}
-                  onChange={setTrendWindow}
-                  size="sm"
-                  options={[
-                    { value: "recent5", label: bi("近 5 单", "Latest 5") },
-                    { value: "recent10", label: bi("近 10 单", "Latest 10") },
-                    { value: "all", label: bi("全部", "All") },
-                  ]}
-                />
+        {/* ── 21st.dev 2:1 Main Grid ───────────────────────────── */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Left 2 Columns: Trend + Recent Trade Activity */}
+          <div className="space-y-6 lg:col-span-2">
+            <DashboardCard
+              title={bi("营收与 CVP 边际毛利趋势", "Revenue & CVP margin trend")}
+              subtitle={bi(
+                "逐笔订单取自真实订单利润快照（固定点精度，无模拟插值）。",
+                "Real per-order profit snapshots (fixed-point precision, no synthetic interpolation)."
               )}
-            </div>
+              action={
+                showFinancials ? (
+                  <SegmentedTabs<CvpTrendWindow>
+                    ariaLabel={bi("趋势范围", "Trend range")}
+                    value={trendWindow}
+                    onChange={setTrendWindow}
+                    size="sm"
+                    options={[
+                      { value: "recent5", label: bi("近 5 单", "Latest 5") },
+                      { value: "recent10", label: bi("近 10 单", "Latest 10") },
+                      { value: "all", label: bi("全部", "All") },
+                    ]}
+                  />
+                ) : null
+              }
+            >
+              {showFinancials ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3.5 sm:grid-cols-3 dark:border-gray-800 dark:bg-gray-800/60">
+                    <SummaryCell
+                      label={bi("营收（选定范围）", "Revenue (window)")}
+                      value={formatMoney(trend.revenue, trend.baseCurrency)}
+                      tone="blue"
+                    />
+                    <SummaryCell
+                      label={bi("净贡献毛利", "Net margin")}
+                      value={formatMoney(trend.margin, trend.baseCurrency)}
+                      suffix={`${trend.marginPct}%`}
+                      tone="emerald"
+                    />
+                    <SummaryCell
+                      label={bi("B2C 订单（累计）", "B2C orders")}
+                      value={String(data?.b2c_orders ?? "—")}
+                      tone="slate"
+                    />
+                  </div>
 
-            {showFinancials ? (
-              <div className="space-y-4 p-5 pt-4">
-                <div className="grid gap-3 rounded-xl bg-slate-50/80 p-3.5 sm:grid-cols-3">
-                  <SummaryCell
-                    label={bi("营收（选定范围）", "Revenue (window)")}
-                    value={formatMoney(trend.revenue, trend.baseCurrency)}
-                    tone="blue"
-                  />
-                  <SummaryCell
-                    label={bi("净贡献毛利", "Net contribution margin")}
-                    value={formatMoney(trend.margin, trend.baseCurrency)}
-                    suffix={`${trend.marginPct}%`}
-                    tone="emerald"
-                  />
-                  <SummaryCell
-                    label={bi("B2C 订单（累计）", "B2C orders (all time)")}
-                    value={String(data?.b2c_orders ?? "—")}
-                    tone="slate"
-                  />
+                  {trend.points.length >= 2 ? (
+                    <RevenueMarginAreaChart
+                      data={trend.points.map((point) => ({
+                        label: point.label.replace(/^ORD-/, ""),
+                        revenue: point.revenue,
+                        margin: point.margin,
+                      }))}
+                      revenueLabel={bi("营收", "Revenue")}
+                      marginLabel={bi("净贡献毛利", "Net margin")}
+                      currencyPrefix={trend.baseCurrency === "CNY" ? "¥" : "$"}
+                    />
+                  ) : (
+                    <div className="grid h-[180px] place-items-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-[13px] font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400">
+                      {trend.points.length === 1
+                        ? bi(
+                            "仅 1 笔订单利润快照，已展示汇总数字；满 2 笔自动绘制趋势曲线。",
+                            "1 profit snapshot so far — curve appears once 2 orders exist."
+                          )
+                        : bi("暂无订单利润快照。", "No order profit snapshots yet.")}
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <div
+                  data-testid="dashboard-trend-masked"
+                  className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>
+                    {bi(
+                      "营收与毛利趋势仅对 Owner / Admin / Manager / Finance 开放，当前角色已脱敏。",
+                      "Revenue and margin trends are restricted to Owner/Admin/Manager/Finance."
+                    )}
+                  </span>
+                </div>
+              )}
+            </DashboardCard>
 
-                {trend.points.length >= 2 ? (
-                  <RevenueMarginAreaChart
-                    data={trend.points.map((point) => ({
-                      label: point.label.replace(/^ORD-/, ""),
-                      revenue: point.revenue,
-                      margin: point.margin,
-                    }))}
-                    revenueLabel={bi("营收", "Revenue")}
-                    marginLabel={bi("净贡献毛利", "Net margin")}
-                    currencyPrefix={trend.baseCurrency === "CNY" ? "¥" : "$"}
-                  />
-                ) : (
-                  <div className="grid h-[200px] place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-[13px] font-medium text-slate-500">
-                    {trend.points.length === 1
-                      ? bi(
-                          "仅 1 笔订单利润快照，已展示汇总数字；至少 2 笔才能绘制趋势曲线。",
-                          "Only one order snapshot so far — summary shown; two are needed for a curve."
-                        )
-                      : bi("暂无订单利润快照，完成首笔订单后自动出现趋势。", "No order profit snapshots yet.")}
+            {/* 21st.dev Recent Activity — Real AI Patrol Alerts + Trade To-dos */}
+            <DashboardCard
+              testId="dashboard-tasks"
+              title={bi("实时外贸动态与待办", "Recent trade activity & tasks")}
+              subtitle={bi(
+                "整合 AI 主动巡检预警与到期外贸跟进任务，点击直达处理。",
+                "Live AI patrol alerts & upcoming trade follow-ups."
+              )}
+              action={
+                <Link
+                  href="/tasks"
+                  className="text-[13px] font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  {bi("查看全部", "View all")}
+                </Link>
+              }
+            >
+              {activityItems.length > 0 ? (
+                <div className="space-y-1">
+                  {activityItems.map((row) => (
+                    <DashboardActivityRow
+                      key={row.id}
+                      icon={row.icon}
+                      accent={row.accent}
+                      title={row.title}
+                      description={row.description}
+                      meta={row.meta}
+                      href={row.href}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-[13px] text-gray-500 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400">
+                  {bi("当前无紧急预警与逾期任务，经营节奏良好。", "No urgent alerts or overdue tasks.")}
+                </div>
+              )}
+            </DashboardCard>
+          </div>
+
+          {/* Right Column: Quick Stats (Patrol Health + Funnel) & Top Channels */}
+          <div className="space-y-6">
+            <DashboardCard
+              testId="dashboard-funnel"
+              title={bi("经营健康与商机进度", "Health & funnel stats")}
+              subtitle={bi("AI 巡检健康分与商机各阶段分布", "AI patrol score & deal stage breakdown")}
+            >
+              <div className="space-y-4">
+                {healthScore !== null && healthDescriptor && (
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 dark:border-blue-900/40 dark:bg-blue-950/30">
+                    <DashboardProgressStat
+                      label={bi(
+                        `AI 经营健康分 · ${healthDescriptor.zh}`,
+                        `AI Health · ${healthDescriptor.en}`
+                      )}
+                      valueLabel={`${healthScore} / 100`}
+                      percent={healthScore}
+                      accent={
+                        healthDescriptor.tone === "emerald"
+                          ? "green"
+                          : healthDescriptor.tone === "amber"
+                            ? "orange"
+                            : "rose"
+                      }
+                    />
                   </div>
                 )}
 
-                <p className="text-[11.5px] leading-5 text-slate-500">
-                  {bi(
-                    `数据来源：finance/overview 订单利润快照（按重算时间倒序，当前 ${trend.orders} 笔；接口单次上限 100 笔）。金额用于展示，计算全程走固定点整数，不经过浮点求和。`,
-                    `Source: finance/overview order profit snapshots (recalculated_at DESC, ${trend.orders} rows, API cap 100). Amounts are display-only and summed with fixed-point integers, never float.`
-                  )}
-                </p>
-              </div>
-            ) : (
-              <div
-                data-testid="dashboard-trend-masked"
-                className="m-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] font-medium text-amber-900"
-              >
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
-                <span>
-                  {bi(
-                    "营收与毛利趋势仅对 Owner / Admin / Manager / Finance 开放，当前角色已脱敏。",
-                    "Revenue and margin trends are limited to Owner/Admin/Manager/Finance; masked for your role."
-                  )}
-                </span>
-              </div>
-            )}
-          </section>
-
-          <section
-            data-testid="dashboard-funnel"
-            className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] lg:col-span-4"
-          >
-            <div>
-              <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
-                <Target className="h-4 w-4 text-blue-600" aria-hidden="true" />
-                {bi("跨境商机漏斗转化", "Cross-border opportunity funnel")}
-              </h2>
-              <p className="mt-1 text-[12px] leading-5 text-slate-600">
-                {bi("按商机阶段统计的真实数量。", "Real counts grouped by opportunity stage.")}
-              </p>
-            </div>
-
-            <div className="mt-4">
-              <HorizontalFunnelBars
-                items={(data?.funnel ?? []).map((stage) => ({
-                  key: stage.stage,
-                  label: FUNNEL_STAGE_LABEL[stage.stage]?.[locale] ?? stage.stage,
-                  count: stage.count,
-                  tone:
-                    stage.stage === "closed_won"
-                      ? "emerald"
-                      : stage.stage === "closed_lost"
-                        ? "slate"
-                        : "blue",
-                }))}
-              />
-              {(data?.funnel ?? []).length === 0 && (
-                <p className="text-[12.5px] text-slate-500">{bi("暂无商机数据", "No opportunities yet")}</p>
-              )}
-            </div>
-
-            <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3.5">
-              <p className="flex items-center gap-1.5 text-[12.5px] font-bold text-emerald-900">
-                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                {bi("AI 赋能提示", "AI enablement")}
-              </p>
-              <p className="mt-1 text-[11.5px] leading-5 text-emerald-800">
-                {bi(
-                  `有 ${data?.pending_proposals ?? 0} 条 L1 提案待人工确认；批准后 AI 会自动把报价、CRM 字段与跟进任务回写 ERP，漏斗推进不再靠手工录入。`,
-                  `${data?.pending_proposals ?? 0} L1 proposals await human review; approving writes quotes, CRM fields and follow-ups back to the ERP automatically.`
+                {funnelRows.length > 0 ? (
+                  funnelRows.map((stage) => {
+                    const meta = FUNNEL_STAGE_LABEL[stage.stage];
+                    const pct = Math.round((stage.count / funnelMax) * 100);
+                    return (
+                      <DashboardProgressStat
+                        key={stage.stage}
+                        label={meta?.[locale] ?? stage.stage}
+                        valueLabel={bi(`${stage.count} 个`, `${stage.count}`)}
+                        percent={pct}
+                        accent={meta?.accent ?? "blue"}
+                      />
+                    );
+                  })
+                ) : (
+                  <p className="text-[12.5px] text-gray-500 dark:text-gray-400">
+                    {bi("暂无商机数据", "No opportunities yet")}
+                  </p>
                 )}
-              </p>
-            </div>
-          </section>
-        </div>
 
-        {/* ── 底部 3 列 Bento ────────────────────────────────── */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <section
-            data-testid="dashboard-channels"
-            className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)]"
-          >
-            <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
-              <Store className="h-4 w-4 text-blue-600" aria-hidden="true" />
-              {bi("全域询盘来源", "Inquiry source mix")}
-            </h2>
-            <p className="mt-1 text-[12px] leading-5 text-slate-600">
-              {bi("按渠道账号统计的真实会话量。", "Real conversation counts per channel account.")}
-            </p>
-            <div className="mt-4">
-              <ChannelDonutChart
-                centerValue={String(channelTotal)}
-                centerLabel={bi("会话总数", "Conversations")}
-                data={channelRows.map((row, index) => ({
-                  name: CHANNEL_LABEL[row.channel]?.[locale] ?? row.channel,
-                  value: row.conversations,
-                  color: CHANNEL_COLOR[row.channel] ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length],
-                  meta: channelTotal
-                    ? `${Math.round((row.conversations / channelTotal) * 100)}%`
-                    : undefined,
-                }))}
-              />
-              {channelRows.length === 0 && (
-                <p className="mt-2 text-[12.5px] text-slate-500">
-                  {bi("暂无会话", "No conversations")}
-                </p>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)]">
-            <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
-              <Layers className="h-4 w-4 text-blue-600" aria-hidden="true" />
-              {bi("快捷工作台与 AI 协同", "Workbench & AI collaboration")}
-            </h2>
-            <p className="mt-1 text-[12px] leading-5 text-slate-600">
-              {bi("一键进入高频业务面，全部为实时数据。", "Jump into high-frequency surfaces, all live data.")}
-            </p>
-            <ul className="mt-3 space-y-1.5">
-              {WORKBENCH_LINKS.map(({ href, icon: Icon, accent, zh, en, descZh, descEn }) => (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    className="group flex items-center gap-3 rounded-xl border border-transparent px-2 py-2 transition-colors hover:border-slate-200 hover:bg-slate-50"
-                  >
-                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${accent}`}>
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-semibold text-slate-900">
-                        {bi(zh, en)}
-                      </span>
-                      <span className="block truncate text-[11.5px] text-slate-500">
-                        {bi(descZh, descEn)}
-                      </span>
-                    </span>
-                    <ArrowUpRight
-                      className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-colors group-hover:text-blue-600"
-                      aria-hidden="true"
-                    />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section
-            data-testid="dashboard-tasks"
-            className="flex flex-col rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)]"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950">
-                  <ClipboardList className="h-4 w-4 text-blue-600" aria-hidden="true" />
-                  {bi("外贸待办与高优提醒", "Trade to-dos & alerts")}
-                </h2>
-                <p className="mt-1 text-[12px] leading-5 text-slate-600">
-                  {bi("按到期时间排序的真实任务。", "Real tasks ordered by due date.")}
-                </p>
-              </div>
-              {highPriorityTasks > 0 && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-rose-200/80 bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700">
-                  {bi(`高优 ${highPriorityTasks}`, `${highPriorityTasks} urgent`)}
-                </span>
-              )}
-            </div>
-
-            <ul className="mt-3 flex-1 space-y-1.5">
-              {(data?.upcoming_tasks ?? []).map((task) => (
-                <li
-                  key={task.id}
-                  className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2"
-                >
-                  <span
-                    className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
-                      task.priority === "high" ? "bg-rose-500" : "bg-slate-300"
-                    }`}
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12.5px] font-semibold text-slate-900">
-                      {task.title}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] text-slate-500">
-                      {task.priority === "high"
-                        ? bi("高优先级 · 需当日处理", "High priority · handle today")
-                        : bi("常规跟进", "Routine follow-up")}
-                    </span>
+                <div className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-300">
+                  <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                  <span>
+                    {bi(
+                      `当前 ${data?.pending_proposals ?? 0} 条 AI 提案待审，审批后自动回写报价与跟进记录。`,
+                      `${data?.pending_proposals ?? 0} AI proposals pending approval for ERP writeback.`
+                    )}
                   </span>
-                </li>
-              ))}
-              {(data?.upcoming_tasks ?? []).length === 0 && (
-                <li className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-4 text-center text-[12.5px] font-medium text-slate-500">
-                  {bi("今日没有待办，保持节奏。", "No tasks today — keep the momentum.")}
-                </li>
-              )}
-            </ul>
+                </div>
+              </div>
+            </DashboardCard>
 
-            <Link
-              href="/tasks"
-              className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-semibold text-slate-800 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50"
+            <DashboardCard
+              testId="dashboard-channels"
+              title={bi("全渠道询盘排行", "Top inquiry channels")}
+              subtitle={bi(
+                `累计 ${channelTotal} 条真实会话`,
+                `${channelTotal} live conversations`
+              )}
+              action={
+                <Link
+                  href="/inbox"
+                  className="text-[13px] font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  {bi("聚合沟通", "Inbox")}
+                </Link>
+              }
             >
-              {bi("查看全部任务", "View all tasks")}
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </Link>
-          </section>
+              <div className="space-y-2.5">
+                {channelRows.length > 0 ? (
+                  channelRows.map((row) => {
+                    const meta = CHANNEL_LABEL[row.channel];
+                    const share = channelTotal
+                      ? Math.round((row.conversations / channelTotal) * 100)
+                      : 0;
+                    return (
+                      <div
+                        key={row.channel}
+                        className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta?.dot ?? "bg-blue-500"}`}
+                          />
+                          <span className="truncate text-gray-700 dark:text-gray-300">
+                            {meta?.[locale] ?? row.channel}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2 tabular-nums">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
+                            {row.conversations}
+                          </span>
+                          <span className="w-9 text-right text-[11.5px] text-gray-400 dark:text-gray-500">
+                            {share}%
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-[12.5px] text-gray-500 dark:text-gray-400">
+                    {bi("暂无渠道会话", "No conversations yet")}
+                  </p>
+                )}
+              </div>
+
+              {lowStockCount > 0 && (
+                <Link
+                  href="/wms"
+                  className="mt-4 flex items-center justify-between rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-[12px] font-medium text-orange-800 transition-colors hover:bg-orange-100 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {bi(`低库存 SKU 预警：${lowStockCount} 项`, `Low-stock SKUs: ${lowStockCount}`)}
+                  </span>
+                  <span className="font-semibold">{bi("去补货 →", "Restock →")}</span>
+                </Link>
+              )}
+
+              <div className="mt-4 border-t border-gray-100 pt-3.5 dark:border-gray-800">
+                <p className="mb-2 text-[11.5px] font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
+                  {bi("高频直达", "Quick jump")}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_WORKBENCH_CHIPS.map(({ href, icon: Icon, zh, en }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[12px] font-medium text-gray-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-700 dark:hover:bg-blue-900/30 dark:hover:text-blue-300"
+                    >
+                      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>{bi(zh, en)}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </DashboardCard>
+          </div>
         </div>
       </div>
     </AppShell>
@@ -628,14 +633,20 @@ function SummaryCell({
   tone: "blue" | "emerald" | "slate";
 }) {
   const valueTone =
-    tone === "blue" ? "text-slate-950" : tone === "emerald" ? "text-emerald-700" : "text-slate-900";
+    tone === "blue"
+      ? "text-blue-600 dark:text-blue-400"
+      : tone === "emerald"
+        ? "text-emerald-600 dark:text-emerald-400"
+        : "text-gray-900 dark:text-gray-100";
   return (
     <div className="min-w-0">
-      <p className="truncate text-[11.5px] font-medium text-slate-500">{label}</p>
-      <p className={`mt-1 flex flex-wrap items-baseline gap-1.5 text-[17px] font-bold tabular-nums ${valueTone}`}>
+      <p className="truncate text-[11.5px] font-medium text-gray-500 dark:text-gray-400">{label}</p>
+      <p
+        className={`mt-1 flex flex-wrap items-baseline gap-1.5 text-[17px] font-bold tabular-nums ${valueTone}`}
+      >
         <span className="truncate">{value}</span>
         {suffix && (
-          <span className="rounded-full bg-emerald-50 px-1.5 py-0.2 text-[11px] font-semibold text-emerald-700">
+          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
             {suffix}
           </span>
         )}

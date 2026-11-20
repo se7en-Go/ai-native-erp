@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { bffFetch } from "@/lib/api";
 import { PrincipalSchema, type Principal } from "@/lib/contracts";
 import { I18nProvider } from "@/lib/i18n";
+import { ThemeProvider } from "@/lib/theme";
 
 export interface AuthSessionState {
   principal: Principal | null;
@@ -80,9 +81,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <I18nProvider defaultLocale="zh">
-        <AuthSessionBridge>{children}</AuthSessionBridge>
-      </I18nProvider>
+      <ThemeProvider defaultTheme="light">
+        <I18nProvider defaultLocale="zh">
+          <AuthSessionBridge>{children}</AuthSessionBridge>
+        </I18nProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

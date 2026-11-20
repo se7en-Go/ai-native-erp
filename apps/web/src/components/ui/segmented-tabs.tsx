@@ -33,7 +33,7 @@ export function SegmentedTabs<T extends string = string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={`inline-flex items-center gap-0.5 rounded-xl border border-[#E5E2DC] bg-[#EFECE6]/90 p-1 ${className}`}
+      className={`inline-flex items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800 ${className}`}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -45,10 +45,10 @@ export function SegmentedTabs<T extends string = string>({
             aria-selected={active}
             data-testid={opt.testId}
             onClick={() => onChange(opt.value)}
-            className={`inline-flex items-center gap-1.5 rounded-lg font-semibold transition-all duration-150 ${pad} ${
+            className={`inline-flex items-center gap-1.5 rounded-md font-semibold transition-all duration-150 ${pad} ${
               active
-                ? "bg-[#18181B] text-[#FAFAF9] shadow-xs"
-                : "text-stone-600 hover:bg-white/80 hover:text-zinc-950"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-gray-600 hover:bg-white/80 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
             }`}
           >
             <span>{opt.label}</span>
