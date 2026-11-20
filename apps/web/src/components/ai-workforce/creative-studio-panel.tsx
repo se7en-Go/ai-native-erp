@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Copy, Save, WandSparkles } from "lucide-react";
+import { Copy, Save, Sparkles, WandSparkles } from "lucide-react";
 import { button, field } from "./presentation";
 import type { CreativeAsset, CreativeAssetRequest, CreativeAssetType, SkuOption } from "./types";
 
@@ -12,7 +12,11 @@ const defaultLanguages = [
   { code: "en", label: "英语" }, { code: "zh", label: "中文" }, { code: "es", label: "西班牙语" },
   { code: "de", label: "德语" }, { code: "fr", label: "法语" }, { code: "ja", label: "日语" },
 ];
-const primary = "inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:outline-offset-2 disabled:opacity-50";
+function SparklesIcon() {
+  return <Sparkles size={14} aria-hidden="true" className="text-blue-600" />;
+}
+
+const primary = "inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-[13px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:outline-offset-2 disabled:opacity-50";
 
 export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGenerate, onSave, onCopy }: {
   skus: readonly SkuOption[];
@@ -69,22 +73,34 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
   }
 
   return (
-    <section aria-label="AI 文案与素材工坊" className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-xs">
-      <header className="mb-5 border-b border-slate-100 pb-4">
-        <p className="flex items-center gap-2 text-xs font-semibold tracking-widest text-blue-700"><WandSparkles size={16} aria-hidden="true" /> 创意工作台</p>
-        <h2 className="mt-1 text-xl font-bold">AI 文案与素材工坊</h2>
-        <p className="mt-1 text-sm text-slate-600">从商品目录选择 SKU，为不同市场生成可编辑的文案草稿。</p>
+    <section
+      aria-label="AI 文案与素材工坊"
+      className="rounded-2xl border border-slate-200/90 bg-white p-5 text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_10px_30px_-20px_rgba(15,23,42,0.25)]"
+    >
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25">
+            <WandSparkles size={18} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-[18px] font-bold tracking-tight">AI 文案与素材工坊</h2>
+            <p className="mt-0.5 text-[12.5px] text-slate-600">从商品目录选择 SKU，为不同市场生成可编辑的文案草稿。</p>
+          </div>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-blue-200/80 bg-blue-50 px-2.5 py-1 text-[11.5px] font-semibold text-blue-700">
+          创意工作台 · 草稿永远人工批准
+        </span>
       </header>
       <div className="grid gap-5 lg:grid-cols-2">
         <form onSubmit={generate}>
           <fieldset disabled={!!pending} className="space-y-4 disabled:opacity-65">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm font-semibold">素材类型
+              <label className="block text-[12.5px] font-semibold text-slate-800">素材类型
                 <select value={assetType} onChange={(event) => setAssetType(event.target.value as CreativeAssetType)} className={field + " mt-1"}>
                   {Object.entries(assetTypes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
-              <label className="block text-sm font-semibold">关联 SKU
+              <label className="block text-[12.5px] font-semibold text-slate-800">关联 SKU
                 <select value={validSku} onChange={(event) => setSku(event.target.value)} className={field + " mt-1"}>
                   <option value="">不关联</option>
                   {skus.map(({ sku, label }) => <option key={sku} value={sku}>{sku} · {label}</option>)}
@@ -92,19 +108,33 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
               </label>
             </div>
             <fieldset className="flex flex-wrap gap-2">
-              <legend className="mb-1 text-sm font-semibold">输出语言</legend>
-              {languages.map(({ code, label }) => <label key={code} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm">
-                <input type="checkbox" checked={validLanguages.includes(code)} className="accent-blue-600" onChange={(event) => setChosen((prev) => event.target.checked ? [...prev, code] : prev.filter((item) => item !== code))} />{label}
-              </label>)}
+              <legend className="mb-1.5 text-[12.5px] font-semibold text-slate-800">输出语言</legend>
+              {languages.map(({ code, label }) => {
+                const on = validLanguages.includes(code);
+                return (
+                  <label
+                    key={code}
+                    className={"inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-colors " + (on ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50")}
+                  >
+                    <input type="checkbox" checked={on} className="accent-blue-600" onChange={(event) => setChosen((prev) => event.target.checked ? [...prev, code] : prev.filter((item) => item !== code))} />{label}
+                  </label>
+                );
+              })}
             </fieldset>
-            <label className="block text-sm font-semibold">创作要求
+            <label className="block text-[12.5px] font-semibold text-slate-800">创作要求
               <textarea required rows={4} value={prompt} onChange={(event) => setPrompt(event.target.value)} className={field + " mt-1 resize-y"} placeholder="例如：为德国经销商介绍应用场景和已验证的产品规格" />
             </label>
             <button type="submit" disabled={!prompt.trim() || !validLanguages.length || !!pending} className={primary}><WandSparkles size={16} aria-hidden="true" />{pending === "generate" ? "正在生成…" : "生成文案"}</button>
           </fieldset>
         </form>
-        <section aria-label="素材预览" className="min-w-0 rounded-xl border border-blue-100 bg-slate-50 p-4" aria-busy={!!pending}>
-          <h3 className="mb-3 font-bold">素材预览</h3>
+        <section
+          aria-label="素材预览"
+          className="min-w-0 rounded-2xl border border-blue-100 bg-slate-50/80 p-4"
+          aria-busy={!!pending}
+        >
+          <h3 className="mb-3 flex items-center gap-1.5 text-[13px] font-bold text-slate-900">
+            <SparklesIcon /> 素材预览
+          </h3>
           {result ? <>
             <div role="group" aria-label="生成版本" className="mb-3 flex flex-wrap gap-2">
               {assets.map((asset, index) => <button key={asset.id ?? asset.language + ":" + index} type="button" aria-pressed={index === selected} disabled={!!pending}
@@ -120,10 +150,10 @@ export function CreativeStudioPanel({ skus, languages = defaultLanguages, onGene
               <button type="button" className={button + " inline-flex items-center gap-2"} disabled={!result.content_text.trim() || !!pending} onClick={() => void act("copy")}><Copy size={15} aria-hidden="true" />复制</button>
               <button type="button" className={primary} disabled={!result.content_text.trim() || !!pending} onClick={() => void act("save")}><Save size={15} aria-hidden="true" />保存素材</button>
             </div>
-          </> : <p className="text-sm text-slate-600">选择类型和语言后，生成的文案会显示在这里。</p>}
+          </> : <p className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-4 text-center text-[12.5px] font-medium text-slate-500">选择类型和语言后，生成的文案会显示在这里。</p>}
         </section>
       </div>
-      {feedback && <p role={feedback.error ? "alert" : "status"} className={"mt-4 text-sm " + (feedback.error ? "text-rose-700" : "text-blue-700")}>{feedback.text}</p>}
+      {feedback && <p role={feedback.error ? "alert" : "status"} className={"mt-4 rounded-xl border px-3 py-2 text-[12.5px] font-medium " + (feedback.error ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-200 bg-blue-50 text-blue-700")}>{feedback.text}</p>}
     </section>
   );
 }

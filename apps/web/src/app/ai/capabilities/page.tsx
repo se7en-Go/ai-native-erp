@@ -2,10 +2,21 @@
 
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BookOpen, Lock, ShieldCheck, Trash2, Upload, Wallet } from "lucide-react";
+import {
+  AlertTriangle,
+  Blocks,
+  BookOpen,
+  Layers,
+  Lock,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  Wallet,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
-import { Badge, Card, CardHeader, EmptyState, Page, PageHeader, StatCard } from "@/components/ui/page";
+import { Badge, Card, CardHeader, EmptyState, Page, PageHeader } from "@/components/ui/page";
+import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { deleteKbDocument, updateCapability, uploadKbDocument } from "@/lib/api-client/live-client";
 import {
   fetchCapabilities,
@@ -204,6 +215,46 @@ export default function AiCapabilitiesPage() {
           </div>
         )}
 
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <BentoStatCard
+            label={bi("AI 能力项", "AI capabilities")}
+            value={String(capabilitiesQuery.data?.capabilities.length ?? CAPABILITY_METADATA.length)}
+            icon={Blocks}
+            accent="blue"
+            badge={bi("全栈可用", "Full stack")}
+            hint={bi(
+              "客服、报价、物流、内容、分析、财务对账",
+              "Support, quoting, logistics, content, analytics, finance recon"
+            )}
+          />
+          <BentoStatCard
+            label={bi("自治级别", "Autonomy levels")}
+            value="3"
+            icon={Layers}
+            accent="violet"
+            badge={bi("无 L3 旁路", "No L3 bypass")}
+            badgeTone="violet"
+            hint={bi("L0 人工把关 / L1 提案人审 / L2 自动执行", "L0 human / L1 review / L2 auto")}
+          />
+          <BentoStatCard
+            label={bi("永久锁定项", "Permanently locked")}
+            value="1"
+            icon={Lock}
+            accent="rose"
+            badge={bi("资金核销", "Cash settlement")}
+            badgeTone="rose"
+            hint={bi("财务对账永不开放 L2 自动执行", "Finance recon never runs at L2")}
+          />
+          <BentoStatCard
+            label={bi("知识库文档", "Knowledge docs")}
+            value={String(kbQuery.data?.items.length ?? "—")}
+            icon={BookOpen}
+            accent="emerald"
+            badge={bi("混合检索", "Hybrid RAG")}
+            hint={bi("BM25 + pgvector + 重排，低置信度转人工", "BM25 + pgvector + rerank; low confidence escalates")}
+          />
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
           {CAPABILITY_METADATA.map((cap) => {
             const currentLevel = levelMap.get(cap.key) ?? "L1_proposal";
@@ -211,7 +262,10 @@ export default function AiCapabilitiesPage() {
             const levelCopy = LEVEL_COPY[currentLevel] ?? { zh: currentLevel, en: currentLevel };
 
             return (
-              <Card key={cap.key} className="p-4">
+              <Card
+                key={cap.key}
+                className="rounded-2xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] transition-shadow hover:shadow-[0_6px_20px_-10px_rgba(15,23,42,0.2)]"
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h2 className="text-sm font-semibold text-slate-900">
@@ -239,7 +293,7 @@ export default function AiCapabilitiesPage() {
                   </span>
                 </div>
 
-                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl border border-slate-200/90 bg-slate-100/90 p-1">
                   {AUTONOMY_LEVELS.map((lvl) => {
                     const active = currentLevel === lvl;
                     const lockedL2 = isFinance && lvl === "L2_auto";
@@ -256,10 +310,10 @@ export default function AiCapabilitiesPage() {
                             autonomy_level: lvl,
                           })
                         }
-                        className={`rounded-lg border px-2 py-1.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                        className={`rounded-lg px-2 py-1.5 text-[12px] font-semibold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-45 ${
                           active
-                            ? "border-blue-600 bg-blue-600 text-white"
-                            : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                            ? "bg-slate-900 text-white shadow-xs"
+                            : "text-slate-600 hover:bg-white/80 hover:text-slate-950"
                         }`}
                       >
                         {bi(copy.zh, copy.en)}
@@ -357,14 +411,25 @@ export default function AiCapabilitiesPage() {
           </div>
         </Card>
 
-        <StatCard
-          label={bi("治理红线", "Governance guardrails")}
-          value={bi("6 项能力 · 3 级自治", "6 capabilities · 3 levels")}
-          hint={bi(
-            "财务对账与资金核销永久锁定 L0；提案全部进入人工审核队列。",
-            "Finance recon and settlement are permanently L0; every proposal enters human review."
-          )}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-[#0B1220] px-5 py-4 text-white shadow-[0_10px_30px_-18px_rgba(15,23,42,0.6)]">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 text-emerald-300 ring-1 ring-white/15">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold">{bi("治理红线", "Governance guardrails")}</p>
+              <p className="mt-0.5 text-[11.5px] leading-5 text-slate-300">
+                {bi(
+                  "财务对账与资金核销永久锁定 L0；所有 L1 提案必须进入人工审核队列后才回写 ERP。",
+                  "Finance recon and settlement stay permanently L0; every L1 proposal must pass human review before writing back to the ERP."
+                )}
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11.5px] font-semibold tabular-nums">
+            {bi("6 项能力 · 3 级自治", "6 capabilities · 3 levels")}
+          </span>
+        </div>
       </Page>
     </AppShell>
   );

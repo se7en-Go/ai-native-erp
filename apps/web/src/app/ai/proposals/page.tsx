@@ -8,6 +8,7 @@ import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { ProposalReviewCard } from "@/components/ai/proposal-review-card";
 import { Badge, EmptyState, Page, PageHeader } from "@/components/ui/page";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { approveProposal, editApproveProposal, rejectProposal } from "@/lib/api-client/live-client";
 import { fetchPendingProposalsCount, fetchProposals } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
@@ -93,36 +94,36 @@ export default function AiProposalsPage() {
           }
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 text-[12px] text-slate-500">
-                <Filter className="h-3.5 w-3.5" />
-                {bi("筛选", "Filter")}
-              </span>
-              <select
+              <SegmentedTabs<ProposalStatus>
+                ariaLabel={bi("按状态筛选", "Filter by status")}
                 value={statusFilter}
-                aria-label={bi("按状态筛选", "Filter by status")}
-                onChange={(e) => setStatusFilter(e.target.value as ProposalStatus)}
-                className="erp-input w-auto"
-              >
-                {(Object.keys(STATUS_COPY) as ProposalStatus[]).map((status) => (
-                  <option key={status} value={status}>
-                    {bi(STATUS_COPY[status].zh, STATUS_COPY[status].en)}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={typeFilter}
-                aria-label={bi("按提案类型筛选", "Filter by proposal type")}
-                onChange={(e) => setTypeFilter(e.target.value as "" | ProposalType)}
-                className="erp-input w-auto"
-              >
-                <option value="">{bi("全部提案类型", "All proposal types")}</option>
-                {(Object.keys(TYPE_COPY) as ProposalType[]).map((type) => (
-                  <option key={type} value={type}>
-                    {bi(TYPE_COPY[type].zh, TYPE_COPY[type].en)}
-                  </option>
-                ))}
-              </select>
+                onChange={setStatusFilter}
+                size="sm"
+                options={(["pending", "approved", "rejected", "expired"] as ProposalStatus[]).map(
+                  (status) => ({
+                    value: status,
+                    label: bi(STATUS_COPY[status].zh, STATUS_COPY[status].en),
+                    testId: `proposal-status-tab-${status}`,
+                    badge: status === "pending" ? (pendingCountQuery.data?.total ?? 0) : undefined,
+                  })
+                )}
+              />
+              <label className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-600 shadow-xs">
+                <Filter className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                <select
+                  value={typeFilter}
+                  aria-label={bi("按提案类型筛选", "Filter by proposal type")}
+                  onChange={(e) => setTypeFilter(e.target.value as "" | ProposalType)}
+                  className="bg-transparent text-[12px] font-semibold text-slate-800 outline-none"
+                >
+                  <option value="">{bi("全部提案类型", "All proposal types")}</option>
+                  {(Object.keys(TYPE_COPY) as ProposalType[]).map((type) => (
+                    <option key={type} value={type}>
+                      {bi(TYPE_COPY[type].zh, TYPE_COPY[type].en)}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           }
         />

@@ -87,12 +87,15 @@ export function ProposalReviewCard({
   }
 
   return (
-    <Card data-testid={`proposal-card-${proposal.id}`} className="p-4">
+    <Card
+      data-testid={`proposal-card-${proposal.id}`}
+      className="rounded-2xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_6px_16px_-6px_rgba(15,23,42,0.05)] transition-shadow hover:shadow-[0_10px_28px_-16px_rgba(15,23,42,0.25)]"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
           <Badge tone="info">{bi(capabilityCopy.zh, capabilityCopy.en)}</Badge>
           {/* 技术码保留原文：E2E 依赖精确的 quote_draft 文本 */}
-          <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-700">
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-slate-700">
             {proposal.proposal_type}
           </span>
           <span className="tabular-nums text-slate-500">
@@ -126,7 +129,7 @@ export function ProposalReviewCard({
       </div>
 
       {!editing ? (
-        <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-[12px] leading-5 text-slate-800">
+        <pre className="mt-3 max-h-72 overflow-auto rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-[11.5px] leading-5 text-slate-800">
           {JSON.stringify(proposal.proposed_payload, null, 2)}
         </pre>
       ) : (
@@ -145,14 +148,14 @@ export function ProposalReviewCard({
               type="button"
               data-testid={`proposal-edit-submit-${proposal.id}`}
               onClick={submitEdit}
-              className="erp-btn erp-btn-primary"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-[12.5px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700"
             >
               {bi("保存并批准", "Save edit & approve")}
             </button>
             <button
               type="button"
               onClick={() => setEditing(false)}
-              className="erp-btn erp-btn-secondary"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
             >
               {bi("取消", "Cancel")}
             </button>
@@ -166,7 +169,7 @@ export function ProposalReviewCard({
           {proposal.citations.map((cit) => (
             <span
               key={`${cit.doc_id}-${cit.chunk_id}`}
-              className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] text-emerald-700 tabular-nums"
+              className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-emerald-700 tabular-nums"
             >
               [{cit.doc_id}#{cit.chunk_id}] · {cit.score.toFixed(2)}
             </span>
@@ -181,7 +184,7 @@ export function ProposalReviewCard({
             disabled={!canReview || belowMarginFloor}
             data-testid={`proposal-approve-${proposal.id}`}
             onClick={() => onApprove(proposal.id)}
-            className="erp-btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-[12.5px] font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Check className="h-3.5 w-3.5" />
             {/* E2E 以 "Approve" 精确匹配按钮名，保持英文原文 */}
@@ -193,7 +196,7 @@ export function ProposalReviewCard({
             disabled={!canReview}
             data-testid={`proposal-edit-toggle-${proposal.id}`}
             onClick={() => setEditing((prev) => !prev)}
-            className="erp-btn border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-[12.5px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Edit3 className="h-3.5 w-3.5" />
             <span>{bi("编辑后批准", "Edit & approve")}</span>
@@ -204,7 +207,7 @@ export function ProposalReviewCard({
             disabled={!canReview}
             data-testid={`proposal-reject-toggle-${proposal.id}`}
             onClick={() => setRejecting((prev) => !prev)}
-            className="erp-btn border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-rose-700 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <XCircle className="h-3.5 w-3.5" />
             <span>{bi("驳回", "Reject")}</span>
@@ -240,7 +243,7 @@ export function ProposalReviewCard({
               onReject(proposal.id, rejectionReason.trim());
               setRejecting(false);
             }}
-            className="erp-btn bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-1.5 text-[12.5px] font-semibold text-white shadow-xs transition-colors hover:bg-rose-700 disabled:opacity-40"
           >
             {bi("确认驳回", "Confirm reject")}
           </button>
