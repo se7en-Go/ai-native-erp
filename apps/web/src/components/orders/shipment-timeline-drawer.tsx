@@ -54,9 +54,9 @@ export function ShipmentTimelineDrawer({
       data-testid="shipment-timeline-drawer"
       className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl"
     >
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">
+          <h3 className="text-[14px] font-bold text-slate-900">
             {bi("17TRACK 物流时间轴与库存台账", "17TRACK timeline & inventory ledger")}
           </h3>
           {order && <p className="text-[11px] text-slate-500">{order.order_no}</p>}
@@ -64,7 +64,7 @@ export function ShipmentTimelineDrawer({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+          className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-xs transition-colors hover:bg-slate-100"
           aria-label={bi("关闭物流抽屉", "Close shipment drawer")}
         >
           <X className="h-4 w-4" />
@@ -90,7 +90,10 @@ export function ShipmentTimelineDrawer({
           </div>
         ) : (
           order!.shipments.map((ship) => (
-            <div key={ship.id} className="space-y-2.5 rounded-xl border border-slate-200 p-3.5">
+            <div
+              key={ship.id}
+              className="space-y-2.5 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 font-semibold text-slate-900">
                   <Truck className="h-4 w-4 text-blue-600" />
@@ -123,9 +126,13 @@ export function ShipmentTimelineDrawer({
                 )}
               </div>
 
-              <div className="space-y-2 border-l-2 border-slate-200 pl-3">
+              <div className="space-y-2.5 border-l-2 border-blue-200 pl-3">
                 {ship.tracking_events.map((ev, idx) => (
-                  <div key={idx} className="space-y-0.5">
+                  <div key={idx} className="relative space-y-0.5">
+                    <span
+                      aria-hidden="true"
+                      className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white"
+                    />
                     <div className="font-medium text-slate-800">{ev.description}</div>
                     <div className="text-[11px] tabular-nums text-slate-500">
                       {ev.location ? `${ev.location} · ` : ""}
@@ -146,7 +153,7 @@ export function ShipmentTimelineDrawer({
           aria-label={bi("库存台账", "Inventory ledger")}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
         >
-          <div className="w-full max-w-2xl space-y-3 rounded-xl bg-white p-4 text-[12px] shadow-2xl">
+          <div className="w-full max-w-2xl space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-[12px] shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2">
               <h4 className="text-sm font-semibold text-slate-900">
                 {bi("原子库存余额与不可变台账", "Atomic inventory balances & immutable ledger")}
