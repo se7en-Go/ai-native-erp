@@ -65,10 +65,11 @@ export default function ChannelsSettingsPage() {
 
   const isAdmin = principal?.role === "owner" || principal?.role === "admin";
   const currentUserId = principal?.user_id ?? null;
-  // 业务员默认只看自己的个人渠道，老板/管理员默认看全部。
-  const [accountsFilter, setAccountsFilter] = useState<AccountsFilter>(
-    isAdmin ? "all" : "mine",
+  // 业务员默认只看自己的个人渠道，老板/管理员默认看全部；principal 异步加载完成后自动同步。
+  const [selectedAccountsFilter, setSelectedAccountsFilter] = useState<AccountsFilter | null>(
+    null,
   );
+  const accountsFilter: AccountsFilter = selectedAccountsFilter ?? (isAdmin ? "all" : "mine");
 
   const pendingProposalsQuery = useQuery({
     queryKey: ["ai", "proposals", "pending-count"],
@@ -289,7 +290,7 @@ export default function ChannelsSettingsPage() {
           currentUserId={currentUserId}
           members={members}
           filter={accountsFilter}
-          onFilterChange={setAccountsFilter}
+          onFilterChange={setSelectedAccountsFilter}
           onChangeOwnership={(accountId, payload) =>
             ownershipMutation.mutateAsync({ accountId, payload }).then(() => undefined)
           }
