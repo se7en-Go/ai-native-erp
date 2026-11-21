@@ -95,7 +95,9 @@ class QuoteItemRead(BaseModel):
     quantity: int
     moq_tier_applied: int | None
     unit_price_quote_ccy: Decimal
-    unit_cost_base_snapshot: Decimal
+    # Internal landed cost. Masked to ``None`` for AGENT callers (RBAC cost masking);
+    # OWNER/ADMIN/MANAGER/FINANCE always receive the exact Decimal snapshot.
+    unit_cost_base_snapshot: Decimal | None = None
     line_total_quote_ccy: Decimal
 
 

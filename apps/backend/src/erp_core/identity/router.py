@@ -6,7 +6,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, TextClause, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from erp_core.identity.models import Customer, CustomerIdentity
@@ -36,6 +36,71 @@ _require_customer_editor = require_roles(
 _require_customer_splitter = require_roles(
     UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER
 )
+
+# ---------------------------------------------------------------------------------------
+# AGENT personal-mailbox isolation for the customer directory.
+#
+# An AGENT sees a customer when EITHER
+#   (a) at least one conversation for that customer is workable by them
+#       (assigned to them, or unassigned on an unowned SHARED mailbox), OR
+#   (b) the customer has no conversations at all (never touched a private mailbox).
+# This intentionally mirrors `channels.inbox_service.agent_can_access_conversation`, but
+# stays plain tenant-scoped SQL: `identity_isolated` forbids importing erp_core.channels.
+_AGENT_VISIBLE_CUSTOMER_SQL = """
+    (
+        EXISTS (
+            SELECT 1
+            FROM conversations conv
+            JOIN channel_accounts ca
+              ON ca.id = conv.channel_account_id
+             AND ca.tenant_id = conv.tenant_id
+            WHERE conv.tenant_id = :visibility_tenant_id
+              AND conv.customer_id = {customer_ref}
+              AND (
+                    conv.assigned_user_id = :visibility_user_id
+                    OR (
+                        conv.assigned_user_id IS NULL
+                        AND ca.visibility_scope = 'shared'
+                        AND ca.owner_user_id IS NULL
+                    )
+                  )
+        )
+        OR NOT EXISTS (
+            SELECT 1
+            FROM conversations any_conv
+            WHERE any_conv.tenant_id = :visibility_tenant_id
+              AND any_conv.customer_id = {customer_ref}
+        )
+    )
+"""
+
+
+def _agent_customer_visibility_clause(
+    customer_ref: str, *, tenant_id: UUID, user_id: UUID
+) -> TextClause:
+    """Build the AGENT visibility predicate bound to this tenant and salesperson."""
+    return text(_AGENT_VISIBLE_CUSTOMER_SQL.format(customer_ref=customer_ref)).bindparams(
+        visibility_tenant_id=tenant_id, visibility_user_id=user_id
+    )
+
+
+def _scoped_customer_query(
+    principal: CurrentPrincipal, customer_id: UUID
+) -> Select[Customer]:
+    """Tenant-scoped single-customer lookup honouring AGENT mailbox isolation."""
+    stmt = select(Customer).where(
+        Customer.tenant_id == principal.tenant_id,
+        Customer.id == customer_id,
+    )
+    if principal.role == UserRole.AGENT:
+        stmt = stmt.where(
+            _agent_customer_visibility_clause(
+                "customers.id",
+                tenant_id=principal.tenant_id,
+                user_id=principal.user_id,
+            )
+        )
+    return stmt
 
 
 def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -74,6 +139,14 @@ async def list_customers(
                     Customer.display_name.ilike(pattern),
                     Customer.primary_email.ilike(pattern),
                     Customer.primary_phone_e164.ilike(pattern),
+                )
+            )
+        if principal.role == UserRole.AGENT:
+            stmt = stmt.where(
+                _agent_customer_visibility_clause(
+                    "customers.id",
+                    tenant_id=principal.tenant_id,
+                    user_id=principal.user_id,
                 )
             )
 
@@ -145,12 +218,7 @@ async def get_customer(
     service = IdentityResolverService()
     async with tenant_session(session_factory, principal.tenant_id) as session:
         cust = (
-            await session.execute(
-                select(Customer).where(
-                    Customer.tenant_id == principal.tenant_id,
-                    Customer.id == customer_id,
-                )
-            )
+            await session.execute(_scoped_customer_query(principal, customer_id))
         ).scalar_one_or_none()
         if cust is None:
             raise HTTPException(

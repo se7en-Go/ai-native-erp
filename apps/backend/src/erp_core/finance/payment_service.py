@@ -7,6 +7,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.finance.models import PaymentRecord, ReceivablePayable
@@ -36,6 +37,73 @@ DEFAULT_DEPOSIT_RATIO = Decimal("0.30")
 
 def _money(value: Decimal) -> Decimal:
     return Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _duplicate_payment_ref_error(ref: str) -> AppError:
+    return AppError(
+        slug="duplicate-payment-ref",
+        status_code=409,
+        code="ERR_DUPLICATE_PAYMENT_REF",
+        title="Duplicate Payment Reference",
+        detail=(
+            f"Payment reference '{ref}' has already been recorded for this tenant; "
+            "a bank transaction can only be booked once."
+        ),
+    )
+
+
+def _assert_settlement_allowed(rp: ReceivablePayable, amount: Decimal) -> Decimal:
+    """Fail closed on a settled receivable or on any payment above the outstanding balance."""
+    outstanding = _money(Decimal(str(rp.due_amount)) - Decimal(str(rp.paid_amount)))
+    if rp.status == "settled" or outstanding <= Decimal("0.00"):
+        raise AppError(
+            slug="receivable-already-settled",
+            status_code=409,
+            code="ERR_RECEIVABLE_ALREADY_SETTLED",
+            title="Receivable Already Settled",
+            detail=(
+                f"Receivable '{rp.id}' is in status '{rp.status}' with an outstanding "
+                f"balance of {outstanding}."
+            ),
+        )
+    if _money(amount) > outstanding + Decimal("0.01"):
+        raise AppError(
+            slug="receivable-overpayment",
+            status_code=422,
+            code="ERR_RECEIVABLE_OVERPAYMENT",
+            title="Receivable Overpayment Rejected",
+            detail="Payment exceeds remaining receivable balance",
+        )
+    return outstanding
+
+
+async def _assert_unique_external_tx_ref(
+    session: AsyncSession, tenant_id: UUID, external_tx_ref: str | None
+) -> str | None:
+    """Return the normalised reference, rejecting one already booked for this tenant."""
+    ref = (external_tx_ref or "").strip()
+    if not ref:
+        return None
+    existing = await session.scalar(
+        text(
+            "SELECT 1 FROM payment_records "
+            "WHERE tenant_id = :tid AND external_tx_ref = :ref LIMIT 1"
+        ),
+        {"tid": tenant_id, "ref": ref},
+    )
+    if existing is not None:
+        raise _duplicate_payment_ref_error(ref)
+    return ref
+
+
+async def _flush_payment_record(session: AsyncSession, ref: str | None) -> None:
+    """Flush, translating the unique-index race on `external_tx_ref` into a clean 409."""
+    try:
+        await session.flush()
+    except IntegrityError:
+        if ref:
+            raise _duplicate_payment_ref_error(ref) from None
+        raise
 
 
 class PaymentService:
@@ -140,13 +208,19 @@ class PaymentService:
         external_tx_ref: str | None = None,
         verified_by_user_id: UUID | None = None,
     ) -> PaymentRecord:
-        """Record a verified payment against a receivable and settle it when fully paid."""
+        """Record a verified payment against a receivable and settle it when fully paid.
+
+        The receivable row is locked `FOR UPDATE` first, so the duplicate-reference and
+        overpayment guards below cannot be raced by two concurrent settlements.
+        """
         receivable = (
             await session.execute(
-                select(ReceivablePayable).where(
+                select(ReceivablePayable)
+                .where(
                     ReceivablePayable.tenant_id == tenant_id,
                     ReceivablePayable.id == rp_id,
                 )
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if receivable is None:
@@ -158,11 +232,14 @@ class PaymentService:
                 detail=f"Receivable '{rp_id}' does not exist.",
             )
 
+        ref = await _assert_unique_external_tx_ref(session, tenant_id, external_tx_ref)
+        _assert_settlement_allowed(receivable, _money(amount_received))
+
         record = PaymentRecord(
             tenant_id=tenant_id,
             rp_id=rp_id,
             payment_method=payment_method,
-            external_tx_ref=external_tx_ref,
+            external_tx_ref=ref,
             amount_received=_money(amount_received),
             currency=currency.upper(),
             actual_fx_rate=Decimal(actual_fx_rate),
@@ -179,7 +256,7 @@ class PaymentService:
             receivable.status = "settled"
         elif paid_total > Decimal("0.00"):
             receivable.status = "partial"
-        await session.flush()
+        await _flush_payment_record(session, ref)
 
         await self.sync_order_payment_status(session, tenant_id, receivable.order_id)
         return record
@@ -316,6 +393,7 @@ class PaymentService:
         pr: PaymentRecord,
     ) -> OrderRead:
         amt = Decimal(str(pr.amount_received)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        _assert_settlement_allowed(rp, amt)
         new_paid = (Decimal(str(rp.paid_amount)) + amt).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
@@ -470,11 +548,12 @@ class PaymentService:
         self._check_payment_currency(payload.currency, rp.currency)
 
         amt = payload.amount_received.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        ref = await _assert_unique_external_tx_ref(session, tenant_id, payload.external_tx_ref)
         pr = PaymentRecord(
             tenant_id=tenant_id,
             rp_id=rp.id,
             payment_method=payload.payment_method,
-            external_tx_ref=payload.external_tx_ref,
+            external_tx_ref=ref,
             amount_received=amt,
             currency=payload.currency.upper(),
             actual_fx_rate=payload.actual_fx_rate.quantize(
@@ -486,7 +565,7 @@ class PaymentService:
             paid_at=payload.paid_at or datetime.now(UTC),
         )
         session.add(pr)
-        await session.flush()
+        await _flush_payment_record(session, ref)
         await self._apply_verified_settlement(session, tenant_id, principal, rp, pr)
         return PaymentRecordRead.model_validate(pr)
 
@@ -507,11 +586,13 @@ class PaymentService:
             )
         rp = await self._lock_open_receivable(session, tenant_id, payload.rp_id)
         self._check_payment_currency(payload.currency, rp.currency)
+        ref = await _assert_unique_external_tx_ref(session, tenant_id, payload.external_tx_ref)
+        _assert_settlement_allowed(rp, _money(payload.amount_received))
         pr = PaymentRecord(
             tenant_id=tenant_id,
             rp_id=rp.id,
             payment_method=payload.payment_method,
-            external_tx_ref=payload.external_tx_ref,
+            external_tx_ref=ref,
             amount_received=payload.amount_received.quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             ),
@@ -525,7 +606,7 @@ class PaymentService:
             paid_at=payload.paid_at or datetime.now(UTC),
         )
         session.add(pr)
-        await session.flush()
+        await _flush_payment_record(session, ref)
         await record_audit_event(
             session,
             tenant_id=tenant_id,

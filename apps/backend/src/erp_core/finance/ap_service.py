@@ -29,6 +29,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.finance.schemas import ExactDecimal
@@ -52,8 +53,9 @@ _PAYABLE_COLUMNS = (
     "paid_amount, currency, due_date, status, payment_ref, paid_at, created_at, updated_at"
 )
 
-# POs that were cancelled never become a liability; everything else (draft,
-# ordered, partially_received, received) is real committed spend and is booked.
+# POs that were cancelled never become a liability, and a `draft` PO is not yet a
+# committed liability either: only `ordered`, `partially_received` and `received`
+# POs are real committed spend and are booked as AP documents.
 _SYNC_PAYABLES_SQL = """
     INSERT INTO payables (
         tenant_id, po_id, supplier_id, po_no, supplier_name,
@@ -74,13 +76,29 @@ _SYNC_PAYABLES_SQL = """
     LEFT JOIN suppliers s
         ON s.tenant_id = po.tenant_id AND s.id = po.supplier_id
     WHERE po.tenant_id = :tid
-      AND po.status <> 'cancelled'
+      AND po.status IN ('ordered', 'partially_received', 'received')
       AND NOT EXISTS (
           SELECT 1
           FROM payables p
           WHERE p.tenant_id = po.tenant_id AND p.po_id = po.id
       )
     RETURNING id, po_no, supplier_name, due_amount, currency
+"""
+
+# A PO that is still `draft` (or was cancelled after booking) must never keep an
+# untouched AP liability. `payables` only allows open/partial/paid (0012 CHECK), so
+# an unpaid orphan is deleted rather than flipped to a non-existent `void` status;
+# anything that already received money stays put as an auditable record.
+_PURGE_ORPHAN_PAYABLES_SQL = """
+    DELETE FROM payables p
+    USING purchase_orders po
+    WHERE p.tenant_id = :tid
+      AND po.tenant_id = p.tenant_id
+      AND po.id = p.po_id
+      AND po.status IN ('draft', 'cancelled')
+      AND p.status = 'open'
+      AND p.paid_amount = 0
+    RETURNING p.id, p.po_no, po.status AS po_status
 """
 
 _LIST_PAYABLES_SQL = f"""
@@ -120,10 +138,65 @@ _AP_TOTALS_SQL = """
       AND UPPER(currency) = UPPER(:ccy)
 """
 
+# Per-currency AR/AP position. A FULL OUTER JOIN keeps currencies that exist on only
+# one side of the ledger, so a foreign-currency receivable can never be hidden.
+_BY_CURRENCY_SQL = """
+    WITH ar AS (
+        SELECT
+            UPPER(TRIM(currency))          AS ccy,
+            COALESCE(SUM(due_amount), 0)   AS total_due,
+            COALESCE(SUM(paid_amount), 0)  AS total_paid
+        FROM receivables_payables
+        WHERE tenant_id = :tid
+          AND direction = 'receivable'
+          AND status <> 'void'
+        GROUP BY UPPER(TRIM(currency))
+    ), ap AS (
+        SELECT
+            UPPER(TRIM(currency))          AS ccy,
+            COALESCE(SUM(due_amount), 0)   AS total_due,
+            COALESCE(SUM(paid_amount), 0)  AS total_paid
+        FROM payables
+        WHERE tenant_id = :tid
+        GROUP BY UPPER(TRIM(currency))
+    )
+    SELECT
+        COALESCE(ar.ccy, ap.ccy)     AS ccy,
+        COALESCE(ar.total_due, 0)    AS ar_total,
+        COALESCE(ar.total_paid, 0)   AS ar_collected,
+        COALESCE(ap.total_due, 0)    AS ap_total,
+        COALESCE(ap.total_paid, 0)   AS ap_paid
+    FROM ar
+    FULL OUTER JOIN ap ON ap.ccy = ar.ccy
+    ORDER BY ccy
+"""
+
+_IDEMPOTENCY_LOOKUP_SQL = """
+    SELECT payable_id, amount
+    FROM payable_payments
+    WHERE tenant_id = :tid AND idempotency_key = :key
+"""
+
+_INSERT_PAYMENT_LEDGER_SQL = """
+    INSERT INTO payable_payments (
+        tenant_id, payable_id, amount, currency, payment_ref,
+        idempotency_key, paid_by_user_id, paid_at
+    ) VALUES (
+        :tid, :pid, :amount, :ccy, :ref,
+        :key, :uid, :paid_at
+    )
+"""
+
 
 def _money(value: Decimal | int | str) -> Decimal:
     """Quantise any monetary input to the ledger's 2-dp `NUMERIC(14, 2)` scale."""
     return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _idempotency_key(value: str | None) -> str | None:
+    """Normalise an idempotency key; an empty string is the same as no key at all."""
+    key = (value or "").strip()
+    return key or None
 
 
 class PayableRead(BaseModel):
@@ -163,6 +236,7 @@ class PayablePaymentRequest(BaseModel):
 
     amount: ExactDecimal = Field(gt=Decimal("0"), max_digits=14, decimal_places=2)
     payment_ref: str = Field(default="", max_length=128)
+    idempotency_key: str | None = Field(default=None, max_length=128)
     paid_at: datetime | None = None
 
     @field_validator("payment_ref")
@@ -170,9 +244,14 @@ class PayablePaymentRequest(BaseModel):
     def _strip_ref(cls, value: str) -> str:
         return value.strip()
 
+    @field_validator("idempotency_key")
+    @classmethod
+    def _strip_idempotency_key(cls, value: str | None) -> str | None:
+        return _idempotency_key(value)
 
-class CashflowSummaryRead(BaseModel):
-    """AR/AP position and net cash flow, all denominated in the tenant base currency."""
+
+class CurrencyCashflowBreakdown(BaseModel):
+    """One currency's AR/AP position, so foreign-currency flows are never hidden."""
 
     currency: str
     ar_total: Decimal
@@ -184,6 +263,25 @@ class CashflowSummaryRead(BaseModel):
     net_cashflow: Decimal
 
 
+class CashflowSummaryRead(BaseModel):
+    """AR/AP position and net cash flow, all denominated in the tenant base currency.
+
+    The top-level fields stay the base-currency summary (fully backwards compatible),
+    while `by_currency` reports every currency actually present in the ledger. Each
+    currency is only ever summed against itself - no cross-currency addition.
+    """
+
+    currency: str
+    ar_total: Decimal
+    ar_collected: Decimal
+    ar_outstanding: Decimal
+    ap_total: Decimal
+    ap_paid: Decimal
+    ap_outstanding: Decimal
+    net_cashflow: Decimal
+    by_currency: list[CurrencyCashflowBreakdown] = Field(default_factory=list)
+
+
 class PayableService:
     """Supplier AP ledger: PO ingestion, L0 settlement and the cash-flow summary."""
 
@@ -193,7 +291,12 @@ class PayableService:
         tenant_id: UUID,
         principal: CurrentPrincipal | None = None,
     ) -> int:
-        """Book an `open` payable for every purchase order that has none yet.
+        """Book an `open` payable for every committed purchase order that has none yet.
+
+        Only POs whose status is `ordered`, `partially_received` or `received` are
+        committed spend: `draft` POs are still being edited and `cancelled` POs are
+        never a liability. An unpaid payable whose PO is now `draft` or `cancelled` is
+        purged (audited), while a partially paid one is kept as an auditable record.
 
         Idempotent per ``(tenant_id, po_id)``: the ``NOT EXISTS`` guard makes a
         repeated call a no-op, and the advisory lock (released at transaction
@@ -204,6 +307,34 @@ class PayableService:
             text("SELECT pg_advisory_xact_lock(hashtext(:key)::bigint)"),
             {"key": f"finance.ap.sync:{tenant_id}"},
         )
+        actor_type: Literal["human_user", "system_cron"] = (
+            "human_user" if principal is not None else "system_cron"
+        )
+        actor_id = str(principal.user_id) if principal is not None else "finance.ap_service"
+
+        purged = (
+            (await session.execute(text(_PURGE_ORPHAN_PAYABLES_SQL), {"tid": tenant_id}))
+            .mappings()
+            .all()
+        )
+        for row in purged:
+            await record_audit_event(
+                session,
+                tenant_id=tenant_id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                action="finance.payable.purged_from_uncommitted_purchase_order",
+                resource_type="payable",
+                resource_id=row["id"],
+                before_state={
+                    "po_no": str(row["po_no"]),
+                    "po_status": str(row["po_status"]),
+                    "status": "open",
+                    "paid_amount": "0.00",
+                },
+                after_state=None,
+            )
+
         created = (
             (
                 await session.execute(
@@ -214,10 +345,6 @@ class PayableService:
             .mappings()
             .all()
         )
-        actor_type: Literal["human_user", "system_cron"] = (
-            "human_user" if principal is not None else "system_cron"
-        )
-        actor_id = str(principal.user_id) if principal is not None else "finance.ap_service"
         for row in created:
             await record_audit_event(
                 session,
@@ -282,8 +409,16 @@ class PayableService:
         principal: CurrentPrincipal,
         payable_id: UUID,
         payload: PayablePaymentRequest,
+        idempotency_key: str | None = None,
     ) -> PayableRead:
-        """Settle a payable (L0 fund red line) and advance ``open -> partial -> paid``."""
+        """Settle a payable (L0 fund red line) and advance ``open -> partial -> paid``.
+
+        Every settlement is written to the immutable `payable_payments` ledger inside
+        the same transaction as the `payables.paid_amount` update, keyed by
+        ``(tenant_id, idempotency_key)``. A retry with the same key and the same
+        ``(payable_id, amount)`` returns the already-updated payable without
+        double-counting; the same key with a different amount is a 409 conflict.
+        """
         self._ensure_payer(principal, tenant_id)
         row = (
             await session.execute(
@@ -304,6 +439,35 @@ class PayableService:
             )
 
         amount = _money(payload.amount)
+        key = _idempotency_key(idempotency_key) or _idempotency_key(payload.idempotency_key)
+        key = key or _idempotency_key(payload.payment_ref)
+        ledger_ready = key is not None and await self._ledger_ready(session)
+
+        if ledger_ready:
+            replay = (
+                (
+                    await session.execute(
+                        text(_IDEMPOTENCY_LOOKUP_SQL), {"tid": tenant_id, "key": key}
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if replay is not None:
+                if replay["payable_id"] == payable_id and _money(replay["amount"]) == amount:
+                    # Same request replayed: the payable already reflects this payment.
+                    return self._to_read(row)
+                raise AppError(
+                    slug="ap-idempotency-conflict",
+                    status_code=409,
+                    code="ERR_AP_IDEMPOTENCY_CONFLICT",
+                    title="Idempotency Key Conflict",
+                    detail=(
+                        f"Idempotency key '{key}' was already used for a different "
+                        "payable or amount."
+                    ),
+                )
+
         due = _money(row["due_amount"])
         already_paid = _money(row["paid_amount"])
         outstanding = _money(due - already_paid)
@@ -352,6 +516,33 @@ class PayableService:
             )
         ).mappings().one()
 
+        if ledger_ready:
+            try:
+                await session.execute(
+                    text(_INSERT_PAYMENT_LEDGER_SQL),
+                    {
+                        "tid": tenant_id,
+                        "pid": payable_id,
+                        "amount": amount,
+                        "ccy": str(row["currency"]).upper(),
+                        "ref": payment_ref,
+                        "key": key,
+                        "uid": principal.user_id,
+                        "paid_at": settled_at,
+                    },
+                )
+            except IntegrityError:
+                raise AppError(
+                    slug="ap-idempotency-conflict",
+                    status_code=409,
+                    code="ERR_AP_IDEMPOTENCY_CONFLICT",
+                    title="Idempotency Key Conflict",
+                    detail=(
+                        f"Idempotency key '{key}' was already used for a different "
+                        "payable or amount."
+                    ),
+                ) from None
+
         await record_audit_event(
             session,
             tenant_id=tenant_id,
@@ -371,6 +562,7 @@ class PayableService:
                 "outstanding": str(_money(due - new_paid)),
                 "status": new_status,
                 "payment_ref": payment_ref,
+                "idempotency_key": key,
             },
         )
         return self._to_read(updated)
@@ -402,6 +594,29 @@ class PayableService:
         ar_collected = _money(ar["total_paid"])
         ap_total = _money(ap["total_due"])
         ap_paid = _money(ap["total_paid"])
+        by_currency = [
+            CurrencyCashflowBreakdown(
+                currency=str(entry["ccy"]).strip().upper(),
+                ar_total=_money(entry["ar_total"]),
+                ar_collected=_money(entry["ar_collected"]),
+                ar_outstanding=_money(
+                    Decimal(str(entry["ar_total"])) - Decimal(str(entry["ar_collected"]))
+                ),
+                ap_total=_money(entry["ap_total"]),
+                ap_paid=_money(entry["ap_paid"]),
+                ap_outstanding=_money(
+                    Decimal(str(entry["ap_total"])) - Decimal(str(entry["ap_paid"]))
+                ),
+                net_cashflow=_money(
+                    Decimal(str(entry["ar_collected"])) - Decimal(str(entry["ap_paid"]))
+                ),
+            )
+            for entry in (
+                (await session.execute(text(_BY_CURRENCY_SQL), {"tid": tenant_id}))
+                .mappings()
+                .all()
+            )
+        ]
         return CashflowSummaryRead(
             currency=currency,
             ar_total=ar_total,
@@ -411,7 +626,20 @@ class PayableService:
             ap_paid=ap_paid,
             ap_outstanding=_money(ap_total - ap_paid),
             net_cashflow=_money(ar_collected - ap_paid),
+            by_currency=by_currency,
         )
+
+    @staticmethod
+    async def _ledger_ready(session: AsyncSession) -> bool:
+        """True once migration 0013 created `payable_payments`.
+
+        The ledger lands in a later revision than the rest of the AP module, so a
+        database that has not caught up yet still settles payables - it simply cannot
+        deduplicate retries until the table exists. `to_regclass` is a cheap catalog
+        probe and never raises for a missing relation.
+        """
+        present = await session.scalar(text("SELECT to_regclass('public.payable_payments')"))
+        return present is not None
 
     @staticmethod
     def _to_read(row: Mapping[str, Any] | RowMapping) -> PayableRead:

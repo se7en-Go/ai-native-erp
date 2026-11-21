@@ -29,6 +29,108 @@ from erp_core.tenancy.audit import record_audit_event
 
 logger = structlog.get_logger(__name__)
 
+#: Order -> tenant-base FX rates are locked at 6 decimal places (orders.fx_rate_to_base).
+FX_RATE_SCALE = Decimal("0.000001")
+
+#: USD-base reference rates (units of each currency per 1 USD). These are ONLY used when
+#: the caller has no live quote at hand: an ecommerce order must never inherit an invented
+#: rate such as a blanket 7.2 for CNY/EUR/GBP orders. Values mirror
+#: ``erp_core.finance.fx_service._FALLBACK_USD_RATES`` and are pinned by a regression test.
+USD_BASE_REFERENCE_RATES: Mapping[str, Decimal] = {
+    "USD": Decimal("1.0000"),
+    "CNY": Decimal("7.2400"),
+    "EUR": Decimal("0.9200"),
+    "GBP": Decimal("0.7900"),
+    "JPY": Decimal("154.0000"),
+    "HKD": Decimal("7.7800"),
+}
+
+
+def _quantize_fx_rate(value: Decimal) -> Decimal:
+    return value.quantize(FX_RATE_SCALE, rounding=ROUND_HALF_UP)
+
+
+def _units_per_usd(currency_code: str, usd_base_rates: Mapping[str, Decimal]) -> Decimal:
+    """Return how many `currency_code` units one USD buys."""
+    if currency_code == "USD":
+        return Decimal("1")
+    raw = usd_base_rates.get(currency_code)
+    quoted = Decimal(str(raw)) if raw is not None else None
+    if quoted is None or quoted <= Decimal("0"):
+        raise AppError(
+            slug="unsupported-fx-currency",
+            status_code=422,
+            code="ERR_UNSUPPORTED_FX_CURRENCY",
+            title="Unsupported FX Currency",
+            detail=(
+                f"No FX quote is available for currency '{currency_code}'; refusing to guess "
+                f"an order-to-base rate."
+            ),
+        )
+    return quoted
+
+
+def resolve_order_fx_rate(
+    *,
+    order_currency: str,
+    base_currency: str,
+    explicit_rate: Decimal | None,
+    live_rates_usd_base: Mapping[str, Decimal] | None = None,
+) -> tuple[Decimal, str]:
+    """Resolve the order -> tenant-base FX rate and tag where it came from.
+
+    ``rate`` multiplies order-currency amounts into the tenant base currency. ``source`` is
+    one of ``explicit`` (channel/order supplied), ``identity`` (same currency),
+    ``live_fx`` (caller supplied USD-base quotes) or ``fallback_fx`` (reference table).
+
+    A blanket default (the former 7.2) is deliberately impossible: cross rates are always
+    derived from USD-base quotes as ``quote(base) / quote(order)``.
+    """
+    if explicit_rate is not None:
+        explicit = Decimal(str(explicit_rate))
+        if explicit <= Decimal("0"):
+            raise AppError(
+                slug="invalid-order-fx-rate",
+                status_code=422,
+                code="ERR_INVALID_ORDER_FX_RATE",
+                title="Invalid Order FX Rate",
+                detail="An explicit order FX rate must be greater than zero.",
+            )
+        return _quantize_fx_rate(explicit), "explicit"
+
+    order_code = order_currency.strip().upper()
+    base_code = base_currency.strip().upper()
+    if len(order_code) != 3 or len(base_code) != 3:
+        raise AppError(
+            slug="invalid-currency-code",
+            status_code=422,
+            code="ERR_INVALID_CURRENCY_CODE",
+            title="Invalid Currency Code",
+            detail=(
+                "Order and base currency must be ISO-4217 three-letter codes "
+                f"(got order='{order_currency}', base='{base_currency}')."
+            ),
+        )
+    if order_code == base_code:
+        return _quantize_fx_rate(Decimal("1")), "identity"
+
+    has_live_rates = live_rates_usd_base is not None
+    usd_base_rates: Mapping[str, Decimal] = (
+        live_rates_usd_base if live_rates_usd_base is not None else USD_BASE_REFERENCE_RATES
+    )
+    rate = _quantize_fx_rate(
+        _units_per_usd(base_code, usd_base_rates) / _units_per_usd(order_code, usd_base_rates)
+    )
+    if rate <= Decimal("0"):
+        raise AppError(
+            slug="invalid-order-fx-rate",
+            status_code=422,
+            code="ERR_INVALID_ORDER_FX_RATE",
+            title="Invalid Order FX Rate",
+            detail=f"Resolved a non-positive {order_code}->{base_code} FX rate.",
+        )
+    return rate, ("live_fx" if has_live_rates else "fallback_fx")
+
 
 class NormalizedLineItem(BaseModel):
     external_sku: str
@@ -58,7 +160,8 @@ class NormalizedOrder(BaseModel):
     external_order_number: str | None = None
     order_mode: OrderMode = OrderMode.B2C_RETAIL
     currency: str = "USD"
-    fx_rate_to_base: Decimal = Decimal("7.200000")
+    #: Locked at ingestion by `resolve_order_fx_rate`; None means "resolve it, never guess".
+    fx_rate_to_base: Decimal | None = None
     subtotal_amount: Decimal
     shipping_charged: Decimal = Decimal("0.00")
     discount_amount: Decimal = Decimal("0.00")
@@ -261,6 +364,15 @@ class EcommerceOrderSyncService:
         self.payments = payment_service or PaymentService(order_service=self.orders)
         self.profits = profit_service or OrderProfitService()
 
+    @staticmethod
+    async def _tenant_base_currency(session: AsyncSession, tenant_id: UUID) -> str:
+        """Tenant reporting currency used to lock every imported order's FX rate."""
+        value = await session.scalar(
+            text("SELECT base_currency FROM tenants WHERE id = :tid"), {"tid": tenant_id}
+        )
+        code = str(value or "").strip().upper()
+        return code if len(code) == 3 else "CNY"
+
     async def ingest_normalized_order(
         self,
         session: AsyncSession,
@@ -270,6 +382,7 @@ class EcommerceOrderSyncService:
         order_dto: NormalizedOrder,
         actor_id: str = "ecommerce_sync",
     ) -> tuple[UUID, bool]:
+        """Idempotently import one storefront order, locking an honest FX rate."""
         existing = await self.orders.find_by_external_order(
             session, tenant_id, channel_account_id, order_dto.external_order_id
         )
@@ -342,6 +455,20 @@ class EcommerceOrderSyncService:
                 {"cid": company_id, "tid": tenant_id, "cust_id": customer_id},
             )
 
+        base_currency = await self._tenant_base_currency(session, tenant_id)
+        fx_rate_to_base, fx_source = resolve_order_fx_rate(
+            order_currency=order_dto.currency,
+            base_currency=base_currency,
+            explicit_rate=order_dto.fx_rate_to_base,
+        )
+        channel_metadata = {
+            **order_dto.channel_metadata,
+            "fx_source": fx_source,
+            "fx_rate_order_to_base": str(fx_rate_to_base),
+            "order_currency": order_dto.currency.strip().upper(),
+            "base_currency": base_currency,
+        }
+
         order_items: list[OrderItemInternal] = []
         for line in order_dto.line_items:
             resolved = await self.catalog.resolve_sku_for_channel(
@@ -388,7 +515,7 @@ class EcommerceOrderSyncService:
                 customer_id=customer_id,
                 warehouse_id=default_warehouse_id,
                 currency=order_dto.currency.upper(),
-                fx_rate_to_base=order_dto.fx_rate_to_base,
+                fx_rate_to_base=fx_rate_to_base,
                 subtotal_amount=order_dto.subtotal_amount,
                 shipping_charged=order_dto.shipping_charged,
                 discount_amount=order_dto.discount_amount,
@@ -396,7 +523,7 @@ class EcommerceOrderSyncService:
                 total_amount=order_dto.total_amount,
                 initial_fulfillment_status=order_dto.fulfillment_status,
                 initial_payment_status=order_dto.payment_status,
-                channel_metadata=order_dto.channel_metadata,
+                channel_metadata=channel_metadata,
                 items=order_items,
             ),
         )

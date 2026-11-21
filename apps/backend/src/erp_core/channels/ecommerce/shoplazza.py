@@ -7,7 +7,7 @@ import hashlib
 import hmac
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 import httpx
@@ -105,6 +105,31 @@ class ShoplazzaAdapter(CommercePlatformAdapter):
     def _decimal(value: Any) -> Decimal:
         return Decimal(str(value if value not in (None, "") else "0"))
 
+    def _normalize_line_item(self, item: Mapping[str, Any]) -> NormalizedLineItem | None:
+        """Build one line item from an explicit ``total`` or ``price * quantity``.
+
+        Shoplazza's ``price`` is per unit; falling back to it as the line total
+        under-reports multi-unit lines (and therefore revenue and CVP).
+        """
+        sku = str(item.get("sku") or "").strip()
+        if not sku:
+            return None
+        quantity = int(item.get("quantity") or 1)
+        explicit_total = item.get("total")
+        line_total = (
+            self._decimal(explicit_total)
+            if explicit_total not in (None, "")
+            else (self._decimal(item.get("price")) * Decimal(quantity)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        )
+        return NormalizedLineItem(
+            external_sku=sku,
+            title=str(item.get("title") or sku),
+            quantity=quantity,
+            line_total=line_total,
+        )
+
     def _normalize_order(self, order: dict[str, Any]) -> NormalizedOrder:
         customer = order.get("customer") or {}
         company = (order.get("company") or {}).get("name") if order.get("company") else None
@@ -145,14 +170,9 @@ class ShoplazzaAdapter(CommercePlatformAdapter):
                 else None
             ),
             line_items=[
-                NormalizedLineItem(
-                    external_sku=str(item["sku"]),
-                    title=str(item.get("title") or item["sku"]),
-                    quantity=int(item["quantity"]),
-                    line_total=self._decimal(item.get("total") or item.get("price")),
-                )
+                line
                 for item in order.get("line_items") or []
-                if str(item.get("sku") or "").strip()
+                if (line := self._normalize_line_item(item)) is not None
             ],
             channel_metadata=metadata,
             updated_at=datetime.fromisoformat(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal, Protocol
@@ -161,6 +162,41 @@ class OrderService:
             shipments=serialized_shipments,
         )
 
+    @staticmethod
+    async def _resolve_fx_rate_to_base(
+        session: AsyncSession,
+        tenant_id: UUID,
+        currency: str,
+        explicit_rate: Decimal | None,
+    ) -> tuple[Decimal, str]:
+        """Lock an honest order -> tenant-base FX rate and report where it came from.
+
+        Imported lazily because ``erp_core.channels.ecommerce.base`` imports this service
+        at module import time; a top-level import here would close an import cycle.
+        """
+        from erp_core.channels.ecommerce.base import resolve_order_fx_rate
+
+        base_currency = await session.scalar(
+            text("SELECT base_currency FROM tenants WHERE id = :tid"), {"tid": tenant_id}
+        )
+        return resolve_order_fx_rate(
+            order_currency=currency,
+            base_currency=str(base_currency or "").strip().upper() or "CNY",
+            explicit_rate=explicit_rate,
+        )
+
+    @staticmethod
+    def _with_refunded_amount(
+        channel_metadata: Mapping[str, Any],
+        payment_status: PaymentStatus,
+        total_amount: Decimal,
+    ) -> dict[str, Any]:
+        """Record the refunded amount so CVP stops counting refunded revenue."""
+        merged = dict(channel_metadata)
+        if payment_status == PaymentStatus.REFUNDED and "refunded_amount" not in merged:
+            merged["refunded_amount"] = str(total_amount)
+        return merged
+
     async def create_manual_order(
         self,
         session: AsyncSession,
@@ -197,6 +233,44 @@ class OrderService:
         total = (
             subtotal + payload.shipping_charged - payload.discount_amount + payload.tax_collected
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if total < Decimal("0.00"):
+            raise AppError(
+                slug="order-negative-total",
+                status_code=422,
+                code="ERR_ORDER_NEGATIVE_TOTAL",
+                title="Negative Order Total",
+                detail="Discount cannot exceed subtotal + shipping + tax.",
+            )
+        if payload.subtotal_amount is not None:
+            declared_subtotal = payload.subtotal_amount.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            if declared_subtotal != subtotal:
+                raise AppError(
+                    slug="order-subtotal-mismatch",
+                    status_code=422,
+                    code="ERR_ORDER_SUBTOTAL_MISMATCH",
+                    title="Order Subtotal Mismatch",
+                    detail=(
+                        f"Declared subtotal {declared_subtotal} does not match the priced "
+                        f"line items {subtotal}."
+                    ),
+                )
+        if payload.total_amount is not None:
+            declared_total = payload.total_amount.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            if declared_total != total:
+                raise AppError(
+                    slug="order-total-mismatch",
+                    status_code=422,
+                    code="ERR_ORDER_TOTAL_MISMATCH",
+                    title="Order Total Mismatch",
+                    detail=(
+                        f"Declared total {declared_total} does not match the priced "
+                        f"total {total}."
+                    ),
+                )
         initial_status = (
             FulfillmentStatus.PENDING_PAYMENT
             if payload.order_mode in {OrderMode.B2B_WHOLESALE, OrderMode.B2B_SAMPLE}
@@ -233,6 +307,15 @@ class OrderService:
     ) -> OrderRead:
         now = datetime.now(UTC)
         order_no = payload.order_no_override or f"ORD-{now:%Y%m%d}-{uuid4().hex[:6].upper()}"
+        fx_rate_to_base, fx_source = await self._resolve_fx_rate_to_base(
+            session, tenant_id, payload.currency, payload.fx_rate_to_base
+        )
+        channel_metadata: dict[str, Any] = self._with_refunded_amount(
+            dict(payload.channel_metadata or {}),
+            payload.initial_payment_status,
+            payload.total_amount,
+        )
+        channel_metadata.setdefault("fx_source", fx_source)
         order = Order(
             tenant_id=tenant_id,
             order_no=order_no,
@@ -242,7 +325,7 @@ class OrderService:
             customer_id=payload.customer_id,
             quote_id=payload.quote_id,
             currency=payload.currency.upper(),
-            fx_rate_to_base=payload.fx_rate_to_base.quantize(
+            fx_rate_to_base=fx_rate_to_base.quantize(
                 Decimal("0.000001"), rounding=ROUND_HALF_UP
             ),
             subtotal_amount=payload.subtotal_amount.quantize(
@@ -258,7 +341,7 @@ class OrderService:
             total_amount=payload.total_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
             fulfillment_status=payload.initial_fulfillment_status,
             payment_status=payload.initial_payment_status,
-            channel_metadata=payload.channel_metadata,
+            channel_metadata=channel_metadata,
         )
         session.add(order)
         await session.flush()
@@ -649,6 +732,12 @@ class OrderService:
                 if order.order_mode in {OrderMode.B2B_WHOLESALE, OrderMode.B2B_SAMPLE}
                 else FulfillmentStatus.CONFIRMED_RESERVED
             )
+        current_metadata = dict(order.channel_metadata or {})
+        refund_metadata = self._with_refunded_amount(
+            current_metadata, new_payment_status, Decimal(str(order.total_amount))
+        )
+        if refund_metadata != current_metadata:
+            order.channel_metadata = refund_metadata
         order.updated_at = datetime.now(UTC)
         await session.flush()
         return await self._serialize_order(session, tenant_id, order)
@@ -681,10 +770,14 @@ class OrderService:
             order.fulfillment_status = fulfillment_status
         if payment_status is not None:
             order.payment_status = payment_status
+        current_metadata = dict(order.channel_metadata or {})
+        refund_metadata = self._with_refunded_amount(
+            current_metadata, order.payment_status, Decimal(str(order.total_amount))
+        )
         if channel_metadata_patch:
-            merged = dict(order.channel_metadata or {})
-            merged.update(channel_metadata_patch)
-            order.channel_metadata = merged
+            refund_metadata.update(channel_metadata_patch)
+        if refund_metadata != current_metadata:
+            order.channel_metadata = refund_metadata
         order.updated_at = datetime.now(UTC)
         await session.flush()
         return await self._serialize_order(session, tenant_id, order)
