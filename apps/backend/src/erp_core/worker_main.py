@@ -23,6 +23,10 @@ import erp_core.finance.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
 
+# The worker publishes due social posts outside FastAPI, so its mapping needs the social
+# tables too (the ORM foreign keys from social_posts/social_accounts must resolve).
+import erp_core.social.models  # noqa: F401
+
 # The worker writes order rows outside FastAPI, so its mapping needs every table the
 # ORM foreign keys reference, exactly like api_main registers them.
 import erp_core.tenancy.models  # noqa: F401
@@ -43,6 +47,7 @@ from erp_core.shared.db import (
     system_session,
 )
 from erp_core.shared.redis_client import create_redis_client
+from erp_core.social.scheduler import dispatch_due_social_posts_cron
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +66,7 @@ COMMERCE_TRACKING_CHANNELS: tuple[str, ...] = (
 COMMERCE_DRAIN_INTERVAL_SECONDS = 2.0
 ECOMMERCE_RECONCILE_INTERVAL_SECONDS = 15 * 60.0
 STALLED_SHIPMENT_MONITOR_INTERVAL_SECONDS = 60 * 60.0
+SOCIAL_DISPATCH_INTERVAL_SECONDS = 60.0
 
 _settings = get_settings()
 broker = RedisStreamBroker(url=_settings.REDIS_URL)
@@ -68,6 +74,8 @@ schedule_source = ListRedisScheduleSource(url=_settings.REDIS_URL)
 scheduler = TaskiqScheduler(broker=broker, sources=[schedule_source, LabelScheduleSource(broker)])
 broker.task(schedule=[{"cron": "0 * * * *"}])(monitor_stalled_shipments_cron)
 broker.task(schedule=[{"cron": "*/15 * * * *"}])(reconcile_ecommerce_orders_cron)
+# Due scheduled social posts are dispatched every minute: `scheduled_at` is minute-granular.
+broker.task(schedule=[{"cron": "* * * * *"}])(dispatch_due_social_posts_cron)
 broker.task(process_17track_webhook)
 _runtime_engine = create_runtime_engine(_settings)
 _session_factory = create_session_factory(_runtime_engine)
@@ -199,6 +207,7 @@ async def _run_commerce_and_tracking_loop(
     drain_interval: float = COMMERCE_DRAIN_INTERVAL_SECONDS,
     reconcile_interval: float = ECOMMERCE_RECONCILE_INTERVAL_SECONDS,
     stalled_interval: float = STALLED_SHIPMENT_MONITOR_INTERVAL_SECONDS,
+    social_interval: float = SOCIAL_DISPATCH_INTERVAL_SECONDS,
     periodic_crons: bool | None = None,
 ) -> None:
     """Drain commerce/tracking streams and run the periodic commerce crons."""
@@ -206,6 +215,7 @@ async def _run_commerce_and_tracking_loop(
     crons = _periodic_crons_enabled() if periodic_crons is None else periodic_crons
     next_reconcile = loop.time() + reconcile_interval
     next_stalled = loop.time() + stalled_interval
+    next_social = loop.time() + social_interval
     logger.info("commerce/tracking worker loop starting (periodic_crons=%s)", crons)
     while not stop.is_set():
         try:
@@ -232,6 +242,14 @@ async def _run_commerce_and_tracking_loop(
                 except Exception:
                     logger.exception("stalled shipment monitor cron failed")
                 next_stalled = now + stalled_interval
+            if now >= next_social:
+                try:
+                    dispatched = await dispatch_due_social_posts_cron()
+                    logger.info("scheduled social dispatch: %s", dispatched)
+                except Exception:
+                    # A platform outage must never kill the worker loop.
+                    logger.exception("scheduled social dispatch cron failed")
+                next_social = now + social_interval
         if await _wait_for_stop(stop, drain_interval):
             break
     logger.info("commerce/tracking worker loop stopped")

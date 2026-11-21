@@ -168,10 +168,22 @@ class PostRead(BaseModel):
 
 
 class PostPublish(BaseModel):
-    """Manual platforms require an explicit human confirmation from the official console."""
+    """How a publish was confirmed, and whether the platform API should be called.
+
+    `manual_confirmation` is the only honest path for `manual_export` platforms: a human
+    posts in the official creation console and records the result here. `external_post_id`
+    records a post id produced outside this workspace (also used for API platforms whose
+    console was used instead of the API).
+
+    `execute_remote` opts into a *real* outbound publish through the platform's official
+    API: the stored OAuth token is decrypted and used to call the vendor endpoint, and the
+    returned receipt becomes the post's `external_post_id`. It defaults to `False` so the
+    historical record-only behaviour is never changed by an older caller.
+    """
 
     manual_confirmation: bool = False
     external_post_id: str | None = Field(default=None, max_length=200)
+    execute_remote: bool = False
 
 
 class CaptionGenerate(BaseModel):

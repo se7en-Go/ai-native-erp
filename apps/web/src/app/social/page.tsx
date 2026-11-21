@@ -27,7 +27,7 @@ import { SocialContentCalendar } from "@/components/social/social-content-calend
 import { SocialPostEditor } from "@/components/social/social-post-editor";
 import { SocialMentionsFeed } from "@/components/social/social-mentions-feed";
 import { getPlaybook, PLATFORM_PLAYBOOKS } from "@/components/social/platform-playbooks";
-import { count, panel, postStatusLabel, postStatusTone, platformLabel, primary } from "@/components/social/presentation";
+import { count, panel, postDeliveryLabel, postStatusLabel, postStatusTone, platformLabel, primary } from "@/components/social/presentation";
 import type {
   SkuOption,
   SocialPlatform,
@@ -54,6 +54,7 @@ import {
   generateSocialCaption,
   publishSocialPost,
   saveSocialPosts,
+  socialPostDelivery,
 } from "@/lib/phase3d-data";
 import { fetchSocialAttributionFunnel } from "@/lib/api-client/pack-g-ap-social";
 
@@ -530,6 +531,8 @@ export default function SocialMarketingPage() {
   const [pendingPlatforms, setPendingPlatforms] = useState<readonly SocialPlatform[]>([]);
   const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
   const [publishPending, setPublishPending] = useState<string | null>(null);
+  // 默认 false：不调用官方 API，只登记本地记录，绝不冒充已外发。
+  const [executeRemote, setExecuteRemote] = useState(false);
 
   const proposalsQuery = useQuery({
     queryKey: ["ai", "proposals", "pending-count"],
@@ -612,11 +615,21 @@ export default function SocialMarketingPage() {
   });
 
   const publish = useMutation({
-    mutationFn: (post: SocialPost) =>
-      publishSocialPost(post.id, getPlaybook(post.platform).publish_mode === "manual_export"),
+    mutationFn: (post: SocialPost) => {
+      const manualOnly = getPlaybook(post.platform).publish_mode === "manual_export";
+      // 只有具备发布接口的平台才真的调官方 API；手动导出平台永远不代发。
+      return publishSocialPost(post.id, manualOnly, {
+        executeRemote: !manualOnly && executeRemote,
+      });
+    },
     onMutate: (post) => setPublishPending(post.id),
     onSuccess: (post) => {
-      setFeedback({ error: false, text: `${platformLabel(post.platform)} 已标记为已发布。` });
+      const delivery = postDeliveryLabel(socialPostDelivery(post));
+      const external = post.external_post_id ? ` · ${post.external_post_id}` : "";
+      setFeedback({
+        error: false,
+        text: `${platformLabel(post.platform)}：${delivery.zh}${external}`,
+      });
     },
     onError: () => setFeedback({ error: true, text: "标记发布失败，请重试。" }),
     onSettled: () => {
@@ -658,6 +671,8 @@ export default function SocialMarketingPage() {
   }, [posts]);
 
   const queue = posts.filter((post) => post.status === "draft" || post.status === "scheduled");
+  // 已发布贴文的送达口径：外部平台已确认 / 人工确认 / 仅本地记录。
+  const published = posts.filter((post) => post.status === "published");
 
   async function handleGenerateCaption(request: {
     platform: SocialPlatform;
@@ -814,16 +829,34 @@ export default function SocialMarketingPage() {
                 aria-label="待发布队列"
                 className={panel + " dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"}
               >
-                <header className="mb-3">
-                  <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900 dark:text-slate-100">
-                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60">
-                      <Library aria-hidden="true" size={15} />
+                <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-900 dark:text-slate-100">
+                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60">
+                        <Library aria-hidden="true" size={15} />
+                      </span>
+                      发布中心
+                    </h2>
+                    <p className="mt-1 text-[12.5px] leading-6 text-slate-600 dark:text-slate-400">
+                      标记发布只登记真实回执：开启实时外发才调官方 API，否则仅写本地记录；人工发布平台需先在官方后台完成发布。
+                    </p>
+                  </div>
+                  {/* 实时外发开关：只有具备发布接口的平台才会真的调官方 API。 */}
+                  <label className="flex max-w-sm cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200">
+                    <input
+                      type="checkbox"
+                      data-testid="social-remote-publish-toggle"
+                      checked={executeRemote}
+                      onChange={() => setExecuteRemote((current) => !current)}
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 accent-blue-600"
+                    />
+                    <span className="min-w-0">
+                      调用官方 API 实时外发（需已授权 OAuth Token）
+                      <span className="mt-0.5 block text-[10.5px] font-normal text-slate-500 dark:text-slate-400">
+                        关闭时只登记本地记录；手动导出平台始终需在官方后台人工发布。
+                      </span>
                     </span>
-                    发布中心
-                  </h2>
-                  <p className="mt-1 text-[12.5px] leading-6 text-slate-600 dark:text-slate-400">
-                    标记发布只登记真实回执，不会代你在任何平台发起未授权发帖；人工发布平台需先在官方后台完成发布。
-                  </p>
+                  </label>
                 </header>
                 {!queue.length ? (
                   <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
@@ -864,6 +897,42 @@ export default function SocialMarketingPage() {
                     ))}
                   </ul>
                 )}
+
+                {/* 已发布贴文的送达口径：外部平台已确认 / 人工确认 / 仅本地记录。 */}
+                {published.length ? (
+                  <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                    <h3 className="text-[12.5px] font-bold text-slate-800 dark:text-slate-200">
+                      已发布送达口径
+                    </h3>
+                    <ul data-testid="social-delivery-list" className="mt-1.5 space-y-1">
+                      {published.slice(0, 5).map((post) => {
+                        const deliveryFields = socialPostDelivery(post);
+                        const delivery = postDeliveryLabel(deliveryFields);
+                        return (
+                          <li
+                            key={post.id}
+                            data-testid={`social-delivery-row-${post.id}`}
+                            className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-slate-700 dark:text-slate-300"
+                          >
+                            <span
+                              data-testid={`social-delivery-badge-${post.id}`}
+                              className={"inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold " + delivery.tone}
+                            >
+                              {delivery.zh}
+                            </span>
+                            <span className="font-semibold">{platformLabel(post.platform)}</span>
+                            <span className="min-w-0 truncate">{post.caption}</span>
+                            {deliveryFields.external_post_id ? (
+                              <span className="font-mono text-[10.5px] text-slate-500 dark:text-slate-400">
+                                {deliveryFields.external_post_id}
+                              </span>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
               </section>
             </div>
           ) : null}

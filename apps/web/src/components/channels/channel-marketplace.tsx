@@ -69,7 +69,10 @@ export function livechatEmbedSnippet(
  * 渠道「真实能力」三档（诚实标注，不夸大）：
  * - live_messaging：真的能收发实时消息（Webhook 验签 + 出站发送）。
  * - order_sync：订单 / 库存 / 商品数据双向同步，但不承载会话消息。
- * - credentials_only：只做凭证加密托管（+ 询盘邮箱 / SKU 映射准备），不保证实时外发。
+ * - credentials_only：只做凭证加密托管，不保证实时外发（当前 14 个渠道已全部脱离该档位）。
+ *
+ * PR #44 之后，Alibaba.com IOP / Amazon SP-API / eBay Sell API 都具备真实的
+ * 刊登推送与订单回拉适配器，因此这三个渠道从「仅凭证」升级为 `order_sync`。
  */
 export type ChannelCapabilityTier =
   | "live_messaging"
@@ -293,54 +296,54 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     titleZh: "Alibaba.com 国际站",
     titleEn: "Alibaba.com",
     descriptionZh:
-      "App Key/Secret 信封加密托管 + 询盘邮箱绑定，询盘直接进 Inbox（不做商品刊登推送）。",
+      "App Key/Secret 信封加密托管，IOP 官方接口实时推送刊登，订单与询盘自动回拉进 ERP。",
     descriptionEn:
-      "App key/secret vaulted plus inquiry mailbox — inquiries land in Inbox, with no listing push.",
+      "App key/secret vaulted (AES-256-GCM); the official IOP API pushes live listings and syncs orders and inquiries automatically.",
     category: "commerce",
     icon: Building2,
     tile: "bg-orange-50 text-orange-700 ring-orange-100",
     accent: "bg-orange-500",
     channelTypes: ["alibaba_email"],
     adminOnly: true,
-    capabilityTier: "credentials_only",
-    capabilityBadgeZh: "凭证与询盘邮箱",
-    capabilityBadgeEn: "Credentials & inquiry email",
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "实时刊登 · 订单与询盘",
+    capabilityBadgeEn: "Live listing · Orders & inquiries",
   },
   {
     key: "amazon",
     titleZh: "Amazon 卖家中心",
     titleEn: "Amazon Seller Central",
     descriptionZh:
-      "Seller ID / Marketplace ID / LWA 与 Refresh Token 信封加密托管，本地 SKU 映射准备（不推送商品上架）。",
+      "Seller ID / LWA 与 Refresh Token 信封加密托管，SP-API 实时推送刊登并自动拉取订单回写 ERP。",
     descriptionEn:
-      "Seller ID, marketplace ID, LWA keys and refresh token vaulted; local SKU mapping prep only, no listing push.",
+      "Seller ID, LWA keys and refresh token vaulted (AES-256-GCM); SP-API pushes live listings and pulls orders back into the ERP.",
     category: "commerce",
     icon: Package,
     tile: "bg-amber-50 text-amber-700 ring-amber-100",
     accent: "bg-amber-500",
     channelTypes: ["amazon_sp"],
     adminOnly: true,
-    capabilityTier: "credentials_only",
-    capabilityBadgeZh: "凭证接入 · SKU映射",
-    capabilityBadgeEn: "Credentials · SKU mapping",
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "SP-API 实时刊登与拉单",
+    capabilityBadgeEn: "SP-API listing & order sync",
   },
   {
     key: "ebay",
     titleZh: "eBay",
     titleEn: "eBay",
     descriptionZh:
-      "Seller Username / Site ID / App + Cert ID 与 Refresh Token 信封加密托管，本地 SKU 映射准备（不推送商品上架）。",
+      "Seller Username / App + Cert ID 与 Refresh Token 信封加密托管，Sell API 实时推送刊登并自动拉取订单回写 ERP。",
     descriptionEn:
-      "Seller username, site ID, app/cert IDs and refresh token vaulted; local SKU mapping prep only, no listing push.",
+      "Seller username, app/cert IDs and refresh token vaulted (AES-256-GCM); the Sell API pushes live listings and pulls orders back into the ERP.",
     category: "commerce",
     icon: BadgeDollarSign,
     tile: "bg-sky-50 text-sky-700 ring-sky-100",
     accent: "bg-sky-600",
     channelTypes: ["ebay"],
     adminOnly: true,
-    capabilityTier: "credentials_only",
-    capabilityBadgeZh: "凭证接入 · SKU映射",
-    capabilityBadgeEn: "Credentials · SKU mapping",
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "Sell API 实时刊登与拉单",
+    capabilityBadgeEn: "Sell API listing & order sync",
   },
 ];
 

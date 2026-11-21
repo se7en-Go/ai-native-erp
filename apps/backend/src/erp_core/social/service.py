@@ -4,9 +4,13 @@ Compliance contract enforced here (not only in the UI):
 
 * scheduling a post on a `manual_export` platform is rejected with 422
   `ERR_SOCIAL_MANUAL_PUBLISH_ONLY` — no silent "scheduled but never posted" rows;
-* publishing never performs an outbound post: an API platform needs a *connected*
-  account before the row may be marked published, and a manual platform needs an
-  explicit human confirmation from the official console;
+* publishing records a delivery instead of pretending one happened: a plain publish only
+  stamps what the operator reported, `execute_remote=True` decrypts the stored OAuth token
+  and really calls the vendor API (through an injected `SocialPublisherPort`), and a manual
+  platform needs an explicit human confirmation from the official console;
+* a remote publish never fabricates success: the upstream receipt is the only source of
+  `external_post_id`, `delivery_mode = "external_api"`, and a revoked token flips the
+  account to `token_expired` instead of being retried every minute;
 * OAuth tokens only ever reach the database through `EnvelopeCryptoService` with
   `AAD = f"{tenant_id}:{account_id}:social_oauth"`, and disconnect shreds the
   envelope so a revoked grant leaves no ciphertext behind.
@@ -15,6 +19,7 @@ Compliance contract enforced here (not only in the UI):
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
@@ -30,7 +35,17 @@ from erp_core.shared.pagination import PaginatedResponse
 from erp_core.shared.query import page_of, record_not_found
 from erp_core.social.marketing_playbooks import marketing_playbooks
 from erp_core.social.models import SocialAccount, SocialMention, SocialPost
-from erp_core.social.playbooks import PLAYBOOKS, playbook_for, supports_scheduled_publish
+from erp_core.social.playbooks import (
+    PLAYBOOKS,
+    SocialPlatform,
+    playbook_for,
+    supports_scheduled_publish,
+)
+from erp_core.social.publishers import (
+    SocialPublisherPort,
+    SocialPublishRequest,
+    SocialTokenExpiredError,
+)
 from erp_core.social.schemas import (
     AccountConnect,
     AccountRead,
@@ -88,6 +103,33 @@ def account_not_connected(platform: str) -> AppError:
     )
 
 
+def social_token_missing(platform: str) -> AppError:
+    return AppError(
+        slug="social-token-missing",
+        title="Social Token Missing",
+        status_code=409,
+        detail=(
+            f"The connected {playbook_for(platform).label} account stores no OAuth token, so "
+            "nothing can be sent to the platform. Re-authorize the account with an access "
+            "token, then publish again."
+        ),
+        code="ERR_SOCIAL_TOKEN_MISSING",
+    )
+
+
+def social_publisher_unavailable() -> AppError:
+    return AppError(
+        slug="social-publisher-unavailable",
+        title="Social Publisher Unavailable",
+        status_code=503,
+        detail=(
+            "No live social publishing adapter is wired into this deployment, so the post was "
+            "not sent to the platform. Configure the publisher and publish again."
+        ),
+        code="ERR_SOCIAL_PUBLISHER_UNAVAILABLE",
+    )
+
+
 def caption_provider_unavailable() -> AppError:
     """Fail closed: never fabricate marketing copy when no provider is configured."""
     return AppError(
@@ -113,10 +155,20 @@ def invalid_post_status(status: str) -> AppError:
 
 
 class SocialService:
-    """Stateless service; the crypto service is the only collaborator it needs."""
+    """Stateless service; token crypto plus an optional live publishing port.
 
-    def __init__(self, crypto_service: EnvelopeCryptoService) -> None:
+    `publisher` is injected by the composition root (and by tests) rather than imported
+    from a concrete HTTP client, which keeps `erp_core.social` isolated from the commerce
+    domains and lets the suite drive every vendor response through `httpx.MockTransport`.
+    """
+
+    def __init__(
+        self,
+        crypto_service: EnvelopeCryptoService,
+        publisher: SocialPublisherPort | None = None,
+    ) -> None:
         self._crypto = crypto_service
+        self._publisher = publisher
 
     # -- platform matrix ---------------------------------------------------
 
@@ -461,6 +513,131 @@ class SocialService:
         await session.flush()
         return self._post_read(post)
 
+    async def _account_for_publish(
+        self, session: AsyncSession, tenant_id: UUID, post: SocialPost
+    ) -> SocialAccount:
+        """Resolve the *connected* account this post publishes through, or fail closed."""
+        account = (
+            await self._assert_account(session, tenant_id, post.social_account_id)
+            if post.social_account_id is not None
+            else await session.scalar(
+                sa.select(SocialAccount).where(
+                    SocialAccount.tenant_id == tenant_id,
+                    SocialAccount.platform == post.platform,
+                    SocialAccount.status == "connected",
+                )
+            )
+        )
+        if account is None or account.status != "connected":
+            raise account_not_connected(post.platform)
+        post.social_account_id = account.id
+        return account
+
+    async def _decrypt_access_token(
+        self, session: AsyncSession, tenant_id: UUID, account: SocialAccount
+    ) -> str:
+        """Decrypt the envelope stored for `account`; a partial envelope fails closed."""
+        ciphertext = account.token_ciphertext
+        nonce = account.token_nonce
+        auth_tag = account.token_auth_tag
+        key_version = account.token_key_version
+        if ciphertext is None or nonce is None or auth_tag is None or key_version is None:
+            raise social_token_missing(account.platform)
+        return await self._crypto.decrypt_secret(
+            session,
+            tenant_id,
+            account.id,
+            SOCIAL_CRED_TYPE,
+            ciphertext,
+            nonce,
+            auth_tag,
+            key_version,
+        )
+
+    async def _mark_publish_failed(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        post: SocialPost,
+        *,
+        code: str,
+        detail: str,
+        token_expired: bool = False,
+    ) -> None:
+        """Persist a terminal failure so the scheduler cannot retry it forever.
+
+        The sanitized upstream `code`/`detail` land in `metrics.publish_error*` (never the
+        raw body, and never the token: `SocialTokenExpiredError.detail` is already
+        scrubbed by the publisher). A revoked grant also flips the account to
+        `token_expired`, which is what the API surfaces as 401.
+        """
+        if token_expired and post.social_account_id is not None:
+            account = await session.scalar(
+                sa.select(SocialAccount).where(
+                    SocialAccount.tenant_id == tenant_id,
+                    SocialAccount.id == post.social_account_id,
+                )
+            )
+            if account is not None:
+                account.status = "token_expired"
+                account.updated_at = datetime.now(UTC)
+        post.status = "failed"
+        post.metrics = {
+            **(post.metrics or {}),
+            "publish_error": code,
+            "publish_error_detail": detail[:300],
+        }
+        post.updated_at = datetime.now(UTC)
+        await session.flush()
+
+    async def _publish_remote(
+        self, session: AsyncSession, tenant_id: UUID, post: SocialPost
+    ) -> PostRead:
+        """Really call the platform API and persist only what the platform confirmed."""
+        if not supports_scheduled_publish(post.platform):
+            raise manual_publish_only(post.platform)
+        account = await self._account_for_publish(session, tenant_id, post)
+        access_token = await self._decrypt_access_token(session, tenant_id, account)
+        publisher = self._publisher
+        if publisher is None:
+            raise social_publisher_unavailable()
+        try:
+            receipt = await publisher.publish(
+                SocialPublishRequest(
+                    platform=cast(SocialPlatform, post.platform),
+                    external_account_id=account.external_account_id,
+                    handle=account.handle,
+                    access_token=access_token,
+                    title=post.title,
+                    caption=post.caption,
+                    hashtags=list(post.hashtags or []),
+                    media_urls=list(post.media_urls or []),
+                    account_config=dict(account.config or {}),
+                )
+            )
+        except SocialTokenExpiredError as exc:
+            # Stamped inside the caller's transaction: the cron sweep commits `failed` +
+            # `token_expired`; the HTTP route rolls back and answers 401 instead of
+            # faking a publish.
+            await self._mark_publish_failed(
+                session, tenant_id, post, code=exc.code, detail=exc.detail, token_expired=True
+            )
+            raise
+        post.status = "published"
+        post.published_at = datetime.now(UTC)
+        post.external_post_id = receipt.external_post_id
+        post.metrics = {
+            **(post.metrics or {}),
+            "publish_channel": "api",
+            "delivery_mode": "external_api",
+            "external_publish_confirmed": True,
+            "permalink": receipt.permalink,
+            "remote_status": receipt.remote_status,
+        }
+        post.updated_at = datetime.now(UTC)
+        await session.flush()
+        return self._post_read(post)
+
     async def publish_post(
         self,
         session: AsyncSession,
@@ -472,23 +649,12 @@ class SocialService:
         if post.status == "published":
             # Idempotent: a retried publish must not double-stamp published_at.
             return self._post_read(post)
+        if payload.execute_remote:
+            return await self._publish_remote(session, tenant_id, post)
 
         delivery_mode: DeliveryMode
         if supports_scheduled_publish(post.platform):
-            account = (
-                await self._assert_account(session, tenant_id, post.social_account_id)
-                if post.social_account_id is not None
-                else await session.scalar(
-                    sa.select(SocialAccount).where(
-                        SocialAccount.tenant_id == tenant_id,
-                        SocialAccount.platform == post.platform,
-                        SocialAccount.status == "connected",
-                    )
-                )
-            )
-            if account is None or account.status != "connected":
-                raise account_not_connected(post.platform)
-            post.social_account_id = account.id
+            await self._account_for_publish(session, tenant_id, post)
             channel = "api"
             delivery_mode = "external_api" if payload.external_post_id else "recorded_local"
         else:
@@ -509,6 +675,65 @@ class SocialService:
         post.updated_at = datetime.now(UTC)
         await session.flush()
         return self._post_read(post)
+
+    async def dispatch_due_scheduled_posts(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        *,
+        now: datetime | None = None,
+        limit: int = 50,
+    ) -> dict[str, int]:
+        """Publish every due `scheduled` post for one tenant through the live APIs.
+
+        Rows are locked with `FOR UPDATE SKIP LOCKED` so two scheduler replicas never
+        publish the same post twice. A failure is persisted as a terminal `failed` row
+        (plus `token_expired` on the account for a revoked grant) so the next sweep does
+        not retry it every minute: only `scheduled` rows are ever selected.
+
+        Returns ``{"scanned": n, "published": n, "failed": n}``.
+        """
+        moment = now or datetime.now(UTC)
+        due = list(
+            (
+                await session.scalars(
+                    sa.select(SocialPost)
+                    .where(
+                        SocialPost.tenant_id == tenant_id,
+                        SocialPost.status == "scheduled",
+                        SocialPost.scheduled_at.is_not(None),
+                        SocialPost.scheduled_at <= moment,
+                    )
+                    .order_by(SocialPost.scheduled_at.asc(), SocialPost.id.asc())
+                    .limit(limit)
+                    .with_for_update(skip_locked=True)
+                )
+            ).all()
+        )
+        stats = {"scanned": len(due), "published": 0, "failed": 0}
+        for post in due:
+            try:
+                await self.publish_post(
+                    session, tenant_id, post.id, PostPublish(execute_remote=True)
+                )
+            except SocialTokenExpiredError as exc:
+                await self._mark_publish_failed(
+                    session,
+                    tenant_id,
+                    post,
+                    code=exc.code,
+                    detail=exc.detail,
+                    token_expired=True,
+                )
+                stats["failed"] += 1
+            except AppError as exc:
+                await self._mark_publish_failed(
+                    session, tenant_id, post, code=exc.code, detail=exc.detail
+                )
+                stats["failed"] += 1
+            else:
+                stats["published"] += 1
+        return stats
 
     # -- mentions ----------------------------------------------------------
 
