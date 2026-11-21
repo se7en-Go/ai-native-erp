@@ -510,6 +510,7 @@ async def test_outbound_dispatch_failure_keeps_entry_pending_for_xautoclaim() ->
         message_id=uuid.uuid4(),
         body_text="boom",
     )
+    await redis.xgroup_create(stream_key, group, id="$", mkstream=True)
     entry_id = await redis.xadd(
         stream_key, {"payload": json.dumps(request.model_dump(mode="json"))}
     )
@@ -520,7 +521,6 @@ async def test_outbound_dispatch_failure_keeps_entry_pending_for_xautoclaim() ->
     original = ingress_worker.send_outbound_message
     ingress_worker.send_outbound_message = _boom  # type: ignore[assignment]
     try:
-        await redis.xgroup_create(stream_key, group, id="0", mkstream=True)
         consumed = await ingress_worker.consume_outbound_stream_batch(
             session_factory=None,  # type: ignore[arg-type]
             redis=redis,
@@ -544,7 +544,8 @@ async def test_outbound_dispatch_failure_keeps_entry_pending_for_xautoclaim() ->
         reclaimed_ids = [msg_id for msg_id, _fields in claimed[1]]
         assert entry_id in reclaimed_ids
     finally:
-        await redis.delete(stream_key)
+        await redis.xgroup_destroy(stream_key, group)
+        await redis.xdel(stream_key, entry_id)
         await redis.aclose()
 
 
