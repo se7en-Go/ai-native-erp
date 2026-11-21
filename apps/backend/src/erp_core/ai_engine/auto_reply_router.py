@@ -98,6 +98,7 @@ async def run_auto_reply(
 ) -> AutoReplyRunResponse:
     """Draft or send one grounded reply; risk-sensitive threads are forced to L1."""
     ip_address, user_agent = _client_context(request)
+    redis = getattr(request.app.state, "redis", None)
     return await service.run(
         session,
         principal,
@@ -105,6 +106,7 @@ async def run_auto_reply(
         body,
         ip_address=ip_address,
         user_agent=user_agent,
+        redis=redis,
     )
 
 
