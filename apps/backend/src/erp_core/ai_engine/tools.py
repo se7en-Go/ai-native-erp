@@ -339,7 +339,22 @@ class ErpToolRegistry:
         session: AsyncSession,
         tenant_id: UUID,
         order_no: str,
+        *,
+        customer_id: UUID | None = None,
     ) -> ToolResult:
+        """Read live fulfillment/tracking facts for one order.
+
+        Internal staff callers omit ``customer_id``; buyer-facing paths (auto-reply,
+        proposal drafting) pass it so the lookup is additionally scoped to the buyer's
+        own orders — a buyer can never read another buyer's tracking inside the same
+        tenant.
+        """
+        params: dict[str, Any] = {"tid": tenant_id, "order_no": order_no.strip()}
+        ownership_clause = ""
+        if customer_id is not None:
+            ownership_clause = " AND customer_id = :customer_id"
+            params["customer_id"] = customer_id
+
         order_row = (
             (
                 await session.execute(
@@ -349,11 +364,13 @@ class ErpToolRegistry:
                         id, order_no, order_mode, currency, total_amount,
                         fulfillment_status, payment_status, created_at
                     FROM orders
-                    WHERE tenant_id = :tid AND order_no = :order_no
+                    WHERE tenant_id = :tid AND order_no = :order_no"""
+                        + ownership_clause
+                        + """
                     LIMIT 1
                     """
                     ),
-                    {"tid": tenant_id, "order_no": order_no.strip()},
+                    params,
                 )
             )
             .mappings()

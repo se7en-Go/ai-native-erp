@@ -14,10 +14,16 @@ Design invariants
    ``ai_proposals.confidence_score NUMERIC(4,3)``.
 4. **Tenant + AGENT isolation.** Conversation loading and the AGENT mailbox visibility
    rule are delegated to :class:`AiProposalGeneratorService`, so this module cannot drift
-   from the policy already enforced by ``POST /conversations/{id}/propose-reply``.
+   from the policy already enforced by ``POST /conversations/{id}/propose-reply``. The
+   customer-level AI profile read applies the same rule with plain tenant-scoped SQL.
+5. **Per-inbound-turn idempotency.** When a caller supplies ``source_message_id``, an
+   outbound reply already stored for that inbound message is replayed instead of re-sent,
+   and the inbound id is persisted as ``channel_metadata.in_reply_to_message_id``.
 
 All drafting is deterministic (no LLM call), therefore every number in an outbound
-message is traceable to a stored evidence row.
+message is traceable to a stored evidence row. Any LLM-polished candidate must additionally
+pass the paired numeric guard: numbers *and* price mentions are verified separately, so a
+stock count can never become a quoted price.
 """
 
 from __future__ import annotations
@@ -48,6 +54,7 @@ from erp_core.ai_engine.proposal_generator import (
 from erp_core.ai_engine.rag_service import build_websearch_tsquery
 from erp_core.ai_engine.router_llm import MODEL_CATALOG, AsyncMultiProviderClient
 from erp_core.ai_engine.tools import ErpToolRegistry
+from erp_core.shared.enums import UserRole
 from erp_core.shared.errors import AppError
 from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.dependencies import CurrentPrincipal
@@ -129,24 +136,35 @@ class CustomerAiProfileRead(BaseModel):
 _RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "refund",
-        re.compile(r"\brefund(?:s|ed|ing)?\b|退款|退钱|退还货款|返还货款", re.I),
+        re.compile(
+            r"\brefund(?:s|ed|ing)?\b|退款|退钱|退还货款|返还货款|\breembols(?:o|os)\b",
+            re.I,
+        ),
     ),
     (
         "chargeback",
-        re.compile(r"\bcharge[\s-]?back\b|拒付|退单|reversal", re.I),
+        re.compile(r"\bcharge[\s-]?back\b|拒付|退单|reversal|\bcontracargos?\b", re.I),
     ),
     (
         "dispute",
-        re.compile(r"\bdispute\b|\bclaim\b|纠纷|投诉理赔|争议", re.I),
+        re.compile(
+            r"\bdispute\b|\bclaim\b|纠纷|投诉理赔|争议|\bdisputas?\b|\breclamo\s+legal\b",
+            re.I,
+        ),
     ),
     (
         "compensation",
-        re.compile(r"\bcompensat(?:e|ion|ory)\b|\bdamages\b|赔付|赔偿", re.I),
+        re.compile(
+            r"\bcompensat(?:e|ion|ory)\b|\bdamages\b|赔付|赔偿"
+            r"|\bcompensaci[oó]n(?:es)?\b|\bindemnizaci[oó]n(?:es)?\b",
+            re.I,
+        ),
     ),
     (
         "goods_return",
         re.compile(
-            r"\breturn(?:s|ed|ing)?\b[^.?!]{0,40}\b(?:goods|order|money|items)\b|退货",
+            r"\breturn(?:s|ed|ing)?\b[^.?!]{0,40}\b(?:goods|order|money|items)\b|退货"
+            r"|\bdevoluci[oó]n(?:es)?\b",
             re.I,
         ),
     ),
@@ -155,7 +173,8 @@ _RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         re.compile(
             r"\bdiscount\s+override\b|\bextra\s+discount\b|\boverride\b[^.?!]{0,20}\bprice\b"
             r"|\b(?:force|forced|change|lower|reduce|drop)\w*\b[^.?!]{0,15}\b(?:price|pricing)\b"
-            r"|强行改价|降价|改价|折扣",
+            r"|强行改价|降价|改价|折扣"
+            r"|\bdescuento\s+especial\b|\bbajar\s+el\s+precio\b",
             re.I,
         ),
     ),
@@ -165,7 +184,8 @@ _RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
             r"\bbank\s+(?:account|details?)\b[^.?!]{0,40}\b(?:chang|updat|new)\w*"
             r"|\b(?:change|update|switch)\w*\b[^.?!]{0,30}\bbank\s+(?:account|details?)\b"
             r"|\bbeneficiary\b[^.?!]{0,30}\bchang\w*"
-            r"|改账户|换账户|更改账号|银行账号变更|变更账户",
+            r"|改账户|换账户|更改账号|银行账号变更|变更账户"
+            r"|\bcuenta\s+bancaria\b|\bcambiar\s+(?:de\s+)?banco\b",
             re.I,
         ),
     ),
@@ -173,7 +193,7 @@ _RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "wire_transfer",
         re.compile(
             r"\bwire\s+transfer\b|\btelegraphic\s+transfer\b"
-            r"|(?<![A-Za-z])T/T(?![A-Za-z])|电汇|汇款",
+            r"|(?<![A-Za-z])T/T(?![A-Za-z])|电汇|汇款|\btransferencia\s+bancaria\b",
             re.I,
         ),
     ),
@@ -182,6 +202,20 @@ _RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         re.compile(r"\bpayment\s+(?:reconcil\w*|receipt)\b|付款核销|核销", re.I),
     ),
 )
+
+#: Redline flags whose explicit negation removes the risk ("no refund needed").
+_NEGATABLE_FLAGS = frozenset({"refund", "dispute"})
+
+#: Negation cues evaluated inside the window preceding a redline match.
+_NEGATION_CUE = re.compile(
+    r"\b(?:no|not|never|none|without|no\s+need(?:\s+for)?|don'?t|do\s+not|doesn'?t"
+    r"|does\s+not|didn'?t|did\s+not|won'?t|will\s+not|isn'?t|is\s+not|aren'?t|are\s+not"
+    r"|not\s+needed|no\s+longer)\b"
+    r"|无需|不需要|不用|不必|没有|不需",
+    re.I,
+)
+
+_SENTENCE_BOUNDARY = frozenset(".!?;。！？；\n")
 
 _CJK = re.compile(r"[\u4e00-\u9fff]")
 _SPANISH = re.compile(r"\b(?:hola|precio|precios|cotizacion|cotización|gracias|necesito)\b", re.I)
@@ -351,11 +385,35 @@ class KbSearchPort(Protocol):
 # --------------------------------------------------------------------------------------
 
 
+def _is_negated_match(message_text: str, match_start: int) -> bool:
+    """True when an explicit negation cue governs the redline match at ``match_start``."""
+    window = message_text[max(0, match_start - 48) : match_start]
+    boundary = max((window.rfind(char) for char in _SENTENCE_BOUNDARY), default=-1)
+    if boundary != -1:
+        window = window[boundary + 1 :]
+    return bool(_NEGATION_CUE.search(window))
+
+
 def detect_risk_flags(message_text: str) -> list[str]:
-    """Return the ordered risk flags forcing this message down to L1 proposal review."""
+    """Return the ordered risk flags forcing this message down to L1 proposal review.
+
+    Refund/dispute redlines are skipped when *every* occurrence is explicitly negated
+    (``no refund needed``, ``不需要退款``, ``no disputa``), so a non-risky enquiry is not
+    falsely escalated. All other redlines stay absolute.
+    """
     if not message_text.strip():
         return []
-    return [flag for flag, pattern in _RISK_PATTERNS if pattern.search(message_text)]
+    flags: list[str] = []
+    for flag, pattern in _RISK_PATTERNS:
+        matches = list(pattern.finditer(message_text))
+        if not matches:
+            continue
+        if flag in _NEGATABLE_FLAGS and all(
+            _is_negated_match(message_text, match.start()) for match in matches
+        ):
+            continue
+        flags.append(flag)
+    return flags
 
 
 def detect_reply_language(message_text: str) -> str:
@@ -536,6 +594,52 @@ _CHAT_CHANNELS = frozenset(
 )
 _NUM_TOKEN = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?")
 
+#: Evidence keys that carry an *explicit* unit/line price (never a quantity or stock count).
+_PRICE_FIELDS = frozenset(
+    {
+        "applied_unit_price_usd",
+        "line_total_usd",
+        "retail_price_usd",
+        "unit_price_usd",
+    }
+)
+
+_PRICE_SYMBOLS = r"US\$|USD|EUR|CNY|RMB|GBP|JPY|AUD|CAD|HKD|[$¥€£]"
+
+#: Price-shaped mentions in a drafted reply (currency prefixed, suffixed, or per-unit).
+_PRICE_MENTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(rf"(?:{_PRICE_SYMBOLS})\s*(\d[\d,]*(?:\.\d+)?)", re.I),
+    re.compile(rf"(\d[\d,]*(?:\.\d+)?)\s*(?:{_PRICE_SYMBOLS})", re.I),
+    re.compile(
+        r"(\d[\d,]*(?:\.\d+)?)\s*(?:/|per\s+)\s*"
+        r"(?:pc|pcs|piece|pieces|unit|units|set|sets|roll|rolls|meter|meters|m|kg)\b",
+        re.I,
+    ),
+)
+
+#: Cents-only price mentions such as ``$.50`` / ``price .50`` (captured as ``0.<cents>``).
+_PRICE_CENTS_ONLY = re.compile(
+    rf"(?:{_PRICE_SYMBOLS}|price|pricing|cost|quote)\W{{0,4}}\.(\d{{2}})(?!\d)", re.I
+)
+
+
+def _as_decimal(value: Any) -> Decimal | None:
+    """Parse one evidence/mention value into an exact :class:`Decimal` (never a float)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, Decimal):
+        return value if value.is_finite() else None
+    if isinstance(value, int | float | str):
+        raw = str(value).replace(",", "").strip()
+        if not raw:
+            return None
+        try:
+            parsed = Decimal(raw)
+        except InvalidOperation:
+            return None
+        return parsed if parsed.is_finite() else None
+    return None
+
 
 def _extract_normalized_numbers(text_value: str) -> set[Decimal]:
     numbers: set[Decimal] = set()
@@ -547,14 +651,51 @@ def _extract_normalized_numbers(text_value: str) -> set[Decimal]:
     return numbers
 
 
+def _collect_verified_prices(evidence: Sequence[dict[str, Any]]) -> set[Decimal]:
+    """Collect prices **only** from explicit price fields of verified ERP evidence."""
+    prices: set[Decimal] = set()
+
+    def walk(node: Any, key: str) -> None:
+        if isinstance(node, dict):
+            for child_key, child in node.items():
+                walk(child, str(child_key).lower())
+            return
+        if isinstance(node, list | tuple):
+            for item in node:
+                walk(item, key)
+            return
+        if key in _PRICE_FIELDS:
+            amount = _as_decimal(node)
+            if amount is not None:
+                prices.add(amount.normalize())
+
+    for item in evidence:
+        walk(item, "")
+    return prices
+
+
+def _extract_price_mentions(text_value: str) -> set[Decimal]:
+    """Extract every price-formatted mention (``$8.50``, ``USD 100/pc``, ``¥32.50``, ``.50``)."""
+    mentions: set[Decimal] = set()
+    for pattern in _PRICE_MENTION_PATTERNS:
+        for raw in pattern.findall(text_value):
+            amount = _as_decimal(raw)
+            if amount is not None:
+                mentions.add(amount.normalize())
+    for cents in _PRICE_CENTS_ONLY.findall(text_value):
+        amount = _as_decimal(f"0.{cents}")
+        if amount is not None:
+            mentions.add(amount.normalize())
+    return mentions
+
+
 def _collect_allowed_numbers(
     *,
     evidence: Sequence[dict[str, Any]],
     kb_hits: Sequence[dict[str, Any]],
-    buyer_message: str,
 ) -> set[Decimal]:
-    allowed = _extract_normalized_numbers(buyer_message)
-    allowed.update(_extract_normalized_numbers(json.dumps(list(evidence), default=str)))
+    """Numbers a reply may quote: only those stored in evidence/KB (never the buyer text)."""
+    allowed = _extract_normalized_numbers(json.dumps(list(evidence), default=str))
     for hit in kb_hits:
         allowed.update(_extract_normalized_numbers(str(hit.get("snippet") or "")))
         allowed.update(_extract_normalized_numbers(str(hit.get("doc_title") or "")))
@@ -568,15 +709,28 @@ def verify_reply_numbers_grounded(
     kb_hits: Sequence[dict[str, Any]],
     buyer_message: str,
 ) -> bool:
-    """Return True only if every numeric figure in ``candidate`` is grounded in facts."""
+    """Return True only if every numeric figure in ``candidate`` is grounded in facts.
+
+    Two paired checks must both pass:
+
+    1. **Numbers.** Every digit group in ``candidate`` must appear in the tool evidence or
+       KB hits. ``buyer_message`` is accepted for call-site compatibility but is deliberately
+       *not* merged: a buyer's counter-offer (``$8.50``) is not a verified price.
+    2. **Prices.** Every price-formatted mention must match an explicit price field of the
+       evidence (``applied_unit_price_usd``, ``line_total_usd``, ``retail_price_usd``,
+       ``b2b_moq_tiers[*].unit_price_usd``). This stops a stock count (``100`` pcs) from being
+       rendered as ``USD 100/pc`` and stops a buyer's counter-offer from being echoed back.
+    """
+    del buyer_message  # intentionally unused: buyer numbers never widen the allowed set
     cleaned = candidate.strip()
     if not cleaned or len(cleaned) > 1200:
         return False
-    allowed = _collect_allowed_numbers(
-        evidence=evidence, kb_hits=kb_hits, buyer_message=buyer_message
-    )
+    allowed = _collect_allowed_numbers(evidence=evidence, kb_hits=kb_hits)
     candidate_numbers = _extract_normalized_numbers(cleaned)
-    return candidate_numbers.issubset(allowed)
+    if not candidate_numbers.issubset(allowed):
+        return False
+    verified_prices = _collect_verified_prices(evidence)
+    return _extract_price_mentions(cleaned).issubset(verified_prices)
 
 
 def _kb_lines(kb_hits: Sequence[dict[str, Any]]) -> list[str]:
@@ -1034,6 +1188,66 @@ class AutoReplyService:
         """Reuse the exact AGENT mailbox isolation rule of the proposal generator."""
         self._scope_service.assert_visibility(principal, conversation)
 
+    async def assert_customer_visibility(
+        self, session: AsyncSession, principal: CurrentPrincipal, customer_id: UUID
+    ) -> None:
+        """Apply the same AGENT personal-mailbox isolation to a customer-level read.
+
+        Mirrors ``identity.router``'s customer visibility rule (and
+        ``InboxService.agent_can_access_conversation``) with plain tenant-scoped SQL so no
+        cross-domain import is introduced: an AGENT may read a customer when at least one of
+        its conversations is workable by them, or when the customer has no conversations at
+        all. Other tenant roles are unaffected.
+        """
+        if principal.role != UserRole.AGENT:
+            return
+        visible = await session.scalar(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM customers c
+                    WHERE c.tenant_id = :tid
+                      AND c.id = :cid
+                      AND (
+                            EXISTS (
+                                SELECT 1
+                                FROM conversations conv
+                                JOIN channel_accounts ca
+                                  ON ca.id = conv.channel_account_id
+                                 AND ca.tenant_id = conv.tenant_id
+                                WHERE conv.tenant_id = :tid
+                                  AND conv.customer_id = c.id
+                                  AND (
+                                        conv.assigned_user_id = :uid
+                                        OR (
+                                            conv.assigned_user_id IS NULL
+                                            AND ca.visibility_scope = 'shared'
+                                            AND ca.owner_user_id IS NULL
+                                        )
+                                      )
+                            )
+                            OR NOT EXISTS (
+                                SELECT 1
+                                FROM conversations any_conv
+                                WHERE any_conv.tenant_id = :tid
+                                  AND any_conv.customer_id = c.id
+                            )
+                          )
+                )
+                """
+            ),
+            {"tid": principal.tenant_id, "cid": customer_id, "uid": principal.user_id},
+        )
+        if not visible:
+            raise AppError(
+                slug="conversation-access-denied",
+                title="Conversation Access Denied",
+                status_code=403,
+                code="ERR_CONVERSATION_ACCESS_DENIED",
+                detail="This customer belongs to another agent's private mailbox.",
+            )
+
     # ------------------------------------------------------------------- setting I/O
 
     async def _load_auto_reply_flag(
@@ -1249,6 +1463,83 @@ class AutoReplyService:
             {"preview": body_text, "tid": tenant_id, "cid": conversation.id},
         )
         return message_id
+
+    async def _find_existing_reply_for_inbound(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        conversation_id: UUID,
+        source_message_id: UUID | None,
+    ) -> tuple[UUID, str] | None:
+        """Return the outbound reply already produced for this inbound turn, if any.
+
+        Idempotency anchor: the outbound message stores ``in_reply_to_message_id`` inside
+        ``channel_metadata``, so a redelivered webhook (or a retried job) replays the stored
+        reply instead of sending a duplicate. Stub services that override the I/O seams may
+        leave ``session`` inert: any SQL failure simply means "no reply found yet".
+        """
+        if source_message_id is None:
+            return None
+        try:
+            row = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT id, COALESCE(body_text, '') AS body_text
+                        FROM messages
+                        WHERE tenant_id = :tid
+                          AND conversation_id = :cid
+                          AND direction = 'outbound'
+                          AND channel_metadata->>'in_reply_to_message_id' = :smid
+                        ORDER BY source_timestamp ASC, created_at ASC, id ASC
+                        LIMIT 1
+                        """
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "cid": conversation_id,
+                        "smid": str(source_message_id),
+                    },
+                )
+            ).first()
+        except Exception:  # noqa: BLE001 - stub sessions without SQL simply skip the check
+            return None
+        if row is None:
+            return None
+        try:
+            return UUID(str(row[0])), str(row[1] or "")
+        except (TypeError, ValueError):
+            return None
+
+    async def _latest_inbound_message_id(
+        self, session: AsyncSession, tenant_id: UUID, conversation_id: UUID
+    ) -> UUID | None:
+        """Fallback turn id when the caller did not supply one (never fatal)."""
+        try:
+            value = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT id
+                        FROM messages
+                        WHERE tenant_id = :tid
+                          AND conversation_id = :cid
+                          AND direction = 'inbound'
+                        ORDER BY source_timestamp DESC, created_at DESC, id DESC
+                        LIMIT 1
+                        """
+                    ),
+                    {"tid": tenant_id, "cid": conversation_id},
+                )
+            ).first()
+        except Exception:  # noqa: BLE001 - stub sessions are allowed to have no storage
+            return None
+        if value is None:
+            return None
+        try:
+            return UUID(str(value[0]))
+        except (TypeError, ValueError):
+            return None
 
     async def _create_proposal(
         self,
@@ -1541,10 +1832,34 @@ class AutoReplyService:
         ip_address: str | None = None,
         user_agent: str | None = None,
         prepare_dispatch: bool = True,
+        source_message_id: UUID | None = None,
     ) -> tuple[AutoReplyRunResponse, AutoReplyDispatchBundle | None]:
-        """Execute one guarded auto-reply attempt and optionally prepare its Redis dispatch."""
+        """Execute one guarded auto-reply attempt and optionally prepare its Redis dispatch.
+
+        ``source_message_id`` makes the attempt idempotent per inbound turn: when a reply was
+        already stored for that inbound message, the stored reply is returned with
+        ``dispatch_bundle=None`` so nothing is re-sent or re-published.
+        """
         conversation = await self.load_conversation(session, principal.tenant_id, conversation_id)
         self.assert_visibility(principal, conversation)
+
+        if source_message_id is not None:
+            existing = await self._find_existing_reply_for_inbound(
+                session, principal.tenant_id, conversation_id, source_message_id
+            )
+            if existing is not None:
+                existing_id, existing_body = existing
+                return (
+                    AutoReplyRunResponse(
+                        conversation_id=conversation.id,
+                        action="auto_replied",
+                        message_id=existing_id,
+                        reply_text=existing_body,
+                        confidence=compute_confidence((), (), ()),
+                    ),
+                    None,
+                )
+
         enabled = await self._load_auto_reply_flag(session, principal.tenant_id, conversation_id)
 
         messages = await self._recent_messages(session, principal.tenant_id, conversation_id)
@@ -1654,6 +1969,13 @@ class AutoReplyService:
                 "risk_flags": risk_flags,
                 "confidence": str(confidence),
             }
+            in_reply_to_message_id = source_message_id
+            if in_reply_to_message_id is None:
+                in_reply_to_message_id = await self._latest_inbound_message_id(
+                    session, principal.tenant_id, conversation.id
+                )
+            if in_reply_to_message_id is not None:
+                metadata["in_reply_to_message_id"] = str(in_reply_to_message_id)
             message_id = await self._insert_outbound_message(
                 session,
                 tenant_id=principal.tenant_id,
@@ -1779,6 +2101,7 @@ class AutoReplyService:
         ip_address: str | None = None,
         user_agent: str | None = None,
         redis: Any = None,
+        source_message_id: UUID | None = None,
     ) -> AutoReplyRunResponse:
         """Execute one guarded auto-reply attempt and optionally dispatch via Redis."""
         response, bundle = await self.run_with_dispatch(
@@ -1789,6 +2112,7 @@ class AutoReplyService:
             ip_address=ip_address,
             user_agent=user_agent,
             prepare_dispatch=redis is not None,
+            source_message_id=source_message_id,
         )
         if redis is not None and bundle is not None:
             await publish_auto_reply_dispatch(redis, bundle)
@@ -2100,6 +2424,8 @@ class AutoReplyService:
         principal: CurrentPrincipal,
         customer_id: UUID,
     ) -> CustomerAiProfileRead:
+        """Return the stored AI profile, enforcing AGENT mailbox isolation first."""
+        await self.assert_customer_visibility(session, principal, customer_id)
         row = (
             await session.execute(
                 text(

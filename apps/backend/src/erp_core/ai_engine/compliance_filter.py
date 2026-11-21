@@ -33,10 +33,23 @@ _FORBIDDEN_TAGS = {
     "ACCOUNT_UPDATE",
     "POST_PURCHASE_UPDATE",
 }
+# Real contact handles: never sanitized, always blocked on marketplace channels.
 _OFF_PLATFORM = re.compile(
     r"\b(?:whats\s*app|we\s*chat|telegram)\b|wa\.me\b|t\.me/|"
-    r"\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|\+?\d(?:[ ().-]*\d){7,14}\b|"
+    r"\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|"
     r"https?\s*://|\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|shop|me|cn|example)\b",
+    re.IGNORECASE,
+)
+# Kept separate from the URL/handle patterns so benign business numbers can be stripped first.
+_PHONE_CONTACT = re.compile(r"\+?\d(?:[ ().-]*\d){7,14}\b")
+# Benign marketplace identifiers that must never be mistaken for a phone number.
+_STRUCTURED_BUSINESS_IDS = re.compile(
+    r"\b(?:ORD|DEMO|PI|SO|PO|TRK|AWB|SKU|INV|LED)-[A-Z0-9-]+\b", re.IGNORECASE
+)
+_ISO_DATES = re.compile(r"\b20\d{2}[-/]\d{2}[-/]\d{2}\b")
+_CURRENCY_AND_QUANTITY_AMOUNTS = re.compile(
+    r"(?:[$]|USD|EUR|GBP|CNY|RMB)\s*\d[\d,]*(?:\.\d+)?|"
+    r"\b\d[\d,]*(?:\.\d+)?\s*(?:USD|EUR|GBP|CNY|RMB|pcs|pieces|units|meters|rolls|sets)\b",
     re.IGNORECASE,
 )
 
@@ -57,6 +70,23 @@ def _decision(*violations: str) -> ComplianceCheckResult:
 
 def consolidate_whatsapp_reply(segments: list[str]) -> str:
     return "\n\n".join(segment.strip() for segment in segments if segment.strip())
+
+
+def _strip_benign_business_numbers(body: str) -> str:
+    """Blank out order/SKU IDs, ISO dates and money/quantity amounts.
+
+    Marketplace replies legitimately contain long digit runs (``ORD-20261121-001``,
+    ``2026-11-21``, ``12345678.90 USD``, ``10000000 pcs``) that would otherwise trip
+    the phone-number heuristic. Only the phone check runs on this sanitized copy;
+    emails, URLs and chat handles are still matched against the original text.
+    """
+    for pattern in (
+        _STRUCTURED_BUSINESS_IDS,
+        _ISO_DATES,
+        _CURRENCY_AND_QUANTITY_AMOUNTS,
+    ):
+        body = pattern.sub(" ", body)
+    return body
 
 
 def _normalize(body: str) -> str:
@@ -92,8 +122,13 @@ class OutboundComplianceFilter:
         tag = str(metadata.get("message_tag", "")).strip().upper()
         if tag in _FORBIDDEN_TAGS and sender_type == MessageSenderType.AI_AGENT:
             violations.append(f"ai_forbidden_{tag.lower()}_tag")
-        # A conservative allowlist: generated marketplace messages may not contain links.
-        if channel_type in MARKETPLACE_CHANNELS and _OFF_PLATFORM.search(body):
+        # A conservative allowlist: generated marketplace messages may not contain links
+        # or off-platform contact handles. Phone detection ignores benign business
+        # numbers (order IDs, dates, amounts, quantities) to avoid false positives.
+        if channel_type in MARKETPLACE_CHANNELS and (
+            _OFF_PLATFORM.search(body)
+            or _PHONE_CONTACT.search(_strip_benign_business_numbers(body))
+        ):
             violations.append("marketplace_off_platform_contact")
         terms = metadata.get("blocked_terms")
         if isinstance(terms, list) and any(

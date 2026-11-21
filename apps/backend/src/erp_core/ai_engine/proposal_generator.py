@@ -36,11 +36,33 @@ _ORDER_INTENT = re.compile(
     re.I,
 )
 _ORDER_NO = re.compile(r"\b(?:ORD|DEMO|PI|SO)-[A-Z0-9][A-Z0-9-]{2,}\b", re.I)
-_SKU_TOKEN = re.compile(r"\b[A-Z][A-Z0-9]*(?:[-_/][A-Z0-9]+){1,6}\b")
-_QUANTITY = re.compile(
-    r"(?<![A-Za-z0-9\-_/])(\d{1,3}(?:[,\s]\d{3})+|\d+)\s*"
-    r"(?:pcs|pieces|piece|units|unit|sets|set|rolls|roll|reels|reel|"
-    r"meters|meter|mtr|m|件|个|套|卷|米|条|台)(?![A-Za-z0-9])",
+# Case-insensitive so buyers typing `led-cob-24v-5m` get the same SKU treatment as
+# `LED-COB-24V-5M` (stripped before quantity parsing, matched by `_search_terms`).
+_SKU_TOKEN = re.compile(r"\b[A-Z][A-Z0-9]*(?:[-_/][A-Z0-9]+){1,6}\b", re.I)
+# Primary count units: they always win over length units ("200 rolls of 5M strip").
+_COUNT_UNITS = (
+    r"cartons|carton|boxes|box|pcs|pieces|piece|units|unit|sets|set|rolls|roll|"
+    r"reels|reel|件|个|套|卷|箱|台"
+)
+# Secondary length units: only consulted when no count unit matched.
+_LENGTH_UNITS = r"meters|meter|mtr|mts|米|条"
+# Product nouns that turn a bare `m` into a spec ("5M strip"), never an order quantity.
+_LENGTH_NOUNS = r"strip|stripes|rolls|roll|reels|reel|tape|cable|cables|bar|bars|tube|tubes|led"
+_QUANTITY_NUMBER = r"(\d{1,3}(?:[,\s]\d{3})+|\d+)"
+# The `(?<![A-Za-z0-9\-_/.])` lookbehind keeps the fractional part of `1.5 meters`
+# from ever being read as quantity 5.
+_COUNT_QUANTITY = re.compile(
+    r"(?<![A-Za-z0-9\-_/.])" + _QUANTITY_NUMBER + r"\s*(?:" + _COUNT_UNITS + r")(?![A-Za-z0-9])",
+    re.I,
+)
+_LENGTH_QUANTITY = re.compile(
+    r"(?<![A-Za-z0-9\-_/.])"
+    + _QUANTITY_NUMBER
+    + r"(?:\s*(?:"
+    + _LENGTH_UNITS
+    + r")(?![A-Za-z0-9])|\s*m(?![A-Za-z0-9])(?!\s*(?:"
+    + _LENGTH_NOUNS
+    + r")\b))",
     re.I,
 )
 _CJK = re.compile(r"[\u4e00-\u9fff]")
@@ -138,20 +160,32 @@ def _detect_language(text: str) -> str:
     return "en"
 
 
+def _as_quantity(match: re.Match[str] | None) -> int | None:
+    if match is None:
+        return None
+    digits = re.sub(r"[^\d]", "", match.group(1))
+    try:
+        qty = int(digits)
+    except ValueError:
+        return None
+    return qty if 0 < qty <= 2_147_483_647 else None
+
+
 def _parse_quantity(text: str) -> int:
     # Strip SKU / order tokens (e.g. LED-COB-24V-5M) so embedded lengths/voltages
     # like "5M" or "24V" are never mistaken for the buyer's requested quantity.
     cleaned = _SKU_TOKEN.sub(" ", text)
     cleaned = _ORDER_NO.sub(" ", cleaned)
-    match = _QUANTITY.search(cleaned)
-    if match is None:
-        return 1
-    digits = re.sub(r"[^\d]", "", match.group(1))
-    try:
-        qty = int(digits)
-    except ValueError:
-        return 1
-    return qty if 0 < qty <= 2_147_483_647 else 1
+    # Count units win: "5M strip, 200 rolls" is 200 rolls, not 5 metres of strip.
+    count_qty = _as_quantity(_COUNT_QUANTITY.search(cleaned))
+    if count_qty is not None:
+        return count_qty
+    # Length units are only a fallback, and a bare `m` before a product noun
+    # ("5M strip") is a specification, never an order quantity.
+    length_qty = _as_quantity(_LENGTH_QUANTITY.search(cleaned))
+    if length_qty is not None:
+        return length_qty
+    return 1
 
 
 class AiProposalGeneratorService:
@@ -312,22 +346,31 @@ class AiProposalGeneratorService:
     ) -> list[str]:
         terms = self._search_terms(message_text)
         if not terms:
-            terms = ["led"]
+            # No SKU/catalog term in the message: returning nothing is correct.
+            # Blindly defaulting to `['led']` priced an unrelated SKU for every
+            # message that merely mentioned orders, shipping or delivery.
+            return []
         params: dict[str, Any] = {"tid": tenant_id}
         clauses: list[str] = []
+        exact_clauses: list[str] = []
         for index, term in enumerate(terms):
             key = f"pattern{index}"
             params[key] = f"%{term}%"
+            exact_key = f"exact{index}"
+            params[exact_key] = term.upper()
             clauses.append(
                 f"(pv.sku ILIKE :{key} OR p.spu_code ILIKE :{key} OR p.category ILIKE :{key})"
             )
+            exact_clauses.append(f"UPPER(pv.sku) = :{exact_key}")
         rows = (
             await session.execute(
                 text(
                     "SELECT pv.sku FROM product_variants pv "
                     "JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id "
                     "WHERE pv.tenant_id = :tid AND (" + " OR ".join(clauses) + ") "
-                    "ORDER BY length(pv.sku), pv.sku LIMIT 3"
+                    "ORDER BY (CASE WHEN "
+                    + " OR ".join(exact_clauses)
+                    + " THEN 0 ELSE 1 END), length(pv.sku), pv.sku LIMIT 3"
                 ),
                 params,
             )
@@ -340,15 +383,18 @@ class AiProposalGeneratorService:
         explicit = _ORDER_NO.search(message_text)
         if explicit is not None:
             candidate = explicit.group(0).upper()
-            exists = await session.scalar(
+            owned = await session.scalar(
                 text(
                     "SELECT order_no FROM orders "
-                    "WHERE tenant_id = :tid AND order_no = :order_no LIMIT 1"
+                    "WHERE tenant_id = :tid AND customer_id = :cid AND order_no = :order_no "
+                    "LIMIT 1"
                 ),
-                {"tid": tenant_id, "order_no": candidate},
+                {"tid": tenant_id, "cid": customer_id, "order_no": candidate},
             )
-            if exists is not None:
-                return str(exists)
+            # The buyer named a specific order: answer it or nothing at all.
+            # Falling through to "their latest order" would answer a different
+            # order than the one asked about (and leak existence of others).
+            return str(owned) if owned is not None else None
         latest = await session.scalar(
             text(
                 "SELECT order_no FROM orders "
@@ -403,7 +449,9 @@ class AiProposalGeneratorService:
         if _ORDER_INTENT.search(message_text):
             order_no = await self._match_order_no(session, tenant_id, customer_id, message_text)
             if order_no is not None:
-                tracking = await self.tools.get_live_order_tracking(session, tenant_id, order_no)
+                tracking = await self.tools.get_live_order_tracking(
+                    session, tenant_id, order_no, customer_id=customer_id
+                )
                 if tracking.ok:
                     evidence.append(self._evidence_payload(tracking))
         return evidence

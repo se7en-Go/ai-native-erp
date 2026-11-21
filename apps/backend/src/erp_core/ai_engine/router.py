@@ -6,7 +6,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import func, select, text
+from sqlalchemy import TextClause, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.ai_engine.capabilities import CAPABILITY_SPECS, min_autonomy
@@ -68,6 +68,68 @@ _CONTEXT_FIELDS = frozenset(
         "target_lang",
     }
 )
+
+
+# ---------------------------------------------------------------------------------------
+# AGENT personal-mailbox isolation for AI proposals (GPT #08).
+#
+# An AGENT may only read or review a proposal whose conversation they can work: either the
+# proposal is not tied to a conversation at all, or the conversation is assigned to them, or
+# it is unassigned on an unowned SHARED mailbox. This mirrors
+# `channels.inbox_service.agent_can_access_conversation`, but stays plain tenant-scoped SQL
+# so the modular-monolith import contracts (see infra/importlinter.ini) stay intact.
+_AGENT_VISIBLE_PROPOSAL_SQL = """
+    (
+        ai_proposals.conversation_id IS NULL
+        OR EXISTS (
+            SELECT 1
+            FROM conversations conv
+            JOIN channel_accounts ca
+              ON ca.id = conv.channel_account_id
+             AND ca.tenant_id = conv.tenant_id
+            WHERE conv.tenant_id = :visibility_tenant_id
+              AND conv.id = ai_proposals.conversation_id
+              AND (
+                    conv.assigned_user_id = :visibility_user_id
+                    OR (
+                        conv.assigned_user_id IS NULL
+                        AND ca.visibility_scope = 'shared'
+                        AND ca.owner_user_id IS NULL
+                    )
+                  )
+        )
+    )
+"""
+
+
+def _agent_proposal_visibility_clause(*, tenant_id: UUID, user_id: UUID) -> TextClause:
+    """Build the AGENT proposal visibility predicate bound to this tenant and salesperson."""
+    return text(_AGENT_VISIBLE_PROPOSAL_SQL).bindparams(
+        visibility_tenant_id=tenant_id, visibility_user_id=user_id
+    )
+
+
+async def _assert_proposal_visibility(
+    session: AsyncSession, principal: CurrentPrincipal, proposal_id: UUID
+) -> None:
+    """Hide a proposal from an AGENT when its conversation sits in another private mailbox.
+
+    A 404 (not 403) is returned so the endpoint never confirms the existence of a
+    proposal belonging to a colleague's personal mailbox.
+    """
+    if principal.role != UserRole.AGENT:
+        return
+    visible = await session.scalar(
+        select(AiProposal.id).where(
+            AiProposal.tenant_id == principal.tenant_id,
+            AiProposal.id == proposal_id,
+            _agent_proposal_visibility_clause(
+                tenant_id=principal.tenant_id, user_id=principal.user_id
+            ),
+        )
+    )
+    if visible is None:
+        raise proposal_error(404, "ERR_PROPOSAL_NOT_FOUND", "Proposal not found.")
 
 
 def _executor(request: Request) -> ProposalExecutorService:
@@ -136,11 +198,17 @@ async def list_proposals(
         filters.append(AiProposal.status == status.value)
     if proposal_type is not None:
         filters.append(AiProposal.proposal_type == proposal_type.value)
+    query = select(AiProposal).where(*filters)
+    count_query = select(func.count()).select_from(AiProposal).where(*filters)
+    if principal.role == UserRole.AGENT:
+        visibility = _agent_proposal_visibility_clause(
+            tenant_id=principal.tenant_id, user_id=principal.user_id
+        )
+        query = query.where(visibility)
+        count_query = count_query.where(visibility)
     rows = (
         await session.scalars(
-            select(AiProposal)
-            .where(*filters)
-            .order_by(
+            query.order_by(
                 AiProposal.created_at.desc(),
                 AiProposal.id,
             )
@@ -148,7 +216,7 @@ async def list_proposals(
             .offset(offset)
         )
     ).all()
-    total = await session.scalar(select(func.count()).select_from(AiProposal).where(*filters))
+    total = await session.scalar(count_query)
     return PaginatedResponse.build(
         items=[AiProposalRead.model_validate(row) for row in rows],
         total=total or 0,
@@ -161,6 +229,7 @@ async def list_proposals(
 async def proposal_detail(
     proposal_id: UUID, session: Db, principal: Principal, executor: Executor
 ) -> AiProposalRead:
+    await _assert_proposal_visibility(session, principal, proposal_id)
     return await executor.get(session, principal, proposal_id)
 
 
@@ -168,6 +237,7 @@ async def proposal_detail(
 async def approve_proposal(
     proposal_id: UUID, session: Db, principal: Principal, executor: Executor
 ) -> AiProposalRead:
+    await _assert_proposal_visibility(session, principal, proposal_id)
     return await executor.approve(session, principal, proposal_id)
 
 
@@ -179,6 +249,7 @@ async def edit_approve_proposal(
     principal: Principal,
     executor: Executor,
 ) -> AiProposalRead:
+    await _assert_proposal_visibility(session, principal, proposal_id)
     return await executor.edit_approve(
         session, principal, proposal_id, body.edited_payload, body.feedback_note
     )
@@ -192,6 +263,7 @@ async def reject_proposal(
     principal: Principal,
     executor: Executor,
 ) -> AiProposalRead:
+    await _assert_proposal_visibility(session, principal, proposal_id)
     return await executor.reject(session, principal, proposal_id, body.reason)
 
 
@@ -199,6 +271,7 @@ async def reject_proposal(
 async def feedback(
     body: ProposalFeedbackRequest, session: Db, principal: Principal, executor: Executor
 ) -> ProposalFeedbackResponse:
+    await _assert_proposal_visibility(session, principal, body.proposal_id)
     fid = await executor.add_feedback(session, principal, body.proposal_id, body.feedback_note)
     return ProposalFeedbackResponse(proposal_id=body.proposal_id, feedback_id=fid)
 
