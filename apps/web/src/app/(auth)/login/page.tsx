@@ -2,22 +2,12 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  Bot,
-  Factory,
-  Globe2,
-  Lock,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { AnimatedSignIn } from "@/components/ui/sign-in";
 import { bffFetch } from "@/lib/api";
 import { fetchOnboardingState } from "@/lib/data-source";
 import { useAuthSession } from "@/components/providers";
 import { useI18n } from "@/lib/i18n";
+import { useTheme } from "@/lib/theme";
 import { BffApiError, type Principal } from "@/lib/contracts";
 
 const DEMO_ACCOUNTS = [
@@ -27,7 +17,7 @@ const DEMO_ACCOUNTS = [
     badgeEn: "Owner",
     zh: "企业所有者 · 全模块权限",
     en: "Owner · full access",
-    dot: "bg-emerald-500",
+    dot: "bg-blue-500",
   },
   {
     email: "finance@quanzhou-led.example.com",
@@ -43,7 +33,7 @@ const DEMO_ACCOUNTS = [
     badgeEn: "Agent",
     zh: "外贸业务员 · 沟通与阶梯报价",
     en: "Sales agent · inbox & quotes",
-    dot: "bg-zinc-700",
+    dot: "bg-emerald-500",
   },
 ];
 
@@ -53,6 +43,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { refreshSession } = useAuthSession();
   const { locale, toggleLocale, bi } = useI18n();
+  const { isDark, toggleTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantSlug, setTenantSlug] = useState("quanzhou-led-factory");
@@ -116,319 +107,81 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-screen bg-gray-50 lg:grid-cols-[1.15fr_0.85fr] dark:bg-gray-950">
-      {/* 左侧：21st.dev 深海蓝曜石指挥舱视觉展板 */}
-      <section className="relative flex flex-col justify-between overflow-hidden bg-[#0B1220] p-8 text-gray-200 lg:p-14">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 18% 18%, rgba(37,99,235,0.28) 0, transparent 44%), radial-gradient(circle at 82% 76%, rgba(79,70,229,0.22) 0, transparent 45%), radial-gradient(circle at 55% 40%, rgba(16,185,129,0.10) 0, transparent 40%)",
-          }}
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-[0.12]"
-          style={{
-            backgroundImage: "radial-gradient(rgba(255,255,255,0.45) 1px, transparent 1px)",
-            backgroundSize: "24px 24px",
-          }}
-        />
-
-        <div className="relative flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(37,99,235,0.38)]">
-              QZ
-              <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-[#0B1220]" />
-            </span>
-            <div>
-              <div className="text-[15px] font-bold tracking-tight text-white">
-                {bi("工贸全渠道外贸工作台", "Hybrid Foreign Trade Command Center")}
-              </div>
-              <div className="text-[11.5px] font-medium text-blue-200/75">
-                Quanzhou Smart LED Lighting · AI-Native ERP
-              </div>
-            </div>
-          </div>
-
-          <span className="hidden items-center gap-1.5 rounded-full border border-blue-400/25 bg-blue-500/15 px-3 py-1 text-[11.5px] font-semibold text-blue-200 backdrop-blur-md sm:inline-flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-            {bi("PG17 RLS 租户硬隔离", "PG17 FORCE RLS")}
-          </span>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
-          className="relative my-10 max-w-2xl space-y-8"
-        >
-          <div className="space-y-4">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[12px] font-medium text-blue-200">
-              <Sparkles className="h-3.5 w-3.5 text-blue-400" />
-              {bi("专为中国工贸一体出海团队打造", "Built for Chinese export manufacturers")}
-            </span>
-            <h1 className="text-[32px] leading-[1.22] font-bold tracking-tight text-white lg:text-[40px]">
-              {bi(
-                "把询盘、报价、订单、收款与 AI 员工，装进同一座外贸指挥舱。",
-                "Inquiries, tiered PI quotes, 17TRACK logistics, CVP margins & AI employees in one command center."
-              )}
-            </h1>
-            <p className="max-w-xl text-[14px] leading-7 text-gray-300/90">
-              {bi(
-                "打通 WhatsApp、外贸邮件、阿里/MIC 与海外社媒，70% 尾款未核销强制阻断出库，每一笔毛利精确到 Decimal，AI 提案人工确认再落单。",
-                "Unify WhatsApp, Email, Meta & Telegram with deterministic SQL grounding, Decimal CVP margin tracking, and human-in-the-loop L0/L1 approvals."
-              )}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-white/12 bg-white/[0.06] p-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3.5">
-              <div className="flex items-center gap-2 text-[12px] font-semibold text-blue-200">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                {bi("实时经营快照 · 泉州 LED 演示工贸租户", "Live Workspace Preview · Quanzhou LED")}
-              </div>
-              <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                {bi("ECB 实时汇率联动", "Live ECB FX Sync")}
-              </span>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-blue-400/25 bg-gradient-to-br from-blue-600/40 to-indigo-700/30 p-3.5">
-                <div className="flex items-center justify-between text-[11px] font-medium text-blue-100/90">
-                  <span>{bi("CVP 平均毛利率", "Avg CVP Margin")}</span>
-                  <TrendingUp className="h-3.5 w-3.5 text-blue-300" />
-                </div>
-                <div className="mt-2 text-[22px] font-bold tabular-nums text-white">35.39%</div>
-                <div className="mt-1 text-[11px] text-blue-200/85">
-                  {bi("净毛利 $11,346.62", "Net $11,346.62")}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3.5">
-                <div className="flex items-center justify-between text-[11px] font-medium text-stone-300">
-                  <span>{bi("AI 数字员工", "AI Workforce")}</span>
-                  <Bot className="h-3.5 w-3.5 text-emerald-400" />
-                </div>
-                <div className="mt-2 text-[22px] font-bold tabular-nums text-white">9 / 9</div>
-                <div className="mt-1 text-[11px] text-stone-400">
-                  {bi("L2/L1/L0 自治矩阵", "L2/L1/L0 governed")}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3.5">
-                <div className="flex items-center justify-between text-[11px] font-medium text-stone-300">
-                  <span>{bi("风控合规引擎", "Compliance Guard")}</span>
-                  <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />
-                </div>
-                <div className="mt-2 text-[22px] font-bold tabular-nums text-white">L0</div>
-                <div className="mt-1 text-[11px] text-stone-400">
-                  {bi("水单复核 · 零幻觉", "Manual cash verify")}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-[11.5px] text-stone-300">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                <Globe2 className="h-3.5 w-3.5 text-emerald-400" />
-                {bi("中英双语实时翻译", "Bilingual live translation")}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                {bi("角色分级 · 成本自动脱敏", "RBAC cost masking")}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                <Lock className="h-3.5 w-3.5 text-emerald-400" />
-                {bi("AES-256-GCM 凭证信封加密", "Envelope crypto")}
-              </span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* 底部安全声明 */}
-        <p className="relative text-[11.5px] text-stone-400">
-          {bi(
-            "多租户行级安全策略（FORCE RLS）强制执行 · 财务与报价全链路留痕审计",
-            "PostgreSQL 17 FORCE RLS · Envelope Encryption · Full Audit Trail"
-          )}
-        </p>
-      </section>
-
-      {/* 右侧：暖陶灰画布上的精致悬浮登录卡 */}
-      <section className="relative flex items-center justify-center p-6 lg:p-14">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.08, ease: "easeOut" }}
-          className="w-full max-w-[448px]"
-        >
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-[22px] font-bold tracking-tight text-zinc-950">
-                {bi("登录企业工作区", "Sign in to workspace")}
-              </h2>
-              <p className="mt-1 text-[13px] text-stone-600">
-                {bi("输入企业工作区标识与账号进入指挥舱", "Enter your workspace slug and credentials")}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={toggleLocale}
-              className="inline-flex items-center rounded-lg border border-gray-200 bg-white p-0.5 text-[12px] font-semibold shadow-xs dark:border-gray-700 dark:bg-gray-900"
-            >
-              <span
-                className={`rounded-md px-2.5 py-1 transition-all ${
-                  locale === "zh" ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400"
-                }`}
-              >
-                中
-              </span>
-              <span
-                className={`rounded-md px-2.5 py-1 transition-all ${
-                  locale === "en" ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400"
-                }`}
-              >
-                EN
-              </span>
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-7 shadow-lg dark:border-gray-800 dark:bg-gray-900">
-            {error && (
-              <div
-                role="alert"
-                className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[12.5px] font-medium text-rose-800"
-              >
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
-              <div>
-                <label htmlFor="tenant-slug" className="erp-label">
-                  {bi("工作区标识", "Tenant workspace slug")}
-                </label>
-                <div className="relative mt-1.5">
-                  <Factory className="pointer-events-none absolute top-3 left-3 h-4 w-4 text-stone-400" />
-                  <input
-                    id="tenant-slug"
-                    type="text"
-                    value={tenantSlug}
-                    onChange={(e) => setTenantSlug(e.target.value)}
-                    className="erp-input py-2.5 pl-9"
-                    placeholder="quanzhou-led-factory"
-                    autoComplete="organization"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="email" className="erp-label">
-                  {bi("企业邮箱", "Work email")}
-                </label>
-                <div className="relative mt-1.5">
-                  <Users className="pointer-events-none absolute top-3 left-3 h-4 w-4 text-stone-400" />
-                  <input
-                    id="email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="erp-input py-2.5 pl-9"
-                    placeholder="owner@quanzhou-led.example.com"
-                    autoComplete="username"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="password" className="erp-label">
-                  {bi("登录密码", "Password")}
-                </label>
-                <div className="relative mt-1.5">
-                  <Lock className="pointer-events-none absolute top-3 left-3 h-4 w-4 text-stone-400" />
-                  <input
-                    id="password"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="erp-input py-2.5 pl-9"
-                    placeholder="••••••••••••"
-                    autoComplete="current-password"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="group flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-[13.5px] font-semibold text-white shadow-sm transition-all hover:bg-blue-700 disabled:opacity-60"
-              >
-                <span>
-                  {submitting
-                    ? bi("正在进入工作台…", "Signing in…")
-                    : bi("登录工作台", "Sign in to workspace")}
-                </span>
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </button>
-            </form>
-
-            <div className="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800">
-              <div className="flex items-center justify-between">
-                <p className="text-[11.5px] font-semibold text-gray-600 dark:text-gray-400">
-                  {bi("演示角色 · 点击一键填充", "Demo roles · click to autofill")}
-                </p>
-                <code className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-[11px] font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                  {DEMO_PASSWORD}
-                </code>
-              </div>
-
-              <ul className="mt-2.5 space-y-2">
-                {DEMO_ACCOUNTS.map((account) => {
-                  const selected = email === account.email;
-                  return (
-                    <li key={account.email}>
-                      <button
-                        type="button"
-                        onClick={() => fillDemoAccount(account.email)}
-                        className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-all ${
-                          selected
-                            ? "border-blue-400 bg-blue-50/70 shadow-xs dark:border-blue-600 dark:bg-blue-900/30"
-                            : "border-gray-200 bg-gray-50/70 hover:border-gray-300 hover:bg-white dark:border-gray-700 dark:bg-gray-800/60 dark:hover:bg-gray-800"
-                        }`}
-                      >
-                        <span className="flex min-w-0 items-center gap-2.5">
-                          <span className={`h-2 w-2 shrink-0 rounded-full ${account.dot}`} />
-                          <span className="min-w-0">
-                            <span className="block truncate text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
-                              {bi(account.zh, account.en)}
-                            </span>
-                            <span className="block truncate text-[11px] text-gray-500 dark:text-gray-400">
-                              {account.email}
-                            </span>
-                          </span>
-                        </span>
-                        <span className="shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-                          {bi(account.badgeZh, account.badgeEn)}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </div>
-
-          <p className="mt-5 text-center text-[11.5px] text-stone-500">
-            {bi(
-              "登录即表示同意企业数据安全与合规审计规范。",
-              "By signing in you accept the enterprise data security & audit policy."
-            )}
-          </p>
-        </motion.div>
-      </section>
-    </div>
+    <AnimatedSignIn
+      titlePrefix={bi("登录", "Sign in to")}
+      brandAccent={bi("工贸全渠道工作台", "Hybrid Trade ERP")}
+      subtitle={bi(
+        "输入企业工作区标识与账号，进入全渠道询盘、报价、订单与 CVP 指挥舱。",
+        "Enter your workspace slug and work account to access inquiries, PI quotes, orders & CVP."
+      )}
+      footerNote={bi(
+        "PG17 FORCE RLS 多租户强隔离 · AES-256-GCM 凭证信封加密 · 全链路审计留痕",
+        "PG17 FORCE RLS tenant isolation · AES-256-GCM envelope crypto · full audit trail"
+      )}
+      locale={locale}
+      onToggleLocale={toggleLocale}
+      isDark={isDark}
+      onToggleTheme={toggleTheme}
+      tenantSlug={tenantSlug}
+      onTenantSlugChange={setTenantSlug}
+      email={email}
+      onEmailChange={setEmail}
+      password={password}
+      onPasswordChange={setPassword}
+      submitting={submitting}
+      error={error}
+      onSubmit={(e) => void handleSubmit(e)}
+      demoHeading={bi("演示角色 · 点击一键填充", "Demo roles · click to autofill")}
+      demoPasswordHint={DEMO_PASSWORD}
+      demoAccounts={DEMO_ACCOUNTS.map((item) => ({
+        email: item.email,
+        badge: bi(item.badgeZh, item.badgeEn),
+        label: bi(item.zh, item.en),
+        dot: item.dot,
+      }))}
+      onSelectDemoAccount={fillDemoAccount}
+      labels={{
+        tenantSlug: bi("工作区标识", "Tenant workspace slug"),
+        email: bi("企业邮箱", "Work email"),
+        password: bi("登录密码", "Password"),
+        submit: bi("登录工作台", "Sign in"),
+        submitting: bi("正在登录…", "Signing in…"),
+        showPassword: bi("显示密码", "Show password"),
+        hidePassword: bi("隐藏密码", "Hide password"),
+        toggleTheme: bi("切换浅色或深色主题", "Toggle light or dark theme"),
+      }}
+      collageImages={[
+        {
+          src: "/images/login/trade-workspace.jpg",
+          alt: bi("外贸数字化工作台", "Modern export trade desk"),
+        },
+        {
+          src: "/images/login/smart-factory.jpg",
+          alt: bi("智能灯具制造车间", "Smart LED manufacturing workshop"),
+        },
+        {
+          src: "/images/login/global-logistics.jpg",
+          alt: bi("国际海运集装箱港口", "Global container port logistics"),
+        },
+        {
+          src: "/images/login/warehouse-fulfillment.jpg",
+          alt: bi("外贸智能仓储履约", "Export warehouse fulfillment"),
+        },
+      ]}
+      orangeStat={{
+        value: "35.4%",
+        description: bi(
+          "Decimal 级 CVP 净贡献毛利实时核算，70% 尾款未核销自动阻断出库。",
+          "Real-time Decimal CVP margin tracking with automatic 70% balance shipment guard."
+        ),
+      }}
+      greenStat={{
+        value: bi("11 渠道", "11 Channels"),
+        description: bi(
+          "聚合 WhatsApp、Telegram、外贸邮件与独立站，AI 提案人审后精准回写 ERP。",
+          "Unify WhatsApp, Telegram, Email & storefronts with human-approved AI ERP grounding."
+        ),
+      }}
+    />
   );
 }
