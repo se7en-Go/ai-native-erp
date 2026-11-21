@@ -67,9 +67,57 @@ function resolveUpstreamPath(segments: string[]): string | null {
   return `/api/v1/${joined}`;
 }
 
+/**
+ * Operator-BFF upstream allowlist (Wave 6 / W6-A).
+ *
+ * The BFF is a *narrow* operator surface, not a general backend proxy. Only
+ * `/api/v1/<prefix>` namespaces that operators actually use are exposed;
+ * machine-to-machine ingress (`/api/v1/webhooks/*`), the public widget API
+ * (`/api/v1/widget/*`), docs (`/docs`, `/openapi.json`, `/redoc`) and every
+ * other backend route are explicitly refused with a 403 ProblemDetail.
+ */
+const ALLOWED_BFF_V1_PREFIXES = new Set([
+  "ai",
+  "analytics",
+  "auth",
+  "b2b",
+  "billing",
+  "catalog",
+  "channels",
+  "connectors",
+  "customers",
+  "finance",
+  "growth",
+  "identity",
+  "inbox",
+  "onboarding",
+  "orders",
+  "search",
+  "social",
+  "supply-chain",
+  "tenancy",
+  "tenants",
+  "wms",
+]);
+
+const ALLOWED_HEALTH_PATHS = new Set(["/healthz", "/readyz"]);
+
+export type AllowedPathPredicate = (upstreamPath: string) => boolean;
+
+function isAllowedUpstreamPath(upstreamPath: string): boolean {
+  if (ALLOWED_HEALTH_PATHS.has(upstreamPath)) return true;
+  if (!upstreamPath.startsWith("/api/v1/")) return false;
+  const prefix = upstreamPath.slice("/api/v1/".length).split("/", 1)[0] ?? "";
+  return ALLOWED_BFF_V1_PREFIXES.has(prefix);
+}
+
 function isSseRequest(request: NextRequest, upstreamPath: string): boolean {
   const accept = request.headers.get("accept") ?? "";
-  return accept.includes("text/event-stream") || upstreamPath.endsWith("/events");
+  return (
+    accept.includes("text/event-stream") ||
+    upstreamPath.endsWith("/stream") ||
+    upstreamPath.endsWith("/events")
+  );
 }
 
 async function tryRefreshToken(refreshToken: string): Promise<{
@@ -88,6 +136,25 @@ async function tryRefreshToken(refreshToken: string): Promise<{
     refresh_token?: string;
     expires_in?: number;
   };
+}
+
+function applyRefreshedCookies(
+  response: NextResponse,
+  refreshedTokens: { access_token: string; refresh_token?: string; expires_in?: number } | null
+): void {
+  if (!refreshedTokens) return;
+  response.cookies.set(
+    ACCESS_COOKIE_NAME,
+    refreshedTokens.access_token,
+    buildAuthCookieOptions(refreshedTokens.expires_in ?? 1800)
+  );
+  if (refreshedTokens.refresh_token) {
+    response.cookies.set(
+      REFRESH_COOKIE_NAME,
+      refreshedTokens.refresh_token,
+      buildAuthCookieOptions(60 * 60 * 24 * 14)
+    );
+  }
 }
 
 const MOCK_ROLE_COOKIE_NAME = "erp_mock_role";
@@ -416,6 +483,21 @@ async function handleProxy(
     );
   }
 
+  // Fail closed before any upstream fetch (and before mock-mode fixtures) so
+  // webhook ingress, the public widget API and backend docs can never be
+  // reached through the operator BFF.
+  if (!isAllowedUpstreamPath(upstreamPath)) {
+    return NextResponse.json(
+      problemDetail(
+        403,
+        "Forbidden BFF Path",
+        "ERR_BFF_PATH_FORBIDDEN",
+        "This upstream path is not exposed through the operator BFF."
+      ),
+      { status: 403 }
+    );
+  }
+
   const targetUrl = `${BACKEND_BASE}${upstreamPath}${request.nextUrl.search}`;
 
   // Mock mode (E2E_MODE=mock / NEXT_PUBLIC_USE_MOCK_API=true): serve the
@@ -554,7 +636,9 @@ async function handleProxy(
     expires_in?: number;
   } | null = null;
 
-  if (upstreamRes.status === 401 && refreshToken && !isSseRequest(request, upstreamPath)) {
+  // Refresh applies to SSE too: a long-lived EventSource that hits an expired
+  // access token must recover in place instead of reconnect-looping on 401.
+  if (upstreamRes.status === 401 && refreshToken) {
     refreshedTokens = await tryRefreshToken(refreshToken);
     if (refreshedTokens) {
       forwardHeaders.set("authorization", `Bearer ${refreshedTokens.access_token}`);
@@ -567,7 +651,7 @@ async function handleProxy(
   }
 
   if (isSseRequest(request, upstreamPath)) {
-    return new Response(upstreamRes.body, {
+    const sseResponse = new NextResponse(upstreamRes.body, {
       status: upstreamRes.status,
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
@@ -576,6 +660,8 @@ async function handleProxy(
         "X-Accel-Buffering": "no",
       },
     });
+    applyRefreshedCookies(sseResponse, refreshedTokens);
+    return sseResponse;
   }
 
   const respHeaders = new Headers();
@@ -593,20 +679,7 @@ async function handleProxy(
     headers: respHeaders,
   });
 
-  if (refreshedTokens) {
-    response.cookies.set(
-      ACCESS_COOKIE_NAME,
-      refreshedTokens.access_token,
-      buildAuthCookieOptions(refreshedTokens.expires_in ?? 1800)
-    );
-    if (refreshedTokens.refresh_token) {
-      response.cookies.set(
-        REFRESH_COOKIE_NAME,
-        refreshedTokens.refresh_token,
-        buildAuthCookieOptions(60 * 60 * 24 * 14)
-      );
-    }
-  }
+  applyRefreshedCookies(response, refreshedTokens);
 
   return response;
 }
@@ -622,11 +695,12 @@ type BffRouteContext = { params: Promise<{ path: string[] }> };
  */
 type BffRouteHandler = ((req: NextRequest, ctx: BffRouteContext) => Promise<Response>) & {
   isMockModeAllowed: MockModePredicate;
+  isAllowedUpstreamPath: AllowedPathPredicate;
 };
 
 export const GET: BffRouteHandler = Object.assign(
   (req: NextRequest, ctx: BffRouteContext) => handleProxy(req, ctx),
-  { isMockModeAllowed }
+  { isMockModeAllowed, isAllowedUpstreamPath }
 );
 
 export async function POST(req: NextRequest, ctx: BffRouteContext) {

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pin, Plus, Sparkles, Tag, X } from "lucide-react";
+import { AlertTriangle, Pin, Plus, RefreshCw, Sparkles, Tag, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { ChannelRail, type ChannelFilterKey } from "@/components/inbox/channel-rail";
@@ -83,9 +83,15 @@ export default function InboxPage() {
   const [metaError, setMetaError] = useState<string | null>(null);
   // 抽屉 → 回复框的单向插入通道：nonce 变更即把片段追加到草稿。
   const [replyInsert, setReplyInsert] = useState<{ text: string; nonce: number } | null>(null);
-  // Pack E：AI 查库自动回复的结果条（可手动关闭）与错误提示。
-  const [autoReplyResult, setAutoReplyResult] = useState<AutoReplyRun | null>(null);
-  const [autoReplyError, setAutoReplyError] = useState<string | null>(null);
+  // Pack E / Wave 6：AI 查库自动回复的结果条与错误提示「按会话隔离」。
+  // 用 Map 而不是全局标量：一次异步回复落地时，结果只能挂到发起它的那条会话上，
+  // 绝不能因为用户中途切到别的买家而把结果串到别人的会话里。
+  const [autoReplyResultsByConv, setAutoReplyResultsByConv] = useState<
+    Record<string, AutoReplyRun | null>
+  >({});
+  const [autoReplyErrorsByConv, setAutoReplyErrorsByConv] = useState<
+    Record<string, string | null>
+  >({});
 
   const canOverseeOwnership =
     principal?.role === "owner" ||
@@ -145,11 +151,33 @@ export default function InboxPage() {
     return allConversations.filter((conv) => !conv.assigned_user_id);
   }, [allConversations, canOverseeOwnership, ownershipFilter, principal?.user_id]);
 
-  const activeConversation = useMemo(
-    () =>
-      conversations.find((c) => c.id === selectedConversationId) ?? conversations[0] ?? null,
-    [conversations, selectedConversationId]
-  );
+  // 记住「见过的会话」：筛选 / 搜索把当前选中的会话临时藏起来时（新 queryKey 的
+  // 数据还没回来），仍能安全地继续展示这条线索，而不是把买家换成 conversations[0]。
+  const conversationSnapshotRef = useRef<Record<string, ConversationSummary>>({});
+  useEffect(() => {
+    for (const conv of allConversations) {
+      conversationSnapshotRef.current[conv.id] = conv;
+    }
+  }, [allConversations]);
+
+  const activeConversation = useMemo(() => {
+    // 初次加载（还没有人工选中）→ 无缝打开第一条会话。
+    if (selectedConversationId === null) return conversations[0] ?? null;
+    return (
+      conversations.find((c) => c.id === selectedConversationId) ??
+      allConversations.find((c) => c.id === selectedConversationId) ??
+      conversationSnapshotRef.current[selectedConversationId] ??
+      null
+    );
+  }, [conversations, allConversations, selectedConversationId]);
+
+  const activeConversationId = activeConversation?.id ?? null;
+  const autoReplyResult = activeConversationId
+    ? (autoReplyResultsByConv[activeConversationId] ?? null)
+    : null;
+  const autoReplyError = activeConversationId
+    ? (autoReplyErrorsByConv[activeConversationId] ?? null)
+    : null;
 
   const messagesQuery = useQuery({
     queryKey: ["inbox", "messages", activeConversation?.id],
@@ -161,6 +189,24 @@ export default function InboxPage() {
     queryKey: ["ai", "proposals", "pending-count"],
     queryFn: () => fetchPendingProposalsCount(),
   });
+
+  // Wave 6：加载失败必须显式告知，绝不能把「请求挂了」伪装成「空收件箱」。
+  const inboxLoadFailed = conversationsQuery.isError || messagesQuery.isError;
+
+  function retryInboxLoad() {
+    if (conversationsQuery.isError) void conversationsQuery.refetch();
+    if (messagesQuery.isError) void messagesQuery.refetch();
+  }
+
+  /** 只写目标会话的结果条目（绝不写「当前激活会话」）。 */
+  function writeAutoReplyResult(conversationId: string, value: AutoReplyRun | null) {
+    setAutoReplyResultsByConv((prev) => ({ ...prev, [conversationId]: value }));
+  }
+
+  /** 只写目标会话的错误条目。 */
+  function writeAutoReplyError(conversationId: string, value: string | null) {
+    setAutoReplyErrorsByConv((prev) => ({ ...prev, [conversationId]: value }));
+  }
 
   // Pack E：当前会话的 AI 自动回复开关（失败不影响页面，默认按「关」）。
   const autoReplySettingQuery = useQuery({
@@ -180,10 +226,11 @@ export default function InboxPage() {
         ["ai", "auto-reply-setting", setting.conversation_id],
         setting,
       );
-      setAutoReplyError(null);
+      writeAutoReplyError(setting.conversation_id, null);
     },
-    onError: (error) => {
-      setAutoReplyError(
+    onError: (error, variables) => {
+      writeAutoReplyError(
+        variables.conversationId,
         error instanceof Error && error.message
           ? error.message
           : bi("自动回复开关保存失败，请重试。", "Failed to save auto-reply toggle."),
@@ -194,23 +241,36 @@ export default function InboxPage() {
   const autoReplyRunMutation = useMutation({
     mutationFn: ({ conversationId }: { conversationId: string }) =>
       runAiAutoReply(conversationId, "auto"),
-    onSuccess: (result) => {
-      setAutoReplyResult(result);
-      setAutoReplyError(null);
+    // 重新执行：只清掉这条会话上一次的结果与错误。
+    onMutate: ({ conversationId }) => {
+      writeAutoReplyResult(conversationId, null);
+      writeAutoReplyError(conversationId, null);
+    },
+    // 结果严格落到 mutationFn 的目标 conversationId 上：即便此刻用户已经切到别的
+    // 会话（或筛选把那条会话藏起来了），也不会把结果串台。
+    onSuccess: (result, variables) => {
+      writeAutoReplyResult(variables.conversationId, result);
+      writeAutoReplyError(variables.conversationId, null);
       // 自动回复往往已写入一条出站消息：立即刷新对话区。
       void queryClient.invalidateQueries({
         queryKey: ["inbox", "messages", result.conversation_id],
       });
       void queryClient.invalidateQueries({ queryKey: ["inbox", "conversations"] });
     },
-    onError: (error) => {
-      setAutoReplyError(
+    onError: (error, variables) => {
+      writeAutoReplyError(
+        variables.conversationId,
         error instanceof Error && error.message
           ? error.message
           : bi("AI 自动回复执行失败，请重试。", "AI auto-reply failed. Please retry."),
       );
     },
   });
+
+  // 「正在查库」状态同样按会话判断：A 会话在飞不该把 B 会话的按钮也变成 loading。
+  const autoReplyPendingConversationId = autoReplyRunMutation.isPending
+    ? (autoReplyRunMutation.variables?.conversationId ?? null)
+    : null;
 
   // Pack B：会话元数据（置顶 / 标签）写回，失败回滚乐观覆盖。
   const metaMutation = useMutation({
@@ -370,7 +430,7 @@ export default function InboxPage() {
       >
         <Sparkles className="h-3 w-3" />
         <span>
-          {autoReplyRunMutation.isPending
+          {autoReplyPendingConversationId === activeConversation.id
             ? bi("查库回复中…", "Grounded reply…")
             : bi("AI 查库自动回复", "AI grounded reply")}
         </span>
@@ -564,6 +624,40 @@ export default function InboxPage() {
           />
           <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {inboxLoadFailed && (
+                <div
+                  role="alert"
+                  data-testid="inbox-load-error"
+                  className="mx-4 mt-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-rose-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200"
+                >
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-semibold">
+                      {bi("收件箱加载失败", "Inbox failed to load")}
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed opacity-80">
+                      {conversationsQuery.isError
+                        ? bi(
+                            "会话列表没有拉到，请检查网络或服务后重试。",
+                            "We could not load conversations. Check the connection and retry.",
+                          )
+                        : bi(
+                            "当前会话的消息没有拉到，请重试。",
+                            "We could not load messages for this conversation. Please retry.",
+                          )}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="inbox-load-error-retry"
+                    onClick={retryInboxLoad}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-rose-300 bg-white px-2 py-1 text-[11.5px] font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-60 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200 dark:hover:bg-rose-500/20"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    <span>{bi("重试", "Retry")}</span>
+                  </button>
+                </div>
+              )}
               {autoReplyResult && (
                 <div
                   data-testid="inbox-autoreply-result"
@@ -613,7 +707,10 @@ export default function InboxPage() {
                     type="button"
                     data-testid="inbox-autoreply-result-dismiss"
                     aria-label={bi("关闭自动回复结果", "Dismiss auto-reply result")}
-                    onClick={() => setAutoReplyResult(null)}
+                    onClick={() => {
+                      // 只清掉「这条会话」的结果，不碰其它会话的缓存。
+                      if (activeConversationId) writeAutoReplyResult(activeConversationId, null);
+                    }}
                     className="grid h-5 w-5 shrink-0 place-items-center rounded-full opacity-60 transition-colors hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
                   >
                     <X className="h-3 w-3" />

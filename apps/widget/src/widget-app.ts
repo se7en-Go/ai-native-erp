@@ -32,8 +32,11 @@ const WIDGET_STYLES = `
   .prechat { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: #ffffff; border-bottom: 1px solid #e2e8f0; }
   .input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; }
   .optin { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; color: #475569; }
+  .error { display: none; padding: 6px 12px; background: #fef2f2; border-top: 1px solid #fecaca;
+    color: #b91c1c; font-size: 11.5px; line-height: 1.4; }
   .footer { display: flex; gap: 6px; padding: 10px; border-top: 1px solid #e2e8f0; background: #ffffff; }
   .send-btn { background: #2563eb; color: #ffffff; border: none; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+  .send-btn:disabled { opacity: 0.6; cursor: default; }
 `;
 
 export class LiveChatWidgetApp {
@@ -45,12 +48,15 @@ export class LiveChatWidgetApp {
   private businessName: string;
   private messages: WidgetMessage[] = [];
   private isOpen = false;
+  private isSending = false;
   private pollTimer: number | null = null;
 
   private panelEl!: HTMLDivElement;
   private bodyEl!: HTMLDivElement;
   private prechatEl!: HTMLDivElement;
   private inputEl!: HTMLInputElement;
+  private sendBtnEl!: HTMLButtonElement;
+  private errorEl!: HTMLDivElement;
 
   constructor(private readonly config: WidgetConfig) {
     this.api = new WidgetApiClientImpl(config.apiBase.replace(/\/$/, ""));
@@ -117,7 +123,10 @@ export class LiveChatWidgetApp {
         whatsapp_phone: waInput.value.trim() || undefined,
         marketing_opt_in: optinCheckbox.checked,
       };
-      void this.ensureSession(prechat);
+      // 网络抖动只会弹一条可重试提示，绝不能变成未处理的 Promise 拒绝。
+      void this.ensureSession(prechat).catch(() => {
+        this.setError("Failed to start chat. Please try again.");
+      });
     });
     this.prechatEl.append(emailInput, waInput, optinLabel, startBtn);
 
@@ -133,21 +142,37 @@ export class LiveChatWidgetApp {
     sendBtn.className = "send-btn";
     sendBtn.type = "submit";
     sendBtn.textContent = "Send";
+    this.sendBtnEl = sendBtn;
     footer.append(this.inputEl, sendBtn);
     footer.addEventListener("submit", (ev) => {
       ev.preventDefault();
       void this.handleSend();
     });
 
-    this.panelEl.append(header, this.prechatEl, this.bodyEl, footer);
+    this.errorEl = document.createElement("div");
+    this.errorEl.className = "error";
+    this.errorEl.setAttribute("role", "alert");
+    this.errorEl.style.display = "none";
+
+    this.panelEl.append(header, this.prechatEl, this.bodyEl, this.errorEl, footer);
     this.shadow.append(style, launcher, this.panelEl);
+  }
+
+  /** Inline, dismissable-on-success error line (never a browser alert()). */
+  private setError(message: string | null): void {
+    this.errorEl.textContent = message ?? "";
+    this.errorEl.style.display = message ? "block" : "none";
   }
 
   async open(): Promise<void> {
     this.isOpen = true;
     this.panelEl.classList.add("open");
     if (!this.sessionToken) {
-      await this.ensureSession();
+      try {
+        await this.ensureSession();
+      } catch {
+        this.setError("Failed to start chat. Please try again.");
+      }
     }
     this.startPolling();
   }
@@ -164,8 +189,13 @@ export class LiveChatWidgetApp {
   async toggle(): Promise<void> {
     if (this.isOpen) {
       this.close();
-    } else {
+      return;
+    }
+    try {
       await this.open();
+    } catch {
+      // open() 已自行兜底；这里只保证 toggle 永不抛出未处理拒绝。
+      this.setError("Failed to start chat. Please try again.");
     }
   }
 
@@ -190,20 +220,32 @@ export class LiveChatWidgetApp {
 
   private async handleSend(): Promise<void> {
     const text = this.inputEl.value.trim();
-    if (!text) return;
-    if (!this.sessionToken) {
-      await this.ensureSession();
+    if (!text || this.isSending) return;
+    this.isSending = true;
+    this.sendBtnEl.disabled = true;
+    this.setError(null);
+    try {
+      if (!this.sessionToken) {
+        await this.ensureSession();
+      }
+      if (!this.sessionToken) return;
+      const msg = await this.api.sendMessage(
+        this.sessionToken,
+        text,
+        window.location.href,
+        this.config.sku,
+      );
+      // 关键：只有服务端确认发送成功后才清空草稿。失败时访客的原文必须原样保留，
+      // 否则一段长询价写完就因为网络抖动消失了。
+      this.inputEl.value = "";
+      this.messages.push(msg);
+      this.renderMessages();
+    } catch {
+      this.setError("Failed to send message. Please try again.");
+    } finally {
+      this.isSending = false;
+      this.sendBtnEl.disabled = false;
     }
-    if (!this.sessionToken) return;
-    this.inputEl.value = "";
-    const msg = await this.api.sendMessage(
-      this.sessionToken,
-      text,
-      window.location.href,
-      this.config.sku,
-    );
-    this.messages.push(msg);
-    this.renderMessages();
   }
 
   async identify(payload: IdentifyPayload): Promise<void> {
@@ -218,12 +260,19 @@ export class LiveChatWidgetApp {
   private startPolling(): void {
     if (this.pollTimer !== null) return;
     this.pollTimer = window.setInterval(() => {
-      void (async () => {
-        if (!this.sessionToken || !this.isOpen) return;
-        this.messages = await this.api.listMessages(this.sessionToken);
-        this.renderMessages();
-      })();
+      void this.pollMessages();
     }, 4000);
+  }
+
+  /** 单轮拉取：任何网络错误都只跳过这一轮，轮询绝不能因异常而中断。 */
+  private async pollMessages(): Promise<void> {
+    if (!this.sessionToken || !this.isOpen) return;
+    try {
+      this.messages = await this.api.listMessages(this.sessionToken);
+      this.renderMessages();
+    } catch {
+      // 静默跳过：下一轮继续拉。
+    }
   }
 
   private renderMessages(): void {

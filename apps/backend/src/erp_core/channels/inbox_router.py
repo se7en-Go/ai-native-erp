@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from collections.abc import AsyncIterator
 from typing import Annotated, cast
 from urllib.parse import quote
@@ -48,6 +49,10 @@ from erp_core.shared.enums import ChannelType, UserRole
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.shared.storage import ObjectStorageService
 from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
+
+# SSE comment frames keep idle proxies/CDNs from dropping the stream. The interval is a
+# module constant so tests can shrink it without patching wall-clock behaviour.
+SSE_HEARTBEAT_INTERVAL_SECONDS: float = 15.0
 
 inbox_router = APIRouter(prefix="/api/v1/inbox", tags=["inbox"])
 _require_inbox_access = require_roles(
@@ -359,12 +364,14 @@ async def stream_inbox_events(
         await pubsub.subscribe(channel_name)
         yield f"event: connected\ndata: {json.dumps({'tenant_id': str(principal.tenant_id)})}\n\n"
         emitted = 0
+        last_activity = time.monotonic()
         try:
             while True:
                 if await request.is_disconnected():
                     break
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if msg and msg.get("type") == "message":
+                    last_activity = time.monotonic()
                     raw_data = msg["data"]
                     data_str = (
                         raw_data.decode("utf-8") if isinstance(raw_data, bytes) else str(raw_data)
@@ -379,8 +386,17 @@ async def stream_inbox_events(
                         break
                 else:
                     await asyncio.sleep(0.05)
+                    # Idle heartbeat. Keepalive frames are SSE comments, so they never
+                    # count towards max_events and never surface as client events.
+                    if time.monotonic() - last_activity >= SSE_HEARTBEAT_INTERVAL_SECONDS:
+                        yield ": keepalive\n\n"
+                        last_activity = time.monotonic()
         finally:
             await pubsub.unsubscribe(channel_name)
             await pubsub.aclose()  # type: ignore[no-untyped-call]
 
-    return StreamingResponse(_event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )

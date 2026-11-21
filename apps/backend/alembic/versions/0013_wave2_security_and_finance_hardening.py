@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
+from alembic import context, op
 
 revision: str = "0013_wave2_security_finance"
 down_revision: str | None = "0012_ai_autoreply_sourcing_ap"
@@ -120,6 +120,13 @@ def _downgrade_orders_non_negative_amounts() -> None:
 
 
 def _audit_partition_names() -> list[str]:
+    if context.is_offline_mode():
+        # `alembic upgrade head --sql` renders against a mock connection whose
+        # `execute()` yields no rows, and partition discovery is inherently
+        # data-dependent, so the offline script cannot enumerate live children.
+        # Nothing is lost at runtime: `ensure_audit_child_rls` FORCEs RLS on every
+        # partition (including newly created ones) during application startup.
+        return []
     rows = op.get_bind().execute(
         sa.text(
             "SELECT c.relname "
