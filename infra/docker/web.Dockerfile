@@ -69,6 +69,7 @@ WORKDIR /app
 # are NOT traced and must be copied alongside.
 COPY --from=builder --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=builder --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=node:node /repo/apps/web/public ./apps/web/public
 
 USER node
 EXPOSE 3000
