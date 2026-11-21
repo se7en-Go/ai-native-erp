@@ -942,6 +942,8 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
   const [publishDraftId, setPublishDraftId] = useState<string | null>(null);
   const [publishSelection, setPublishSelection] = useState<string[]>([]);
   const [multiplier, setMultiplier] = useState("1.00");
+  // 默认 false：不勾选时仍然只写本地 SKU 映射，绝不声称平台上架。
+  const [pushToMarketplace, setPushToMarketplace] = useState(false);
   const [publishResults, setPublishResults] = useState<Record<string, SourcingPublishResult[]>>({});
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -991,11 +993,16 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
   });
 
   const publishMutation = useMutation({
-    mutationFn: (input: { draftId: string; channelAccountIds: string[] }) =>
+    mutationFn: (input: {
+      draftId: string;
+      channelAccountIds: string[];
+      pushToMarketplace: boolean;
+    }) =>
       publishSourcingDraft(input.draftId, {
         channel_account_ids: input.channelAccountIds,
         price_multiplier: multiplier.trim() || "1.00",
         stock_sync_ratio: "1.00",
+        push_to_marketplace: input.pushToMarketplace,
       }),
     onSuccess: (results, input) => {
       setPublishError(null);
@@ -1261,6 +1268,7 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
                 publishOpen={publishDraftId === draft.id}
                 publishSelection={publishSelection}
                 multiplier={multiplier}
+                livePushEnabled={pushToMarketplace}
                 publishPending={publishMutation.isPending && publishMutation.variables?.draftId === draft.id}
                 publishResults={publishResults[draft.id]}
                 publishError={publishDraftId === draft.id ? publishError : null}
@@ -1273,10 +1281,12 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
                 }}
                 onToggleStore={toggleStore}
                 onChangeMultiplier={setMultiplier}
+                onToggleLivePush={() => setPushToMarketplace((current) => !current)}
                 onConfirmPublish={() =>
                   publishMutation.mutate({
                     draftId: draft.id,
                     channelAccountIds: publishSelection,
+                    pushToMarketplace,
                   })
                 }
                 onImport={() => importMutation.mutate(draft.id)}
@@ -1297,6 +1307,7 @@ function SourcingDraftCard({
   publishOpen,
   publishSelection,
   multiplier,
+  livePushEnabled,
   publishPending,
   publishResults,
   publishError,
@@ -1305,6 +1316,7 @@ function SourcingDraftCard({
   onTogglePublish,
   onToggleStore,
   onChangeMultiplier,
+  onToggleLivePush,
   onConfirmPublish,
   onImport,
   onDelete,
@@ -1315,6 +1327,7 @@ function SourcingDraftCard({
   publishOpen: boolean;
   publishSelection: string[];
   multiplier: string;
+  livePushEnabled: boolean;
   publishPending: boolean;
   publishResults?: SourcingPublishResult[];
   publishError: string | null;
@@ -1323,12 +1336,14 @@ function SourcingDraftCard({
   onTogglePublish: () => void;
   onToggleStore: (storeId: string) => void;
   onChangeMultiplier: (value: string) => void;
+  onToggleLivePush: () => void;
   onConfirmPublish: () => void;
   onImport: () => void;
   onDelete: () => void;
 }) {
   const { bi } = useI18n();
-  const status = sourcingStatusCopy(draft.status);
+  // 草稿徽标优先使用真实刊登状态（`live_published` 只能由平台回执写入）。
+  const status = sourcingStatusCopy(draft.listing_state ?? draft.status);
 
   return (
     <article
@@ -1524,6 +1539,29 @@ function SourcingDraftCard({
             </p>
           )}
 
+          {/* 实时上架开关：默认关闭，不勾选只写本地 SKU 映射，绝不声称平台上架。 */}
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-800 dark:border-blue-900/70 dark:bg-slate-900 dark:text-slate-200">
+            <input
+              type="checkbox"
+              data-testid="sourcing-live-push-toggle"
+              checked={livePushEnabled}
+              onChange={onToggleLivePush}
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 accent-blue-600"
+            />
+            <span className="min-w-0">
+              {bi(
+                "同时通过官方 API 实时上架到 Amazon / eBay / Alibaba",
+                "Push live listing via official API (Amazon / eBay / Alibaba)"
+              )}
+              <span className="mt-0.5 block text-[10.5px] font-normal text-slate-500 dark:text-slate-400">
+                {bi(
+                  "不勾选只写本地 SKU 映射（映射就绪），不声称平台已上架。",
+                  "Leave unchecked for local SKU mapping only — no claim of a live listing."
+                )}
+              </span>
+            </span>
+          </label>
+
           <div className="flex items-center justify-end gap-1.5">
             <button
               type="button"
@@ -1555,17 +1593,35 @@ function SourcingDraftCard({
           data-testid={`sourcing-publish-results-${draft.id}`}
           className="mt-2.5 space-y-1 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 dark:border-emerald-800/70 dark:bg-emerald-950/30"
         >
-          {publishResults.map((result) => (
-            <li
-              key={result.mapping_id}
-              className="flex flex-wrap items-center gap-1.5 text-[11.5px] font-medium text-emerald-900 dark:text-emerald-200"
-            >
-              <CheckCircle2 className="h-3 w-3 shrink-0" />
-              <span className="font-semibold">{sourcingStoreLabel(result.channel_type)}</span>
-              <span className="font-mono text-[11px]">{result.external_sku}</span>
-              <span className="tabular-nums">{formatMoney(result.price_usd, "USD")}</span>
-            </li>
-          ))}
+          {publishResults.map((result) => {
+            const resultStatus = sourcingStatusCopy(
+              result.listing_state ?? draft.listing_state ?? draft.status
+            );
+            return (
+              <li
+                key={result.mapping_id}
+                className="flex flex-wrap items-center gap-1.5 text-[11.5px] font-medium text-emerald-900 dark:text-emerald-200"
+              >
+                <CheckCircle2 className="h-3 w-3 shrink-0" />
+                <span className="font-semibold">{sourcingStoreLabel(result.channel_type)}</span>
+                <span className="font-mono text-[11px]">{result.external_sku}</span>
+                <span className="tabular-nums">{formatMoney(result.price_usd, "USD")}</span>
+                <span
+                  data-testid={`sourcing-publish-result-status-${draft.id}-${result.channel_account_id}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10.5px] font-semibold ${resultStatus.tone}`}
+                >
+                  {bi(resultStatus.zh, resultStatus.en)}
+                </span>
+                <span
+                  data-testid={`sourcing-publish-result-external-id-${draft.id}-${result.channel_account_id}`}
+                  className="max-w-full truncate font-mono text-[10.5px] text-emerald-800/80 dark:text-emerald-300/80"
+                  title={result.external_product_id}
+                >
+                  {bi("平台 ID", "Platform ID")} {result.external_product_id}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </article>

@@ -69,6 +69,7 @@ from erp_core.shared.errors import register_exception_handlers
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
 from erp_core.social.attribution_router import router as social_attribution_router
+from erp_core.social.publishers import HttpSocialPublisherDispatcher
 from erp_core.social.router import router as social_router
 from erp_core.supply_chain.analytics import router as executive_router
 from erp_core.supply_chain.router import supply_router, wms_router
@@ -107,6 +108,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # `catalog_isolated`), so the live marketplace push is injected here through the
     # `MarketplaceListingPublisher` protocol instead.
     app.state.marketplace_listing_publisher = MarketplaceListingDispatcher()
+    # Live social publishing (Instagram/Facebook/TikTok/YouTube/LinkedIn/Pinterest/X/
+    # WeChat OA) is injected through the social module's `SocialPublisherPort` protocol.
+    app.state.social_publisher = HttpSocialPublisherDispatcher()
     app.state.runtime_engine = runtime_engine
     app.state.session_factory = session_factory
     app.state.broker_session_factory = migrator_sessions

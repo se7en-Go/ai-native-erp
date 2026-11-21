@@ -1,7 +1,9 @@
 // Phase 3D data layer: generated-SDK calls by default, fixture-backed responses
 // only when NEXT_PUBLIC_USE_MOCK_API=true (same switch as data-source.ts).
 import * as live from "@/lib/api-client/phase3d";
-import type { SocialKpis } from "@/lib/api-client/phase3d";
+import { mapPost, type SocialKpis } from "@/lib/api-client/phase3d";
+import type { PostRead } from "@/lib/api-client/types.gen";
+import { bffFetch } from "@/lib/api";
 import type {
   SocialAccount,
   SocialPlatform,
@@ -41,6 +43,30 @@ function recomputeMockSummary(): void {
   };
 }
 
+/**
+ * 贴文送达口径：`PostRead` 里的三个字段 + 状态，页面用它区分
+ * 「外部平台已确认」与「本地已记录」。
+ */
+export interface SocialDeliveryFields {
+  status: string;
+  delivery_mode?: "recorded_local" | "manual_confirmed" | "external_api" | null;
+  external_publish_confirmed?: boolean | null;
+  external_post_id?: string | null;
+}
+
+export type SocialPostWithDelivery = SocialPost & Omit<SocialDeliveryFields, "status">;
+
+/** 把 UI 贴文还原成 `postDeliveryLabel(...)` 的入参（缺省即「本地已记录」）。 */
+export function socialPostDelivery(post: SocialPost): SocialDeliveryFields {
+  const candidate = post as SocialPostWithDelivery;
+  return {
+    status: candidate.status,
+    delivery_mode: candidate.delivery_mode ?? null,
+    external_publish_confirmed: candidate.external_publish_confirmed ?? null,
+    external_post_id: candidate.external_post_id ?? null,
+  };
+}
+
 function toUiAccount(row: (typeof mockState.accounts)[number]): SocialAccount {
   return {
     id: row.id,
@@ -53,7 +79,7 @@ function toUiAccount(row: (typeof mockState.accounts)[number]): SocialAccount {
   };
 }
 
-function toUiPost(row: (typeof mockState.posts)[number]): SocialPost {
+function toUiPost(row: (typeof mockState.posts)[number]): SocialPostWithDelivery {
   return {
     id: row.id,
     platform: row.platform as SocialPlatform,
@@ -64,6 +90,9 @@ function toUiPost(row: (typeof mockState.posts)[number]): SocialPost {
     status: row.status,
     scheduled_at: row.scheduled_at,
     published_at: row.published_at,
+    delivery_mode: row.delivery_mode ?? null,
+    external_publish_confirmed: row.external_publish_confirmed ?? null,
+    external_post_id: row.external_post_id ?? null,
   };
 }
 
@@ -190,19 +219,50 @@ export async function saveSocialPosts(
   return created;
 }
 
+/** 实时外发开关：默认 false，只有 api 模式平台且已授权 OAuth 才建议开启。 */
+export interface PublishSocialOptions {
+  executeRemote?: boolean;
+  externalPostId?: string;
+}
+
 export function publishSocialPost(
   postId: string,
-  manualConfirmation: boolean
-): Promise<SocialPost> {
+  manualConfirmation: boolean,
+  options: PublishSocialOptions = {}
+): Promise<SocialPostWithDelivery> {
+  const executeRemote = options.executeRemote === true;
   if (shouldUseMockApi()) {
     const row = mockState.posts.find((post) => post.id === postId);
     if (!row) return Promise.reject(new Error("social post not found"));
     row.status = "published";
     row.published_at = new Date().toISOString();
+    // 诚实口径：只有显式要求实时外发才声称平台已确认；否则只是本地记录 / 人工确认。
+    row.delivery_mode = executeRemote
+      ? "external_api"
+      : manualConfirmation
+        ? "manual_confirmed"
+        : "recorded_local";
+    row.external_publish_confirmed = executeRemote;
+    row.external_post_id = executeRemote
+      ? (options.externalPostId ?? `remote-mock-${postId.slice(0, 8)}`)
+      : (row.external_post_id ?? null);
     recomputeMockSummary();
     return Promise.resolve(toUiPost(row));
   }
-  return live.publishPost(postId, { manual_confirmation: manualConfirmation });
+  // 实时外发开关必须进请求体：后端据此调用平台官方发布接口。
+  const body: { manual_confirmation: boolean; execute_remote: boolean } = {
+    manual_confirmation: manualConfirmation,
+    execute_remote: executeRemote,
+  };
+  return bffFetch<PostRead>(`/v1/social/posts/${encodeURIComponent(postId)}/publish`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  }).then((raw) => ({
+    ...mapPost(raw),
+    delivery_mode: raw.delivery_mode ?? null,
+    external_publish_confirmed: raw.external_publish_confirmed ?? null,
+    external_post_id: raw.external_post_id ?? null,
+  }));
 }
 
 export interface CaptionRequestInput {

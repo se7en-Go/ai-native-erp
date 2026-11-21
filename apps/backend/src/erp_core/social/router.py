@@ -55,7 +55,10 @@ def _service(request: Request) -> SocialService:
         from erp_core.shared.config import get_settings
 
         crypto = EnvelopeCryptoService(get_settings())
-    return SocialService(crypto)
+    # The live publishing adapter is injected by the composition root (api_main) so a
+    # deployment without official-API credentials still serves the record-only paths.
+    publisher = getattr(request.app.state, "social_publisher", None)
+    return SocialService(crypto, publisher=publisher)
 
 
 def _caption_provider(request: Request) -> CaptionProvider:

@@ -39,9 +39,9 @@ const EXPECTED_TIER_BY_KEY: Record<string, ChannelCapabilityTier> = {
   shopline: "order_sync",
   shoplazza: "order_sync",
   tiktok_shop: "order_sync",
-  alibaba_intl: "credentials_only",
-  amazon: "credentials_only",
-  ebay: "credentials_only",
+  alibaba_intl: "order_sync",
+  amazon: "order_sync",
+  ebay: "order_sync",
 };
 
 describe("wave5 honest channel capability badges", () => {
@@ -53,8 +53,8 @@ describe("wave5 honest channel capability badges", () => {
 
     const tiers = CHANNEL_MARKETPLACE.map((item) => item.capabilityTier);
     expect(tiers.filter((tier) => tier === "live_messaging")).toHaveLength(6);
-    expect(tiers.filter((tier) => tier === "order_sync")).toHaveLength(5);
-    expect(tiers.filter((tier) => tier === "credentials_only")).toHaveLength(3);
+    expect(tiers.filter((tier) => tier === "order_sync")).toHaveLength(8);
+    expect(tiers.filter((tier) => tier === "credentials_only")).toHaveLength(0);
 
     for (const item of CHANNEL_MARKETPLACE) {
       expect(item.capabilityBadgeZh.length).toBeGreaterThan(0);
@@ -80,10 +80,13 @@ describe("wave5 honest channel capability badges", () => {
       "订单与库存同步",
     );
     expect(screen.getByTestId("channel-capability-amazon").textContent).toContain(
-      "凭证接入 · SKU映射",
+      "SP-API 实时刊登与拉单",
     );
     expect(screen.getByTestId("channel-capability-alibaba_intl").textContent).toContain(
-      "凭证与询盘邮箱",
+      "实时刊登 · 订单与询盘",
+    );
+    expect(screen.getByTestId("channel-capability-ebay").textContent).toContain(
+      "Sell API 实时刊登与拉单",
     );
   });
 
@@ -97,14 +100,17 @@ describe("wave5 honest channel capability badges", () => {
       "Order & stock sync",
     );
     expect(screen.getByTestId("channel-capability-ebay").textContent).toContain(
-      "Credentials · SKU mapping",
+      "Sell API listing & order sync",
     );
     expect(screen.getByTestId("channel-capability-alibaba_intl").textContent).toContain(
-      "Credentials & inquiry email",
+      "Live listing · Orders & inquiries",
     );
     // 不再出现「实时消息」式的过度承诺。
     expect(screen.getByTestId("channel-capability-amazon").textContent).not.toContain(
       "Live messaging",
+    );
+    expect(screen.getByTestId("channel-capability-amazon").textContent).toContain(
+      "SP-API listing & order sync",
     );
   });
 
@@ -122,18 +128,27 @@ describe("wave5 honest channel capability badges", () => {
     expect(screen.getByTestId("marketplace-custom-channel-card")).toBeInTheDocument();
   });
 
-  it("keeps the 3 credentials-only channels honest in their descriptions", () => {
+  it("keeps the 3 foreign-trade channels honest about their live API listing push", () => {
     const amazon = CHANNEL_MARKETPLACE.find((item) => item.key === "amazon")!;
     const ebay = CHANNEL_MARKETPLACE.find((item) => item.key === "ebay")!;
     const alibaba = CHANNEL_MARKETPLACE.find((item) => item.key === "alibaba_intl")!;
 
-    for (const item of [amazon, ebay]) {
+    // 三个渠道都声明「实时刊登」+「订单回拉」，并明确凭证是信封加密托管。
+    for (const item of [amazon, ebay, alibaba]) {
+      expect(item.capabilityTier).toBe("order_sync");
       expect(item.descriptionZh).toContain("加密");
-      expect(item.descriptionZh).toContain("SKU 映射");
-      expect(item.descriptionZh).toContain("不推送商品上架");
+      expect(item.capabilityBadgeZh).toContain("实时刊登");
+      expect(item.capabilityBadgeEn.toLowerCase()).toContain("listing");
     }
-    expect(alibaba.descriptionZh).toContain("询盘邮箱");
-    expect(alibaba.descriptionZh).toContain("不做商品刊登推送");
+    expect(amazon.descriptionZh).toContain("SP-API");
+    expect(ebay.descriptionZh).toContain("Sell API");
+    expect(alibaba.descriptionZh).toContain("IOP");
+    expect(alibaba.descriptionZh).toContain("询盘");
+    // 旧口径（不推送商品上架 / 不做商品刊登推送）已不成立，必须已移除。
+    for (const item of [amazon, ebay, alibaba]) {
+      expect(item.descriptionZh).not.toContain("不推送商品上架");
+      expect(item.descriptionZh).not.toContain("不做商品刊登推送");
+    }
   });
 });
 

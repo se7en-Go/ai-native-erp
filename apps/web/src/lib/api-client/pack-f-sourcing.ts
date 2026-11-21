@@ -447,11 +447,16 @@ export async function importSourcingDraftToCatalog(
   );
 }
 
-/** POST /v1/catalog/sourcing/drafts/{draft_id}/publish — 多平台一键刊登。 */
+/** POST /v1/catalog/sourcing/drafts/{draft_id}/publish — 多平台一键刊登。
+ *
+ * `push_to_marketplace: true` 走真实平台 API（Amazon SP-API / eBay Sell API / Alibaba IOP）；
+ * 缺省 `false` 只写本地 SKU 映射，与既有「不夸大」口径一致。
+ */
 export async function publishSourcingDraft(
   draftId: string,
   body: SourcingPublishRequest,
 ): Promise<SourcingPublishResult[]> {
+  const pushToMarketplace = body.push_to_marketplace === true;
   if (shouldUseMockApi()) {
     const draft = mockDrafts.find((item) => item.id === draftId) ?? mockDrafts[0];
     const multiplier = decimalInput(body.price_multiplier, 1);
@@ -467,11 +472,22 @@ export async function publishSourcingDraft(
         stock_sync_ratio: moneyString(ratio),
         mapping_id: `mock-mapping-${draft.id}-${index + 1}`,
         published_at: publishedAt,
+        // 只有显式要求实时推送时，Mock 才声称平台已确认上线。
+        listing_state: pushToMarketplace ? "live_published" : "mapping_ready",
+        external_listing_confirmed: pushToMarketplace,
+        publish_mode: pushToMarketplace ? "live_marketplace_api" : "local_sku_mapping",
       }),
     );
     const published: SourcingDraftRead = {
       ...draft,
       status: "published",
+      // 本地 `status` 保留 `published`（既有徽标断言依赖「已刊登」子串）；
+      // 只有真实推送成功才把 `listing_state` 提升为 `live_published`。
+      listing_state: pushToMarketplace ? "live_published" : draft.listing_state,
+      attributes:
+        typeof body.initial_stock_quantity === "number"
+          ? { ...draft.attributes, initial_stock_quantity: body.initial_stock_quantity }
+          : draft.attributes,
       publish_history: [
         ...(draft.publish_history ?? []),
         ...results.map((result) => ({
@@ -479,6 +495,7 @@ export async function publishSourcingDraft(
           external_sku: result.external_sku,
           price_usd: result.price_usd,
           published_at: result.published_at,
+          publish_mode: result.publish_mode,
         })),
       ],
       updated_at: publishedAt,
@@ -489,6 +506,47 @@ export async function publishSourcingDraft(
   return bffFetch<SourcingPublishResult[]>(
     `/v1/catalog/sourcing/drafts/${encodeURIComponent(draftId)}/publish`,
     { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 平台订单回拉（Amazon SP-API / eBay Sell API / Alibaba IOP）
+// ---------------------------------------------------------------------------
+
+/** 订单回拉统计：扫到 / 找回 / 更新 / 失败，全部由后端确定性 SQL 返回。 */
+export interface MarketplaceOrderSyncResult {
+  channel_account_id: string;
+  channel_type: string;
+  scanned: number;
+  recovered: number;
+  updated: number;
+  failed: number;
+}
+
+/** POST /v1/channels/marketplace/{channel_account_id}/sync-orders?lookback_hours=N。
+ *
+ * 走平台官方订单接口回拉最近 N 小时的订单，缺失的直接落 ERP，已存在的幂等更新。
+ * Mock 模式返回一组固定统计，零后端也能点亮「拉单」按钮。
+ */
+export async function triggerMarketplaceOrderSync(
+  channelAccountId: string,
+  lookbackHours = 24,
+): Promise<MarketplaceOrderSyncResult> {
+  const hours =
+    Number.isFinite(lookbackHours) && lookbackHours > 0 ? Math.trunc(lookbackHours) : 24;
+  if (shouldUseMockApi()) {
+    return {
+      channel_account_id: channelAccountId,
+      channel_type: "amazon_sp",
+      scanned: 2,
+      recovered: 1,
+      updated: 1,
+      failed: 0,
+    };
+  }
+  return bffFetch<MarketplaceOrderSyncResult>(
+    `/v1/channels/marketplace/${encodeURIComponent(channelAccountId)}/sync-orders?lookback_hours=${hours}`,
+    { method: "POST" },
   );
 }
 
