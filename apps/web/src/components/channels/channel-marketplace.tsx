@@ -65,6 +65,17 @@ export function livechatEmbedSnippet(
   }"></script>`;
 }
 
+/**
+ * 渠道「真实能力」三档（诚实标注，不夸大）：
+ * - live_messaging：真的能收发实时消息（Webhook 验签 + 出站发送）。
+ * - order_sync：订单 / 库存 / 商品数据双向同步，但不承载会话消息。
+ * - credentials_only：只做凭证加密托管（+ 询盘邮箱 / SKU 映射准备），不保证实时外发。
+ */
+export type ChannelCapabilityTier =
+  | "live_messaging"
+  | "order_sync"
+  | "credentials_only";
+
 export type ChannelMarketplaceItem = {
   key: ExtendedMarketplaceChannelKey;
   titleZh: string;
@@ -80,6 +91,20 @@ export type ChannelMarketplaceItem = {
   channelTypes: ChannelType[];
   /** owner/admin 专属（公司资产），业务员不可见。 */
   adminOnly: boolean;
+  /** 诚实能力档位 + 双语徽标文案（卡片上必须展示，避免过度承诺）。 */
+  capabilityTier: ChannelCapabilityTier;
+  capabilityBadgeZh: string;
+  capabilityBadgeEn: string;
+};
+
+/** 能力徽标配色：即时消息=翠绿，订单同步=天蓝，仅凭证=琥珀。 */
+export const CAPABILITY_BADGE_TONE: Record<ChannelCapabilityTier, string> = {
+  live_messaging:
+    "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-300",
+  order_sync:
+    "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/40 dark:text-sky-300",
+  credentials_only:
+    "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-300",
 };
 
 /**
@@ -99,6 +124,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-emerald-500",
     channelTypes: ["whatsapp_cloud", "whatsapp_coexistence"],
     adminOnly: false,
+    capabilityTier: "live_messaging",
+    capabilityBadgeZh: "实时消息收发",
+    capabilityBadgeEn: "Live messaging",
   },
   {
     key: "telegram",
@@ -112,6 +140,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-sky-500",
     channelTypes: ["telegram"],
     adminOnly: false,
+    capabilityTier: "live_messaging",
+    capabilityBadgeZh: "实时消息收发",
+    capabilityBadgeEn: "Live messaging",
   },
   {
     key: "messenger",
@@ -125,6 +156,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-blue-500",
     channelTypes: ["messenger"],
     adminOnly: true,
+    capabilityTier: "live_messaging",
+    capabilityBadgeZh: "实时消息收发",
+    capabilityBadgeEn: "Live messaging",
   },
   {
     key: "instagram_dm",
@@ -138,6 +172,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-rose-500",
     channelTypes: ["instagram_dm"],
     adminOnly: true,
+    capabilityTier: "live_messaging",
+    capabilityBadgeZh: "实时消息收发",
+    capabilityBadgeEn: "Live messaging",
   },
   {
     key: "email",
@@ -151,6 +188,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-emerald-500",
     channelTypes: ["email", "made_in_china_email"],
     adminOnly: false,
+    capabilityTier: "live_messaging",
+    capabilityBadgeZh: "实时消息收发",
+    capabilityBadgeEn: "Live messaging",
   },
   {
     key: "web_livechat",
@@ -164,6 +204,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-violet-500",
     channelTypes: ["web_livechat"],
     adminOnly: true,
+    capabilityTier: "live_messaging",
+    capabilityBadgeZh: "实时消息收发",
+    capabilityBadgeEn: "Live messaging",
   },
   {
     key: "shopify",
@@ -177,6 +220,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-lime-600",
     channelTypes: ["shopify"],
     adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "订单与库存同步",
+    capabilityBadgeEn: "Order & stock sync",
   },
   {
     key: "woocommerce",
@@ -190,6 +236,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-purple-500",
     channelTypes: ["woocommerce"],
     adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "订单与库存同步",
+    capabilityBadgeEn: "Order & stock sync",
   },
   {
     key: "shopline",
@@ -203,6 +252,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-sky-500",
     channelTypes: ["shopline"],
     adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "订单与库存同步",
+    capabilityBadgeEn: "Order & stock sync",
   },
   {
     key: "shoplazza",
@@ -216,6 +268,9 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-indigo-500",
     channelTypes: ["shoplazza"],
     adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "订单与库存同步",
+    capabilityBadgeEn: "Order & stock sync",
   },
   {
     key: "tiktok_shop",
@@ -229,45 +284,63 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     accent: "bg-zinc-700 dark:bg-zinc-500",
     channelTypes: ["tiktok_shop"],
     adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "订单与库存同步",
+    capabilityBadgeEn: "Order & stock sync",
   },
   {
     key: "alibaba_intl",
     titleZh: "Alibaba.com 国际站",
     titleEn: "Alibaba.com",
-    descriptionZh: "粘贴 App Key/Secret 与询盘邮箱快速绑定，询盘直接进 Inbox。",
-    descriptionEn: "Paste the app key/secret plus the inquiry mailbox to bind in one step.",
+    descriptionZh:
+      "App Key/Secret 信封加密托管 + 询盘邮箱绑定，询盘直接进 Inbox（不做商品刊登推送）。",
+    descriptionEn:
+      "App key/secret vaulted plus inquiry mailbox — inquiries land in Inbox, with no listing push.",
     category: "commerce",
     icon: Building2,
     tile: "bg-orange-50 text-orange-700 ring-orange-100",
     accent: "bg-orange-500",
     channelTypes: ["alibaba_email"],
     adminOnly: true,
+    capabilityTier: "credentials_only",
+    capabilityBadgeZh: "凭证与询盘邮箱",
+    capabilityBadgeEn: "Credentials & inquiry email",
   },
   {
     key: "amazon",
     titleZh: "Amazon 卖家中心",
     titleEn: "Amazon Seller Central",
-    descriptionZh: "Seller ID / Marketplace ID / LWA 密钥与 Refresh Token 加密直连。",
-    descriptionEn: "Seller ID, marketplace ID, LWA keys and refresh token, encrypted.",
+    descriptionZh:
+      "Seller ID / Marketplace ID / LWA 与 Refresh Token 信封加密托管，本地 SKU 映射准备（不推送商品上架）。",
+    descriptionEn:
+      "Seller ID, marketplace ID, LWA keys and refresh token vaulted; local SKU mapping prep only, no listing push.",
     category: "commerce",
     icon: Package,
     tile: "bg-amber-50 text-amber-700 ring-amber-100",
     accent: "bg-amber-500",
     channelTypes: ["amazon_sp"],
     adminOnly: true,
+    capabilityTier: "credentials_only",
+    capabilityBadgeZh: "凭证接入 · SKU映射",
+    capabilityBadgeEn: "Credentials · SKU mapping",
   },
   {
     key: "ebay",
     titleZh: "eBay",
     titleEn: "eBay",
-    descriptionZh: "Seller Username / Site ID / App + Cert ID 与 Refresh Token 直连。",
-    descriptionEn: "Seller username, site ID, app/cert IDs and refresh token direct connect.",
+    descriptionZh:
+      "Seller Username / Site ID / App + Cert ID 与 Refresh Token 信封加密托管，本地 SKU 映射准备（不推送商品上架）。",
+    descriptionEn:
+      "Seller username, site ID, app/cert IDs and refresh token vaulted; local SKU mapping prep only, no listing push.",
     category: "commerce",
     icon: BadgeDollarSign,
     tile: "bg-sky-50 text-sky-700 ring-sky-100",
     accent: "bg-sky-600",
     channelTypes: ["ebay"],
     adminOnly: true,
+    capabilityTier: "credentials_only",
+    capabilityBadgeZh: "凭证接入 · SKU映射",
+    capabilityBadgeEn: "Credentials · SKU mapping",
   },
 ];
 
@@ -522,6 +595,20 @@ export function ChannelMarketplaceGrid({
                       : bi(item.descriptionZh, item.descriptionEn)}
                   </p>
                 </div>
+              </div>
+
+              {/* 诚实能力徽标：每个渠道都明确标注「能做什么 / 不能做什么」。 */}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span
+                  data-testid={`channel-capability-${item.key}`}
+                  data-capability-tier={item.capabilityTier}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${
+                    CAPABILITY_BADGE_TONE[item.capabilityTier]
+                  }`}
+                >
+                  <span aria-hidden="true" className="h-1 w-1 rounded-full bg-current opacity-70" />
+                  {bi(item.capabilityBadgeZh, item.capabilityBadgeEn)}
+                </span>
               </div>
 
               <span

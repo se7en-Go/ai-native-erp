@@ -12,6 +12,9 @@ from erp_core.social.playbooks import PublishMode, SocialPlatform, SocialRegion
 
 AccountStatus = Literal["connected", "disconnected", "token_expired"]
 PostStatus = Literal["draft", "scheduled", "published", "failed"]
+# How a post actually reached the outside world. The database status column stays the
+# four-value lifecycle token; this literal tells the truth about delivery.
+DeliveryMode = Literal["recorded_local", "manual_confirmed", "external_api"]
 Sentiment = Literal["positive", "neutral", "negative", "lead_intent"]
 
 
@@ -158,6 +161,10 @@ class PostRead(BaseModel):
     created_by: UUID
     created_at: datetime
     updated_at: datetime
+    # Honest delivery state: a `published` row without an external post id was only
+    # recorded locally (or manually confirmed in the platform's own console).
+    delivery_mode: DeliveryMode = "recorded_local"
+    external_publish_confirmed: bool = False
 
 
 class PostPublish(BaseModel):
