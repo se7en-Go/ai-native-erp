@@ -39,6 +39,7 @@ from erp_core.channels.adapters.messenger import messenger_router
 from erp_core.channels.adapters.telegram import telegram_router
 from erp_core.channels.adapters.whatsapp import whatsapp_router
 from erp_core.channels.ecommerce.connectors_router import router as connectors_router
+from erp_core.channels.ecommerce.listing_dispatcher import MarketplaceListingDispatcher
 from erp_core.channels.ecommerce.marketplace_connect_router import (
     router as marketplace_connect_router,
 )
@@ -102,6 +103,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.storage = storage
     app.state.crypto_service = crypto_service
+    # The catalog module must never import erp_core.channels (import-linter
+    # `catalog_isolated`), so the live marketplace push is injected here through the
+    # `MarketplaceListingPublisher` protocol instead.
+    app.state.marketplace_listing_publisher = MarketplaceListingDispatcher()
     app.state.runtime_engine = runtime_engine
     app.state.session_factory = session_factory
     app.state.broker_session_factory = migrator_sessions

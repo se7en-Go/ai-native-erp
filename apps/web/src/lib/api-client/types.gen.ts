@@ -1225,6 +1225,18 @@ export type MarketplaceConnectionRead = {
     visibility_scope?: string | null;
 };
 
+/**
+ * Outcome of one on-demand order reconciliation for a marketplace account.
+ */
+export type MarketplaceOrderSyncResult = {
+    channel_account_id: string;
+    channel_type: string;
+    failed: number;
+    recovered: number;
+    scanned: number;
+    updated: number;
+};
+
 export type MembershipItem = {
     created_at: string;
     email: string;
@@ -2668,7 +2680,9 @@ export type SourcingMoqTier = {
 
 export type SourcingPublishRequest = {
     channel_account_ids: Array<string>;
+    initial_stock_quantity?: number;
     price_multiplier?: number | string;
+    push_to_marketplace?: boolean;
     stock_sync_ratio?: number | string;
 };
 
@@ -5860,6 +5874,38 @@ export type ConnectInstagramApiV1ChannelsInstagramConnectPostResponses = {
 };
 
 export type ConnectInstagramApiV1ChannelsInstagramConnectPostResponse = ConnectInstagramApiV1ChannelsInstagramConnectPostResponses[keyof ConnectInstagramApiV1ChannelsInstagramConnectPostResponses];
+
+export type SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        channel_account_id: string;
+    };
+    query?: {
+        lookback_hours?: number;
+    };
+    url: '/api/v1/channels/marketplace/{channel_account_id}/sync-orders';
+};
+
+export type SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostError = SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostErrors[keyof SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostErrors];
+
+export type SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: MarketplaceOrderSyncResult;
+};
+
+export type SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostResponse = SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostResponses[keyof SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostResponses];
 
 export type ConnectMessengerApiV1ChannelsMessengerConnectPostData = {
     body: MessengerConnectRequest;

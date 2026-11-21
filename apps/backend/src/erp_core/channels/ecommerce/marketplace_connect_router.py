@@ -12,17 +12,23 @@ Every endpoint follows the same fail-closed contract as ``connectors_router``:
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from erp_core.channels.ecommerce.base import CredentialVaultHelper, register_channel_routing
+from erp_core.channels.ecommerce.listing_dispatcher import build_marketplace_adapter
+from erp_core.orders.reconciliation_worker import (
+    reconcile_channel_account_orders,
+    resolve_default_warehouse_id,
+)
 from erp_core.shared.db import tenant_session
-from erp_core.shared.enums import UserRole
+from erp_core.shared.enums import ChannelType, UserRole
 from erp_core.shared.errors import AppError
 from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
@@ -31,6 +37,9 @@ router = APIRouter(prefix="/api/v1/channels", tags=["marketplace-connect"])
 
 _ADMIN_ROLES = (UserRole.OWNER, UserRole.ADMIN)
 AdminPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_ADMIN_ROLES))]
+
+_SYNC_ROLES = (UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
+SyncPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_SYNC_ROLES))]
 
 ALIBABA_INTL_CREDENTIAL_TYPE = "alibaba_intl_app"
 AMAZON_CREDENTIAL_TYPE = "amazon_sp_api"
@@ -42,6 +51,11 @@ EBAY_CHANNEL_TYPE = "ebay"
 
 DEFAULT_AMAZON_MARKETPLACE_ID = "ATVPDKIKX0DER"
 DEFAULT_EBAY_SITE_ID = "EBAY_US"
+
+#: Channels with a real order-feed adapter behind the on-demand sync endpoint.
+SYNC_SUPPORTED_CHANNEL_TYPES: frozenset[str] = frozenset(
+    {AMAZON_CHANNEL_TYPE, EBAY_CHANNEL_TYPE, ALIBABA_INTL_CHANNEL_TYPE}
+)
 
 CREDENTIAL_TYPES: dict[str, str] = {
     ALIBABA_INTL_CHANNEL_TYPE: ALIBABA_INTL_CREDENTIAL_TYPE,
@@ -105,6 +119,17 @@ class MarketplaceConnectionRead(BaseModel):
     credential_type: str
     status: str = "active"
     visibility_scope: str | None = None
+
+
+class MarketplaceOrderSyncResult(BaseModel):
+    """Outcome of one on-demand order reconciliation for a marketplace account."""
+
+    channel_account_id: UUID
+    channel_type: str
+    scanned: int
+    recovered: int
+    updated: int
+    failed: int
 
 
 async def _upsert_channel_account(
@@ -217,6 +242,103 @@ async def provision_marketplace_account(
     )
 
 
+async def _load_marketplace_account(
+    session: AsyncSession, tenant_id: UUID, channel_account_id: UUID
+) -> tuple[str, dict[str, Any]]:
+    """Load one tenant-scoped channel account or fail closed with a 404."""
+    row = (
+        await session.execute(
+            text(
+                "SELECT channel_type, config FROM channel_accounts "
+                "WHERE tenant_id = :tid AND id = :caid"
+            ),
+            {"tid": tenant_id, "caid": channel_account_id},
+        )
+    ).one_or_none()
+    if row is None:
+        raise AppError(
+            slug="channel-account-not-found",
+            status_code=404,
+            code="ERR_CHANNEL_ACCOUNT_NOT_FOUND",
+            title="Channel Account Not Found",
+            detail=f"Channel account '{channel_account_id}' does not exist for this tenant.",
+        )
+    config = row.config if isinstance(row.config, dict) else {}
+    return str(row.channel_type), config
+
+
+@router.post(
+    "/marketplace/{channel_account_id}/sync-orders",
+    response_model=MarketplaceOrderSyncResult,
+)
+async def sync_marketplace_orders(
+    request: Request,
+    channel_account_id: UUID,
+    principal: SyncPrincipal,
+    lookback_hours: int = Query(default=24, ge=1, le=720),
+) -> MarketplaceOrderSyncResult:
+    """Pull a marketplace's order feed on demand and ingest missing/drifted orders.
+
+    Used to repair a missed webhook without waiting for the 15-minute cron: the same
+    ``reconcile_channel_account_orders`` worker is reused so ingestion stays idempotent and
+    fully audited.
+    """
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        channel_type, account_config = await _load_marketplace_account(
+            session, principal.tenant_id, channel_account_id
+        )
+        if channel_type not in SYNC_SUPPORTED_CHANNEL_TYPES:
+            raise AppError(
+                slug="marketplace-order-sync-unsupported",
+                status_code=422,
+                code="ERR_MARKETPLACE_ORDER_SYNC_UNSUPPORTED",
+                title="Marketplace Order Sync Unsupported",
+                detail=(
+                    f"Channel type '{channel_type}' has no live order feed integration; "
+                    f"supported channels are {', '.join(sorted(SYNC_SUPPORTED_CHANNEL_TYPES))}."
+                ),
+            )
+        credentials, _expires_at = await _credential_vault().load_secret_json(
+            session,
+            principal.tenant_id,
+            channel_account_id,
+            CREDENTIAL_TYPES[channel_type],
+        )
+        transport = getattr(request.app.state, "marketplace_http_transport", None)
+        adapter = build_marketplace_adapter(channel_type, credentials, transport=transport)
+        if adapter is None:  # pragma: no cover - guarded by SYNC_SUPPORTED_CHANNEL_TYPES
+            raise AppError(
+                slug="marketplace-order-sync-unsupported",
+                status_code=422,
+                code="ERR_MARKETPLACE_ORDER_SYNC_UNSUPPORTED",
+                title="Marketplace Order Sync Unsupported",
+                detail=f"Channel type '{channel_type}' has no order adapter.",
+            )
+        warehouse_id = await resolve_default_warehouse_id(
+            session,
+            principal.tenant_id,
+            channel_account_id,
+            account_config,
+        )
+        stats = await reconcile_channel_account_orders(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_account_id=channel_account_id,
+            channel_type=ChannelType(channel_type),
+            adapter=adapter,
+            default_warehouse_id=warehouse_id,
+            since=datetime.now(UTC) - timedelta(hours=lookback_hours),
+        )
+    return MarketplaceOrderSyncResult(
+        channel_account_id=channel_account_id,
+        channel_type=channel_type,
+        scanned=stats["scanned"],
+        recovered=stats["recovered"],
+        updated=stats["updated"],
+        failed=stats["failed"],
+    )
+
+
 @router.post(
     "/alibaba-intl/connect",
     response_model=MarketplaceConnectionRead,
@@ -321,6 +443,8 @@ __all__ = [
     "CREDENTIAL_TYPES",
     "EBAY_CREDENTIAL_TYPE",
     "MarketplaceConnectionRead",
+    "MarketplaceOrderSyncResult",
+    "SYNC_SUPPORTED_CHANNEL_TYPES",
     "provision_marketplace_account",
     "router",
 ]
