@@ -24,7 +24,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from html import unescape
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -387,6 +387,48 @@ class SourcingMoqTier(BaseModel):
     unit_price_usd: Decimal = Field(gt=Decimal("0"))
 
 
+class MarketplaceListingPayload(BaseModel):
+    """Everything a marketplace API needs to create one live listing.
+
+    Pure catalog-side DTO: it carries no channel/order/finance types, so
+    ``catalog_isolated`` stays green and the concrete adapter arrives through
+    ``MarketplaceListingPublisher`` injection (``app.state`` in ``api_main``).
+    """
+
+    channel_account_id: UUID
+    channel_type: str
+    external_sku: str
+    title: str
+    description: str
+    bullet_points: list[str]
+    price_usd: Decimal
+    quantity: int
+    images: list[str]
+    category: str
+    hs_code: str | None = None
+    moq_tiers: list[SourcingMoqTier] = Field(default_factory=list)
+
+
+class MarketplaceListingDispatchReceipt(BaseModel):
+    """Proof a marketplace accepted a listing, plus the id the ERP must persist."""
+
+    external_product_id: str
+    external_sku: str
+    status: str
+    raw_response: dict[str, Any] = Field(default_factory=dict)
+
+
+class MarketplaceListingPublisher(Protocol):
+    """Structural contract for the live marketplace push (implemented in ``channels``)."""
+
+    async def publish_listing(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        payload: MarketplaceListingPayload,
+    ) -> MarketplaceListingDispatchReceipt: ...
+
+
 class SourcingCollectRequest(BaseModel):
     source_platform: Literal["1688", "url", "manual"] = "1688"
     source_url: str | None = Field(default=None, max_length=2048)
@@ -498,6 +540,11 @@ class SourcingPublishRequest(BaseModel):
     channel_account_ids: list[UUID] = Field(min_length=1, max_length=50)
     price_multiplier: Decimal = Field(default=Decimal("1.00"), gt=Decimal("0"), le=Decimal("10"))
     stock_sync_ratio: Decimal = Field(default=Decimal("1.00"), ge=Decimal("0"), le=Decimal("1"))
+    #: Opt-in live push. Default ``False`` keeps the historic local-SKU-mapping behavior
+    #: (and therefore every existing caller/test) byte-identical.
+    push_to_marketplace: bool = False
+    #: Sellable quantity pushed with a live listing; ignored by the local mapping path.
+    initial_stock_quantity: int = Field(default=100, ge=1, le=1_000_000)
 
 
 class SourcingPublishResult(BaseModel):
@@ -764,6 +811,18 @@ def channel_sku_prefix(channel_type: str) -> str:
 
 def build_external_sku(channel_type: str, sku: str) -> str:
     return f"{channel_sku_prefix(channel_type)}-{sku}"
+
+
+def build_listing_description(draft: SourcingDraftRead) -> str:
+    """Deterministic English listing body pushed to a live marketplace.
+
+    Prefers the supplier description captured at collection time and degrades to the
+    optimized title, so a live listing never ships an empty description.
+    """
+    source = _WHITESPACE_RE.sub(
+        " ", str(draft.attributes.get("source_description") or "")
+    ).strip()
+    return source[:2000] or draft.optimized_title_en
 
 
 def plan_sourcing_draft(
@@ -1375,7 +1434,16 @@ class SourcingService:
         actor_id: str,
         draft_id: UUID,
         payload: SourcingPublishRequest,
+        listing_publisher: MarketplaceListingPublisher | None = None,
     ) -> list[SourcingPublishResult]:
+        """Publish a draft to channel accounts, locally or through a live marketplace push.
+
+        ``push_to_marketplace=False`` keeps the Wave-5 contract: only a local SKU mapping is
+        stored and the remote id is an explicit ``pending-listing:`` placeholder. With
+        ``push_to_marketplace=True`` the injected ``listing_publisher`` performs the real
+        marketplace call and its returned id is what gets persisted; without a publisher the
+        request fails closed rather than inventing a live listing.
+        """
         draft = await self._load_draft(session, tenant_id, draft_id)
         if draft.imported_variant_id is None or draft.imported_product_id is None:
             imported = await self.import_to_catalog(session, tenant_id, actor_id, draft_id)
@@ -1395,9 +1463,66 @@ class SourcingService:
         for channel_account_id in payload.channel_account_ids:
             channel_type = await self._channel_account(session, tenant_id, channel_account_id)
             external_sku = build_external_sku(channel_type, draft.suggested_sku)
-            # No marketplace API is called, so the remote id is an explicit placeholder:
-            # reusing the internal SKU would impersonate a live listing id.
+            price_usd = (draft.target_price_usd * payload.price_multiplier).quantize(
+                _CENT, rounding=ROUND_HALF_UP
+            )
+            # Local SKU mapping is the default: no marketplace API is called, so the remote id
+            # is an explicit placeholder. Reusing the internal SKU would impersonate a live
+            # listing id.
             external_product_id = pending_listing_product_id(external_sku)
+            listing_state: Literal["mapping_ready", "live_published"] = "mapping_ready"
+            publish_mode: Literal["local_sku_mapping", "live_marketplace_api"] = (
+                "local_sku_mapping"
+            )
+            external_listing_confirmed = False
+            remote_status: str | None = None
+            if payload.push_to_marketplace:
+                if listing_publisher is None:
+                    raise AppError(
+                        slug="marketplace-publisher-unavailable",
+                        status_code=503,
+                        code="ERR_MARKETPLACE_PUBLISHER_UNAVAILABLE",
+                        title="Marketplace Publisher Unavailable",
+                        detail=(
+                            "A live marketplace push was requested but no listing publisher "
+                            "is wired into this deployment."
+                        ),
+                    )
+                receipt = await listing_publisher.publish_listing(
+                    session,
+                    tenant_id,
+                    MarketplaceListingPayload(
+                        channel_account_id=channel_account_id,
+                        channel_type=channel_type,
+                        external_sku=external_sku,
+                        title=draft.optimized_title_en,
+                        description=build_listing_description(draft),
+                        bullet_points=list(draft.bullet_points),
+                        price_usd=price_usd,
+                        quantity=payload.initial_stock_quantity,
+                        images=list(draft.images),
+                        category=draft.suggested_category,
+                        hs_code=draft.suggested_hs_code,
+                        moq_tiers=list(draft.moq_tiers),
+                    ),
+                )
+                confirmed_product_id = (receipt.external_product_id or "").strip()
+                if not confirmed_product_id:
+                    raise AppError(
+                        slug="marketplace-publisher-receipt-invalid",
+                        status_code=502,
+                        code="ERR_MARKETPLACE_PUBLISHER_RECEIPT_INVALID",
+                        title="Marketplace Publisher Receipt Invalid",
+                        detail=(
+                            f"The marketplace push for SKU '{external_sku}' returned no "
+                            "external product id; nothing is recorded as a live listing."
+                        ),
+                    )
+                external_product_id = confirmed_product_id
+                listing_state = "live_published"
+                publish_mode = "live_marketplace_api"
+                external_listing_confirmed = True
+                remote_status = receipt.status
             sync_inventory_enabled = payload.stock_sync_ratio > 0
             mapping_id = await self._upsert_mapping(
                 session,
@@ -1408,9 +1533,6 @@ class SourcingService:
                 external_sku=external_sku,
                 sync_inventory_enabled=sync_inventory_enabled,
             )
-            price_usd = (draft.target_price_usd * payload.price_multiplier).quantize(
-                _CENT, rounding=ROUND_HALF_UP
-            )
             published_at = datetime.now(UTC)
             entry: dict[str, Any] = {
                 "channel_account_id": str(channel_account_id),
@@ -1420,10 +1542,12 @@ class SourcingService:
                 "price_usd": str(price_usd),
                 "stock_sync_ratio": str(payload.stock_sync_ratio),
                 "published_at": published_at.isoformat(),
-                "listing_state": "mapping_ready",
-                "external_listing_confirmed": False,
-                "publish_mode": "local_sku_mapping",
+                "listing_state": listing_state,
+                "external_listing_confirmed": external_listing_confirmed,
+                "publish_mode": publish_mode,
             }
+            if remote_status is not None:
+                entry["remote_status"] = remote_status
             history.append(entry)
             results.append(
                 SourcingPublishResult(
@@ -1435,9 +1559,9 @@ class SourcingService:
                     stock_sync_ratio=payload.stock_sync_ratio,
                     mapping_id=mapping_id,
                     published_at=published_at,
-                    listing_state="mapping_ready",
-                    external_listing_confirmed=False,
-                    publish_mode="local_sku_mapping",
+                    listing_state=listing_state,
+                    external_listing_confirmed=external_listing_confirmed,
+                    publish_mode=publish_mode,
                 )
             )
 
@@ -1457,6 +1581,18 @@ class SourcingService:
                 "did": draft_id,
             },
         )
+        # Only report a live state when *every* requested channel was confirmed remotely.
+        live_confirmed = bool(results) and all(
+            result.listing_state == "live_published" for result in results
+        )
+        after_state: dict[str, Any] = {
+            "sku": draft.suggested_sku,
+            "channels": [str(result.channel_account_id) for result in results],
+            "listing_state": "live_published" if live_confirmed else "mapping_ready",
+            "external_listing_confirmed": live_confirmed,
+        }
+        if live_confirmed:
+            after_state["publish_mode"] = "live_marketplace_api"
         await record_audit_event(
             session,
             tenant_id=tenant_id,
@@ -1465,12 +1601,7 @@ class SourcingService:
             action="catalog.sourcing_draft.published",
             resource_type="sourcing_draft",
             resource_id=draft_id,
-            after_state={
-                "sku": draft.suggested_sku,
-                "channels": [str(result.channel_account_id) for result in results],
-                "listing_state": "mapping_ready",
-                "external_listing_confirmed": False,
-            },
+            after_state=after_state,
         )
         return results
 
@@ -1484,6 +1615,9 @@ __all__ = [
     "DnsResolver",
     "ListingState",
     "MAX_SOURCE_FETCH_BYTES",
+    "MarketplaceListingDispatchReceipt",
+    "MarketplaceListingPayload",
+    "MarketplaceListingPublisher",
     "PENDING_LISTING_PREFIX",
     "PlannedSourcingDraft",
     "SourcingCollectRequest",
@@ -1499,6 +1633,7 @@ __all__ = [
     "SourcingSource",
     "build_english_title",
     "build_external_sku",
+    "build_listing_description",
     "build_selling_points",
     "build_suggested_sku",
     "channel_sku_prefix",

@@ -6738,6 +6738,46 @@
         "title": "MarketplaceConnectionRead",
         "type": "object"
       },
+      "MarketplaceOrderSyncResult": {
+        "description": "Outcome of one on-demand order reconciliation for a marketplace account.",
+        "properties": {
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "channel_type": {
+            "title": "Channel Type",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "recovered": {
+            "title": "Recovered",
+            "type": "integer"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_account_id",
+          "channel_type",
+          "scanned",
+          "recovered",
+          "updated",
+          "failed"
+        ],
+        "title": "MarketplaceOrderSyncResult",
+        "type": "object"
+      },
       "MembershipItem": {
         "properties": {
           "created_at": {
@@ -14483,6 +14523,13 @@
             "title": "Channel Account Ids",
             "type": "array"
           },
+          "initial_stock_quantity": {
+            "default": 100,
+            "maximum": 1000000.0,
+            "minimum": 1.0,
+            "title": "Initial Stock Quantity",
+            "type": "integer"
+          },
           "price_multiplier": {
             "anyOf": [
               {
@@ -14496,6 +14543,11 @@
             ],
             "default": "1.00",
             "title": "Price Multiplier"
+          },
+          "push_to_marketplace": {
+            "default": false,
+            "title": "Push To Marketplace",
+            "type": "boolean"
           },
           "stock_sync_ratio": {
             "anyOf": [
@@ -22020,7 +22072,7 @@
     },
     "/api/v1/catalog/sourcing/drafts/{draft_id}/publish": {
       "post": {
-        "description": "Publish a draft to the selected channel accounts via platform SKU mappings.",
+        "description": "Publish a draft to the selected channel accounts via platform SKU mappings.\n\nWith ``push_to_marketplace=True`` the live publisher injected by the composition root\n(``app.state.marketplace_listing_publisher``) performs the real marketplace call. The\ncatalog module never imports ``erp_core.channels``: it only sees the structural\n``MarketplaceListingPublisher`` protocol.",
         "operationId": "publish_sourcing_draft_api_v1_catalog_sourcing_drafts__draft_id__publish_post",
         "parameters": [
           {
@@ -23193,6 +23245,78 @@
         "summary": "Connect Instagram",
         "tags": [
           "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/marketplace/{channel_account_id}/sync-orders": {
+      "post": {
+        "description": "Pull a marketplace's order feed on demand and ingest missing/drifted orders.\n\nUsed to repair a missed webhook without waiting for the 15-minute cron: the same\n``reconcile_channel_account_orders`` worker is reused so ingestion stays idempotent and\nfully audited.",
+        "operationId": "sync_marketplace_orders_api_v1_channels_marketplace__channel_account_id__sync_orders_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lookback_hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "maximum": 720,
+              "minimum": 1,
+              "title": "Lookback Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceOrderSyncResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Marketplace Orders",
+        "tags": [
+          "marketplace-connect"
         ]
       }
     },

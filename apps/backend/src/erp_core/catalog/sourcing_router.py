@@ -111,10 +111,22 @@ async def publish_sourcing_draft(
     payload: SourcingPublishRequest,
     principal: WriterPrincipal,
 ) -> list[SourcingPublishResult]:
-    """Publish a draft to the selected channel accounts via platform SKU mappings."""
+    """Publish a draft to the selected channel accounts via platform SKU mappings.
+
+    With ``push_to_marketplace=True`` the live publisher injected by the composition root
+    (``app.state.marketplace_listing_publisher``) performs the real marketplace call. The
+    catalog module never imports ``erp_core.channels``: it only sees the structural
+    ``MarketplaceListingPublisher`` protocol.
+    """
+    publisher = getattr(request.app.state, "marketplace_listing_publisher", None)
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
         return await _service.publish(
-            session, principal.tenant_id, str(principal.user_id), draft_id, payload
+            session,
+            principal.tenant_id,
+            str(principal.user_id),
+            draft_id,
+            payload,
+            listing_publisher=publisher,
         )
 
 

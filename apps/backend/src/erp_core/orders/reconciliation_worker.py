@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import httpx
 import structlog
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +34,9 @@ ECOMMERCE_CHANNELS = (
     ChannelType.SHOPLINE,
     ChannelType.SHOPLAZZA,
     ChannelType.TIKTOK_SHOP,
+    ChannelType.AMAZON_SP,
+    ChannelType.EBAY,
+    ChannelType.ALIBABA_EMAIL,
 )
 CREDENTIAL_TYPES = {
     ChannelType.SHOPIFY: ("shopify_custom_app", "oauth_token"),
@@ -40,6 +44,9 @@ CREDENTIAL_TYPES = {
     ChannelType.SHOPLINE: ("shopline_app",),
     ChannelType.SHOPLAZZA: ("shoplazza_app",),
     ChannelType.TIKTOK_SHOP: ("tiktok_shop_app",),
+    ChannelType.AMAZON_SP: ("amazon_sp_api",),
+    ChannelType.EBAY: ("ebay_api",),
+    ChannelType.ALIBABA_EMAIL: ("alibaba_intl_app",),
 }
 REPLAY_WINDOW = timedelta(minutes=30)
 
@@ -183,8 +190,12 @@ async def _adapter_credentials(
 
 
 async def _instantiate_adapter(
-    channel_type: ChannelType, credentials: dict[str, Any], warehouse_id: UUID | None
+    channel_type: ChannelType,
+    credentials: dict[str, Any],
+    warehouse_id: UUID | None,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> CommercePlatformAdapter:
+    from erp_core.channels.ecommerce.listing_dispatcher import build_marketplace_adapter
     from erp_core.channels.ecommerce.shopify import ShopifyGraphqlAdapter
     from erp_core.channels.ecommerce.shoplazza import ShoplazzaAdapter
     from erp_core.channels.ecommerce.shopline import ShoplineAdapter
@@ -229,6 +240,14 @@ async def _instantiate_adapter(
             shop_cipher=str(credentials.get("shop_cipher") or ""),
             app_mode=str(credentials.get("app_mode") or "seller_byok"),
         )
+    # Amazon SP-API / eBay Sell / Alibaba.com ICBU share one credential-to-adapter
+    # mapping with the live listing dispatcher, so the same vaulted secret can drive both
+    # publishing and order reconciliation.
+    marketplace_adapter = build_marketplace_adapter(
+        channel_type.value, credentials, transport=transport
+    )
+    if marketplace_adapter is not None:
+        return marketplace_adapter
     raise AppError(
         slug="unsupported-ecommerce-channel",
         status_code=422,
@@ -276,7 +295,18 @@ async def reconcile_tenant_orders(
                 account_config=account.config,
                 warehouse_override=warehouse_override,
             )
-            adapter = await _instantiate_adapter(channel_type, credentials, warehouse_id)
+            try:
+                adapter = await _instantiate_adapter(channel_type, credentials, warehouse_id)
+            except AppError as exc:
+                # An incomplete credential blob must not abort the whole tenant sweep.
+                logger.warning(
+                    "reconciliation_adapter_unavailable",
+                    tenant_id=str(tenant_id),
+                    channel_account_id=str(account.id),
+                    channel_type=channel_type.value,
+                    code=exc.code,
+                )
+                continue
             stats = await reconcile_channel_account_orders(
                 session,
                 tenant_id=tenant_id,
