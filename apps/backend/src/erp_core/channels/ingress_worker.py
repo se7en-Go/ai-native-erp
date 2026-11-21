@@ -838,8 +838,13 @@ async def _maybe_run_auto_reply(
     redis: aioredis.Redis,
     tenant_id: uuid.UUID,
     conversation_id: uuid.UUID,
+    *,
+    source_message_id: uuid.UUID | None = None,
 ) -> bool:
     """Run guarded AI auto-reply when enabled on the conversation.
+
+    ``source_message_id`` is the inbound message that triggered this turn. It makes the run
+    idempotent per inbound message, so a redelivered webhook cannot produce a second reply.
 
     Returns ``True`` when the inbound turn was handled (either auto-sent to the channel
     or held as an L1 proposal), so the caller skips duplicate proposal generation.
@@ -875,6 +880,7 @@ async def _maybe_run_auto_reply(
                 conversation_id,
                 AutoReplyRunRequest(mode="auto"),
                 prepare_dispatch=True,
+                source_message_id=source_message_id,
             )
             action = str(result.action)
         # Transaction is now committed; safely enqueue outbound delivery & SSE push.
@@ -988,7 +994,8 @@ async def process_raw_webhook_event(
         return "dead_letter"
 
     published_events: list[dict[str, Any]] = []
-    auto_proposal_conversations: list[uuid.UUID] = []
+    # (conversation_id -> inbound message_id) for non-STOP inbound turns in this envelope.
+    auto_proposal_conversations: dict[uuid.UUID, uuid.UUID] = {}
     try:
         async with tenant_session(session_factory, tenant_id) as t_sess:
             parsed_batch = await adapter.parse_webhook(
@@ -1051,9 +1058,8 @@ async def process_raw_webhook_event(
                     if (
                         inbound.direction == MessageDirection.INBOUND
                         and not inbound.is_stop_command
-                        and conv_id not in auto_proposal_conversations
                     ):
-                        auto_proposal_conversations.append(conv_id)
+                        auto_proposal_conversations.setdefault(conv_id, msg_id)
                     published_events.append(
                         {
                             "event": "message.created",
@@ -1105,9 +1111,13 @@ async def process_raw_webhook_event(
             await redis.publish(f"inbox:events:{tenant_id}", json.dumps(ev))
 
         if auto_proposal_conversations:
-            for conv_id in auto_proposal_conversations:
+            for conv_id, msg_id in auto_proposal_conversations.items():
                 handled = await _maybe_run_auto_reply(
-                    session_factory, redis, tenant_id, conv_id
+                    session_factory,
+                    redis,
+                    tenant_id,
+                    conv_id,
+                    source_message_id=msg_id,
                 )
                 if not handled and _auto_ai_proposal_enabled():
                     await _maybe_generate_auto_proposal(
