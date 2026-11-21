@@ -386,9 +386,11 @@ class TenancyAuthService:
                 code="ERR_INSUFFICIENT_ROLE",
             )
         email = str(req.email).lower().strip()
+        # Narrow SECURITY DEFINER lookup: `users` is fail-closed tenant scoped for app_runtime,
+        # so an identity that only belongs to another tenant is not directly selectable here.
         existing_user = (
             await session.execute(
-                text("SELECT id, full_name FROM users WHERE email = :email"),
+                text("SELECT id, full_name FROM resolve_user_identity(:email)"),
                 {"email": email},
             )
         ).first()
@@ -465,6 +467,60 @@ class TenancyAuthService:
         row = (
             await session.execute(
                 text(
+                    "SELECT id, user_id, role, is_active FROM tenant_memberships "
+                    "WHERE id = :mid AND tenant_id = :tid FOR UPDATE"
+                ),
+                {"mid": str(membership_id), "tid": str(actor.tenant_id)},
+            )
+        ).first()
+        if row is None:
+            raise AppError(
+                slug="membership-not-found",
+                title="Membership Not Found",
+                status_code=404,
+                detail="Membership does not exist in this workspace",
+                code="ERR_NOT_FOUND",
+            )
+
+        target_role = UserRole(str(row.role))
+        if target_role == UserRole.OWNER and actor.role != UserRole.OWNER:
+            raise AppError(
+                slug="owner-membership-restricted",
+                title="Owner Membership Restricted",
+                status_code=403,
+                detail="Only an existing owner can modify an owner membership",
+                code="ERR_INSUFFICIENT_ROLE",
+            )
+
+        demotes_owner = req.role != UserRole.OWNER
+        deactivates_owner = req.is_active is False
+        if (
+            target_role == UserRole.OWNER
+            and bool(row.is_active)
+            and (demotes_owner or deactivates_owner)
+        ):
+            active_owner_ids = (
+                await session.execute(
+                    text(
+                        "SELECT id FROM tenant_memberships "
+                        "WHERE tenant_id = :tid AND role = 'owner' AND is_active = true "
+                        "FOR UPDATE"
+                    ),
+                    {"tid": str(actor.tenant_id)},
+                )
+            ).all()
+            if len(active_owner_ids) <= 1:
+                raise AppError(
+                    slug="last-owner-protected",
+                    title="Last Owner Protected",
+                    status_code=409,
+                    detail="Cannot demote or deactivate the last active owner of a tenant",
+                    code="ERR_LAST_OWNER_PROTECTED",
+                )
+
+        updated = (
+            await session.execute(
+                text(
                     "UPDATE tenant_memberships "
                     "SET role = :role, is_active = COALESCE(:is_active, is_active) "
                     "WHERE id = :mid AND tenant_id = :tid "
@@ -478,7 +534,7 @@ class TenancyAuthService:
                 },
             )
         ).first()
-        if row is None:
+        if updated is None:
             raise AppError(
                 slug="membership-not-found",
                 title="Membership Not Found",
@@ -489,18 +545,18 @@ class TenancyAuthService:
         user_row = (
             await session.execute(
                 text("SELECT email, full_name FROM users WHERE id = :uid"),
-                {"uid": str(row.user_id)},
+                {"uid": str(updated.user_id)},
             )
         ).one()
         return MembershipItem(
-            membership_id=UUID(str(row.id)),
-            tenant_id=UUID(str(row.tenant_id)),
-            user_id=UUID(str(row.user_id)),
+            membership_id=UUID(str(updated.id)),
+            tenant_id=UUID(str(updated.tenant_id)),
+            user_id=UUID(str(updated.user_id)),
             email=str(user_row.email),
             full_name=str(user_row.full_name),
-            role=UserRole(str(row.role)),
-            is_active=bool(row.is_active),
-            created_at=row.created_at,
+            role=UserRole(str(updated.role)),
+            is_active=bool(updated.is_active),
+            created_at=updated.created_at,
         )
 
     async def update_tenant_settings(

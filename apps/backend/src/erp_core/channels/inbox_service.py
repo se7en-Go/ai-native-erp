@@ -39,6 +39,7 @@ from erp_core.shared.enums import (
     MessageSenderType,
     UserRole,
 )
+from erp_core.shared.errors import AppError
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.dependencies import CurrentPrincipal
@@ -892,14 +893,28 @@ class InboxService:
         acct = await self._account(session, tenant_id, conv.channel_account_id)
         if not agent_can_access_conversation(principal, conv, acct):
             raise ConversationAccessDeniedError("ERR_CONVERSATION_ACCESS_DENIED")
-        if (
-            principal.role == UserRole.AGENT
-            and req.assigned_user_id is not None
-            and req.assigned_user_id != principal.user_id
-        ):
-            raise ConversationAccessDeniedError(
-                "Agents cannot reassign conversations to other users"
-            )
+        if principal.role == UserRole.AGENT:
+            # Autonomy switches and third-party reassignment are supervisory controls:
+            # an AGENT may only claim work for itself, never widen AI autonomy or move a
+            # conversation onto another salesperson (which would also leak the record).
+            if req.ai_autonomy_override is not None:
+                raise AppError(
+                    slug="insufficient-role",
+                    status_code=403,
+                    code="ERR_INSUFFICIENT_ROLE",
+                    title="Insufficient Role Permissions",
+                    detail=(
+                        "Role 'agent' cannot override conversation AI autonomy; "
+                        "manager/admin/owner required."
+                    ),
+                )
+            if (
+                req.assigned_user_id is not None
+                and req.assigned_user_id != principal.user_id
+            ):
+                raise ConversationAccessDeniedError(
+                    "Agents cannot reassign conversations to other users"
+                )
 
         before = {
             "status": conv.status,

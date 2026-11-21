@@ -395,15 +395,23 @@ class QuoteService:
 
             if margin_pct < vp.min_margin_floor_pct:
                 if not override_margin_floor:
+                    # AGENT seats must not learn the exact margin or the tenant's floor:
+                    # both are commercially sensitive pricing intelligence. The error code
+                    # stays identical so clients keep a stable machine-readable contract.
+                    detail = (
+                        f"SKU '{vp.sku}' margin is below the configured margin floor."
+                        if principal.role == UserRole.AGENT
+                        else (
+                            f"SKU '{vp.sku}' margin {margin_pct}% is below floor "
+                            f"{vp.min_margin_floor_pct}%."
+                        )
+                    )
                     raise AppError(
                         slug="margin-floor-violation",
                         status_code=422,
                         code="ERR_MARGIN_FLOOR_VIOLATION",
                         title="Margin Floor Violation",
-                        detail=(
-                            f"SKU '{vp.sku}' margin {margin_pct}% is below floor "
-                            f"{vp.min_margin_floor_pct}%."
-                        ),
+                        detail=detail,
                     )
                 margin_override_used = True
 

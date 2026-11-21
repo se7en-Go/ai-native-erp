@@ -49,6 +49,35 @@ DocumentPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_READER_R
 _documents = ExportDocumentService()
 
 
+def _mask_order_for_role(order: OrderRead, role: UserRole) -> OrderRead:
+    """Hide the landed-cost snapshot from AGENT responses (RBAC cost masking).
+
+    The cost snapshot feeds profit/CVP reporting, so it stays persisted; only the
+    AGENT-facing read model is redacted. OWNER/ADMIN/MANAGER/FINANCE keep the exact
+    Decimal so finance reconciliation is unaffected.
+    """
+    if role != UserRole.AGENT:
+        return order
+    masked_items = [
+        item.model_copy(update={"unit_cost_base_snapshot": None}) for item in order.items
+    ]
+    return order.model_copy(update={"items": masked_items})
+
+
+def _mask_order_page(
+    page: PaginatedResponse[OrderRead], role: UserRole
+) -> PaginatedResponse[OrderRead]:
+    if role != UserRole.AGENT:
+        return page
+    return PaginatedResponse[OrderRead](
+        items=[_mask_order_for_role(order, role) for order in page.items],
+        total=page.total,
+        limit=page.limit,
+        offset=page.offset,
+        has_more=page.has_more,
+    )
+
+
 def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
     factory: async_sessionmaker[AsyncSession] | None = getattr(
         request.app.state, "session_factory", None
@@ -71,7 +100,7 @@ async def list_orders(
     offset: int = Query(default=0, ge=0),
 ) -> PaginatedResponse[OrderRead]:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.list_orders(
+        page = await _service.list_orders(
             session,
             principal.tenant_id,
             order_mode=order_mode,
@@ -82,6 +111,7 @@ async def list_orders(
             limit=limit,
             offset=offset,
         )
+    return _mask_order_page(page, principal.role)
 
 
 @router.get("/inventory/balances", response_model=PaginatedResponse[InventoryBalanceItemRead])
@@ -126,7 +156,8 @@ async def get_order(
     order_id: UUID,
 ) -> OrderRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.get_order(session, principal.tenant_id, order_id)
+        order = await _service.get_order(session, principal.tenant_id, order_id)
+    return _mask_order_for_role(order, principal.role)
 
 
 @router.post("", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
@@ -136,7 +167,10 @@ async def create_order(
     payload: OrderCreateRequest,
 ) -> OrderRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.create_manual_order(session, principal.tenant_id, principal, payload)
+        order = await _service.create_manual_order(
+            session, principal.tenant_id, principal, payload
+        )
+    return _mask_order_for_role(order, principal.role)
 
 
 @router.get("/{order_id}/documents/commercial-invoice.pdf", response_class=Response)

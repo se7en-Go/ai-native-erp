@@ -1430,7 +1430,7 @@ export const updateCustomerApiV1CustomersCustomerIdPatch = <ThrowOnError extends
 
 /**
  * Get Cashflow Summary
- * AR collected minus AP paid, with outstanding balances, in the base currency.
+ * AR collected minus AP paid in the base currency, plus the per-currency breakdown.
  */
 export const getCashflowSummaryApiV1FinanceCashflowSummaryGet = <ThrowOnError extends boolean = false>(options?: Options<GetCashflowSummaryApiV1FinanceCashflowSummaryGetData, ThrowOnError>) => {
     return (options?.client ?? _heyApiClient).get<GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponse, GetCashflowSummaryApiV1FinanceCashflowSummaryGetError, ThrowOnError>({
@@ -1493,6 +1493,10 @@ export const listPayablesApiV1FinancePayablesGet = <ThrowOnError extends boolean
 /**
  * Pay Payable
  * Settle a payable; `open -> partial -> paid`, audited, never overpaid.
+ *
+ * The ledger key resolves as ``Idempotency-Key`` header -> ``body.idempotency_key``
+ * -> ``body.payment_ref`` -> a generated UUID, so a retried settlement can never
+ * be counted twice while every settlement still lands in the immutable ledger.
  */
 export const payPayableApiV1FinancePayablesPayableIdPayPost = <ThrowOnError extends boolean = false>(options: Options<PayPayableApiV1FinancePayablesPayableIdPayPostData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).post<PayPayableApiV1FinancePayablesPayableIdPayPostResponse, PayPayableApiV1FinancePayablesPayableIdPayPostError, ThrowOnError>({

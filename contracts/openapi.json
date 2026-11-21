@@ -2243,7 +2243,7 @@
         "type": "object"
       },
       "CashflowSummaryRead": {
-        "description": "AR/AP position and net cash flow, all denominated in the tenant base currency.",
+        "description": "AR/AP position and net cash flow, all denominated in the tenant base currency.\n\nThe top-level fields stay the base-currency summary (fully backwards compatible),\nwhile `by_currency` reports every currency actually present in the ledger. Each\ncurrency is only ever summed against itself - no cross-currency addition.",
         "properties": {
           "ap_outstanding": {
             "title": "Ap Outstanding",
@@ -2268,6 +2268,13 @@
           "ar_total": {
             "title": "Ar Total",
             "type": "string"
+          },
+          "by_currency": {
+            "items": {
+              "$ref": "#/components/schemas/CurrencyCashflowBreakdown"
+            },
+            "title": "By Currency",
+            "type": "array"
           },
           "currency": {
             "title": "Currency",
@@ -3695,6 +3702,55 @@
           "updated_at"
         ],
         "title": "CreditWalletRead",
+        "type": "object"
+      },
+      "CurrencyCashflowBreakdown": {
+        "description": "One currency's AR/AP position, so foreign-currency flows are never hidden.",
+        "properties": {
+          "ap_outstanding": {
+            "title": "Ap Outstanding",
+            "type": "string"
+          },
+          "ap_paid": {
+            "title": "Ap Paid",
+            "type": "string"
+          },
+          "ap_total": {
+            "title": "Ap Total",
+            "type": "string"
+          },
+          "ar_collected": {
+            "title": "Ar Collected",
+            "type": "string"
+          },
+          "ar_outstanding": {
+            "title": "Ar Outstanding",
+            "type": "string"
+          },
+          "ar_total": {
+            "title": "Ar Total",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "net_cashflow": {
+            "title": "Net Cashflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "ar_total",
+          "ar_collected",
+          "ar_outstanding",
+          "ap_total",
+          "ap_paid",
+          "ap_outstanding",
+          "net_cashflow"
+        ],
+        "title": "CurrencyCashflowBreakdown",
         "type": "object"
       },
       "CurrencyValue": {
@@ -7661,9 +7717,11 @@
               },
               {
                 "type": "string"
+              },
+              {
+                "type": "null"
               }
             ],
-            "default": "7.200000",
             "title": "Fx Rate To Base"
           },
           "items": {
@@ -7691,6 +7749,21 @@
             "default": "0.00",
             "title": "Shipping Charged"
           },
+          "subtotal_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtotal Amount"
+          },
           "tax_collected": {
             "anyOf": [
               {
@@ -7703,6 +7776,21 @@
             ],
             "default": "0.00",
             "title": "Tax Collected"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
           },
           "warehouse_id": {
             "format": "uuid",
@@ -7778,8 +7866,15 @@
             "type": "string"
           },
           "unit_cost_base_snapshot": {
-            "title": "Unit Cost Base Snapshot",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Cost Base Snapshot"
           },
           "unit_price": {
             "title": "Unit Price",
@@ -7798,7 +7893,6 @@
           "sku_snapshot",
           "quantity",
           "unit_price",
-          "unit_cost_base_snapshot",
           "line_total"
         ],
         "title": "OrderItemRead",
@@ -9708,6 +9802,18 @@
               }
             ],
             "title": "Amount"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           },
           "paid_at": {
             "anyOf": [
@@ -12060,8 +12166,15 @@
             "type": "string"
           },
           "unit_cost_base_snapshot": {
-            "title": "Unit Cost Base Snapshot",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Cost Base Snapshot"
           },
           "unit_price_quote_ccy": {
             "title": "Unit Price Quote Ccy",
@@ -12082,7 +12195,6 @@
           "quantity",
           "moq_tier_applied",
           "unit_price_quote_ccy",
-          "unit_cost_base_snapshot",
           "line_total_quote_ccy"
         ],
         "title": "QuoteItemRead",
@@ -24447,7 +24559,7 @@
     },
     "/api/v1/finance/cashflow-summary": {
       "get": {
-        "description": "AR collected minus AP paid, with outstanding balances, in the base currency.",
+        "description": "AR collected minus AP paid in the base currency, plus the per-currency breakdown.",
         "operationId": "get_cashflow_summary_api_v1_finance_cashflow_summary_get",
         "parameters": [
           {
@@ -24773,7 +24885,7 @@
     },
     "/api/v1/finance/payables/{payable_id}/pay": {
       "post": {
-        "description": "Settle a payable; `open -> partial -> paid`, audited, never overpaid.",
+        "description": "Settle a payable; `open -> partial -> paid`, audited, never overpaid.\n\nThe ledger key resolves as ``Idempotency-Key`` header -> ``body.idempotency_key``\n-> ``body.payment_ref`` -> a generated UUID, so a retried settlement can never\nbe counted twice while every settlement still lands in the immutable ledger.",
         "operationId": "pay_payable_api_v1_finance_payables__payable_id__pay_post",
         "parameters": [
           {
@@ -24784,6 +24896,22 @@
               "format": "uuid",
               "title": "Payable Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           },
           {

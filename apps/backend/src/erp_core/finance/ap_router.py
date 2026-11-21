@@ -14,9 +14,9 @@ red line) allows only Owner/Finance.
 from __future__ import annotations
 
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.finance.ap_service import (
@@ -58,10 +58,27 @@ async def pay_payable(
     payload: PayablePaymentRequest,
     session: TenantDB,
     principal: ApPayer,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> PayableRead:
-    """Settle a payable; `open -> partial -> paid`, audited, never overpaid."""
+    """Settle a payable; `open -> partial -> paid`, audited, never overpaid.
+
+    The ledger key resolves as ``Idempotency-Key`` header -> ``body.idempotency_key``
+    -> ``body.payment_ref`` -> a generated UUID, so a retried settlement can never
+    be counted twice while every settlement still lands in the immutable ledger.
+    """
+    resolved_key = (
+        (idempotency_key or "").strip()
+        or (payload.idempotency_key or "").strip()
+        or payload.payment_ref.strip()
+        or uuid4().hex
+    )
     return await _service.record_payment(
-        session, principal.tenant_id, principal, payable_id, payload
+        session,
+        principal.tenant_id,
+        principal,
+        payable_id,
+        payload,
+        idempotency_key=resolved_key,
     )
 
 
@@ -70,5 +87,5 @@ async def get_cashflow_summary(
     session: TenantDB,
     principal: ApReader,
 ) -> CashflowSummaryRead:
-    """AR collected minus AP paid, with outstanding balances, in the base currency."""
+    """AR collected minus AP paid in the base currency, plus the per-currency breakdown."""
     return await _service.cashflow_summary(session, principal.tenant_id)

@@ -8,7 +8,7 @@ import json
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from urllib.parse import urlencode
 
@@ -138,6 +138,32 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
     def _decimal(value: Any) -> Decimal:
         return Decimal(str(value if value not in (None, "") else "0"))
 
+    def _normalize_line_item(self, item: Mapping[str, Any]) -> NormalizedLineItem | None:
+        """Build one line item, multiplying TikTok's per-unit ``sale_price`` by quantity.
+
+        TikTok Shop's ``sale_price`` is the unit price; using it as the line total silently
+        under-reports multi-unit lines (and therefore order revenue and CVP).
+        """
+        sku = str(item.get("seller_sku") or "").strip()
+        if not sku:
+            return None
+        quantity = int(item.get("quantity") or 1)
+        unit_price = self._decimal(item.get("sale_price"))
+        explicit_total = item.get("line_total") or item.get("total_price")
+        line_total = (
+            self._decimal(explicit_total)
+            if explicit_total not in (None, "")
+            else (unit_price * Decimal(quantity)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        )
+        return NormalizedLineItem(
+            external_sku=sku,
+            title=str(item.get("product_name") or sku),
+            quantity=quantity,
+            line_total=line_total,
+        )
+
     def _normalize_order(self, order: dict[str, Any]) -> NormalizedOrder:
         payment = order.get("payment") or {}
         recipient = order.get("recipient_address") or {}
@@ -173,14 +199,9 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
                 country_code=recipient.get("region_code"),
             ),
             line_items=[
-                NormalizedLineItem(
-                    external_sku=str(item["seller_sku"]),
-                    title=str(item.get("product_name") or item["seller_sku"]),
-                    quantity=int(item.get("quantity") or 1),
-                    line_total=self._decimal(item.get("sale_price")),
-                )
+                line
                 for item in order.get("line_items") or []
-                if str(item.get("seller_sku") or "").strip()
+                if (line := self._normalize_line_item(item)) is not None
             ],
             channel_metadata=metadata,
             updated_at=datetime.fromtimestamp(int(order.get("update_time") or 0), UTC),

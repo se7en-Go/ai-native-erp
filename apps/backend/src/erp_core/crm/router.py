@@ -51,6 +51,35 @@ ManagerPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_MANAGER_R
 ReaderPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_READER_ROLES))]
 
 
+def _mask_quote_for_role(quote: QuoteRead, role: UserRole) -> QuoteRead:
+    """Strip margin/cost internals an AGENT must never see; other roles are untouched.
+
+    AGENT is a quota-carrying sales seat: it may price quotes but must never learn the
+    landed cost snapshot or the resulting margin. Masking happens at the response edge so
+    the persisted Decimal snapshots (needed by finance/profit reporting) stay intact.
+    """
+    if role != UserRole.AGENT:
+        return quote
+    masked_items = [
+        item.model_copy(update={"unit_cost_base_snapshot": None}) for item in quote.items
+    ]
+    return quote.model_copy(update={"items": masked_items})
+
+
+def _mask_quote_page(
+    page: PaginatedResponse[QuoteRead], role: UserRole
+) -> PaginatedResponse[QuoteRead]:
+    if role != UserRole.AGENT:
+        return page
+    return PaginatedResponse[QuoteRead](
+        items=[_mask_quote_for_role(quote, role) for quote in page.items],
+        total=page.total,
+        limit=page.limit,
+        offset=page.offset,
+        has_more=page.has_more,
+    )
+
+
 def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
     factory: async_sessionmaker[AsyncSession] | None = getattr(
         request.app.state, "session_factory", None
@@ -156,9 +185,10 @@ async def list_quotes(
     offset: int = Query(default=0, ge=0),
 ) -> PaginatedResponse[QuoteRead]:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.list_quotes(
+        page = await _service.list_quotes(
             session, principal.tenant_id, opportunity_id=opportunity_id, limit=limit, offset=offset
         )
+    return _mask_quote_page(page, principal.role)
 
 
 @router.post("/quotes", response_model=QuoteRead, status_code=status.HTTP_201_CREATED)
@@ -168,7 +198,8 @@ async def create_quote(
     payload: QuoteCreate,
 ) -> QuoteRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.create_quote(session, principal.tenant_id, principal, payload)
+        quote = await _service.create_quote(session, principal.tenant_id, principal, payload)
+    return _mask_quote_for_role(quote, principal.role)
 
 
 @router.post(
@@ -183,9 +214,10 @@ async def reprice_quote_version(
     payload: QuoteRepriceRequest,
 ) -> QuoteRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.reprice_quote_version(
+        quote = await _service.reprice_quote_version(
             session, principal.tenant_id, principal, quote_id, payload
         )
+    return _mask_quote_for_role(quote, principal.role)
 
 
 @router.post("/quotes/{quote_id}/send", response_model=QuoteRead)
@@ -195,7 +227,8 @@ async def send_quote(
     quote_id: UUID,
 ) -> QuoteRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.send_quote(session, principal.tenant_id, principal, quote_id)
+        quote = await _service.send_quote(session, principal.tenant_id, principal, quote_id)
+    return _mask_quote_for_role(quote, principal.role)
 
 
 @router.post("/quotes/{quote_id}/accept", response_model=QuoteRead)
@@ -205,7 +238,8 @@ async def accept_quote(
     quote_id: UUID,
 ) -> QuoteRead:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.accept_quote(session, principal.tenant_id, principal, quote_id)
+        quote = await _service.accept_quote(session, principal.tenant_id, principal, quote_id)
+    return _mask_quote_for_role(quote, principal.role)
 
 
 @router.post("/quotes/{quote_id}/pdf", response_model=QuotePdfResponse)
@@ -266,6 +300,9 @@ async def convert_quote_to_order(
     payload: ConvertQuoteRequest,
 ) -> ConvertQuoteResponse:
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.convert_quote_to_order(
+        converted = await _service.convert_quote_to_order(
             session, principal.tenant_id, principal, quote_id, payload
         )
+    return converted.model_copy(
+        update={"quote": _mask_quote_for_role(converted.quote, principal.role)}
+    )

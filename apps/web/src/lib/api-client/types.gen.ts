@@ -391,6 +391,10 @@ export type CaptionRead = {
 
 /**
  * AR/AP position and net cash flow, all denominated in the tenant base currency.
+ *
+ * The top-level fields stay the base-currency summary (fully backwards compatible),
+ * while `by_currency` reports every currency actually present in the ledger. Each
+ * currency is only ever summed against itself - no cross-currency addition.
  */
 export type CashflowSummaryRead = {
     ap_outstanding: string;
@@ -399,6 +403,7 @@ export type CashflowSummaryRead = {
     ar_collected: string;
     ar_outstanding: string;
     ar_total: string;
+    by_currency?: Array<CurrencyCashflowBreakdown>;
     currency: string;
     net_cashflow: string;
 };
@@ -652,6 +657,20 @@ export type CreditWalletRead = {
     topup_credits_balance: number;
     total_credits_available: number;
     updated_at: string;
+};
+
+/**
+ * One currency's AR/AP position, so foreign-currency flows are never hidden.
+ */
+export type CurrencyCashflowBreakdown = {
+    ap_outstanding: string;
+    ap_paid: string;
+    ap_total: string;
+    ar_collected: string;
+    ar_outstanding: string;
+    ar_total: string;
+    currency: string;
+    net_cashflow: string;
 };
 
 export type CurrencyValue = {
@@ -1372,11 +1391,13 @@ export type OrderCreateRequest = {
     currency?: string;
     customer_id: string;
     discount_amount?: number | string;
-    fx_rate_to_base?: number | string;
+    fx_rate_to_base?: number | string | null;
     items: Array<OrderItemInput>;
     order_mode?: OrderMode;
     shipping_charged?: number | string;
+    subtotal_amount?: number | string | null;
     tax_collected?: number | string;
+    total_amount?: number | string | null;
     warehouse_id: string;
 };
 
@@ -1392,7 +1413,7 @@ export type OrderItemRead = {
     order_id: string;
     quantity: number;
     sku_snapshot: string;
-    unit_cost_base_snapshot: string;
+    unit_cost_base_snapshot?: string | null;
     unit_price: string;
     variant_id: string;
 };
@@ -1819,6 +1840,7 @@ export type PayableListRead = {
  */
 export type PayablePaymentRequest = {
     amount: number | string;
+    idempotency_key?: string | null;
     paid_at?: string | null;
     payment_ref?: string;
 };
@@ -2210,7 +2232,7 @@ export type QuoteItemRead = {
     quantity: number;
     quote_id: string;
     sku_snapshot: string;
-    unit_cost_base_snapshot: string;
+    unit_cost_base_snapshot?: string | null;
     unit_price_quote_ccy: string;
     variant_id: string;
 };
@@ -6627,6 +6649,7 @@ export type ListPayablesApiV1FinancePayablesGetResponse = ListPayablesApiV1Finan
 export type PayPayableApiV1FinancePayablesPayableIdPayPostData = {
     body: PayablePaymentRequest;
     headers?: {
+        'Idempotency-Key'?: string | null;
         authorization?: string | null;
     };
     path: {
