@@ -124,6 +124,24 @@ export type AiProposalRead = {
     target_entity_type: string | null;
 };
 
+export type AlibabaIntlConnectRequest = {
+    app_key: string;
+    app_secret: string;
+    display_name: string;
+    inquiry_email?: string | null;
+    store_id: string;
+    visibility_scope?: 'shared' | 'private';
+};
+
+export type AmazonConnectRequest = {
+    display_name: string;
+    lwa_client_id: string;
+    lwa_client_secret: string;
+    marketplace_id?: string;
+    refresh_token: string;
+    seller_id: string;
+};
+
 export type AssistantChatRequest = {
     capability?: AiCapability;
     channel_type?: ChannelType;
@@ -188,6 +206,39 @@ export type AutoExecutedCapability = {
     capability: AiCapability;
     display_name: string;
     href: string;
+};
+
+export type AutoReplyRunRequest = {
+    max_kb_hits?: number;
+    mode?: 'auto' | 'proposal_only';
+};
+
+export type AutoReplyRunResponse = {
+    action: 'auto_replied' | 'proposal_created' | 'abstained';
+    confidence: string;
+    conversation_id: string;
+    kb_hits?: Array<{
+        [key: string]: unknown;
+    }>;
+    message_id?: string | null;
+    proposal_id?: string | null;
+    reply_text?: string | null;
+    risk_flags?: Array<string>;
+    tool_evidence?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+/**
+ * Per-conversation auto-reply toggle.
+ */
+export type AutoReplySettingRead = {
+    ai_auto_reply_enabled: boolean;
+    conversation_id: string;
+};
+
+export type AutoReplySettingUpdate = {
+    enabled: boolean;
 };
 
 export type AutonomyLevel = 'L0_copilot' | 'L1_proposal' | 'L2_auto';
@@ -336,6 +387,20 @@ export type CaptionRead = {
     platform: 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'linkedin' | 'pinterest' | 'x' | 'xiaohongshu' | 'douyin' | 'kuaishou' | 'bilibili' | 'wechat_video' | 'wechat_oa' | 'weibo';
     sku_ref: string | null;
     text: string;
+};
+
+/**
+ * AR/AP position and net cash flow, all denominated in the tenant base currency.
+ */
+export type CashflowSummaryRead = {
+    ap_outstanding: string;
+    ap_paid: string;
+    ap_total: string;
+    ar_collected: string;
+    ar_outstanding: string;
+    ar_total: string;
+    currency: string;
+    net_cashflow: string;
 };
 
 /**
@@ -594,6 +659,27 @@ export type CurrencyValue = {
     currency: string;
 };
 
+export type CustomerAiProfileRead = {
+    ai_summary?: string;
+    buyer_type?: 'b2b_buyer' | 'b2b_distributor' | 'b2c_consumer' | 'unknown';
+    company_name?: string | null;
+    country_code?: string | null;
+    customer_id: string;
+    estimated_order_value_usd?: string | null;
+    interested_skus?: Array<string>;
+    key_requirements?: Array<string>;
+    next_best_action?: string;
+    pain_points?: Array<string>;
+    preferred_language?: string;
+    price_sensitivity?: 'low' | 'medium' | 'high';
+    purchase_intent_score?: number;
+    synced_followup_id?: string | null;
+    synced_lead_id?: string | null;
+    tags?: Array<string>;
+    target_incoterm?: string | null;
+    updated_at: string;
+};
+
 export type CustomerIdentityRead = {
     confidence_level: ConfidenceLevel;
     created_at: string;
@@ -677,6 +763,15 @@ export type DeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed'
 export type DisconnectChannelResponse = {
     channel_account_id: string;
     status?: ChannelStatus;
+};
+
+export type EbayConnectRequest = {
+    app_id: string;
+    cert_id: string;
+    display_name: string;
+    refresh_token: string;
+    seller_username: string;
+    site_id?: string;
 };
 
 export type EmailConnectRequest = {
@@ -1096,6 +1191,19 @@ export type LowStockItemRead = {
 export type LowStockListRead = {
     items: Array<LowStockItemRead>;
     total?: number;
+};
+
+/**
+ * Non-secret projection of a freshly connected marketplace account.
+ */
+export type MarketplaceConnectionRead = {
+    channel_account_id: string;
+    channel_type: string;
+    credential_type: string;
+    display_name: string;
+    external_account_id: string;
+    status?: string;
+    visibility_scope?: string | null;
 };
 
 export type MembershipItem = {
@@ -1695,6 +1803,47 @@ export type PatrolFindingItem = {
     title_zh: string;
 };
 
+/**
+ * The tenant AP ledger plus its base-currency totals.
+ */
+export type PayableListRead = {
+    currency: string;
+    items: Array<PayableRead>;
+    total_due: string;
+    total_outstanding: string;
+    total_paid: string;
+};
+
+/**
+ * A supplier settlement. `amount` must be an exact decimal, never a float.
+ */
+export type PayablePaymentRequest = {
+    amount: number | string;
+    paid_at?: string | null;
+    payment_ref?: string;
+};
+
+/**
+ * One supplier AP document as stored in `public.payables`.
+ */
+export type PayableRead = {
+    created_at: string;
+    currency: string;
+    due_amount: string;
+    due_date: string | null;
+    id: string;
+    paid_amount: string;
+    paid_at: string | null;
+    payment_ref: string | null;
+    po_id: string | null;
+    po_no: string;
+    status: string;
+    supplier_id: string | null;
+    supplier_name: string;
+    tenant_id: string;
+    updated_at: string;
+};
+
 export type PaymentCreate = {
     actual_fx_rate: number | string;
     amount_received: number | string;
@@ -1873,6 +2022,10 @@ export type ProductRead = {
     spu_code: string;
     tenant_id: string;
     updated_at: string;
+};
+
+export type ProfileExtractionRequest = {
+    sync_to_crm?: boolean;
 };
 
 export type ProfitSummaryRead = {
@@ -2368,6 +2521,31 @@ export type SkuMargin = {
 };
 
 /**
+ * Social -> CRM -> quote attribution for the whole tenant.
+ */
+export type SocialAttributionFunnelRead = {
+    converted_crm_customers: number;
+    lead_to_customer_rate_pct: string;
+    linked_quotes_count: number;
+    platform_breakdown: Array<SocialPlatformFunnelItem>;
+    published_posts: number;
+    social_leads_captured: number;
+    total_posts: number;
+};
+
+/**
+ * One platform's slice of the funnel.
+ */
+export type SocialPlatformFunnelItem = {
+    converted_crm_customers: number;
+    lead_to_customer_rate_pct: string;
+    platform: string;
+    published_posts: number;
+    social_leads_captured: number;
+    total_posts: number;
+};
+
+/**
  * Bilingual operating card for one platform: audience, funnel, practices, compliance.
  */
 export type SocialPlaybookItem = {
@@ -2398,6 +2576,86 @@ export type SocialSummary = {
     social_leads: number;
     supported_platforms: number;
     total_posts: number;
+};
+
+export type SourcingCollectRequest = {
+    category?: string;
+    fx_rate_usd_cny?: number | string;
+    hs_code?: string | null;
+    images?: Array<string>;
+    raw_price_cny?: number | string | null;
+    raw_text?: string | null;
+    raw_title?: string | null;
+    source_platform?: '1688' | 'url' | 'manual';
+    source_url?: string | null;
+    target_margin_pct?: number | string;
+};
+
+export type SourcingDeleteResult = {
+    deleted: boolean;
+    draft_id: string;
+};
+
+export type SourcingDraftRead = {
+    attributes: {
+        [key: string]: unknown;
+    };
+    bullet_points: Array<string>;
+    cost_usd: string;
+    created_at: string;
+    fx_rate_usd_cny: string;
+    id: string;
+    images: Array<string>;
+    imported_product_id?: string | null;
+    imported_variant_id?: string | null;
+    moq_tiers: Array<SourcingMoqTier>;
+    optimized_title_en: string;
+    publish_history?: Array<{
+        [key: string]: unknown;
+    }>;
+    raw_price_cny: string;
+    raw_title: string;
+    source_platform: string;
+    source_url: string | null;
+    status: string;
+    suggested_category: string;
+    suggested_hs_code: string | null;
+    suggested_sku: string;
+    target_margin_pct: string;
+    target_price_usd: string;
+    tenant_id: string;
+    updated_at: string;
+};
+
+export type SourcingImportResult = {
+    created: boolean;
+    draft: SourcingDraftRead;
+    product_id: string;
+    retail_price_usd: string;
+    sku: string;
+    variant_id: string;
+};
+
+export type SourcingMoqTier = {
+    min_qty: number;
+    unit_price_usd: string;
+};
+
+export type SourcingPublishRequest = {
+    channel_account_ids: Array<string>;
+    price_multiplier?: number | string;
+    stock_sync_ratio?: number | string;
+};
+
+export type SourcingPublishResult = {
+    channel_account_id: string;
+    channel_type: string;
+    external_product_id: string;
+    external_sku: string;
+    mapping_id: string;
+    price_usd: string;
+    published_at: string;
+    stock_sync_ratio: string;
 };
 
 export type SplitCustomerRequest = {
@@ -2912,6 +3170,126 @@ export type UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses = {
 
 export type UpdateCapabilitiesApiV1AiCapabilitiesPatchResponse = UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses[keyof UpdateCapabilitiesApiV1AiCapabilitiesPatchResponses];
 
+export type GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/conversations/{conversation_id}/auto-reply';
+};
+
+export type GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetError = GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetErrors[keyof GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetErrors];
+
+export type GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutoReplySettingRead;
+};
+
+export type GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetResponse = GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetResponses[keyof GetAutoReplySettingApiV1AiConversationsConversationIdAutoReplyGetResponses];
+
+export type UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchData = {
+    body: AutoReplySettingUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/conversations/{conversation_id}/auto-reply';
+};
+
+export type UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchError = UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchErrors[keyof UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchErrors];
+
+export type UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutoReplySettingRead;
+};
+
+export type UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchResponse = UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchResponses[keyof UpdateAutoReplySettingApiV1AiConversationsConversationIdAutoReplyPatchResponses];
+
+export type RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostData = {
+    body: AutoReplyRunRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/conversations/{conversation_id}/auto-reply/run';
+};
+
+export type RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostError = RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostErrors[keyof RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostErrors];
+
+export type RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutoReplyRunResponse;
+};
+
+export type RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostResponse = RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostResponses[keyof RunAutoReplyApiV1AiConversationsConversationIdAutoReplyRunPostResponses];
+
+export type ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostData = {
+    body: ProfileExtractionRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/conversations/{conversation_id}/extract-profile';
+};
+
+export type ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostError = ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostErrors[keyof ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostErrors];
+
+export type ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CustomerAiProfileRead;
+};
+
+export type ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostResponse = ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostResponses[keyof ExtractCustomerProfileApiV1AiConversationsConversationIdExtractProfilePostResponses];
+
 export type ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostData = {
     body?: never;
     headers?: {
@@ -2941,6 +3319,36 @@ export type ProposeConversationReplyApiV1AiConversationsConversationIdProposeRep
 };
 
 export type ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostResponse = ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostResponses[keyof ProposeConversationReplyApiV1AiConversationsConversationIdProposeReplyPostResponses];
+
+export type GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        customer_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/customers/{customer_id}/profile';
+};
+
+export type GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetError = GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetErrors[keyof GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetErrors];
+
+export type GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CustomerAiProfileRead;
+};
+
+export type GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetResponse = GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetResponses[keyof GetCustomerAiProfileApiV1AiCustomersCustomerIdProfileGetResponses];
 
 export type ListEmployeesApiV1AiEmployeesGetData = {
     body?: never;
@@ -4772,6 +5180,182 @@ export type CreateSkuMappingApiV1CatalogSkuMappingsPostResponses = {
 
 export type CreateSkuMappingApiV1CatalogSkuMappingsPostResponse = CreateSkuMappingApiV1CatalogSkuMappingsPostResponses[keyof CreateSkuMappingApiV1CatalogSkuMappingsPostResponses];
 
+export type CollectSourcingDraftApiV1CatalogSourcingCollectPostData = {
+    body: SourcingCollectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/sourcing/collect';
+};
+
+export type CollectSourcingDraftApiV1CatalogSourcingCollectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CollectSourcingDraftApiV1CatalogSourcingCollectPostError = CollectSourcingDraftApiV1CatalogSourcingCollectPostErrors[keyof CollectSourcingDraftApiV1CatalogSourcingCollectPostErrors];
+
+export type CollectSourcingDraftApiV1CatalogSourcingCollectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: SourcingDraftRead;
+};
+
+export type CollectSourcingDraftApiV1CatalogSourcingCollectPostResponse = CollectSourcingDraftApiV1CatalogSourcingCollectPostResponses[keyof CollectSourcingDraftApiV1CatalogSourcingCollectPostResponses];
+
+export type ListSourcingDraftsApiV1CatalogSourcingDraftsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/sourcing/drafts';
+};
+
+export type ListSourcingDraftsApiV1CatalogSourcingDraftsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSourcingDraftsApiV1CatalogSourcingDraftsGetError = ListSourcingDraftsApiV1CatalogSourcingDraftsGetErrors[keyof ListSourcingDraftsApiV1CatalogSourcingDraftsGetErrors];
+
+export type ListSourcingDraftsApiV1CatalogSourcingDraftsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<SourcingDraftRead>;
+};
+
+export type ListSourcingDraftsApiV1CatalogSourcingDraftsGetResponse = ListSourcingDraftsApiV1CatalogSourcingDraftsGetResponses[keyof ListSourcingDraftsApiV1CatalogSourcingDraftsGetResponses];
+
+export type DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        draft_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/sourcing/drafts/{draft_id}';
+};
+
+export type DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteError = DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteErrors[keyof DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteErrors];
+
+export type DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourcingDeleteResult;
+};
+
+export type DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteResponse = DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteResponses[keyof DeleteSourcingDraftApiV1CatalogSourcingDraftsDraftIdDeleteResponses];
+
+export type GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        draft_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/sourcing/drafts/{draft_id}';
+};
+
+export type GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetError = GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetErrors[keyof GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetErrors];
+
+export type GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourcingDraftRead;
+};
+
+export type GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetResponse = GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetResponses[keyof GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetResponses];
+
+export type ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        draft_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/sourcing/drafts/{draft_id}/import-to-catalog';
+};
+
+export type ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostError = ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostErrors[keyof ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostErrors];
+
+export type ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: SourcingImportResult;
+};
+
+export type ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostResponse = ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostResponses[keyof ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostResponses];
+
+export type PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostData = {
+    body: SourcingPublishRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        draft_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/sourcing/drafts/{draft_id}/publish';
+};
+
+export type PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostError = PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostErrors[keyof PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostErrors];
+
+export type PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<SourcingPublishResult>;
+};
+
+export type PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostResponse = PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostResponses[keyof PublishSourcingDraftApiV1CatalogSourcingDraftsDraftIdPublishPostResponses];
+
 export type ListVariantsApiV1CatalogVariantsGetData = {
     body?: never;
     headers?: {
@@ -5015,6 +5599,62 @@ export type UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchRe
 
 export type UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchResponse = UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchResponses[keyof UpdateChannelOwnershipApiV1ChannelsAccountsAccountIdOwnershipPatchResponses];
 
+export type ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostData = {
+    body: AlibabaIntlConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/alibaba-intl/connect';
+};
+
+export type ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostError = ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostErrors[keyof ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostErrors];
+
+export type ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostResponse = ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostResponses[keyof ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostResponses];
+
+export type ConnectAmazonApiV1ChannelsAmazonConnectPostData = {
+    body: AmazonConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/amazon/connect';
+};
+
+export type ConnectAmazonApiV1ChannelsAmazonConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectAmazonApiV1ChannelsAmazonConnectPostError = ConnectAmazonApiV1ChannelsAmazonConnectPostErrors[keyof ConnectAmazonApiV1ChannelsAmazonConnectPostErrors];
+
+export type ConnectAmazonApiV1ChannelsAmazonConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectAmazonApiV1ChannelsAmazonConnectPostResponse = ConnectAmazonApiV1ChannelsAmazonConnectPostResponses[keyof ConnectAmazonApiV1ChannelsAmazonConnectPostResponses];
+
 export type ListChannelConsentsApiV1ChannelsConsentsGetData = {
     body?: never;
     headers?: {
@@ -5108,6 +5748,34 @@ export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses = {
 };
 
 export type ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponse = ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses[keyof ReplayDeadLetterEventApiV1ChannelsDlqEventIdReplayPostResponses];
+
+export type ConnectEbayApiV1ChannelsEbayConnectPostData = {
+    body: EbayConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/ebay/connect';
+};
+
+export type ConnectEbayApiV1ChannelsEbayConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectEbayApiV1ChannelsEbayConnectPostError = ConnectEbayApiV1ChannelsEbayConnectPostErrors[keyof ConnectEbayApiV1ChannelsEbayConnectPostErrors];
+
+export type ConnectEbayApiV1ChannelsEbayConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectEbayApiV1ChannelsEbayConnectPostResponse = ConnectEbayApiV1ChannelsEbayConnectPostResponses[keyof ConnectEbayApiV1ChannelsEbayConnectPostResponses];
 
 export type ConnectEmailApiV1ChannelsEmailConnectPostData = {
     body: EmailConnectRequest;
@@ -5785,6 +6453,34 @@ export type UpdateCustomerApiV1CustomersCustomerIdPatchResponses = {
 
 export type UpdateCustomerApiV1CustomersCustomerIdPatchResponse = UpdateCustomerApiV1CustomersCustomerIdPatchResponses[keyof UpdateCustomerApiV1CustomersCustomerIdPatchResponses];
 
+export type GetCashflowSummaryApiV1FinanceCashflowSummaryGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/finance/cashflow-summary';
+};
+
+export type GetCashflowSummaryApiV1FinanceCashflowSummaryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCashflowSummaryApiV1FinanceCashflowSummaryGetError = GetCashflowSummaryApiV1FinanceCashflowSummaryGetErrors[keyof GetCashflowSummaryApiV1FinanceCashflowSummaryGetErrors];
+
+export type GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CashflowSummaryRead;
+};
+
+export type GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponse = GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponses[keyof GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponses];
+
 export type ExportCvpCsvApiV1FinanceCvpExportCsvGetData = {
     body?: never;
     headers?: {
@@ -5899,6 +6595,64 @@ export type GetFinanceOverviewApiV1FinanceOverviewGetResponses = {
 };
 
 export type GetFinanceOverviewApiV1FinanceOverviewGetResponse = GetFinanceOverviewApiV1FinanceOverviewGetResponses[keyof GetFinanceOverviewApiV1FinanceOverviewGetResponses];
+
+export type ListPayablesApiV1FinancePayablesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/finance/payables';
+};
+
+export type ListPayablesApiV1FinancePayablesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPayablesApiV1FinancePayablesGetError = ListPayablesApiV1FinancePayablesGetErrors[keyof ListPayablesApiV1FinancePayablesGetErrors];
+
+export type ListPayablesApiV1FinancePayablesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayableListRead;
+};
+
+export type ListPayablesApiV1FinancePayablesGetResponse = ListPayablesApiV1FinancePayablesGetResponses[keyof ListPayablesApiV1FinancePayablesGetResponses];
+
+export type PayPayableApiV1FinancePayablesPayableIdPayPostData = {
+    body: PayablePaymentRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        payable_id: string;
+    };
+    query?: never;
+    url: '/api/v1/finance/payables/{payable_id}/pay';
+};
+
+export type PayPayableApiV1FinancePayablesPayableIdPayPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PayPayableApiV1FinancePayablesPayableIdPayPostError = PayPayableApiV1FinancePayablesPayableIdPayPostErrors[keyof PayPayableApiV1FinancePayablesPayableIdPayPostErrors];
+
+export type PayPayableApiV1FinancePayablesPayableIdPayPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayableRead;
+};
+
+export type PayPayableApiV1FinancePayablesPayableIdPayPostResponse = PayPayableApiV1FinancePayablesPayableIdPayPostResponses[keyof PayPayableApiV1FinancePayablesPayableIdPayPostResponses];
 
 export type RecordPaymentApiV1FinancePaymentsPostData = {
     body: PaymentCreate;
@@ -7438,6 +8192,34 @@ export type DisconnectAccountApiV1SocialAccountsAccountIdDisconnectPostResponses
 };
 
 export type DisconnectAccountApiV1SocialAccountsAccountIdDisconnectPostResponse = DisconnectAccountApiV1SocialAccountsAccountIdDisconnectPostResponses[keyof DisconnectAccountApiV1SocialAccountsAccountIdDisconnectPostResponses];
+
+export type GetAttributionFunnelApiV1SocialAttributionFunnelGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/social/attribution-funnel';
+};
+
+export type GetAttributionFunnelApiV1SocialAttributionFunnelGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAttributionFunnelApiV1SocialAttributionFunnelGetError = GetAttributionFunnelApiV1SocialAttributionFunnelGetErrors[keyof GetAttributionFunnelApiV1SocialAttributionFunnelGetErrors];
+
+export type GetAttributionFunnelApiV1SocialAttributionFunnelGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SocialAttributionFunnelRead;
+};
+
+export type GetAttributionFunnelApiV1SocialAttributionFunnelGetResponse = GetAttributionFunnelApiV1SocialAttributionFunnelGetResponses[keyof GetAttributionFunnelApiV1SocialAttributionFunnelGetResponses];
 
 export type GenerateCaptionApiV1SocialCaptionGeneratePostData = {
     body: CaptionGenerate;

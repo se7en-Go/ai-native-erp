@@ -26,9 +26,17 @@ import {
 } from "@/components/channels/messaging-channel-cards";
 import { isEmailConnectDraftValid } from "@/components/channels/quick-connect-panel";
 import {
+  isSourcingMarketplaceKey,
   livechatEmbedSnippet,
   marketplaceChannel,
+  type ExtendedMarketplaceChannelKey,
 } from "@/components/channels/channel-marketplace";
+import {
+  connectAlibabaIntl,
+  connectAmazon,
+  connectEbay,
+  type SourcingChannelKey,
+} from "@/lib/api-client/pack-f-sourcing";
 import type {
   ChannelAccountApiItem,
   ChannelVisibilityScope,
@@ -85,6 +93,17 @@ type Draft = {
   shop_id: string;
   shop_cipher: string;
   app_key: string;
+  refresh_token: string;
+  seller_id: string;
+  marketplace_id: string;
+  site_id: string;
+  seller_username: string;
+  store_id: string;
+  inquiry_email: string;
+  lwa_client_id: string;
+  lwa_client_secret: string;
+  app_id: string;
+  cert_id: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -119,6 +138,17 @@ const EMPTY_DRAFT: Draft = {
   shop_id: "",
   shop_cipher: "",
   app_key: "",
+  refresh_token: "",
+  seller_id: "",
+  marketplace_id: "ATVPDKIKX0DER",
+  site_id: "EBAY-US",
+  seller_username: "",
+  store_id: "",
+  inquiry_email: "",
+  lwa_client_id: "",
+  lwa_client_secret: "",
+  app_id: "",
+  cert_id: "",
 };
 
 const META_ID = /^[0-9]{1,32}$/;
@@ -129,7 +159,7 @@ function trimmed(value: string): string {
 }
 
 /** 三步入驻指引：抽屉里默认折叠，点开就是可照抄的中文步骤。 */
-const GUIDES: Record<MarketplaceChannelKey, Array<{ zh: string; en: string }>> = {
+const GUIDES: Record<ExtendedMarketplaceChannelKey, Array<{ zh: string; en: string }>> = {
   whatsapp: [
     { zh: "在 Meta 开发者后台创建 WhatsApp Business 应用", en: "Create a WhatsApp Business app in Meta for Developers" },
     { zh: "复制 WABA ID 与手机号 ID（或走 Embedded Signup 授权）", en: "Copy the WABA ID and phone number ID, or use Embedded Signup" },
@@ -185,6 +215,21 @@ const GUIDES: Record<MarketplaceChannelKey, Array<{ zh: string; en: string }>> =
     { zh: "复制 Shop ID、Shop Cipher、App Key 与 App Secret", en: "Copy the shop ID, shop cipher, app key and secret" },
     { zh: "补上访问令牌后一键绑定，订单与 TikTok 会话同步", en: "Add the access token to sync orders and TikTok chats" },
   ],
+  alibaba_intl: [
+    { zh: "在 Alibaba.com 卖家中心 → 开放平台申请 App Key / Secret", en: "Apply for an App Key/Secret in Alibaba.com Seller Central → Open Platform" },
+    { zh: "填写店铺 ID 与询盘接收邮箱（可留空沿用工作邮箱）", en: "Enter the store ID and the inquiry mailbox (optional)" },
+    { zh: "一键绑定后询盘自动进 Inbox，密钥信封加密保存", en: "Bind once so inquiries land in Inbox with envelope-encrypted keys" },
+  ],
+  amazon: [
+    { zh: "Seller Central → 开发者中心注册 LWA 应用", en: "Register an LWA app in Seller Central → Developer Central" },
+    { zh: "复制 Seller ID、Marketplace ID、LWA Client ID / Secret 与 Refresh Token", en: "Copy the seller ID, marketplace ID, LWA client ID/secret and refresh token" },
+    { zh: "一键加密直连，订单、库存与买家消息同步进主档", en: "Direct-connect to sync orders, stock and buyer messages" },
+  ],
+  ebay: [
+    { zh: "eBay 开发者计划创建生产应用，拿到 App ID / Cert ID", en: "Create a production app in the eBay developer program for the App/Cert IDs" },
+    { zh: "用 OAuth 换取 Refresh Token，并确认卖家用户名与站点 ID", en: "Exchange an OAuth refresh token and confirm the seller username and site ID" },
+    { zh: "一键加密直连，eBay 订单与刊登 SKU 双向同步", en: "Direct-connect for two-way order and listing SKU sync" },
+  ],
 };
 
 const FIELD_LABEL_COPY = {
@@ -233,7 +278,7 @@ function Field({
 }
 
 export type ChannelConnectDrawerProps = {
-  channelKey: MarketplaceChannelKey | null;
+  channelKey: ExtendedMarketplaceChannelKey | null;
   accounts: ChannelAccountApiItem[];
   isAdmin: boolean;
   currentUserId?: string | null;
@@ -324,7 +369,9 @@ export function ChannelConnectDrawer(props: ChannelConnectDrawerProps) {
   );
 }
 
-type ChannelConnectFormProps = ChannelConnectDrawerProps & { channelKey: MarketplaceChannelKey };
+type ChannelConnectFormProps = ChannelConnectDrawerProps & {
+  channelKey: ExtendedMarketplaceChannelKey;
+};
 
 function ChannelConnectForm({
   channelKey,
@@ -369,13 +416,15 @@ function ChannelConnectForm({
   }, [currentUserId, isAdmin, ownerId, scope]);
 
   const ownershipReady = isAdmin ? scope === "shared" || Boolean(ownerId) : true;
+  const isSourcingChannel = isSourcingMarketplaceKey(channelKey);
   const showsOwnership =
-    channelKey === "telegram" ||
+    !isSourcingChannel &&
+    (channelKey === "telegram" ||
     channelKey === "whatsapp" ||
     channelKey === "email" ||
     channelKey === "messenger" ||
-    channelKey === "instagram_dm" ||
-    channelKey === "web_livechat";
+      channelKey === "instagram_dm" ||
+      channelKey === "web_livechat");
 
   function update<K extends keyof Draft>(field: K, value: string) {
     setDraft((current) => ({
@@ -450,6 +499,26 @@ function ChannelConnectForm({
           Boolean(trimmed(draft.app_secret)) &&
           Boolean(trimmed(draft.access_token))
         );
+      case "alibaba_intl":
+        return (
+          Boolean(trimmed(draft.app_key)) &&
+          Boolean(trimmed(draft.app_secret)) &&
+          Boolean(trimmed(draft.store_id))
+        );
+      case "amazon":
+        return (
+          Boolean(trimmed(draft.seller_id)) &&
+          Boolean(trimmed(draft.lwa_client_id)) &&
+          Boolean(trimmed(draft.lwa_client_secret)) &&
+          Boolean(trimmed(draft.refresh_token))
+        );
+      case "ebay":
+        return (
+          Boolean(trimmed(draft.seller_username)) &&
+          Boolean(trimmed(draft.app_id)) &&
+          Boolean(trimmed(draft.cert_id)) &&
+          Boolean(trimmed(draft.refresh_token))
+        );
       default:
         return false;
     }
@@ -457,9 +526,9 @@ function ChannelConnectForm({
 
   const valid = formValid && ownershipReady;
 
-  function buildRequest(): MarketplaceConnectRequest {
+  function buildRequest(key: MarketplaceChannelKey): MarketplaceConnectRequest {
     const displayName = trimmed(draft.display_name);
-    switch (channelKey) {
+    switch (key) {
       case "telegram": {
         const body: TelegramConnectPayload = {
           bot_token: trimmed(draft.bot_token),
@@ -591,13 +660,54 @@ function ChannelConnectForm({
     }
   }
 
+  /**
+   * Pack F 三个外贸渠道走各自的后端接入端点（密钥字段原样提交、绝不回显）。
+   * 其余 11 个渠道仍由 `onSubmit`（connectMarketplaceChannel）统一分发。
+   */
+  function submitSourcingChannel(key: SourcingChannelKey): Promise<MessagingConnectResult> {
+    const displayName = trimmed(draft.display_name) || item.titleEn;
+    switch (key) {
+      case "alibaba_intl":
+        return connectAlibabaIntl({
+          app_key: trimmed(draft.app_key),
+          app_secret: trimmed(draft.app_secret),
+          display_name: displayName,
+          store_id: trimmed(draft.store_id),
+          ...(trimmed(draft.inquiry_email)
+            ? { inquiry_email: trimmed(draft.inquiry_email) }
+            : {}),
+          visibility_scope: scope === "shared" ? "shared" : "private",
+        });
+      case "amazon":
+        return connectAmazon({
+          display_name: displayName,
+          seller_id: trimmed(draft.seller_id),
+          marketplace_id: trimmed(draft.marketplace_id) || "ATVPDKIKX0DER",
+          lwa_client_id: trimmed(draft.lwa_client_id),
+          lwa_client_secret: trimmed(draft.lwa_client_secret),
+          refresh_token: trimmed(draft.refresh_token),
+        });
+      case "ebay":
+        return connectEbay({
+          display_name: displayName,
+          seller_username: trimmed(draft.seller_username),
+          site_id: trimmed(draft.site_id) || "EBAY-US",
+          app_id: trimmed(draft.app_id),
+          cert_id: trimmed(draft.cert_id),
+          refresh_token: trimmed(draft.refresh_token),
+        });
+    }
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!valid || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
-      const connected = await onSubmit(buildRequest());
+      const connected = isSourcingMarketplaceKey(channelKey)
+        ? await submitSourcingChannel(channelKey)
+        : await onSubmit(buildRequest(channelKey));
       setResult(connected);
       onConnected?.();
     } catch (cause) {
@@ -1112,6 +1222,162 @@ function ChannelConnectForm({
           <p className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[11px] leading-5 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
             {bi("接入模式：卖家自备应用（seller_byok）", "Mode: seller BYOK (seller_byok)")}
           </p>
+        </>
+      )}
+
+      {channelKey === "alibaba_intl" && (
+        <>
+          <Field
+            testId="alibaba-app-key-input"
+            label="App Key"
+            value={draft.app_key}
+            onChange={(value) => update("app_key", value)}
+            placeholder="1234567"
+          />
+          <Field
+            testId="alibaba-app-secret-input"
+            label="App Secret"
+            value={draft.app_secret}
+            onChange={(value) => update("app_secret", value)}
+            placeholder={bi("提交后不再回显", "Never echoed back after submit")}
+            secret
+          />
+          <Field
+            testId="alibaba-store-id-input"
+            label={bi("国际站店铺 ID", "Store ID")}
+            value={draft.store_id}
+            onChange={(value) => update("store_id", value)}
+            placeholder="qzled"
+          />
+          <Field
+            testId="alibaba-inquiry-email-input"
+            label={bi("询盘接收邮箱（可选）", "Inquiry mailbox (optional)")}
+            value={draft.inquiry_email}
+            onChange={(value) => update("inquiry_email", value)}
+            placeholder="sales@company.com"
+            type="email"
+            hint={bi(
+              "留空则沿用该账号的工作邮箱，询盘不会丢。",
+              "Leave blank to reuse the account mailbox — inquiries are never dropped."
+            )}
+          />
+          {displayNameField}
+          <div className="inline-flex items-center gap-0.5 self-start rounded-lg border border-slate-200 bg-slate-100/90 p-0.5 dark:border-slate-700 dark:bg-slate-800/70">
+            <button
+              type="button"
+              data-testid="alibaba-scope-shared"
+              aria-pressed={scope === "shared"}
+              onClick={() => setScope("shared")}
+              className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+                scope === "shared"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400"
+              }`}
+            >
+              {bi("公司公海（team shared）", "Company shared")}
+            </button>
+            <button
+              type="button"
+              data-testid="alibaba-scope-private"
+              aria-pressed={scope !== "shared"}
+              onClick={() => setScope("personal")}
+              className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+                scope !== "shared"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400"
+              }`}
+            >
+              {bi("专属（private）", "Private")}
+            </button>
+          </div>
+        </>
+      )}
+
+      {channelKey === "amazon" && (
+        <>
+          <Field
+            testId="amazon-seller-id-input"
+            label="Seller ID"
+            value={draft.seller_id}
+            onChange={(value) => update("seller_id", value)}
+            placeholder="A2EUQ1WTGCTBG2"
+          />
+          <Field
+            testId="amazon-marketplace-id-input"
+            label="Marketplace ID"
+            value={draft.marketplace_id}
+            onChange={(value) => update("marketplace_id", value)}
+            placeholder="ATVPDKIKX0DER"
+            hint={bi("美国站 ATVPDKIKX0DER，欧洲站 A1PA6795UKMFR9。", "US: ATVPDKIKX0DER · EU: A1PA6795UKMFR9.")}
+          />
+          <Field
+            testId="amazon-lwa-client-id"
+            label="LWA Client ID"
+            value={draft.lwa_client_id}
+            onChange={(value) => update("lwa_client_id", value)}
+            placeholder="amzn1.application-oa2-client..."
+          />
+          <Field
+            testId="amazon-lwa-client-secret"
+            label="LWA Client Secret"
+            value={draft.lwa_client_secret}
+            onChange={(value) => update("lwa_client_secret", value)}
+            placeholder={bi("提交后不再回显", "Never echoed back after submit")}
+            secret
+          />
+          <Field
+            testId="amazon-refresh-token"
+            label="Refresh Token"
+            value={draft.refresh_token}
+            onChange={(value) => update("refresh_token", value)}
+            placeholder="Atzr|IwEB..."
+            secret
+          />
+          {displayNameField}
+        </>
+      )}
+
+      {channelKey === "ebay" && (
+        <>
+          <Field
+            testId="ebay-seller-username-input"
+            label={bi("卖家用户名", "Seller username")}
+            value={draft.seller_username}
+            onChange={(value) => update("seller_username", value)}
+            placeholder="qzled_official"
+          />
+          <Field
+            testId="ebay-site-id-input"
+            label="Site ID"
+            value={draft.site_id}
+            onChange={(value) => update("site_id", value)}
+            placeholder="EBAY-US"
+            hint={bi("美国 EBAY-US，英国 EBAY-GB，德国 EBAY-DE。", "US: EBAY-US · UK: EBAY-GB · DE: EBAY-DE.")}
+          />
+          <Field
+            testId="ebay-app-id-input"
+            label="App ID（Client ID）"
+            value={draft.app_id}
+            onChange={(value) => update("app_id", value)}
+            placeholder="QzLedERP-App-PRD-..."
+          />
+          <Field
+            testId="ebay-cert-id-input"
+            label="Cert ID（Client Secret）"
+            value={draft.cert_id}
+            onChange={(value) => update("cert_id", value)}
+            placeholder={bi("提交后不再回显", "Never echoed back after submit")}
+            secret
+          />
+          <Field
+            testId="ebay-refresh-token"
+            label="Refresh Token"
+            value={draft.refresh_token}
+            onChange={(value) => update("refresh_token", value)}
+            placeholder="v^1.1#i^1#..."
+            secret
+          />
+          {displayNameField}
         </>
       )}
 

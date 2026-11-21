@@ -4,6 +4,8 @@ import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock,
+  FileText,
+  GitBranch,
   Globe2,
   Layers,
   Library,
@@ -12,6 +14,8 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -22,7 +26,7 @@ import { SocialPlatformMatrix } from "@/components/social/social-platform-matrix
 import { SocialContentCalendar } from "@/components/social/social-content-calendar";
 import { SocialPostEditor } from "@/components/social/social-post-editor";
 import { SocialMentionsFeed } from "@/components/social/social-mentions-feed";
-import { getPlaybook } from "@/components/social/platform-playbooks";
+import { getPlaybook, PLATFORM_PLAYBOOKS } from "@/components/social/platform-playbooks";
 import { count, panel, postStatusLabel, postStatusTone, platformLabel, primary } from "@/components/social/presentation";
 import type {
   SkuOption,
@@ -51,16 +55,32 @@ import {
   publishSocialPost,
   saveSocialPosts,
 } from "@/lib/phase3d-data";
+import { fetchSocialAttributionFunnel } from "@/lib/api-client/pack-g-ap-social";
 
-type TabId = "matrix" | "playbooks" | "calendar" | "editor" | "listening";
+type TabId = "matrix" | "playbooks" | "calendar" | "editor" | "listening" | "attribution";
 
-const TABS: ReadonlyArray<{ id: TabId; label: string; icon: typeof Globe2 }> = [
+const TABS: ReadonlyArray<{
+  id: TabId;
+  label: string;
+  icon: typeof Globe2;
+  testId?: string;
+}> = [
   { id: "matrix", label: "平台矩阵", icon: Globe2 },
-  { id: "playbooks", label: "平台玩法矩阵", icon: Layers },
+  { id: "playbooks", label: "平台玩法矩阵", icon: Layers, testId: "social-playbooks-tab" },
   { id: "calendar", label: "发布中心与内容日历", icon: CalendarClock },
   { id: "editor", label: "贴文编辑器与 AI 文案工坊", icon: Sparkles },
   { id: "listening", label: "舆情监听与转线索", icon: MessageCircle },
+  { id: "attribution", label: "获客链路看板", icon: GitBranch, testId: "social-tab-attribution" },
 ];
+
+/** 归因明细表把后端返回的 14 个平台 key 翻成运营看得懂的名字。 */
+const FUNNEL_PLATFORM_LABEL: Readonly<Record<string, string>> = Object.fromEntries(
+  PLATFORM_PLAYBOOKS.map((item) => [item.platform, item.label])
+);
+
+function funnelPlatformLabel(platform: string): string {
+  return FUNNEL_PLATFORM_LABEL[platform] ?? platform;
+}
 
 const REGION_LABEL: Record<Exclude<SocialPlaybookRegion, "all">, string> = {
   overseas: "海外",
@@ -277,6 +297,230 @@ function SocialPlaybooksBoard() {
 function suggestedHandle(platform: SocialPlatform): string {
   const playbook = getPlaybook(platform);
   return playbook.region === "domestic" ? playbook.label : `@${platform}`;
+}
+
+/**
+ * 获客链路看板：已发布内容 → 社媒捕获线索 → 转化 CRM 客户 → 关联报价单。
+ *
+ * 每个数字都来自后端确定性 SQL 归因（先看 mention 平台，再看线索自身的
+ * source_channel），前端不估算、不抽样，只把契约里的字符串与计数画出来。
+ */
+function SocialAttributionBoard() {
+  const { bi } = useI18n();
+  const funnelQuery = useQuery({
+    queryKey: ["social", "attribution-funnel"],
+    queryFn: () => fetchSocialAttributionFunnel(),
+  });
+
+  const funnel = funnelQuery.data;
+  const breakdown = funnel?.platform_breakdown ?? [];
+  const publishedPosts = funnel?.published_posts ?? 0;
+  const totalPosts = funnel?.total_posts ?? 0;
+  const socialLeads = funnel?.social_leads_captured ?? 0;
+  const convertedCustomers = funnel?.converted_crm_customers ?? 0;
+  const linkedQuotes = funnel?.linked_quotes_count ?? 0;
+  const conversionRate = funnel?.lead_to_customer_rate_pct ?? "0.00";
+
+  // 转化条只比长度：计数是整数，取最大步作为 100%，不涉及金额浮点。
+  const widestStep = Math.max(publishedPosts, socialLeads, convertedCustomers, linkedQuotes, 1);
+  const barWidth = (value: number) =>
+    `${Math.max(value > 0 ? 4 : 0, Math.round((value / widestStep) * 100))}%`;
+
+  const steps = [
+    {
+      key: "published",
+      testId: "funnel-step-published",
+      label: bi("已发布内容", "Published content"),
+      value: publishedPosts,
+      hint: bi(`内容总数 ${count(totalPosts)} 篇`, `${count(totalPosts)} posts in total`),
+      icon: Send,
+      bar: "bg-blue-500 dark:bg-blue-400",
+      ring: "bg-blue-50 text-blue-600 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60",
+    },
+    {
+      key: "leads",
+      testId: "funnel-step-leads",
+      label: bi("社媒捕获线索", "Social leads captured"),
+      value: socialLeads,
+      hint: bi("含舆情转线索与渠道归因", "Listening conversions plus channel attribution"),
+      icon: MessageCircle,
+      bar: "bg-sky-500 dark:bg-sky-400",
+      ring: "bg-sky-50 text-sky-600 ring-sky-100 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-800/60",
+    },
+    {
+      key: "customers",
+      testId: "funnel-step-customers",
+      label: bi("转化 CRM 客户", "Converted CRM customers"),
+      value: convertedCustomers,
+      hint: bi("按 distinct 客户去重", "Deduplicated per distinct customer"),
+      icon: Users,
+      bar: "bg-emerald-500 dark:bg-emerald-400",
+      ring: "bg-emerald-50 text-emerald-600 ring-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-800/60",
+    },
+    {
+      key: "quotes",
+      testId: "funnel-step-quotes",
+      label: bi("关联报价单", "Linked quotes"),
+      value: linkedQuotes,
+      hint: bi("客户 → 商机 → 报价", "Customer → opportunity → quote"),
+      icon: FileText,
+      bar: "bg-indigo-500 dark:bg-indigo-400",
+      ring: "bg-indigo-50 text-indigo-600 ring-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:ring-indigo-800/60",
+    },
+  ];
+
+  return (
+    <section
+      aria-label="获客链路看板"
+      data-testid="social-attribution-board"
+      className="space-y-3.5"
+    >
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800/60">
+              <GitBranch aria-hidden="true" size={15} />
+            </span>
+            {bi("获客链路看板", "Attribution funnel")}
+          </h2>
+          <p className="mt-1 max-w-4xl text-[12.5px] leading-6 text-slate-600 dark:text-slate-400">
+            {bi(
+              "从已发布内容到关联报价单的四步实时归因：线索平台取舆情来源，无舆情时取线索自身的渠道来源，转化客户按 distinct 去重，因此转化率永远 ≤ 100%。",
+              "Four live steps from published content to linked quotes: a lead's platform comes from its mention, otherwise from its own source channel, and converted customers are deduplicated — so the rate can never exceed 100%."
+            )}
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-blue-900 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-300">
+          <TrendingUp aria-hidden="true" size={13} />
+          {bi("综合转化率", "Overall conversion")} {conversionRate}%
+        </span>
+      </header>
+
+      {funnelQuery.error ? (
+        <p
+          role="alert"
+          data-testid="social-attribution-error"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300"
+        >
+          {bi("获客链路数据加载失败，请稍后重试。", "Failed to load the attribution funnel. Please retry.")}
+        </p>
+      ) : null}
+
+      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        {steps.map((step) => (
+          <article
+            key={step.key}
+            data-testid={step.testId}
+            className="min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:border-blue-300 hover:shadow-[0_6px_20px_-8px_rgba(37,99,235,0.28)] dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="min-w-0 text-[12px] font-semibold text-slate-600 dark:text-slate-400">
+                {step.label}
+              </span>
+              <span
+                className={"grid h-7 w-7 shrink-0 place-items-center rounded-lg ring-1 " + step.ring}
+              >
+                <step.icon aria-hidden="true" size={14} />
+              </span>
+            </div>
+            <div className="mt-2 text-[22px] font-bold tabular-nums leading-tight tracking-tight text-slate-950 dark:text-slate-100">
+              {count(step.value)}
+            </div>
+            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div
+                aria-hidden="true"
+                className={"h-full rounded-full transition-all duration-300 " + step.bar}
+                style={{ width: barWidth(step.value) }}
+              />
+            </div>
+            <p className="mt-2 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
+              {step.hint}
+            </p>
+          </article>
+        ))}
+      </div>
+
+      <div
+        data-testid="funnel-conversion-rate"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200/80 bg-gradient-to-r from-blue-50 via-white to-white px-4 py-3 dark:border-blue-800/70 dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900"
+      >
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold text-blue-900 dark:text-blue-300">
+            {bi("线索 → CRM 客户综合转化率", "Lead → CRM customer conversion")}
+          </p>
+          <p className="mt-0.5 text-[11.5px] text-slate-600 dark:text-slate-400">
+            {bi(
+              `捕获线索 ${count(socialLeads)} → 转化客户 ${count(convertedCustomers)}`,
+              `${count(socialLeads)} leads → ${count(convertedCustomers)} customers`
+            )}
+          </p>
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-[24px] font-bold tabular-nums leading-none tracking-tight text-blue-700 dark:text-blue-300">
+            {conversionRate}
+          </span>
+          <span className="text-[13px] font-semibold text-blue-700/80 dark:text-blue-400">%</span>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+          <h3 className="text-[13.5px] font-bold tracking-tight text-slate-950 dark:text-slate-100">
+            {bi("分平台归因明细", "Per-platform attribution")}
+          </h3>
+          <span className="text-[11px] font-semibold tabular-nums text-slate-500 dark:text-slate-400">
+            {bi("平台", "Platforms")} · {breakdown.length}
+          </span>
+        </div>
+        {breakdown.length === 0 ? (
+          <p
+            data-testid="funnel-platform-empty"
+            className="p-4 text-sm text-slate-600 dark:text-slate-400"
+          >
+            {bi(
+              "暂无归因数据：先发布内容或把舆情转为线索。",
+              "No attribution data yet: publish content or convert a mention into a lead."
+            )}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table" data-testid="funnel-platform-table">
+              <thead>
+                <tr>
+                  <th>{bi("平台", "Platform")}</th>
+                  <th>{bi("发帖（已发布/总数）", "Posts (published/total)")}</th>
+                  <th>{bi("捕获线索", "Leads captured")}</th>
+                  <th>{bi("转化客户", "Customers")}</th>
+                  <th>{bi("线索 → 客户转化率", "Lead → customer rate")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {breakdown.map((row) => (
+                  <tr key={row.platform} data-testid={`funnel-platform-row-${row.platform}`}>
+                    <td className="text-[12.5px] font-semibold text-slate-900 dark:text-slate-100">
+                      {funnelPlatformLabel(row.platform)}
+                    </td>
+                    <td className="tabular-nums text-[12.5px] text-slate-700 dark:text-slate-300">
+                      {count(row.published_posts)} / {count(row.total_posts)}
+                    </td>
+                    <td className="tabular-nums text-[12.5px] text-slate-700 dark:text-slate-300">
+                      {count(row.social_leads_captured)}
+                    </td>
+                    <td className="tabular-nums text-[12.5px] font-semibold text-slate-900 dark:text-slate-100">
+                      {count(row.converted_crm_customers)}
+                    </td>
+                    <td className="tabular-nums text-[12.5px] font-semibold text-blue-700 dark:text-blue-400">
+                      {row.lead_to_customer_rate_pct}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export default function SocialMarketingPage() {
@@ -527,9 +771,9 @@ export default function SocialMarketingPage() {
             ariaLabel="社媒功能分区"
             value={tab}
             onChange={setTab}
-            options={TABS.map(({ id, label, icon: Icon }) => ({
+            options={TABS.map(({ id, label, icon: Icon, testId }) => ({
               value: id,
-              testId: id === "playbooks" ? "social-playbooks-tab" : undefined,
+              testId,
               label: (
                 <span className="inline-flex items-center gap-1.5">
                   <Icon aria-hidden="true" size={15} />
@@ -641,6 +885,8 @@ export default function SocialMarketingPage() {
               onConvertToLead={(mentionId) => convert.mutateAsync(mentionId).then(() => undefined)}
             />
           ) : null}
+
+          {tab === "attribution" ? <SocialAttributionBoard /> : null}
         </div>
       </Page>
     </AppShell>

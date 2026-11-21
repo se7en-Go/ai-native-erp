@@ -168,14 +168,14 @@ function stubSearchParams(search: string) {
 }
 
 describe("channel marketplace catalogue", () => {
-  it("lists all 11 inbox channels across 3 categories and maps inbox filters", () => {
-    expect(CHANNEL_MARKETPLACE).toHaveLength(11);
+  it("lists all 14 inbox channels across 3 categories and maps inbox filters", () => {
+    expect(CHANNEL_MARKETPLACE).toHaveLength(14);
     expect(CHANNEL_MARKETPLACE.filter((item) => item.category === "messaging")).toHaveLength(4);
     expect(CHANNEL_MARKETPLACE.filter((item) => item.category === "email_web")).toHaveLength(2);
-    expect(CHANNEL_MARKETPLACE.filter((item) => item.category === "commerce")).toHaveLength(5);
-    expect(new Set(CHANNEL_MARKETPLACE.map((item) => item.key)).size).toBe(11);
+    expect(CHANNEL_MARKETPLACE.filter((item) => item.category === "commerce")).toHaveLength(8);
+    expect(new Set(CHANNEL_MARKETPLACE.map((item) => item.key)).size).toBe(14);
 
-    expect(visibleMarketplaceItems(true)).toHaveLength(11);
+    expect(visibleMarketplaceItems(true)).toHaveLength(14);
     expect(visibleMarketplaceItems(false).map((item) => item.key)).toEqual(AGENT_MARKETPLACE_KEYS);
 
     // WhatsApp Cloud 与 Coexistence 合并统计到同一个市场卡片。
@@ -207,7 +207,7 @@ describe("5-tab channel hub", () => {
     renderHub();
 
     expect(await screen.findByTestId("channel-kpi-strip")).toBeTruthy();
-    expect(screen.getByTestId("hub-tab-marketplace").textContent).toContain("11");
+    expect(screen.getByTestId("hub-tab-marketplace").textContent).toContain("14");
     expect(screen.getByTestId("hub-tab-compliance")).toBeTruthy();
     expect(screen.getByTestId("hub-tab-pi_template")).toBeTruthy();
     await waitFor(() => {
@@ -216,7 +216,7 @@ describe("5-tab channel hub", () => {
     });
 
     expect(screen.getByTestId("marketplace-grid").className).toContain("xl:grid-cols-3");
-    expect(screen.getAllByTestId(/^marketplace-card-/)).toHaveLength(11);
+    expect(screen.getAllByTestId(/^marketplace-card-/)).toHaveLength(14);
     expect(screen.getByTestId("marketplace-status-telegram").textContent).toContain(
       "1 connected"
     );
@@ -260,7 +260,7 @@ describe("5-tab channel hub", () => {
     expect(screen.queryByTestId("marketplace-card-shopify")).toBeNull();
 
     fireEvent.click(screen.getByTestId("marketplace-category-commerce"));
-    expect(screen.getAllByTestId(/^marketplace-card-/)).toHaveLength(5);
+    expect(screen.getAllByTestId(/^marketplace-card-/)).toHaveLength(8);
 
     fireEvent.click(screen.getByTestId("marketplace-category-all"));
     fireEvent.change(screen.getByTestId("marketplace-search"), {
