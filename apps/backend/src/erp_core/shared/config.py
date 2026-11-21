@@ -4,8 +4,16 @@ import json
 from functools import lru_cache
 from typing import Annotated, Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_PRODUCTION_ENVS = frozenset({"production", "prod"})
+_DEV_JWT_SECRET_PREFIX = "dev-only-jwt-secret"
+_DEV_MASTER_KEK_PREFIX = "0001020304050607"
+_DEV_RUNTIME_DB_MARKER = "runtime_dev_pass"
+_DEV_MIGRATOR_DB_MARKER = "migrator_dev_pass"
+_DEV_S3_SECRET = "minioadmin"
+_MIN_JWT_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -76,6 +84,39 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return [str(item) for item in value]
         return ["http://localhost:3000", "http://localhost:3001"]
+
+    @model_validator(mode="after")
+    def reject_development_secrets_in_production(self) -> Settings:
+        """Fail closed: a production boot must never inherit a development secret.
+
+        ``APP_ENV=development``/``test`` keeps every shipped default so local runs and
+        pytest stay seamless; ``production``/``prod`` refuses to start instead of
+        silently running with a publicly known KEK, JWT key or DB password.
+        """
+        if self.APP_ENV.strip().lower() not in _PRODUCTION_ENVS:
+            return self
+        problems: list[str] = []
+        jwt_secret = self.JWT_SECRET.strip()
+        if not jwt_secret or jwt_secret.startswith(_DEV_JWT_SECRET_PREFIX):
+            problems.append("JWT_SECRET still uses the development default")
+        if len(jwt_secret) < _MIN_JWT_SECRET_LENGTH:
+            problems.append(
+                f"JWT_SECRET must be at least {_MIN_JWT_SECRET_LENGTH} characters long"
+            )
+        if self.MASTER_KEK_HEX.strip().lower().startswith(_DEV_MASTER_KEK_PREFIX):
+            problems.append("MASTER_KEK_HEX still uses the development default")
+        if _DEV_RUNTIME_DB_MARKER in self.DATABASE_RUNTIME_URL:
+            problems.append("DATABASE_RUNTIME_URL still uses the development password")
+        if _DEV_MIGRATOR_DB_MARKER in self.DATABASE_MIGRATOR_URL:
+            problems.append("DATABASE_MIGRATOR_URL still uses the development password")
+        if self.S3_SECRET_KEY.strip() == _DEV_S3_SECRET:
+            problems.append("S3_SECRET_KEY still uses the development default")
+        if problems:
+            raise ValueError(
+                "Refusing to start with development defaults while APP_ENV="
+                f"'{self.APP_ENV}': " + "; ".join(problems)
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

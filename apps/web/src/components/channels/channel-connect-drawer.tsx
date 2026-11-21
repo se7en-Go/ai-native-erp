@@ -158,6 +158,20 @@ function trimmed(value: string): string {
   return value.trim();
 }
 
+/**
+ * WooCommerce REST credentials are addressed by an absolute base URL, so a bare
+ * domain (`shop.example.com`) must be upgraded to `https://shop.example.com`
+ * (trailing slashes stripped) before it reaches the connector — otherwise the
+ * backend builds a relative/invalid REST base and signature verification fails
+ * (GPT #24).
+ */
+export function normalizeWooCommerceStoreUrl(raw: string): string {
+  const value = trimmed(raw);
+  if (!value) return "";
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+  return withScheme.replace(/\/+$/, "");
+}
+
 /** 三步入驻指引：抽屉里默认折叠，点开就是可照抄的中文步骤。 */
 const GUIDES: Record<ExtendedMarketplaceChannelKey, Array<{ zh: string; en: string }>> = {
   whatsapp: [
@@ -621,7 +635,7 @@ function ChannelConnectForm({
       }
       case "woocommerce": {
         const body: WooCommerceConnectPayload = {
-          store_url: trimmed(draft.store_url),
+          store_url: normalizeWooCommerceStoreUrl(draft.store_url),
           consumer_key: trimmed(draft.consumer_key),
           consumer_secret: trimmed(draft.consumer_secret),
           ...(trimmed(draft.webhook_secret)

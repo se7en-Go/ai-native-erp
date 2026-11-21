@@ -39,6 +39,20 @@ const DEMO_ACCOUNTS = [
 
 const DEMO_PASSWORD = "FactoryPass2026!";
 
+/**
+ * Demo-credential gate (Wave 1 / DS P1-12).
+ *
+ * The one-click role panel prints a real, hardcoded owner/finance/agent
+ * password, so it must never reach a production build unless the operator
+ * explicitly opts in. `NODE_ENV` is inlined by Next at build time, so a
+ * production build always lands on `false` unless
+ * `NEXT_PUBLIC_DEMO_LOGIN=true` (or a deliberate mock build) is set.
+ */
+const showDemoLogin =
+  process.env.NEXT_PUBLIC_DEMO_LOGIN === "true" ||
+  process.env.NEXT_PUBLIC_USE_MOCK_API === "true" ||
+  process.env.NODE_ENV !== "production";
+
 export default function LoginPage() {
   const router = useRouter();
   const { refreshSession } = useAuthSession();
@@ -46,7 +60,7 @@ export default function LoginPage() {
   const { isDark, toggleTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantSlug, setTenantSlug] = useState("quanzhou-led-factory");
+  const [tenantSlug, setTenantSlug] = useState(showDemoLogin ? "quanzhou-led-factory" : "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -131,14 +145,18 @@ export default function LoginPage() {
       submitting={submitting}
       error={error}
       onSubmit={(e) => void handleSubmit(e)}
-      demoHeading={bi("演示角色 · 点击一键填充", "Demo roles · click to autofill")}
-      demoPasswordHint={DEMO_PASSWORD}
-      demoAccounts={DEMO_ACCOUNTS.map((item) => ({
-        email: item.email,
-        badge: bi(item.badgeZh, item.badgeEn),
-        label: bi(item.zh, item.en),
-        dot: item.dot,
-      }))}
+      demoHeading={showDemoLogin ? bi("演示角色 · 点击一键填充", "Demo roles · click to autofill") : ""}
+      demoPasswordHint={showDemoLogin ? DEMO_PASSWORD : ""}
+      demoAccounts={
+        showDemoLogin
+          ? DEMO_ACCOUNTS.map((item) => ({
+              email: item.email,
+              badge: bi(item.badgeZh, item.badgeEn),
+              label: bi(item.zh, item.en),
+              dot: item.dot,
+            }))
+          : []
+      }
       onSelectDemoAccount={fillDemoAccount}
       labels={{
         tenantSlug: bi("工作区标识", "Tenant workspace slug"),

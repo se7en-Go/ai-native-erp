@@ -2667,6 +2667,12 @@ export const createOrResumeWidgetSessionApiV1WidgetSessionPost = <ThrowOnError e
 
 /**
  * Widget Cors Preflight
+ * Answer the preflight without ever granting cookie/credentialed cross-origin access.
+ *
+ * Preflight carries no site_key, so the Origin cannot be validated against a channel
+ * account here. The widget authenticates with a Bearer header (never cookies), therefore
+ * the unchecked preflight omits ``Access-Control-Allow-Credentials`` entirely instead of
+ * echoing an unvalidated Origin as credentialed.
  */
 export const widgetCorsPreflightApiV1WidgetPathOptions = <ThrowOnError extends boolean = false>(options?: Options<WidgetCorsPreflightApiV1WidgetPathOptionsData, ThrowOnError>) => {
     return (options?.client ?? _heyApiClient).options<unknown, unknown, ThrowOnError>({

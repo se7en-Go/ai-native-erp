@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
-from collections.abc import Mapping
+import ipaddress
+import os
+import socket
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -26,6 +30,144 @@ from erp_core.shared.errors import AppError
 
 WC_API_PREFIX = "/wp-json/wc/v3"
 
+_DEFAULT_STORE_SCHEME = "https"
+_ALLOW_LOCAL_ENV = "ALLOW_LOCAL_WEBHOOK_URLS"
+_LOCAL_HOSTNAMES = frozenset({"localhost", "localhost.localdomain", "ip6-localhost", "::1"})
+_BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".localdomain", ".internal", ".intranet")
+# RFC 6598 carrier-grade NAT space: not ``is_private`` on every CPython release.
+_SHARED_ADDRESS_SPACE = ipaddress.ip_network("100.64.0.0/10")
+
+DnsResolver = Callable[[str], Awaitable[Sequence[str]]]
+
+
+def _invalid_store(detail: str) -> AppError:
+    return AppError(
+        slug="invalid-woocommerce-store",
+        status_code=422,
+        code="ERR_INVALID_WOOCOMMERCE_STORE",
+        title="Invalid WooCommerce Store",
+        detail=detail,
+    )
+
+
+def _unsafe_store(detail: str) -> AppError:
+    return AppError(
+        slug="unsafe-woocommerce-store",
+        status_code=422,
+        code="ERR_WOOCOMMERCE_UNSAFE_HOST",
+        title="Unsafe WooCommerce Store Host",
+        detail=detail,
+    )
+
+
+def _is_public_ip(value: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Fail closed: only globally routable unicast addresses are acceptable."""
+    mapped = getattr(value, "ipv4_mapped", None)
+    if mapped is not None:
+        return _is_public_ip(mapped)
+    return not (
+        value.is_private
+        or value.is_loopback
+        or value.is_link_local
+        or value.is_multicast
+        or value.is_reserved
+        or value.is_unspecified
+        or (isinstance(value, ipaddress.IPv4Address) and value in _SHARED_ADDRESS_SPACE)
+    )
+
+
+def allow_local_store_hosts() -> bool:
+    """Explicit dev/test override for loopback store URLs (``ALLOW_LOCAL_WEBHOOK_URLS``)."""
+    raw = os.environ.get(_ALLOW_LOCAL_ENV, "").strip().lower()
+    return bool(raw) and raw not in {"0", "false", "no", "off"}
+
+
+async def system_dns_resolver(host: str) -> Sequence[str]:
+    """Resolve ``host`` through the platform stub resolver (``()`` when unknown)."""
+    try:
+        infos = await asyncio.to_thread(socket.getaddrinfo, host, None)
+    except OSError:
+        return ()
+    return tuple({str(info[4][0]) for info in infos})
+
+
+def normalize_store_url(store_url: str, *, allow_local: bool = False) -> str:
+    """Normalise a store URL to an absolute ``https`` base URL and refuse unsafe hosts.
+
+    Accepts bare domains (``shop.example.com`` -> ``https://shop.example.com``),
+    rejects non-http(s) schemes, embedded credentials, internal hostnames and
+    private/loopback/link-local/reserved/CGNAT IP literals. No DNS is performed
+    here — see :func:`validate_store_url` for the network check.
+    """
+    candidate = (store_url or "").strip()
+    if not candidate:
+        raise _invalid_store("Store URL must not be empty.")
+    if "://" not in candidate:
+        candidate = f"{_DEFAULT_STORE_SCHEME}://{candidate}"
+    parsed = urlparse(candidate)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        raise _invalid_store("Store URL must be an absolute http(s) URL.")
+    if parsed.username or parsed.password:
+        raise _invalid_store("Store URL must not embed credentials.")
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not host:
+        raise _invalid_store("Store URL must include a hostname.")
+    if not allow_local:
+        if host in _LOCAL_HOSTNAMES or host.endswith(_BLOCKED_HOST_SUFFIXES):
+            raise _unsafe_store(f"Host '{host}' is a local or internal target.")
+        try:
+            literal = ipaddress.ip_address(host)
+        except ValueError:
+            literal = None
+        if literal is not None and not _is_public_ip(literal):
+            raise _unsafe_store(f"IP literal '{host}' is not a public internet address.")
+    # Ports survive (``netloc`` includes them); the scheme is always normalised to https.
+    return f"{_DEFAULT_STORE_SCHEME}://{parsed.netloc}"
+
+
+async def validate_store_url(
+    store_url: str,
+    *,
+    resolve_dns: bool = True,
+    dns_resolver: DnsResolver | None = None,
+    allow_local: bool | None = None,
+) -> str:
+    """Normalise + validate a WooCommerce store URL, optionally re-checking DNS answers.
+
+    ``resolve_dns`` must be ``True`` for every real outbound API call; unit tests that
+    inject a mocked ``httpx`` client/transport pass ``False`` because their hostnames
+    are intentionally fake.
+    """
+    local_allowed = allow_local_store_hosts() if allow_local is None else allow_local
+    normalized = normalize_store_url(store_url, allow_local=local_allowed)
+    if not resolve_dns or local_allowed:
+        return normalized
+    host = (urlparse(normalized).hostname or "").strip().lower().rstrip(".")
+    resolver = dns_resolver or system_dns_resolver
+    try:
+        answers = await resolver(host)
+    except OSError as exc:
+        raise _unsafe_store(
+            f"DNS resolution for '{host}' failed ({type(exc).__name__})."
+        ) from exc
+    addresses = sorted(
+        {str(answer).strip().strip("[]") for answer in answers if str(answer).strip()}
+    )
+    if not addresses:
+        raise _unsafe_store(f"Host '{host}' did not resolve to any address.")
+    for address in addresses:
+        try:
+            resolved = ipaddress.ip_address(address.split("%", 1)[0])
+        except ValueError as exc:
+            raise _unsafe_store(
+                f"Host '{host}' resolved to an unparsable address '{address}'."
+            ) from exc
+        if not _is_public_ip(resolved):
+            raise _unsafe_store(
+                f"Host '{host}' resolves to non-public address '{address}'."
+            )
+    return normalized
+
 
 def build_wc_authorize_url(
     store_url: str,
@@ -35,15 +177,9 @@ def build_wc_authorize_url(
     callback_url: str,
     scope: str = "read_write",
 ) -> str:
-    parsed = urlparse(store_url)
+    parsed = urlparse(normalize_store_url(store_url))
     if parsed.scheme != "https" or not parsed.netloc:
-        raise AppError(
-            slug="invalid-woocommerce-store",
-            status_code=422,
-            code="ERR_INVALID_WOOCOMMERCE_STORE",
-            title="Invalid WooCommerce Store",
-            detail="Store URL must be an absolute https URL.",
-        )
+        raise _invalid_store("Store URL must be an absolute https URL.")
     query = urlencode(
         {
             "app_name": app_name,
@@ -78,16 +214,11 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         http_client: httpx.AsyncClient | None = None,
         webhook_secret: str = "",
     ) -> None:
-        parsed = urlparse(store_url)
-        if not parsed.netloc:
-            raise AppError(
-                slug="invalid-woocommerce-store",
-                status_code=422,
-                code="ERR_INVALID_WOOCOMMERCE_STORE",
-                title="Invalid WooCommerce Store",
-                detail="Store URL must be absolute.",
-            )
-        self.store_url = f"https://{parsed.netloc}"
+        self._allow_local = allow_local_store_hosts()
+        # A real deployment gets a DNS re-check before every outbound request; a mock
+        # client injected by a unit test already owns the transport, so skip it.
+        self._resolve_dns = http_client is None
+        self.store_url = normalize_store_url(store_url, allow_local=self._allow_local)
         self.consumer_key = consumer_key
         self.consumer_secret = consumer_secret
         self.meta_field_map = dict(meta_field_map or {})
@@ -101,6 +232,8 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         params: dict[str, Any] | None = None,
         json_body: Any = None,
     ) -> Any:
+        if self._resolve_dns:
+            await validate_store_url(self.store_url, allow_local=self._allow_local)
         url = f"{self.store_url}{WC_API_PREFIX}{path}"
         auth = (self.consumer_key, self.consumer_secret)
         if self._http_client is not None:

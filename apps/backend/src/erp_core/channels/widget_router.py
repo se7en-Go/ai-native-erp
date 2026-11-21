@@ -25,6 +25,13 @@ from erp_core.shared.enums import ChannelType, ConversationMode, ConversationSta
 
 widget_router = APIRouter(prefix="/api/v1/widget", tags=["widget"])
 
+# Short-lived visitor bearer token: a leaked widget token must not stay valid for a week.
+_WIDGET_JWT_TTL = timedelta(hours=2)
+# Long conversations keep only the newest page of messages, not the oldest.
+_WIDGET_MESSAGE_PAGE_LIMIT = 100
+# 96 bits of HMAC-SHA256 in hex is plenty to make a visitor id unpredictable/forge-proof.
+_VISITOR_SIGNATURE_HEX_CHARS = 24
+
 
 class PreChatOptInPayload(BaseModel):
     display_name: str | None = None
@@ -100,12 +107,63 @@ def _get_redis(request: Request) -> aioredis.Redis:
     return client
 
 
+def _widget_signing_secret() -> str:
+    """Single secret source for visitor-id HMAC and for the widget bearer JWT."""
+    return get_settings().JWT_SECRET
+
+
 def _jwt_secret() -> str:
-    return os.environ["JWT_SECRET"]
+    return _widget_signing_secret()
 
 
 def _jwt_alg() -> str:
-    return os.environ.get("JWT_ALGORITHM", "HS256")
+    return get_settings().JWT_ALGORITHM
+
+
+def _visitor_signature(
+    raw_vid: str, *, tenant_id: uuid.UUID, account_id: uuid.UUID, secret: str
+) -> str:
+    message = f"{tenant_id}:{account_id}:{raw_vid}".encode()
+    return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()[
+        :_VISITOR_SIGNATURE_HEX_CHARS
+    ]
+
+
+def sign_visitor_id(
+    raw_vid: str, *, tenant_id: uuid.UUID, account_id: uuid.UUID, secret: str
+) -> str:
+    """Return ``'<uuid>.<hmac_sha256_hex[:24]>'`` bound to one tenant + channel account."""
+    normalized = str(uuid.UUID(raw_vid.strip()))
+    signature = _visitor_signature(
+        normalized, tenant_id=tenant_id, account_id=account_id, secret=secret
+    )
+    return f"{normalized}.{signature}"
+
+
+def verify_signed_visitor_id(
+    token: str | None, *, tenant_id: uuid.UUID, account_id: uuid.UUID, secret: str
+) -> str | None:
+    """Return the raw visitor UUID only when the signature is valid for this account.
+
+    A bare (unsigned) UUID, a tampered MAC, or a token minted for another tenant/account
+    all return ``None`` so the caller mints a fresh anonymous visitor instead of resuming
+    somebody else's conversation.
+    """
+    if not token:
+        return None
+    raw_vid, separator, signature = token.strip().partition(".")
+    if separator != "." or not raw_vid or not signature:
+        return None
+    try:
+        normalized = str(uuid.UUID(raw_vid))
+    except ValueError:
+        return None
+    expected = _visitor_signature(
+        normalized, tenant_id=tenant_id, account_id=account_id, secret=secret
+    )
+    if not hmac.compare_digest(signature.lower(), expected):
+        return None
+    return normalized
 
 
 def _sign_widget_token(claims: WidgetTokenClaims) -> str:
@@ -118,7 +176,7 @@ def _sign_widget_token(claims: WidgetTokenClaims) -> str:
         "conversation_id": str(claims.conversation_id),
         "scope": "widget_visitor",
         "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(days=7)).timestamp()),
+        "exp": int((now + _WIDGET_JWT_TTL).timestamp()),
     }
     return jwt.encode(payload, _jwt_secret(), algorithm=_jwt_alg())
 
@@ -170,11 +228,17 @@ def _enforce_origin(origin: str | None, allowed_origins: list[str]) -> dict[str,
 
 @widget_router.options("/{path:path}")
 async def widget_cors_preflight(request: Request) -> Response:
+    """Answer the preflight without ever granting cookie/credentialed cross-origin access.
+
+    Preflight carries no site_key, so the Origin cannot be validated against a channel
+    account here. The widget authenticates with a Bearer header (never cookies), therefore
+    the unchecked preflight omits ``Access-Control-Allow-Credentials`` entirely instead of
+    echoing an unvalidated Origin as credentialed.
+    """
     origin = request.headers.get("origin")
     headers = (
         {
             "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Authorization, Content-Type",
             "Vary": "Origin",
@@ -183,6 +247,69 @@ async def widget_cors_preflight(request: Request) -> Response:
         else {}
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT, headers=headers)
+
+
+async def _fetch_latest_messages(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    *,
+    after_id: uuid.UUID | None = None,
+) -> list[dict[str, Any]]:
+    """Return the newest (optionally cursor-bounded) 100 messages in ascending order.
+
+    Long conversations must show the most recent page of history, so the query orders
+    DESC and the page is reversed into chronological order for the widget transcript.
+    """
+    params: dict[str, Any] = {
+        "tid": tenant_id,
+        "cid": conversation_id,
+        "limit": _WIDGET_MESSAGE_PAGE_LIMIT,
+    }
+    after_clause = ""
+    if after_id is not None:
+        cursor = (
+            await session.execute(
+                text(
+                    "SELECT source_timestamp, id FROM messages "
+                    "WHERE tenant_id = :tid AND conversation_id = :cid AND id = :mid"
+                ),
+                {"tid": tenant_id, "cid": conversation_id, "mid": after_id},
+            )
+        ).first()
+        if cursor is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Widget message cursor not found in this conversation",
+            )
+        after_clause = " AND (source_timestamp, id) > (:cur_ts, :cur_id)"
+        params["cur_ts"] = cursor[0]
+        params["cur_id"] = cursor[1]
+    rows = (
+        (
+            await session.execute(
+                text(
+                    "SELECT id, direction, sender_type, body_text, created_at "
+                    "FROM messages WHERE tenant_id = :tid AND conversation_id = :cid "
+                    "AND direction != 'internal_note'" + after_clause + " "
+                    "ORDER BY source_timestamp DESC, id DESC LIMIT :limit"
+                ),
+                params,
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return [
+        {
+            "id": row["id"],
+            "direction": row["direction"],
+            "sender_type": row["sender_type"],
+            "body_text": row["body_text"],
+            "created_at": row["created_at"],
+        }
+        for row in reversed(rows)
+    ]
 
 
 @widget_router.post("/session", response_model=WidgetSessionResponse)
@@ -209,7 +336,20 @@ async def create_or_resume_widget_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown site_key")
 
     tenant_id, channel_account_id = dir_row[0], dir_row[1]
-    visitor_id = (payload.visitor_id or str(uuid.uuid4())).strip()
+    signing_secret = _widget_signing_secret()
+    # Only an HMAC-signed visitor id minted for THIS tenant + channel account may be
+    # resumed. Anything else (missing, raw UUID, tampered, other account) gets a brand
+    # new anonymous visitor, so guessing a UUID cannot hijack a stranger's session.
+    resumed_visitor_id = verify_signed_visitor_id(
+        payload.visitor_id,
+        tenant_id=tenant_id,
+        account_id=channel_account_id,
+        secret=signing_secret,
+    )
+    visitor_id = resumed_visitor_id or str(uuid.uuid4())
+    signed_visitor_id = sign_visitor_id(
+        visitor_id, tenant_id=tenant_id, account_id=channel_account_id, secret=signing_secret
+    )
     identity_svc = IdentityResolverService()
     consent_svc = ConsentAndSuppressionService()
 
@@ -245,18 +385,22 @@ async def create_or_resume_widget_session(
             else f"Visitor {visitor_id[:6]}"
         )
 
-        if prechat and prechat.email:
-            customer_id, _ = await identity_svc.resolve_or_create_customer(
-                session, tenant_id, IdentityType.EMAIL, prechat.email, display_name
-            )
-        elif prechat and prechat.whatsapp_phone:
-            customer_id, _ = await identity_svc.resolve_or_create_customer(
-                session, tenant_id, IdentityType.PHONE_E164, prechat.whatsapp_phone, display_name
-            )
-        else:
-            customer_id, _ = await identity_svc.resolve_or_create_customer(
-                session, tenant_id, IdentityType.WEB_VISITOR_ID, visitor_id, display_name
-            )
+        # SECURITY: the visitor id is the ONLY identity this unauthenticated endpoint may
+        # resolve. Pre-chat email/phone are stored as unverified leads on the conversation
+        # and are never linked into customer_identities (nor into an existing customer's
+        # thread) until the HMAC-verified POST /identify proves ownership of them.
+        customer_id, _ = await identity_svc.resolve_or_create_customer(
+            session, tenant_id, IdentityType.WEB_VISITOR_ID, visitor_id, display_name
+        )
+
+        unverified_prechat: dict[str, Any] = {}
+        if prechat is not None:
+            if prechat.email:
+                unverified_prechat["email"] = prechat.email
+            if prechat.whatsapp_phone:
+                unverified_prechat["whatsapp_phone"] = prechat.whatsapp_phone
+            if prechat.marketing_opt_in:
+                unverified_prechat["marketing_opt_in"] = True
 
         await session.execute(
             text(
@@ -270,6 +414,9 @@ async def create_or_resume_widget_session(
 
         if prechat and prechat.marketing_opt_in:
             client_ip = request.client.host if request.client else None
+            # The opt-in is recorded as UNVERIFIED proof only: no normalized address is
+            # passed, so an attacker cannot use a forged pre-chat form to clear a victim's
+            # STOP suppression_list entry or attach consent to a victim's address.
             if prechat.whatsapp_phone:
                 await consent_svc.record_opt_in(
                     session=session,
@@ -279,7 +426,7 @@ async def create_or_resume_widget_session(
                     proof_source="web_livechat_prechat",
                     disclosed_business_name=business_name,
                     proof_ip=client_ip,
-                    normalized_address=prechat.whatsapp_phone,
+                    evidence_ref="unverified_prechat",
                 )
             if prechat.email:
                 await consent_svc.record_opt_in(
@@ -290,7 +437,7 @@ async def create_or_resume_widget_session(
                     proof_source="web_livechat_prechat",
                     disclosed_business_name=business_name,
                     proof_ip=client_ip,
-                    normalized_address=prechat.email,
+                    evidence_ref="unverified_prechat",
                 )
 
         conv_id = (
@@ -330,25 +477,28 @@ async def create_or_resume_widget_session(
                             "sku": payload.sku,
                             "cart_value_usd": payload.cart_value_usd,
                             "utm_params": payload.utm_params,
+                            "unverified_prechat": unverified_prechat,
                         }
                     ),
                 },
             )
-
-        msg_rows = (
-            (
-                await session.execute(
-                    text(
-                        "SELECT id, direction, sender_type, body_text, created_at "
-                        "FROM messages WHERE tenant_id = :tid AND conversation_id = :cid "
-                        "AND direction != 'internal_note' ORDER BY source_timestamp ASC LIMIT 100"
-                    ),
-                    {"tid": tenant_id, "cid": conv_id},
-                )
+        elif unverified_prechat:
+            # Refresh the unverified lead snapshot on the resumed thread (never an identity).
+            await session.execute(
+                text(
+                    "UPDATE conversations SET channel_policy_state = "
+                    "COALESCE(channel_policy_state, CAST('{}' AS jsonb)) || "
+                    "CAST(:patch AS jsonb), updated_at = now() "
+                    "WHERE tenant_id = :tid AND id = :cid"
+                ),
+                {
+                    "tid": tenant_id,
+                    "cid": conv_id,
+                    "patch": json.dumps({"unverified_prechat": unverified_prechat}),
+                },
             )
-            .mappings()
-            .all()
-        )
+
+        msg_rows = await _fetch_latest_messages(session, tenant_id, conv_id)
 
     token = _sign_widget_token(
         WidgetTokenClaims(
@@ -361,7 +511,7 @@ async def create_or_resume_widget_session(
     )
     return WidgetSessionResponse(
         session_token=token,
-        visitor_id=visitor_id,
+        visitor_id=signed_visitor_id,
         customer_id=customer_id,
         conversation_id=conv_id,
         business_name=business_name,
@@ -392,6 +542,7 @@ async def list_widget_messages(
     request: Request,
     response: Response,
     claims: Annotated[WidgetTokenClaims, Depends(_decode_widget_token)],
+    after_id: uuid.UUID | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     session_factory = _get_session_factory(request)
     async with tenant_session(session_factory, claims.tenant_id) as session:
@@ -402,19 +553,8 @@ async def list_widget_messages(
             request.headers.get("origin"),
             response,
         )
-        rows = (
-            (
-                await session.execute(
-                    text(
-                        "SELECT id, direction, sender_type, body_text, created_at "
-                        "FROM messages WHERE tenant_id = :tid AND conversation_id = :cid "
-                        "AND direction != 'internal_note' ORDER BY source_timestamp ASC LIMIT 100"
-                    ),
-                    {"tid": claims.tenant_id, "cid": claims.conversation_id},
-                )
-            )
-            .mappings()
-            .all()
+        rows = await _fetch_latest_messages(
+            session, claims.tenant_id, claims.conversation_id, after_id=after_id
         )
     return {
         "items": [
@@ -587,14 +727,29 @@ async def identify_widget_visitor(
             auth_tag=bytes(cred["auth_tag"]),
             key_version=int(cred["key_version"]),
         )
-        canonical = (
-            f"{claims.visitor_id}:{payload.email or ''}:{payload.phone_e164 or ''}:"
-            f"{payload.external_customer_id or ''}:{payload.timestamp}"
+        # The visitor id surfaced to integrators is now server-signed, so a merchant page
+        # may have signed either '<uuid>.<mac>' or the bare legacy UUID. Accept both forms
+        # (both are public identifiers; only the merchant-held secret proves ownership) and
+        # compare every candidate in constant time without short-circuiting.
+        signed_visitor_id = sign_visitor_id(
+            claims.visitor_id,
+            tenant_id=claims.tenant_id,
+            account_id=claims.channel_account_id,
+            secret=_widget_signing_secret(),
         )
-        expected_sig = hmac.new(
-            hmac_secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(payload.hmac_signature, expected_sig):
+        signature_valid = False
+        for candidate_vid in (claims.visitor_id, signed_visitor_id):
+            candidate_canonical = (
+                f"{candidate_vid}:{payload.email or ''}:{payload.phone_e164 or ''}:"
+                f"{payload.external_customer_id or ''}:{payload.timestamp}"
+            )
+            candidate_sig = hmac.new(
+                hmac_secret.encode("utf-8"),
+                candidate_canonical.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            signature_valid |= hmac.compare_digest(payload.hmac_signature, candidate_sig)
+        if not signature_valid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid HMAC signature",

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import binascii
 import hashlib
 import hmac
 import os
 import re
 import smtplib
+import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -88,6 +90,8 @@ _SAFE_HTML_ATTRS: dict[str, set[str]] = {
     "td": {"colspan", "rowspan"},
     "th": {"colspan", "rowspan"},
 }
+# Svix replay window: reject any delivery whose timestamp is more than 5 minutes off.
+_SVIX_TIMESTAMP_TOLERANCE_SECONDS = 300
 
 
 class S3AttachmentStore:
@@ -135,6 +139,27 @@ def _payload_bytes(payload: Any) -> bytes:
     if isinstance(payload, str):
         return payload.encode("utf-8")
     return b""
+
+
+def _svix_timestamp_is_fresh(raw_timestamp: str | None) -> bool:
+    """Replay guard: the Svix timestamp must parse as an int within a 5-minute window."""
+    if not raw_timestamp:
+        return False
+    try:
+        timestamp = int(str(raw_timestamp).strip())
+    except (TypeError, ValueError):
+        return False
+    return abs(time.time() - timestamp) <= _SVIX_TIMESTAMP_TOLERANCE_SECONDS
+
+
+def _svix_key_bytes(secret: str) -> bytes | None:
+    """Decode a ``whsec_`` base64 secret; ``None`` when the secret is malformed."""
+    if not secret.startswith("whsec_"):
+        return secret.encode("utf-8")
+    try:
+        return base64.b64decode(secret.removeprefix("whsec_"), validate=True)
+    except (ValueError, binascii.Error):
+        return None
 
 
 @dataclass(slots=True)
@@ -193,11 +218,11 @@ class EmailAdapter(MessagingChannelAdapter):
         svix_ts = headers.get("svix-timestamp")
         svix_sig = headers.get("svix-signature")
         if svix_id and svix_ts and svix_sig:
-            key_bytes = (
-                base64.b64decode(secret.removeprefix("whsec_"))
-                if secret.startswith("whsec_")
-                else secret.encode("utf-8")
-            )
+            if not _svix_timestamp_is_fresh(svix_ts):
+                return False
+            key_bytes = _svix_key_bytes(secret)
+            if key_bytes is None:
+                return False
             signed_payload = f"{svix_id}.{svix_ts}.".encode() + raw_body
             expected_b64 = base64.b64encode(
                 hmac.new(key_bytes, signed_payload, hashlib.sha256).digest()

@@ -14,11 +14,13 @@ The module intentionally imports only ``erp_core.catalog``, ``erp_core.shared`` 
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import ipaddress
 import json
 import re
-from collections.abc import Callable, Mapping, Sequence
+import socket
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from html import unescape
@@ -45,6 +47,8 @@ _COST_SCALE = Decimal("0.0001")
 _HUNDRED = Decimal("100")
 _MAX_TARGET_MARGIN_PCT = Decimal("90.00")
 _MAX_FETCH_CHARS = 512_000
+# Hard cap on the raw bytes we are willing to pull from a third-party page.
+MAX_SOURCE_FETCH_BYTES = 2 * 1024 * 1024
 _FETCH_TIMEOUT_SECONDS = 3.0
 _DEFAULT_WEIGHT_GRAMS = 500
 _DEFAULT_LEAD_TIME_DAYS = 7
@@ -72,6 +76,10 @@ _BLOCKED_HOSTNAMES = frozenset(
 )
 _BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".localdomain", ".internal", ".intranet")
 _BLOCKED_URL_SCHEMES = frozenset({"file", "ftp", "gopher", "data", "dict", "ldap", "javascript"})
+# RFC 6598 carrier-grade NAT space: not ``is_private`` on every CPython release.
+_SHARED_ADDRESS_SPACE = ipaddress.ip_network("100.64.0.0/10")
+
+DnsResolver = Callable[[str], Awaitable[Sequence[str]]]
 
 _CNY_PREFIX_PRICE_RE = re.compile(
     r"(?:¥|￥|RMB|CNY)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)", re.IGNORECASE
@@ -214,19 +222,20 @@ def _to_decimal(raw: str) -> Decimal | None:
 
 
 def _is_public_ip(value: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    if (
+    """Fail closed: only globally routable unicast addresses are acceptable."""
+    mapped = getattr(value, "ipv4_mapped", None)
+    if mapped is not None:
+        # ``::ffff:127.0.0.1`` is a loopback target wearing an IPv6 costume.
+        return _is_public_ip(mapped)
+    return not (
         value.is_private
         or value.is_loopback
         or value.is_link_local
         or value.is_multicast
         or value.is_reserved
         or value.is_unspecified
-    ):
-        return False
-    mapped = getattr(value, "ipv4_mapped", None)
-    if mapped is not None:
-        return _is_public_ip(mapped)
-    return True
+        or (isinstance(value, ipaddress.IPv4Address) and value in _SHARED_ADDRESS_SPACE)
+    )
 
 
 def validate_source_url(raw: str) -> str:
@@ -283,6 +292,59 @@ def validate_source_url(raw: str) -> str:
             f"Host '{host}' is not a fully qualified public domain.",
         )
     return candidate
+
+
+def _blocked_source_error(host: str, detail: str) -> AppError:
+    return _sourcing_error("blocked-source-url", "ERR_SOURCING_URL_BLOCKED", f"{host}: {detail}")
+
+
+async def system_dns_resolver(host: str) -> Sequence[str]:
+    """Resolve ``host`` through the platform stub resolver (``()`` when unknown)."""
+    try:
+        infos = await asyncio.to_thread(socket.getaddrinfo, host, None)
+    except OSError:
+        return ()
+    return tuple({str(info[4][0]) for info in infos})
+
+
+async def resolve_and_validate_public_url(
+    url: str,
+    *,
+    dns_resolver: DnsResolver | None = None,
+) -> tuple[str, list[str]]:
+    """Validate a source URL *and* every address its hostname currently resolves to.
+
+    ``validate_source_url`` only inspects the URL text, so a hostile hostname such as
+    ``127.0.0.1.nip.io`` slips through it. Resolving here — immediately before the
+    request — defeats DNS-rebinding style tricks: any answer that is not globally
+    routable rejects the whole URL.
+    """
+    safe_url = validate_source_url(url)
+    host = (urlparse(safe_url).hostname or "").strip().lower().rstrip(".")
+    resolver = dns_resolver or system_dns_resolver
+    try:
+        answers = await resolver(host)
+    except OSError as exc:
+        raise _blocked_source_error(
+            host, f"DNS resolution failed ({type(exc).__name__})"
+        ) from exc
+    addresses = sorted(
+        {str(answer).strip().strip("[]") for answer in answers if str(answer).strip()}
+    )
+    if not addresses:
+        raise _blocked_source_error(host, "hostname did not resolve to any address")
+    for address in addresses:
+        try:
+            resolved = ipaddress.ip_address(address.split("%", 1)[0])
+        except ValueError as exc:
+            raise _blocked_source_error(
+                host, f"hostname resolved to an unparsable address '{address}'"
+            ) from exc
+        if not _is_public_ip(resolved):
+            raise _blocked_source_error(
+                host, f"hostname resolves to non-public address '{address}'"
+            )
+    return safe_url, addresses
 
 
 # --------------------------------------------------------------------------------------
@@ -744,6 +806,30 @@ def _default_client_factory() -> httpx.AsyncClient:
     )
 
 
+async def _read_capped_body(response: httpx.Response) -> str:
+    """Stream a response body, stopping hard at ``MAX_SOURCE_FETCH_BYTES`` bytes."""
+    encoding = response.charset_encoding or "utf-8"
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in response.aiter_bytes():
+        if not chunk:
+            continue
+        remaining = MAX_SOURCE_FETCH_BYTES - total
+        if remaining <= 0:
+            break
+        if len(chunk) > remaining:
+            chunks.append(chunk[:remaining])
+            total += remaining
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    try:
+        body = b"".join(chunks).decode(encoding, errors="replace")
+    except LookupError:  # an unknown charset label must not abort collection
+        body = b"".join(chunks).decode("utf-8", errors="replace")
+    return body[:_MAX_FETCH_CHARS]
+
+
 class SourcingService:
     """Sourcing draft lifecycle: collect -> price -> import -> publish."""
 
@@ -751,25 +837,34 @@ class SourcingService:
         self,
         catalog_service: CatalogService | None = None,
         client_factory: Callable[[], httpx.AsyncClient] | None = None,
+        dns_resolver: DnsResolver | None = None,
     ) -> None:
         self.catalog = catalog_service or CatalogService()
         self._client_factory = client_factory or _default_client_factory
+        self._dns_resolver = dns_resolver
 
     # -- collection ------------------------------------------------------------------
 
-    async def fetch_source_metadata(self, source_url: str) -> SourcingPageMetadata:
+    async def fetch_source_metadata(
+        self, source_url: str, *, dns_resolver: DnsResolver | None = None
+    ) -> SourcingPageMetadata:
         """Fetch a public page; never bypass captcha/anti-bot walls (graceful degrade)."""
-        safe_url = validate_source_url(source_url)
+        safe_url, _addresses = await resolve_and_validate_public_url(
+            source_url, dns_resolver=dns_resolver or self._dns_resolver
+        )
         try:
-            async with self._client_factory() as client:
-                response = await client.get(safe_url)
+            async with (
+                self._client_factory() as client,
+                client.stream("GET", safe_url) as response,
+            ):
+                status_code = response.status_code
+                body = await _read_capped_body(response) if status_code == 200 else ""
         except httpx.HTTPError as exc:
             logger.warning("sourcing.fetch_failed", url=safe_url, error=str(exc))
             return SourcingPageMetadata()
-        body = response.text[:_MAX_FETCH_CHARS]
         lowered = body.lower()
-        if response.status_code != 200 or any(marker in lowered for marker in _CAPTCHA_MARKERS):
-            logger.warning("sourcing.fetch_blocked", url=safe_url, status=response.status_code)
+        if status_code != 200 or any(marker in lowered for marker in _CAPTCHA_MARKERS):
+            logger.warning("sourcing.fetch_blocked", url=safe_url, status=status_code)
             return SourcingPageMetadata()
         return parse_page_metadata(body)
 
@@ -1332,6 +1427,8 @@ class SourcingService:
 
 
 __all__ = [
+    "DnsResolver",
+    "MAX_SOURCE_FETCH_BYTES",
     "PlannedSourcingDraft",
     "SourcingCollectRequest",
     "SourcingDeleteResult",
@@ -1353,5 +1450,7 @@ __all__ = [
     "parse_page_metadata",
     "parse_supplier_copy",
     "plan_sourcing_draft",
+    "resolve_and_validate_public_url",
+    "system_dns_resolver",
     "validate_source_url",
 ]

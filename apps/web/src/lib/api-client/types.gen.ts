@@ -9423,7 +9423,9 @@ export type ListWidgetMessagesApiV1WidgetMessagesGetData = {
         authorization?: string | null;
     };
     path?: never;
-    query?: never;
+    query?: {
+        after_id?: string | null;
+    };
     url: '/api/v1/widget/messages';
 };
 

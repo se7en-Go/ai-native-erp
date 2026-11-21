@@ -14,6 +14,39 @@ import {
 
 const BACKEND_BASE = (process.env.BFF_BACKEND_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
+/**
+ * Mock-mode gate (Wave 1 / Muse P0-05).
+ *
+ * `NEXT_PUBLIC_USE_MOCK_API` is a *public* build flag, so a stray
+ * `NEXT_PUBLIC_USE_MOCK_API=true` inlined into a production bundle must never
+ * be able to turn the BFF into an unauthenticated owner-login bypass.
+ * Production therefore hard-refuses mock mode regardless of the flag, while
+ * `pnpm run dev` (NODE_ENV=development, used by the e2e-mock suite) keeps the
+ * fixture-backed behaviour 100% intact.
+ */
+export type MockModePredicate = (env?: NodeJS.ProcessEnv) => boolean;
+
+function isMockModeAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.NODE_ENV === "production") return false;
+  return env.NEXT_PUBLIC_USE_MOCK_API === "true";
+}
+
+function problemDetail(
+  status: number,
+  title: string,
+  code: string,
+  detail: string
+): {
+  type: string;
+  title: string;
+  status: number;
+  detail: string;
+  code: string;
+} {
+  const slug = code.toLowerCase().replace(/_/g, "-");
+  return { type: `https://erp.local/errors/${slug}`, title, status, detail, code };
+}
+
 function resolveUpstreamPath(segments: string[]): string | null {
   if (!segments || segments.length === 0) return null;
   for (const seg of segments) {
@@ -95,7 +128,9 @@ async function handleMockMode(
   request: NextRequest,
   upstreamPath: string
 ): Promise<Response | null> {
-  if (process.env.NEXT_PUBLIC_USE_MOCK_API !== "true") return null;
+  // Fail closed: a production build never serves mock fixtures/owner data.
+  if (process.env.NODE_ENV === "production") return null;
+  if (!isMockModeAllowed()) return null;
   const method = request.method;
   const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
 
@@ -400,18 +435,64 @@ async function handleProxy(
       headers: { "Content-Type": "application/json" },
       body: bodyText,
     });
-    const payload = await loginRes.json();
-    if (!loginRes.ok) {
-      return NextResponse.json(payload, { status: loginRes.status });
+    // Never let a non-JSON (HTML 502 from a proxy/ingress, empty body, etc.)
+    // response blow up into an unhandled SyntaxError -> opaque 500.
+    const rawLoginBody = await loginRes.text();
+    let payload: Record<string, unknown> | null = null;
+    try {
+      const parsed: unknown = rawLoginBody.trim().length > 0 ? JSON.parse(rawLoginBody) : null;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        payload = parsed as Record<string, unknown>;
+      }
+    } catch {
+      payload = null;
     }
-    const { access_token, refresh_token, expires_in, principal, user } = payload as {
-      access_token: string;
-      refresh_token: string;
-      expires_in?: number;
-      principal?: unknown;
-      user?: unknown;
-    };
-    const resolvedPrincipal = principal ?? user;
+
+    if (!loginRes.ok) {
+      if (payload) {
+        return NextResponse.json(payload, { status: loginRes.status });
+      }
+      return NextResponse.json(
+        problemDetail(
+          502,
+          "Upstream Authentication Failed",
+          "ERR_UPSTREAM_AUTH_INVALID_RESPONSE",
+          `Auth upstream returned status ${loginRes.status} with a non-JSON body.`
+        ),
+        { status: 502 }
+      );
+    }
+
+    if (!payload) {
+      return NextResponse.json(
+        problemDetail(
+          502,
+          "Upstream Authentication Failed",
+          "ERR_UPSTREAM_AUTH_INVALID_RESPONSE",
+          "Auth upstream returned an empty or non-JSON body."
+        ),
+        { status: 502 }
+      );
+    }
+
+    const access_token = payload.access_token;
+    if (typeof access_token !== "string" || access_token.length === 0) {
+      return NextResponse.json(
+        problemDetail(
+          502,
+          "Upstream Authentication Failed",
+          "ERR_UPSTREAM_AUTH_MISSING_TOKEN",
+          "Auth upstream response did not contain a usable access_token."
+        ),
+        { status: 502 }
+      );
+    }
+    const refresh_token =
+      typeof payload.refresh_token === "string" && payload.refresh_token.length > 0
+        ? payload.refresh_token
+        : undefined;
+    const expires_in = typeof payload.expires_in === "number" ? payload.expires_in : undefined;
+    const resolvedPrincipal = payload.principal ?? payload.user;
     const response = NextResponse.json({ principal: resolvedPrincipal }, { status: 200 });
     response.cookies.set(
       ACCESS_COOKIE_NAME,
@@ -530,18 +611,33 @@ async function handleProxy(
   return response;
 }
 
-export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+type BffRouteContext = { params: Promise<{ path: string[] }> };
+
+/**
+ * Next.js route modules may only export HTTP verbs plus segment config
+ * (`.next/types/app/api/bff/[...path]/route.ts` enforces that with
+ * `checkFields<Diff<...>>`), so the pure predicate cannot be a top-level named
+ * export. It rides on the GET handler instead, which keeps it directly
+ * unit-testable (`GET.isMockModeAllowed(env)`) without a proxy round-trip.
+ */
+type BffRouteHandler = ((req: NextRequest, ctx: BffRouteContext) => Promise<Response>) & {
+  isMockModeAllowed: MockModePredicate;
+};
+
+export const GET: BffRouteHandler = Object.assign(
+  (req: NextRequest, ctx: BffRouteContext) => handleProxy(req, ctx),
+  { isMockModeAllowed }
+);
+
+export async function POST(req: NextRequest, ctx: BffRouteContext) {
   return handleProxy(req, ctx);
 }
-export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+export async function PUT(req: NextRequest, ctx: BffRouteContext) {
   return handleProxy(req, ctx);
 }
-export async function PUT(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+export async function PATCH(req: NextRequest, ctx: BffRouteContext) {
   return handleProxy(req, ctx);
 }
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return handleProxy(req, ctx);
-}
-export async function DELETE(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+export async function DELETE(req: NextRequest, ctx: BffRouteContext) {
   return handleProxy(req, ctx);
 }

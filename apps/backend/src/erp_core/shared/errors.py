@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -33,6 +35,26 @@ class AppError(Exception):
         self.code = code
 
 
+def _sanitized_validation_summary(exc: RequestValidationError) -> str:
+    """Summarize validation failures without Pydantic's raw ``input``/``ctx`` echo.
+
+    Pydantic error dicts include the offending input value, so returning
+    ``str(exc.errors())`` reflects plaintext passwords, API keys and bot tokens straight
+    back to the caller (and into access logs). Only the field location, error type and a
+    static message are safe to expose.
+    """
+    return json.dumps(
+        [
+            {
+                "loc": [str(part) for part in error.get("loc", ())],
+                "type": str(error.get("type", "")),
+                "msg": str(error.get("msg", "")),
+            }
+            for error in exc.errors()
+        ]
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     async def handle_app_error(request: Request, exc: Exception) -> JSONResponse:
         if not isinstance(exc, AppError):
@@ -58,7 +80,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             type="https://erp.local/errors/validation-error",
             title="Request Validation Failed",
             status=422,
-            detail=str(exc.errors()),
+            detail=_sanitized_validation_summary(exc),
             instance=str(request.url.path),
             code="ERR_VALIDATION",
         )

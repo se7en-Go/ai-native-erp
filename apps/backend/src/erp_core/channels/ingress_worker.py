@@ -18,6 +18,7 @@ from erp_core.channels.adapters.base import (
     AdapterRegistry,
     NormalizedInboundEvent,
     NormalizedStatusEvent,
+    NormalizedWebhookBatch,
     OutboundMessageRequest,
 )
 from erp_core.channels.rate_limiter import DualTokenBucketLimiter
@@ -68,6 +69,90 @@ def _defer_delay_seconds() -> float:
 
 class OutOfOrderParentError(Exception):
     """Raised when a child webhook arrives prior to its parent entity/message."""
+
+
+def filter_webhook_batch_for_row(
+    batch: NormalizedWebhookBatch,
+    *,
+    expected_account_id: str | None,
+    expected_event_id: str | None,
+) -> NormalizedWebhookBatch:
+    """Keep only the events that belong to the raw webhook row being processed.
+
+    One inbound envelope (a single Meta/WhatsApp/Telegram POST) can be split into several
+    ``raw_webhook_events`` rows, one per message and per external channel account, and the
+    worker resolves the tenant from the row's ``external_account_id``. Every row therefore
+    has to drop events routed to a different external account, otherwise Tenant A's payload
+    writes customer identities, conversations and messages into Tenant B's tenant session.
+
+    Rules (deliberately conservative so legitimate single-envelope events survive):
+
+    * Always enforce ``external_account_id``: an event carrying a non-empty account that
+      differs from the row's account is dropped. Events with an empty account are kept.
+    * Narrow by ``external_event_id`` only when the batch actually contains a matching
+      ``external_message_id`` (inbound) or ``source_external_event_id``/``external_message_id``
+      (status). Synthetic/composite row ids (``sha256`` digests, svix ids, ``status:...``
+      keys) never match and therefore never shrink the batch.
+
+    The input batch is not mutated; a filtered copy is returned, with the same
+    ``account_updates``. Only account/message identifiers are logged, never payloads.
+    """
+    expected_account = (expected_account_id or "").strip()
+    expected_event = (expected_event_id or "").strip()
+
+    inbound_events: list[NormalizedInboundEvent] = []
+    for inbound in batch.inbound_events:
+        event_account = (inbound.external_account_id or "").strip()
+        if (
+            expected_account
+            and event_account
+            and event_account != expected_account
+            and inbound.resolved_conversation_id is None
+        ):
+            logger.warning(
+                "dropping inbound webhook event for foreign channel account "
+                "(expected_account=%s event_account=%s external_event_id=%s)",
+                expected_account,
+                event_account,
+                inbound.external_event_id,
+            )
+            continue
+        inbound_events.append(inbound)
+
+    status_events: list[NormalizedStatusEvent] = []
+    for status_event in batch.status_events:
+        event_account = (status_event.external_account_id or "").strip()
+        if expected_account and event_account and event_account != expected_account:
+            logger.warning(
+                "dropping status webhook event for foreign channel account "
+                "(expected_account=%s event_account=%s external_message_id=%s)",
+                expected_account,
+                event_account,
+                status_event.external_message_id,
+            )
+            continue
+        status_events.append(status_event)
+
+    if expected_event:
+        matching_inbound = [
+            event for event in inbound_events if event.external_message_id == expected_event
+        ]
+        if matching_inbound:
+            inbound_events = matching_inbound
+        matching_status = [
+            status_event
+            for status_event in status_events
+            if expected_event
+            in (status_event.source_external_event_id, status_event.external_message_id)
+        ]
+        if matching_status:
+            status_events = matching_status
+
+    return NormalizedWebhookBatch(
+        inbound_events=inbound_events,
+        status_events=status_events,
+        account_updates=list(batch.account_updates),
+    )
 
 
 def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -777,13 +862,37 @@ async def process_raw_webhook_event(
     auto_proposal_conversations: list[uuid.UUID] = []
     try:
         async with tenant_session(session_factory, tenant_id) as t_sess:
-            batch = await adapter.parse_webhook(
+            parsed_batch = await adapter.parse_webhook(
                 session=t_sess,
                 tenant_id=tenant_id,
                 channel_account_id=channel_account_id,
                 payload=payload,
                 headers={str(k).lower(): str(v) for k, v in headers.items()},
             )
+            # One envelope can be split across rows of several tenants: never apply
+            # events routed to another external account inside this tenant session.
+            ext_event_id: str | None = row["external_event_id"]
+            batch = filter_webhook_batch_for_row(
+                parsed_batch,
+                expected_account_id=ext_acct_id,
+                expected_event_id=ext_event_id,
+            )
+            if (
+                len(batch.inbound_events) != len(parsed_batch.inbound_events)
+                or len(batch.status_events) != len(parsed_batch.status_events)
+            ):
+                logger.warning(
+                    "webhook %s (%s account=%s event=%s) filtered events: "
+                    "inbound %d->%d, status %d->%d",
+                    raw_event_id,
+                    channel_type,
+                    ext_acct_id,
+                    ext_event_id,
+                    len(parsed_batch.inbound_events),
+                    len(batch.inbound_events),
+                    len(parsed_batch.status_events),
+                    len(batch.status_events),
+                )
 
             for inbound in batch.inbound_events:
                 conv_id, msg_id = await _persist_inbound_event(
