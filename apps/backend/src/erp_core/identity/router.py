@@ -86,7 +86,7 @@ def _agent_customer_visibility_clause(
 
 def _scoped_customer_query(
     principal: CurrentPrincipal, customer_id: UUID
-) -> Select[tuple[Customer]]:
+) -> Select[Customer]:
     """Tenant-scoped single-customer lookup honouring AGENT mailbox isolation."""
     stmt = select(Customer).where(
         Customer.tenant_id == principal.tenant_id,
