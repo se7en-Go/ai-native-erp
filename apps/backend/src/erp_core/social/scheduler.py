@@ -19,6 +19,7 @@ sweep. A failed post is persisted as `failed` (with the sanitized upstream code 
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -48,6 +49,7 @@ async def dispatch_due_social_posts_cron(
     runtime_session_factory: Factory | None = None,
     publisher: SocialPublisherPort | None = None,
     now: datetime | None = None,
+    tenant_ids: Sequence[UUID] | None = None,
 ) -> dict[str, int]:
     """Publish every due scheduled post for every active tenant.
 
@@ -74,13 +76,27 @@ async def dispatch_due_social_posts_cron(
     service = SocialService(EnvelopeCryptoService(settings), publisher=publisher)
     try:
         async with system_session(broker_session_factory) as directory:
-            tenant_ids: list[UUID] = [
-                row.id
-                for row in (
-                    await directory.execute(text("SELECT id FROM tenants WHERE is_active"))
-                ).all()
-            ]
-        for tenant_id in tenant_ids:
+            if tenant_ids is not None:
+                active_ids: list[UUID] = [
+                    row.id
+                    for row in (
+                        await directory.execute(
+                            text(
+                                "SELECT id FROM tenants "
+                                "WHERE is_active AND id = ANY(CAST(:ids AS uuid[]))"
+                            ),
+                            {"ids": [str(tid) for tid in tenant_ids]},
+                        )
+                    ).all()
+                ]
+            else:
+                active_ids = [
+                    row.id
+                    for row in (
+                        await directory.execute(text("SELECT id FROM tenants WHERE is_active"))
+                    ).all()
+                ]
+        for tenant_id in active_ids:
             try:
                 async with tenant_session(runtime_session_factory, tenant_id) as session:
                     stats = await service.dispatch_due_scheduled_posts(

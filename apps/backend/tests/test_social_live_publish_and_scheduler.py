@@ -18,8 +18,6 @@ and never leave a post marked `published`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -39,7 +37,7 @@ import erp_core.tenancy.models  # noqa: F401
 import erp_core.worker_main as worker_main
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
-from erp_core.shared.db import system_session, tenant_session
+from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import UserRole
 from erp_core.shared.errors import register_exception_handlers
 from erp_core.social.publishers import HttpSocialPublisherDispatcher
@@ -119,30 +117,6 @@ async def workspace(runtime_session_factory: Factory) -> dict[str, Any]:
         "owner_a": principals[0],
         "owner_b": principals[1],
     }
-
-
-@asynccontextmanager
-async def _only_tenants(factory: Factory, keep: set[UUID]) -> AsyncIterator[None]:
-    """Deactivate every other tenant so a global cron sweep is deterministic.
-
-    The suite shares one PostgreSQL database with every other test module (rows are
-    committed inside tenant sessions), so a cron that sweeps *all* active tenants has to
-    be given an exclusive view. `is_active` is restored unconditionally afterwards.
-    """
-    active_tenants = text("SELECT id FROM tenants WHERE is_active")
-    set_inactive = text("UPDATE tenants SET is_active = false WHERE id = ANY(CAST(:ids AS uuid[]))")
-    set_active = text("UPDATE tenants SET is_active = true WHERE id = ANY(CAST(:ids AS uuid[]))")
-    async with system_session(factory) as session:
-        rows = (await session.execute(active_tenants)).all()
-        deactivated = [str(row.id) for row in rows if row.id not in keep]
-        if deactivated:
-            await session.execute(set_inactive, {"ids": deactivated})
-    try:
-        yield
-    finally:
-        if deactivated:
-            async with system_session(factory) as session:
-                await session.execute(set_active, {"ids": deactivated})
 
 
 async def _connect(
@@ -446,55 +420,55 @@ async def test_scheduled_dispatch_publishes_due_posts_in_two_isolated_tenants(
                 client, "x", caption=f"Future post {key}", scheduled_at=future
             )
 
-    async with _only_tenants(
-        migrator_session_factory, {workspace["tenant_a"], workspace["tenant_b"]}
-    ):
-        totals = await dispatch_due_social_posts_cron(
-            broker_session_factory=migrator_session_factory,
-            runtime_session_factory=runtime_session_factory,
-            publisher=publisher,
-            now=now,
-        )
-        assert totals == {"tenants": 2, "scanned": 2, "published": 2, "failed": 0}
+    scoped_tenants = [workspace["tenant_a"], workspace["tenant_b"]]
+    totals = await dispatch_due_social_posts_cron(
+        broker_session_factory=migrator_session_factory,
+        runtime_session_factory=runtime_session_factory,
+        publisher=publisher,
+        now=now,
+        tenant_ids=scoped_tenants,
+    )
+    assert totals == {"tenants": 2, "scanned": 2, "published": 2, "failed": 0}
 
-        # Every due row is now published with the receipt the platform returned; only one
-        # outbound call per due post (the future rows were never touched).
-        assert len(calls) == 2
-        sent_tokens = {request.headers["authorization"] for request in calls}
-        assert sent_tokens == {f"Bearer {X_TOKEN}-owner_a", f"Bearer {X_TOKEN}-owner_b"}
+    # Every due row is now published with the receipt the platform returned; only one
+    # outbound call per due post (the future rows were never touched).
+    assert len(calls) == 2
+    sent_tokens = {request.headers["authorization"] for request in calls}
+    assert sent_tokens == {f"Bearer {X_TOKEN}-owner_a", f"Bearer {X_TOKEN}-owner_b"}
 
-        for key in ("owner_a", "owner_b"):
-            async with tenant_session(
-                runtime_session_factory, workspace["tenant_" + key[-1]]
-            ) as session:
-                due_row = (
-                    await session.execute(
-                        text(
-                            "SELECT status, external_post_id, metrics FROM social_posts "
-                            "WHERE id = :pid"
-                        ),
-                        {"pid": UUID(posts[f"due_{key}"]["id"])},
-                    )
-                ).one()
-                assert due_row.status == "published"
-                assert due_row.external_post_id
-                assert due_row.metrics["delivery_mode"] == "external_api"
-                assert due_row.metrics["external_publish_confirmed"] is True
-                future_status = await session.scalar(
-                    text("SELECT status FROM social_posts WHERE id = :pid"),
-                    {"pid": UUID(posts[f"future_{key}"]["id"])},
+    for key in ("owner_a", "owner_b"):
+        async with tenant_session(
+            runtime_session_factory, workspace["tenant_" + key[-1]]
+        ) as session:
+            due_row = (
+                await session.execute(
+                    text(
+                        "SELECT status, external_post_id, metrics FROM social_posts "
+                        "WHERE id = :pid"
+                    ),
+                    {"pid": UUID(posts[f"due_{key}"]["id"])},
                 )
-                assert future_status == "scheduled"
+            ).one()
+            assert due_row.status == "published"
+            assert due_row.external_post_id
+            assert due_row.metrics["delivery_mode"] == "external_api"
+            assert due_row.metrics["external_publish_confirmed"] is True
+            future_status = await session.scalar(
+                text("SELECT status FROM social_posts WHERE id = :pid"),
+                {"pid": UUID(posts[f"future_{key}"]["id"])},
+            )
+            assert future_status == "scheduled"
 
-        # A second sweep finds nothing due: no double publish, no extra outbound call.
-        again = await dispatch_due_social_posts_cron(
-            broker_session_factory=migrator_session_factory,
-            runtime_session_factory=runtime_session_factory,
-            publisher=publisher,
-            now=datetime.now(UTC),
-        )
-        assert again == {"tenants": 0, "scanned": 0, "published": 0, "failed": 0}
-        assert len(calls) == 2
+    # A second sweep finds nothing due: no double publish, no extra outbound call.
+    again = await dispatch_due_social_posts_cron(
+        broker_session_factory=migrator_session_factory,
+        runtime_session_factory=runtime_session_factory,
+        publisher=publisher,
+        now=datetime.now(UTC),
+        tenant_ids=scoped_tenants,
+    )
+    assert again == {"tenants": 0, "scanned": 0, "published": 0, "failed": 0}
+    assert len(calls) == 2
 
 
 async def test_scheduled_dispatch_persists_a_revoked_token_as_failed_once(
@@ -518,42 +492,43 @@ async def test_scheduled_dispatch_persists_a_revoked_token_as_failed_once(
             client, "x", caption="Revoked token scheduled", scheduled_at=now - timedelta(minutes=1)
         )
 
-    async with _only_tenants(migrator_session_factory, {workspace["tenant_a"]}):
-        totals = await dispatch_due_social_posts_cron(
-            broker_session_factory=migrator_session_factory,
-            runtime_session_factory=runtime_session_factory,
-            publisher=publisher,
-            now=now,
-        )
-        assert totals == {"tenants": 1, "scanned": 1, "published": 0, "failed": 1}
-        assert len(calls) == 1
+    totals = await dispatch_due_social_posts_cron(
+        broker_session_factory=migrator_session_factory,
+        runtime_session_factory=runtime_session_factory,
+        publisher=publisher,
+        now=now,
+        tenant_ids=[workspace["tenant_a"]],
+    )
+    assert totals == {"tenants": 1, "scanned": 1, "published": 0, "failed": 1}
+    assert len(calls) == 1
 
-        async with tenant_session(runtime_session_factory, workspace["tenant_a"]) as session:
-            status, metrics = (
-                await session.execute(
-                    text("SELECT status, metrics FROM social_posts WHERE id = :pid"),
-                    {"pid": UUID(post["id"])},
-                )
-            ).one()
-            assert status == "failed"
-            assert metrics["publish_error"] == "ERR_SOCIAL_TOKEN_EXPIRED"
-            assert REVOKED_TOKEN not in metrics["publish_error_detail"]
-            assert (
-                await session.scalar(
-                    text("SELECT status FROM social_accounts WHERE id = :aid"),
-                    {"aid": UUID(account["id"])},
-                )
-            ) == "token_expired"
+    async with tenant_session(runtime_session_factory, workspace["tenant_a"]) as session:
+        status, metrics = (
+            await session.execute(
+                text("SELECT status, metrics FROM social_posts WHERE id = :pid"),
+                {"pid": UUID(post["id"])},
+            )
+        ).one()
+        assert status == "failed"
+        assert metrics["publish_error"] == "ERR_SOCIAL_TOKEN_EXPIRED"
+        assert REVOKED_TOKEN not in metrics["publish_error_detail"]
+        assert (
+            await session.scalar(
+                text("SELECT status FROM social_accounts WHERE id = :aid"),
+                {"aid": UUID(account["id"])},
+            )
+        ) == "token_expired"
 
-        # The terminal `failed` row is not retried, so a dead token cannot hammer the API.
-        again = await dispatch_due_social_posts_cron(
-            broker_session_factory=migrator_session_factory,
-            runtime_session_factory=runtime_session_factory,
-            publisher=publisher,
-            now=datetime.now(UTC),
-        )
-        assert again == {"tenants": 0, "scanned": 0, "published": 0, "failed": 0}
-        assert len(calls) == 1
+    # The terminal `failed` row is not retried, so a dead token cannot hammer the API.
+    again = await dispatch_due_social_posts_cron(
+        broker_session_factory=migrator_session_factory,
+        runtime_session_factory=runtime_session_factory,
+        publisher=publisher,
+        now=datetime.now(UTC),
+        tenant_ids=[workspace["tenant_a"]],
+    )
+    assert again == {"tenants": 0, "scanned": 0, "published": 0, "failed": 0}
+    assert len(calls) == 1
 
 
 async def test_scheduled_dispatch_survives_a_platform_outage(
@@ -576,13 +551,13 @@ async def test_scheduled_dispatch_survives_a_platform_outage(
             client, "x", caption="Platform outage", scheduled_at=now - timedelta(minutes=1)
         )
 
-    async with _only_tenants(migrator_session_factory, {workspace["tenant_a"]}):
-        totals = await dispatch_due_social_posts_cron(
-            broker_session_factory=migrator_session_factory,
-            runtime_session_factory=runtime_session_factory,
-            publisher=publisher,
-            now=now,
-        )
+    totals = await dispatch_due_social_posts_cron(
+        broker_session_factory=migrator_session_factory,
+        runtime_session_factory=runtime_session_factory,
+        publisher=publisher,
+        now=now,
+        tenant_ids=[workspace["tenant_a"]],
+    )
 
     assert totals == {"tenants": 1, "scanned": 1, "published": 0, "failed": 1}
     async with tenant_session(runtime_session_factory, workspace["tenant_a"]) as session:
