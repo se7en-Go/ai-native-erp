@@ -31309,6 +31309,23 @@
         "operationId": "list_widget_messages_api_v1_widget_messages_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "after_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Id"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -31463,6 +31480,7 @@
     },
     "/api/v1/widget/{path}": {
       "options": {
+        "description": "Answer the preflight without ever granting cookie/credentialed cross-origin access.\n\nPreflight carries no site_key, so the Origin cannot be validated against a channel\naccount here. The widget authenticates with a Bearer header (never cookies), therefore\nthe unchecked preflight omits ``Access-Control-Allow-Credentials`` entirely instead of\nechoing an unvalidated Origin as credentialed.",
         "operationId": "widget_cors_preflight_api_v1_widget__path__options",
         "responses": {
           "200": {

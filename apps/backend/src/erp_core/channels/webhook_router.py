@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import uuid
+from collections.abc import Mapping
 from typing import Any, cast
 
 import redis.asyncio as aioredis
@@ -52,6 +53,38 @@ _META_CHANNELS = (
     "instagram_dm",
 )
 TELEGRAM_BOT_KEY = re.compile(r"[1-9][0-9]{0,19}")
+
+# Auth material a caller may send with a webhook. Signature verification consumes these
+# in memory only; they must never be persisted with the raw webhook row.
+_SENSITIVE_WEBHOOK_HEADERS: frozenset[str] = frozenset(
+    {
+        "x-telegram-bot-api-secret-token",
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "x-webhook-secret",
+        "x-secret-token",
+    }
+)
+
+
+def sanitize_webhook_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    """Return a copy of ``headers`` with auth/secret headers removed (case-insensitive).
+
+    Raw webhook rows are long-lived, tenant-readable payload storage. Persisting
+    ``Authorization``/``Cookie``/bot secret tokens there would leak live credentials to
+    any reader of ``raw_webhook_events`` and into DLQ payloads, so only the safe subset
+    of the request headers is stored. Verification still runs on the original mapping
+    before this function is called.
+    """
+    sanitized: dict[str, str] = {}
+    for name, value in headers.items():
+        if str(name).strip().lower() in _SENSITIVE_WEBHOOK_HEADERS:
+            continue
+        sanitized[str(name)] = str(value)
+    return sanitized
 
 
 def build_default_adapter_registry() -> AdapterRegistry:
@@ -395,7 +428,7 @@ async def _accept_events(
                     break
             resolved_tenants[ext_acct_id] = (found_tenant, found_type)
 
-        headers_json = json.dumps(headers)
+        headers_json = json.dumps(sanitize_webhook_headers(headers))
         payload_json = json.dumps(payload)
 
         for ext_event_id, ext_acct_id in extracted_events:
