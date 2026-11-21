@@ -569,7 +569,15 @@ export function sourcingStoreAccounts(
   return shouldUseMockApi() ? MOCK_SOURCING_STORE_ACCOUNTS.map((store) => ({ ...store })) : [];
 }
 
-/** 草稿状态徽标：草稿 / 已入主档 / 已刊登。 */
+/** 草稿状态徽标：草稿 / 已入主档 / 本地映射就绪 / 已刊登（本地记录）/ 已上线刊登。
+ *
+ * 诚实原则：Mock 与「一键刊登」只写入本地 SKU 映射（`publish_history`），
+ * 并不能证明平台侧已经上线，所以本地状态用「映射就绪（待平台确认）」而不是「已刊登」。
+ * 真正由平台回执确认后才用 `live_published`。
+ *
+ * 注意：`published` 的 zh 必须保留「已刊登」子串，
+ * 既有 `pack-f-sourcing-channels-ui.test.tsx` 断言使用了 `toContain("已刊登")`。
+ */
 export function sourcingStatusCopy(status: string): { zh: string; en: string; tone: string } {
   switch (status) {
     case "imported":
@@ -578,11 +586,23 @@ export function sourcingStatusCopy(status: string): { zh: string; en: string; to
         en: "Imported",
         tone: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/40 dark:text-sky-300",
       };
+    case "mapping_ready":
+      return {
+        zh: "映射就绪（待平台确认）",
+        en: "Mapping ready",
+        tone: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-200",
+      };
     case "published":
       return {
-        zh: "已刊登",
-        en: "Published",
-        tone: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-300",
+        zh: "已刊登（本地记录）",
+        en: "Published (local)",
+        tone: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-950/40 dark:text-emerald-300",
+      };
+    case "live_published":
+      return {
+        zh: "已上线刊登",
+        en: "Live published",
+        tone: "border-emerald-300 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200 dark:border-emerald-700/70 dark:bg-emerald-950/60 dark:text-emerald-200 dark:ring-emerald-800/60",
       };
     default:
       return {

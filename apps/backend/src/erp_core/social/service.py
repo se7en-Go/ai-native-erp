@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.crm.models import Lead
@@ -34,6 +35,7 @@ from erp_core.social.schemas import (
     AccountConnect,
     AccountRead,
     ConvertLeadResult,
+    DeliveryMode,
     MentionCreate,
     MentionRead,
     PlatformRead,
@@ -320,9 +322,55 @@ class SocialService:
             query.order_by(
                 SocialPost.scheduled_at.desc().nullslast(), SocialPost.created_at.desc()
             ),
-            PostRead.model_validate,
+            self._post_read,
             limit,
             offset,
+        )
+
+    @staticmethod
+    def _post_read(row: SocialPost) -> PostRead:
+        """Serialize a post without ever overstating delivery.
+
+        `status = 'published'` only says the lifecycle reached published; `delivery_mode`
+        and `external_publish_confirmed` say whether anything actually left the building.
+        """
+        metrics = row.metrics or {}
+        delivery_mode: DeliveryMode
+        if row.status != "published":
+            delivery_mode = "recorded_local"
+            external_publish_confirmed = False
+        else:
+            recorded_mode = metrics.get("delivery_mode")
+            if recorded_mode in ("recorded_local", "manual_confirmed", "external_api"):
+                delivery_mode = recorded_mode
+            elif metrics.get("publish_channel") == "manual_console":
+                delivery_mode = "manual_confirmed"
+            elif row.external_post_id:
+                delivery_mode = "external_api"
+            else:
+                delivery_mode = "recorded_local"
+            external_publish_confirmed = bool(
+                metrics.get("external_publish_confirmed", bool(row.external_post_id))
+            )
+        return PostRead(
+            id=row.id,
+            social_account_id=row.social_account_id,
+            platform=row.platform,
+            title=row.title,
+            caption=row.caption,
+            hashtags=list(row.hashtags or []),
+            media_urls=list(row.media_urls or []),
+            sku_ref=row.sku_ref,
+            status=row.status,
+            scheduled_at=row.scheduled_at,
+            published_at=row.published_at,
+            external_post_id=row.external_post_id,
+            metrics=dict(metrics),
+            created_by=row.created_by,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            delivery_mode=delivery_mode,
+            external_publish_confirmed=external_publish_confirmed,
         )
 
     @staticmethod
@@ -367,7 +415,7 @@ class SocialService:
         )
         session.add(post)
         await session.flush()
-        return PostRead.model_validate(post)
+        return self._post_read(post)
 
     async def _post_for_update(
         self, session: AsyncSession, tenant_id: UUID, post_id: UUID
@@ -411,7 +459,7 @@ class SocialService:
         self._guard_schedule(post.platform, post.status, post.scheduled_at)
         post.updated_at = datetime.now(UTC)
         await session.flush()
-        return PostRead.model_validate(post)
+        return self._post_read(post)
 
     async def publish_post(
         self,
@@ -423,8 +471,9 @@ class SocialService:
         post = await self._post_for_update(session, tenant_id, post_id)
         if post.status == "published":
             # Idempotent: a retried publish must not double-stamp published_at.
-            return PostRead.model_validate(post)
+            return self._post_read(post)
 
+        delivery_mode: DeliveryMode
         if supports_scheduled_publish(post.platform):
             account = (
                 await self._assert_account(session, tenant_id, post.social_account_id)
@@ -441,18 +490,25 @@ class SocialService:
                 raise account_not_connected(post.platform)
             post.social_account_id = account.id
             channel = "api"
+            delivery_mode = "external_api" if payload.external_post_id else "recorded_local"
         else:
             if not payload.manual_confirmation:
                 raise manual_publish_only(post.platform)
             channel = "manual_console"
+            delivery_mode = "manual_confirmed"
 
         post.status = "published"
         post.published_at = datetime.now(UTC)
         post.external_post_id = payload.external_post_id
-        post.metrics = {**(post.metrics or {}), "publish_channel": channel}
+        post.metrics = {
+            **(post.metrics or {}),
+            "publish_channel": channel,
+            "delivery_mode": delivery_mode,
+            "external_publish_confirmed": bool(payload.external_post_id),
+        }
         post.updated_at = datetime.now(UTC)
         await session.flush()
-        return PostRead.model_validate(post)
+        return self._post_read(post)
 
     # -- mentions ----------------------------------------------------------
 
@@ -497,6 +553,40 @@ class SocialService:
         await session.flush()
         return MentionRead.model_validate(mention)
 
+    async def _customer_for_mention(
+        self, session: AsyncSession, tenant_id: UUID, platform: str, author_handle: str
+    ) -> Customer | None:
+        """Resolve the customer a social handle already maps to, or `None`.
+
+        Identity is `(platform, lower(author_handle))` — proven by an earlier
+        `social_mention` lead — never the mutable `customers.display_name`, because the
+        same handle on two platforms is two different people and a display name can
+        collide with an unrelated B2B customer.
+        """
+        linked_customer_id = await session.scalar(
+            text(
+                """
+                SELECT l.customer_id
+                FROM leads l
+                WHERE l.tenant_id = :tid
+                  AND l.source_channel = 'social_mention'
+                  AND l.extracted_requirements->>'platform' = :platform
+                  AND lower(l.extracted_requirements->>'author_handle') = lower(:handle)
+                ORDER BY l.created_at ASC, l.id ASC
+                LIMIT 1
+                """
+            ),
+            {"tid": tenant_id, "platform": platform, "handle": author_handle},
+        )
+        if linked_customer_id is None:
+            return None
+        return await session.scalar(
+            sa.select(Customer).where(
+                Customer.tenant_id == tenant_id,
+                Customer.id == UUID(str(linked_customer_id)),
+            )
+        )
+
     async def convert_mention_to_lead(
         self, session: AsyncSession, tenant_id: UUID, mention_id: UUID
     ) -> ConvertLeadResult:
@@ -522,13 +612,8 @@ class SocialService:
                     already_converted=True,
                 )
 
-        customer = await session.scalar(
-            sa.select(Customer)
-            .where(
-                Customer.tenant_id == tenant_id,
-                Customer.display_name == mention.author_handle[:255],
-            )
-            .limit(1)
+        customer = await self._customer_for_mention(
+            session, tenant_id, mention.platform, mention.author_handle
         )
         if customer is None:
             customer = Customer(

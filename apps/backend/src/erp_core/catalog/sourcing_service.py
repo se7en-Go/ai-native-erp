@@ -55,6 +55,13 @@ _DEFAULT_LEAD_TIME_DAYS = 7
 _DEFAULT_MIN_MARGIN_FLOOR_PCT = Decimal("15.00")
 _USER_AGENT = "OmniERP-SourcingBot/1.0 (+https://erp.local/sourcing)"
 
+# Honest listing bookkeeping. ``sourcing_drafts.status`` is pinned by the 0012 DB CHECK
+# constraint to ``('draft', 'imported', 'published')``; publishing only writes a local
+# ``platform_sku_mappings`` row and never calls a marketplace API, so a remote product
+# id is intentionally explicit about being pending rather than invented.
+PENDING_LISTING_PREFIX = "pending-listing:"
+ListingState = Literal["draft", "imported", "mapping_ready", "live_published"]
+
 # (min_qty, volume discount applied to the tier-1 target retail price)
 _MOQ_LADDER: tuple[tuple[int, Decimal], ...] = (
     (100, Decimal("0.00")),
@@ -203,6 +210,29 @@ def _as_json_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return {str(key): item for key, item in value.items()}
     return {}
+
+
+def draft_listing_state(
+    status: str, publish_history: Sequence[Mapping[str, Any]]
+) -> ListingState:
+    """Derive the honest listing state from the persisted status + publish history.
+
+    ``published`` only proves a local SKU mapping was stored, so it maps to
+    ``mapping_ready`` unless a history entry explicitly confirms an external listing.
+    """
+    if status == "published":
+        for entry in publish_history:
+            if entry.get("external_listing_confirmed") is True:
+                return "live_published"
+        return "mapping_ready"
+    if status == "imported":
+        return "imported"
+    return "draft"
+
+
+def pending_listing_product_id(external_sku: str) -> str:
+    """Placeholder remote product id that never impersonates a live marketplace id."""
+    return f"{PENDING_LISTING_PREFIX}{external_sku}"
 
 
 def _to_decimal(raw: str) -> Decimal | None:
@@ -446,6 +476,11 @@ class SourcingDraftRead(BaseModel):
     imported_product_id: UUID | None = None
     imported_variant_id: UUID | None = None
     publish_history: list[dict[str, Any]] = Field(default_factory=list)
+    # Honest double bookkeeping: ``status`` stays bound to the 0012 DB CHECK
+    # (``draft``/``imported``/``published``), while ``listing_state`` records what
+    # publishing actually achieved. ``published`` only means "a local SKU mapping
+    # exists"; ``live_published`` requires an explicitly confirmed external listing.
+    listing_state: Literal["draft", "imported", "mapping_ready", "live_published"] = "draft"
     created_at: datetime
     updated_at: datetime
 
@@ -474,6 +509,11 @@ class SourcingPublishResult(BaseModel):
     stock_sync_ratio: Decimal
     mapping_id: UUID
     published_at: datetime
+    # Publishing only persists a local SKU mapping: no marketplace API is called, so
+    # nothing may be reported as a live listing until it is confirmed out of band.
+    listing_state: Literal["mapping_ready", "live_published"] = "mapping_ready"
+    external_listing_confirmed: bool = False
+    publish_mode: Literal["local_sku_mapping", "live_marketplace_api"] = "local_sku_mapping"
 
 
 class SourcingDeleteResult(BaseModel):
@@ -972,6 +1012,7 @@ class SourcingService:
             for entry in _as_json_list(data.get("publish_history"))
             if isinstance(entry, Mapping)
         ]
+        status = str(data["status"])
         raw_price = Decimal(str(data["raw_price_cny"]))
         fx_rate = Decimal(str(data["fx_rate_usd_cny"]))
         cost_usd = (raw_price / fx_rate).quantize(_COST_SCALE, rounding=ROUND_HALF_UP)
@@ -998,7 +1039,8 @@ class SourcingService:
             moq_tiers=tiers,
             images=images,
             attributes=_as_json_dict(data.get("attributes")),
-            status=str(data["status"]),
+            status=status,
+            listing_state=draft_listing_state(status, history),
             imported_product_id=(
                 UUID(str(imported_product_id)) if imported_product_id else None
             ),
@@ -1353,13 +1395,16 @@ class SourcingService:
         for channel_account_id in payload.channel_account_ids:
             channel_type = await self._channel_account(session, tenant_id, channel_account_id)
             external_sku = build_external_sku(channel_type, draft.suggested_sku)
+            # No marketplace API is called, so the remote id is an explicit placeholder:
+            # reusing the internal SKU would impersonate a live listing id.
+            external_product_id = pending_listing_product_id(external_sku)
             sync_inventory_enabled = payload.stock_sync_ratio > 0
             mapping_id = await self._upsert_mapping(
                 session,
                 tenant_id=tenant_id,
                 variant_id=variant_id,
                 channel_account_id=channel_account_id,
-                external_product_id=draft.suggested_sku,
+                external_product_id=external_product_id,
                 external_sku=external_sku,
                 sync_inventory_enabled=sync_inventory_enabled,
             )
@@ -1371,9 +1416,13 @@ class SourcingService:
                 "channel_account_id": str(channel_account_id),
                 "channel_type": channel_type,
                 "external_sku": external_sku,
+                "external_product_id": external_product_id,
                 "price_usd": str(price_usd),
                 "stock_sync_ratio": str(payload.stock_sync_ratio),
                 "published_at": published_at.isoformat(),
+                "listing_state": "mapping_ready",
+                "external_listing_confirmed": False,
+                "publish_mode": "local_sku_mapping",
             }
             history.append(entry)
             results.append(
@@ -1381,11 +1430,14 @@ class SourcingService:
                     channel_account_id=channel_account_id,
                     channel_type=channel_type,
                     external_sku=external_sku,
-                    external_product_id=external_sku,
+                    external_product_id=external_product_id,
                     price_usd=price_usd,
                     stock_sync_ratio=payload.stock_sync_ratio,
                     mapping_id=mapping_id,
                     published_at=published_at,
+                    listing_state="mapping_ready",
+                    external_listing_confirmed=False,
+                    publish_mode="local_sku_mapping",
                 )
             )
 
@@ -1416,6 +1468,8 @@ class SourcingService:
             after_state={
                 "sku": draft.suggested_sku,
                 "channels": [str(result.channel_account_id) for result in results],
+                "listing_state": "mapping_ready",
+                "external_listing_confirmed": False,
             },
         )
         return results
@@ -1428,7 +1482,9 @@ class SourcingService:
 
 __all__ = [
     "DnsResolver",
+    "ListingState",
     "MAX_SOURCE_FETCH_BYTES",
+    "PENDING_LISTING_PREFIX",
     "PlannedSourcingDraft",
     "SourcingCollectRequest",
     "SourcingDeleteResult",
@@ -1447,8 +1503,10 @@ __all__ = [
     "build_suggested_sku",
     "channel_sku_prefix",
     "compute_sourcing_pricing",
+    "draft_listing_state",
     "parse_page_metadata",
     "parse_supplier_copy",
+    "pending_listing_product_id",
     "plan_sourcing_draft",
     "resolve_and_validate_public_url",
     "system_dns_resolver",

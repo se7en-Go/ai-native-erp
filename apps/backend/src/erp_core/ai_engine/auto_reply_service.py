@@ -2330,7 +2330,6 @@ class AutoReplyService:
         *,
         now: datetime,
     ) -> UUID:
-        followup_id = uuid4()
         summary = (
             f"AI customer profile: {profile.ai_summary} | "
             f"Next best action: {profile.next_best_action}"
@@ -2340,6 +2339,48 @@ class AutoReplyService:
             if profile.purchase_intent_score >= 40
             else None
         )
+        # One profile note per customer, rewritten in place: re-running profiling must
+        # never spam the follow-up queue with duplicate "AI customer profile:" rows.
+        existing_id = await session.scalar(
+            text(
+                """
+                SELECT id FROM customer_followups
+                WHERE tenant_id = :tid
+                  AND customer_id = :cid
+                  AND followup_type = 'note'
+                  AND summary LIKE :summary_prefix
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "tid": tenant_id,
+                "cid": profile.customer_id,
+                "summary_prefix": "AI customer profile:%",
+            },
+        )
+        if existing_id is not None:
+            followup_id = UUID(str(existing_id))
+            await session.execute(
+                text(
+                    """
+                    UPDATE customer_followups
+                    SET summary = :summary,
+                        next_action_at = :next_action_at,
+                        author_user_id = :author
+                    WHERE tenant_id = :tid AND id = :id
+                    """
+                ),
+                {
+                    "id": followup_id,
+                    "tid": tenant_id,
+                    "author": author_user_id,
+                    "summary": summary,
+                    "next_action_at": next_action_at,
+                },
+            )
+            return followup_id
+        followup_id = uuid4()
         await session.execute(
             text(
                 """

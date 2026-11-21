@@ -18,6 +18,9 @@ Compliance boundary, enforced here rather than in the UI:
 * Prospect e-mail enrichment only reads what a business publishes on its own
   website (``enrichment.py``); nothing is pattern-guessed and no private address
   is ever fetched.
+* The deterministic fallback catalogue is demo data. Outside development it is never
+  substituted for a failed live collection (``allow_synthetic_fallback``), never synced
+  into the CRM, and never handed to a mail provider.
 """
 
 from __future__ import annotations
@@ -89,6 +92,7 @@ from erp_core.growth.schemas import (
     SyncToCrmResult,
 )
 from erp_core.identity.models import B2bCompany, Customer
+from erp_core.shared.config import get_settings
 from erp_core.shared.enums import ChannelType, CustomerType, LeadStatus, UserRole
 from erp_core.shared.errors import AppError
 from erp_core.shared.pagination import PaginatedResponse
@@ -107,6 +111,9 @@ REASON_WHATSAPP_US_BAN = "WhatsApp 美国 +1 营销禁令"
 REASON_WHATSAPP_NO_OPT_IN = "缺少 WhatsApp Opt-In 许可"
 REASON_RATE_LIMITED = "超出 WhatsApp 发送速率"
 REASON_SEND_FAILED = "邮件发送失败"
+# Synthetic rows exist only to make a demo/staging workspace look populated. They are
+# fabricated businesses, so they must never become CRM leads or receive outreach.
+REASON_SYNTHETIC_BLOCKED = "合成演示数据禁止外发"
 
 # Compliant B2B opt-out footer appended to every real outreach message.
 OPT_OUT_FOOTER = "Reply STOP to opt out from future business inquiries."
@@ -154,6 +161,28 @@ def with_opt_out_footer(body: str) -> str:
 
 def conflict(detail: str, *, code: str, slug: str) -> AppError:
     return AppError(slug=slug, title="State Conflict", status_code=409, detail=detail, code=code)
+
+
+def is_synthetic_prospect(row: CollectedProspect | None) -> bool:
+    """True when this prospect was fabricated by the deterministic fallback catalogue.
+
+    The marker travels in ``raw_metadata`` (``synthetic`` flag, the fallback provider id
+    or the ``job_source`` stamped by ``_insert_prospects``), so synthetic rows stay
+    recognisable long after the collection job has finished.
+    """
+    if row is None:
+        return False
+    metadata: Mapping[str, Any] = row.raw_metadata or {}
+    if bool(metadata.get("synthetic")):
+        return True
+    if metadata.get("provider") == FALLBACK_PROVIDER:
+        return True
+    return metadata.get("job_source") == FALLBACK_PROVIDER
+
+
+def _is_production_env() -> bool:
+    """Mirror ``Settings``: only the two production labels forbid synthetic leads."""
+    return get_settings().APP_ENV.strip().lower() in ("production", "prod")
 
 
 def normalize_email(raw: str | None) -> str | None:
@@ -328,6 +357,7 @@ class GrowthService:
         email_http_transport: httpx.AsyncBaseTransport | None = None,
         website_enricher: WebsiteEmailEnricher | None = None,
         dns_resolver: DnsResolver | None = None,
+        allow_synthetic_fallback: bool | None = None,
     ) -> None:
         self._consent = consent or ConsentAndSuppressionService()
         self._http_client = http_client
@@ -336,6 +366,13 @@ class GrowthService:
         self._rate_limiter = rate_limiter
         self._unsubscribe_base_url = unsubscribe_base_url
         self._email_http_transport = email_http_transport
+        # A production workspace must never silently collect fabricated businesses, so
+        # the deterministic catalogue is opt-out there (and opt-in only explicitly).
+        self._allow_synthetic_fallback = (
+            (not _is_production_env())
+            if allow_synthetic_fallback is None
+            else allow_synthetic_fallback
+        )
         self._enricher = website_enricher or WebsiteEmailEnricher(
             transport=email_http_transport, resolver=dns_resolver
         )
@@ -583,6 +620,12 @@ class GrowthService:
                     return [], provider
                 notes.append(f"{provider}: no records returned")
         reason = "; ".join(notes)[:300] or "no live provider configured"
+        if plan.provider_mode == "auto" and not self._allow_synthetic_fallback:
+            # Honest failure beats fabricated leads: a production job must go red.
+            raise provider_unavailable(
+                f"auto: {reason}. Synthetic fallback collection is disabled "
+                "(APP_ENV=production); collect from a live provider or import a CSV."
+            )
         return fallback_catalogue(request, reason=reason), FALLBACK_PROVIDER
 
     async def _insert_prospects(
@@ -788,6 +831,19 @@ class GrowthService:
                 .with_for_update()
             )
         )
+        synthetic = [row for row in rows if is_synthetic_prospect(row)]
+        if synthetic:
+            # Fail closed before any B2bCompany/Customer/Lead row is materialized.
+            raise AppError(
+                slug="synthetic-prospect-blocked",
+                title="Synthetic Prospect Blocked",
+                status_code=422,
+                code="ERR_SYNTHETIC_PROSPECT_BLOCKED",
+                detail=(
+                    "Synthetic fallback prospects cannot be synced into CRM leads. "
+                    "Collect from a live provider or CSV import."
+                ),
+            )
         synced: list[SyncedLead] = []
         skipped = 0
         touched_jobs: set[UUID] = set()
@@ -1201,6 +1257,16 @@ class GrowthService:
         await session.flush()
         return len(rows)
 
+    async def _load_prospect(
+        self, session: AsyncSession, tenant_id: UUID, prospect_id: UUID
+    ) -> CollectedProspect | None:
+        return await session.scalar(
+            sa.select(CollectedProspect).where(
+                CollectedProspect.tenant_id == tenant_id,
+                CollectedProspect.id == prospect_id,
+            )
+        )
+
     async def _recipient_block_reason(
         self,
         session: AsyncSession,
@@ -1209,6 +1275,11 @@ class GrowthService:
         recipient: CampaignRecipient,
     ) -> str | None:
         address = recipient.address
+        if recipient.prospect_id is not None and is_synthetic_prospect(
+            await self._load_prospect(session, tenant_id, recipient.prospect_id)
+        ):
+            # Checked first: a fabricated business is unsendable on every channel.
+            return REASON_SYNTHETIC_BLOCKED
         if address.startswith(_MISSING_ADDRESS_PREFIX):
             return REASON_ADDRESS_MISSING
         if channel == "email":
@@ -1601,6 +1672,13 @@ class GrowthService:
                         else REASON_EMAIL_INVALID
                     )
                 continue
+            if is_synthetic_prospect(prospect):
+                # A synthetic lead is never handed to Resend/SMTP, not even in dry-run.
+                suppressed += 1
+                if not payload.dry_run:
+                    recipient.status = "suppressed"
+                    recipient.error_reason = REASON_SYNTHETIC_BLOCKED
+                continue
             if await self._consent.is_suppressed(session, tenant_id, "email", address):
                 suppressed += 1
                 if not payload.dry_run:
@@ -1693,6 +1771,7 @@ class GrowthService:
 
 __all__ = [
     "OPT_OUT_FOOTER",
+    "REASON_SYNTHETIC_BLOCKED",
     "CollectionPlan",
     "GrowthService",
     "collection_plan_for_job",
@@ -1700,6 +1779,7 @@ __all__ = [
     "csv_safe_cell",
     "dedupe_fingerprint",
     "grade_for",
+    "is_synthetic_prospect",
     "normalize_email",
     "normalize_phone",
     "provider_unavailable",

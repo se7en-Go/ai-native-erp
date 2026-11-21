@@ -28,6 +28,60 @@ export const sentimentTone: Record<SocialSentiment, string> = {
 export const regionLabel: Record<SocialRegion, string> = { domestic: "国内", overseas: "海外" };
 export const publishModeLabel: Record<PublishMode, string> = { api: "API 自动发布", manual_export: "手动导出" };
 
+/**
+ * 发布模式补充说明：`API 自动发布` 只代表平台接口已授权，
+ * 真正上线仍以平台回执为准；手动模式必须在官方后台人工确认。
+ * 保留 `publishModeLabel` 原文不动（既有测试断言了「API 自动发布」）。
+ */
+export const publishModeHonestNote: Record<PublishMode, string> = {
+  api: "接口已授权，上线以平台回执为准",
+  manual_export: "需在官方后台人工确认发布",
+};
+
+/** 一条贴文到底有没有真的发到外部平台。 */
+export type PostDeliveryState = "external_confirmed" | "manual_confirmed" | "recorded_local";
+
+export interface PostDeliveryLabel {
+  state: PostDeliveryState;
+  zh: string;
+  en: string;
+  tone: string;
+}
+
+/**
+ * 贴文送达口径：本地记录 / 官方后台人工确认 / 外部平台已确认。
+ * 绝不把「本地已记录」渲染成「已发布上线」。
+ */
+export function postDeliveryLabel(post: {
+  status: string;
+  delivery_mode?: string | null;
+  external_publish_confirmed?: boolean | null;
+  external_post_id?: string | null;
+}): PostDeliveryLabel {
+  if (post.external_publish_confirmed === true || post.delivery_mode === "external_api") {
+    return {
+      state: "external_confirmed",
+      zh: "外部平台已确认",
+      en: "Confirmed externally",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    };
+  }
+  if (post.delivery_mode === "manual_confirmed") {
+    return {
+      state: "manual_confirmed",
+      zh: "官方后台手动确认",
+      en: "Manually confirmed",
+      tone: "border-sky-200 bg-sky-50 text-sky-800",
+    };
+  }
+  return {
+    state: "recorded_local",
+    zh: "本地已记录（未外发）",
+    en: "Recorded locally",
+    tone: "border-slate-200 bg-slate-100 text-slate-700",
+  };
+}
+
 export function platformLabel(platform: SocialPlatform): string {
   return PLAYBOOK_BY_PLATFORM[platform]?.label ?? platform;
 }

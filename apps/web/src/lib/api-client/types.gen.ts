@@ -1969,7 +1969,9 @@ export type PostRead = {
     caption: string;
     created_at: string;
     created_by: string;
+    delivery_mode?: 'recorded_local' | 'manual_confirmed' | 'external_api';
     external_post_id: string | null;
+    external_publish_confirmed?: boolean;
     hashtags: Array<string>;
     id: string;
     media_urls: Array<string>;
@@ -2630,6 +2632,7 @@ export type SourcingDraftRead = {
     images: Array<string>;
     imported_product_id?: string | null;
     imported_variant_id?: string | null;
+    listing_state?: 'draft' | 'imported' | 'mapping_ready' | 'live_published';
     moq_tiers: Array<SourcingMoqTier>;
     optimized_title_en: string;
     publish_history?: Array<{
@@ -2672,10 +2675,13 @@ export type SourcingPublishRequest = {
 export type SourcingPublishResult = {
     channel_account_id: string;
     channel_type: string;
+    external_listing_confirmed?: boolean;
     external_product_id: string;
     external_sku: string;
+    listing_state?: 'mapping_ready' | 'live_published';
     mapping_id: string;
     price_usd: string;
+    publish_mode?: 'local_sku_mapping' | 'live_marketplace_api';
     published_at: string;
     stock_sync_ratio: string;
 };

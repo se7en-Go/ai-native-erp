@@ -10558,6 +10558,16 @@
             "title": "Created By",
             "type": "string"
           },
+          "delivery_mode": {
+            "default": "recorded_local",
+            "enum": [
+              "recorded_local",
+              "manual_confirmed",
+              "external_api"
+            ],
+            "title": "Delivery Mode",
+            "type": "string"
+          },
           "external_post_id": {
             "anyOf": [
               {
@@ -10568,6 +10578,11 @@
               }
             ],
             "title": "External Post Id"
+          },
+          "external_publish_confirmed": {
+            "default": false,
+            "title": "External Publish Confirmed",
+            "type": "boolean"
           },
           "hashtags": {
             "items": {
@@ -14277,6 +14292,17 @@
             ],
             "title": "Imported Variant Id"
           },
+          "listing_state": {
+            "default": "draft",
+            "enum": [
+              "draft",
+              "imported",
+              "mapping_ready",
+              "live_published"
+            ],
+            "title": "Listing State",
+            "type": "string"
+          },
           "moq_tiers": {
             "items": {
               "$ref": "#/components/schemas/SourcingMoqTier"
@@ -14503,12 +14529,26 @@
             "title": "Channel Type",
             "type": "string"
           },
+          "external_listing_confirmed": {
+            "default": false,
+            "title": "External Listing Confirmed",
+            "type": "boolean"
+          },
           "external_product_id": {
             "title": "External Product Id",
             "type": "string"
           },
           "external_sku": {
             "title": "External Sku",
+            "type": "string"
+          },
+          "listing_state": {
+            "default": "mapping_ready",
+            "enum": [
+              "mapping_ready",
+              "live_published"
+            ],
+            "title": "Listing State",
             "type": "string"
           },
           "mapping_id": {
@@ -14518,6 +14558,15 @@
           },
           "price_usd": {
             "title": "Price Usd",
+            "type": "string"
+          },
+          "publish_mode": {
+            "default": "local_sku_mapping",
+            "enum": [
+              "local_sku_mapping",
+              "live_marketplace_api"
+            ],
+            "title": "Publish Mode",
             "type": "string"
           },
           "published_at": {
