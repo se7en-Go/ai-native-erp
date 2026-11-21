@@ -38,7 +38,10 @@ _ORDER_INTENT = re.compile(
 _ORDER_NO = re.compile(r"\b(?:ORD|DEMO|PI|SO)-[A-Z0-9][A-Z0-9-]{2,}\b", re.I)
 _SKU_TOKEN = re.compile(r"\b[A-Z][A-Z0-9]*(?:[-_/][A-Z0-9]+){1,6}\b")
 _QUANTITY = re.compile(
-    r"\b(\d{1,3}(?:[,\s]\d{3})+|\d+)\s*(?:pcs|pieces|units|sets|meters|meter|mtr|m)\b", re.I
+    r"(?<![A-Za-z0-9\-_/])(\d{1,3}(?:[,\s]\d{3})+|\d+)\s*"
+    r"(?:pcs|pieces|piece|units|unit|sets|set|rolls|roll|reels|reel|"
+    r"meters|meter|mtr|m|件|个|套|卷|米|条|台)(?![A-Za-z0-9])",
+    re.I,
 )
 _CJK = re.compile(r"[\u4e00-\u9fff]")
 _SPANISH = re.compile(r"\b(?:hola|precio|precios|cotizacion|cotización|gracias|necesito)\b", re.I)
@@ -136,7 +139,11 @@ def _detect_language(text: str) -> str:
 
 
 def _parse_quantity(text: str) -> int:
-    match = _QUANTITY.search(text)
+    # Strip SKU / order tokens (e.g. LED-COB-24V-5M) so embedded lengths/voltages
+    # like "5M" or "24V" are never mistaken for the buyer's requested quantity.
+    cleaned = _SKU_TOKEN.sub(" ", text)
+    cleaned = _ORDER_NO.sub(" ", cleaned)
+    match = _QUANTITY.search(cleaned)
     if match is None:
         return 1
     digits = re.sub(r"[^\d]", "", match.group(1))

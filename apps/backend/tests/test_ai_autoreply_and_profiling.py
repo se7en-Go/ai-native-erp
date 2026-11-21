@@ -148,8 +148,9 @@ class _StubAutoReplyService(AutoReplyService):
         evidence: Sequence[dict[str, Any]] = (),
         kb_hits: Sequence[dict[str, Any]] = (),
         customer: dict[str, str] | None = None,
+        llm_client: Any = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_client=llm_client, enable_llm_polish=llm_client is not None)
         self._conversation = conversation
         self._enabled = enabled
         self._messages = list(messages)
@@ -1145,3 +1146,148 @@ async def test_ingress_worker_maybe_run_auto_reply_respects_toggle(
         cast(Any, object()), cast(Any, _FakeRedis()), tenant_id, conv_id
     )
     assert handled_disabled is False
+
+
+# --------------------------------------------------------------------------------------
+# Quantity parsing with embedded SKU units & natural LLM polish + numeric guard
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("buyer_text", "expected_qty"),
+    [
+        ("Do you have LED-COB-24V-5M in stock? Price for 1000 pcs?", 1000),
+        ("LED-COB-24V-5M 5000米 FOB 报价多少？", 5000),
+        ("Quote for 2,500 pieces of SKU LED-COB-24V-10M please", 2500),
+        ("Need 300 rolls of LED-COB-24V-5M", 300),
+        ("Do you have LED-COB-24V-5M in stock?", 1),
+    ],
+)
+def test_parse_quantity_ignores_length_suffix_inside_sku_tokens(
+    buyer_text: str, expected_qty: int
+) -> None:
+    from erp_core.ai_engine.proposal_generator import _parse_quantity
+
+    assert _parse_quantity(buyer_text) == expected_qty
+
+
+def test_verify_reply_numbers_grounded_accepts_verified_and_rejects_hallucinated() -> None:
+    from erp_core.ai_engine.auto_reply_service import verify_reply_numbers_grounded
+
+    evidence = [
+        _sku_evidence(
+            sku="LED-COB-24V-5M",
+            unit_price="12.00",
+            qty=1000,
+            available=4300,
+            lead_time=7,
+            tier=1000,
+        )
+    ]
+    kb = [{"doc_title": "Warranty", "snippet": "IP65 waterproof, 2-year warranty."}]
+
+    valid = (
+        "Hi Seven! Yes, we have 4,300 pcs of LED-COB-24V-5M in stock. For 1,000 pcs, "
+        "FOB is $12/pc with a 7-day lead time and IP65 protection. Which destination port?"
+    )
+    assert verify_reply_numbers_grounded(
+        valid,
+        evidence=evidence,
+        kb_hits=kb,
+        buyer_message="Do you have LED-COB-24V-5M in stock? Price for 1000 pcs?",
+    )
+
+    hallucinated = (
+        "Hi Seven! For 1,000 pcs we can offer $9.50/pc with 3-day express shipping."
+    )
+    assert not verify_reply_numbers_grounded(
+        hallucinated,
+        evidence=evidence,
+        kb_hits=kb,
+        buyer_message="Do you have LED-COB-24V-5M in stock? Price for 1000 pcs?",
+    )
+
+
+@pytest.mark.asyncio
+async def test_auto_reply_uses_llm_polish_when_grounded_and_falls_back_on_hallucination() -> None:
+    from erp_core.ai_engine.router_llm import LlmProviderResponse
+
+    class _FakeLlm:
+        def __init__(self, text_out: str) -> None:
+            self._text = text_out
+
+        def has_key(self, provider: str) -> bool:
+            return provider == "deepseek"
+
+        async def complete(self, **_kwargs: Any) -> LlmProviderResponse:
+            return LlmProviderResponse(
+                text=self._text,
+                model_id="deepseek-chat",
+                provider="deepseek",
+                prompt_tokens=100,
+                completion_tokens=40,
+            )
+
+    conv = ConversationContext(
+        id=uuid4(),
+        customer_id=uuid4(),
+        channel_type="telegram",
+        assigned_user_id=None,
+        visibility_scope="shared",
+        owner_user_id=None,
+    )
+    evidence = [
+        _sku_evidence(
+            sku="LED-COB-24V-5M",
+            unit_price="12.00",
+            qty=1000,
+            available=4300,
+            lead_time=7,
+            tier=1000,
+        )
+    ]
+    msgs = [
+        RecentMessage(
+            "inbound",
+            "customer",
+            "Do you have LED-COB-24V-5M in stock? Price for 1000 pcs?",
+        )
+    ]
+
+    # Case 1: LLM outputs natural, fully grounded reply -> accepted!
+    natural_reply = (
+        "Hi Seven! Yes, LED-COB-24V-5M is in stock (4,300 pcs available). "
+        "For 1,000 pcs, FOB price is USD 12.00/pc with a 7-day lead time. "
+        "Which destination port are we shipping to?"
+    )
+    svc_ok = _StubAutoReplyService(
+        conversation=conv,
+        enabled=True,
+        messages=msgs,
+        evidence=evidence,
+        llm_client=_FakeLlm(natural_reply),
+    )
+    res_ok = await svc_ok.run(
+        _DUMMY_SESSION, _principal(), conv.id, AutoReplyRunRequest(mode="auto")
+    )
+    assert res_ok.action == "auto_replied"
+    assert res_ok.reply_text == natural_reply
+    assert svc_ok.inserted_messages[0]["metadata"]["llm_polished"] is True
+
+    # Case 2: LLM hallucinates an ungrounded price ($8.88) -> rejected & fallback used!
+    svc_bad = _StubAutoReplyService(
+        conversation=conv,
+        enabled=True,
+        messages=msgs,
+        evidence=evidence,
+        llm_client=_FakeLlm("Sure! Special discount $8.88/pc for 1000 pcs."),
+    )
+    res_bad = await svc_bad.run(
+        _DUMMY_SESSION, _principal(), conv.id, AutoReplyRunRequest(mode="auto")
+    )
+    assert res_bad.action == "auto_replied"
+    assert res_bad.reply_text is not None
+    assert "12.00" in res_bad.reply_text
+    assert "8.88" not in res_bad.reply_text
+    assert "Verified live information" not in res_bad.reply_text
+    assert svc_bad.inserted_messages[0]["metadata"]["llm_polished"] is False
