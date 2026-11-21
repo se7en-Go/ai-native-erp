@@ -415,6 +415,28 @@ def usd_order_total(orders: Sequence[ProfileOrder]) -> Decimal | None:
     return total.quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
 
 
+_COURTESY_PATTERN = re.compile(
+    r"^(?:"
+    r"(?:ok|okay|k|kk|got\s+it|noted|sure|alright|sounds\s+good|great|perfect|awesome)"
+    r"(?:[\s,!.~]*(?:thx|tx|ty|tysm|thanks|thank\s+you|much\s+appreciated))?"
+    r"|(?:thx|tx|ty|tysm|thanks|thank\s+you|appreciate\s+it|much\s+appreciated)"
+    r"|(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|hola|buenos\s+dias|gracias)"
+    r"|(?:你好|您好|哈喽|嗨|在吗|谢谢|多谢|感谢|好的|好哒|收到|明白|了解|知道了|ok谢谢|好的谢谢)"
+    r")[\s!.,~。！？，]*$",
+    re.IGNORECASE,
+)
+
+
+def is_courtesy_message(message_text: str) -> bool:
+    """True only for short pure greetings or acknowledgements containing no product/order claims."""
+    cleaned = message_text.strip()
+    if not cleaned or len(cleaned) > 48 or "?" in cleaned or "？" in cleaned:
+        return False
+    if any(ch.isdigit() for ch in cleaned):
+        return False
+    return bool(_COURTESY_PATTERN.fullmatch(cleaned))
+
+
 def decide_auto_reply(
     *,
     mode: ReplyMode,
@@ -422,11 +444,14 @@ def decide_auto_reply(
     has_evidence: bool,
     has_kb: bool,
     risk_flags: Sequence[str],
+    is_courtesy: bool = False,
 ) -> AutoReplyDecision:
     """The single authority deciding auto-send vs. L1 proposal vs. abstention."""
     if risk_flags:
         return AutoReplyDecision("proposal_created", "risk_guardrail_forced_l1")
     if not has_evidence and not has_kb:
+        if is_courtesy and mode == "auto" and auto_reply_enabled:
+            return AutoReplyDecision("auto_replied", "courtesy_auto_reply")
         return AutoReplyDecision("abstained", "no_grounding_evidence")
     if mode != "auto":
         return AutoReplyDecision("proposal_created", "proposal_only_mode")
@@ -627,6 +652,50 @@ def build_abstain_reply(*, language: str, customer_name: str) -> str:
         "certifications? We will send the formal quotation and Proforma Invoice right away."
         "\n\nBest regards,\nExport Sales Team"
     )
+
+
+def build_courtesy_reply(*, language: str, customer_name: str) -> str:
+    """Short zero-claim acknowledgement for pure greetings or thank-you messages."""
+    name = customer_name.strip() or "there"
+    if language == "zh":
+        return (
+            f"您好 {name}，不客气！随时告诉我们您想咨询的产品型号、实时库存、MOQ 阶梯报价"
+            "或形式发票（PI），我会第一时间为您查询核实。"
+        )
+    if language == "es":
+        return (
+            f"Hola {name}, con mucho gusto. Avísenos cuando necesite consultar stock en tiempo "
+            "real, precios por MOQ o una Factura Proforma (PI)."
+        )
+    return (
+        f"You're welcome, {name}! Please let us know anytime you need live stock, "
+        "MOQ tier pricing, product specifications, or a formal Proforma Invoice (PI)."
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class AutoReplyDispatchBundle:
+    """Outbound stream payload + SSE event bundle emitted after transaction commit."""
+
+    tenant_id: UUID
+    outbound_payload: dict[str, Any] | None = None
+    sse_event: dict[str, Any] | None = None
+
+
+async def publish_auto_reply_dispatch(redis: Any, bundle: AutoReplyDispatchBundle | None) -> None:
+    """Enqueue outbound channel delivery and publish real-time inbox SSE notifications."""
+    if redis is None or bundle is None:
+        return
+    if bundle.outbound_payload is not None:
+        await redis.xadd(
+            "stream:outbound:messages",
+            {"payload": json.dumps(bundle.outbound_payload, ensure_ascii=False, default=str)},
+        )
+    if bundle.sse_event is not None:
+        await redis.publish(
+            f"inbox:events:{bundle.tenant_id}",
+            json.dumps(bundle.sse_event, ensure_ascii=False, default=str),
+        )
 
 
 # --------------------------------------------------------------------------------------
@@ -1166,9 +1235,147 @@ class AutoReplyService:
             user_agent=user_agent,
         )
 
+    async def _build_outbound_dispatch(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        conversation: ConversationContext,
+        message_id: UUID,
+        body_text: str,
+        metadata: dict[str, Any],
+    ) -> AutoReplyDispatchBundle | None:
+        """Build the Redis outbound-stream + SSE notification bundle for an auto-sent reply."""
+        row = (
+            (
+                await session.execute(
+                    text(
+                        """
+                        SELECT c.channel_account_id,
+                               c.external_thread_id,
+                               c.assigned_user_id,
+                               c.subject,
+                               a.external_account_id,
+                               a.visibility_scope
+                        FROM conversations c
+                        JOIN channel_accounts a
+                          ON a.tenant_id = c.tenant_id AND a.id = c.channel_account_id
+                        WHERE c.tenant_id = :tid AND c.id = :cid
+                        """
+                    ),
+                    {"tid": tenant_id, "cid": conversation.id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            return None
+
+        recipient_id = str(row["external_thread_id"] or "").strip()
+        if not recipient_id:
+            ident = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT identity_value
+                        FROM customer_identities
+                        WHERE tenant_id = :tid AND customer_id = :cust AND is_active = true
+                        ORDER BY CASE identity_type
+                            WHEN 'phone_e164' THEN 1
+                            WHEN 'email' THEN 2
+                            ELSE 3
+                        END, created_at ASC
+                        LIMIT 1
+                        """
+                    ),
+                    {"tid": tenant_id, "cust": conversation.customer_id},
+                )
+            ).scalar_one_or_none()
+            recipient_id = str(ident or "").strip()
+
+        outbound_payload: dict[str, Any] | None = None
+        if recipient_id:
+            outbound_payload = {
+                "tenant_id": str(tenant_id),
+                "channel_account_id": str(row["channel_account_id"]),
+                "channel_type": conversation.channel_type,
+                "external_account_id": str(row["external_account_id"]),
+                "recipient_id": recipient_id,
+                "conversation_id": str(conversation.id),
+                "message_id": str(message_id),
+                "content_type": "text",
+                "body_text": body_text,
+                "subject": row["subject"],
+                "metadata": metadata,
+            }
+
+        sse_event = {
+            "event": "message.created",
+            "conversation_id": str(conversation.id),
+            "message_id": str(message_id),
+            "direction": "outbound",
+            "channel_type": conversation.channel_type,
+            "assigned_user_id": (
+                str(row["assigned_user_id"]) if row["assigned_user_id"] is not None else None
+            ),
+            "visibility_scope": str(row["visibility_scope"] or "shared"),
+        }
+        return AutoReplyDispatchBundle(
+            tenant_id=tenant_id,
+            outbound_payload=outbound_payload,
+            sse_event=sse_event,
+        )
+
+    async def _build_proposal_dispatch(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        conversation: ConversationContext,
+        proposal_id: UUID,
+    ) -> AutoReplyDispatchBundle:
+        row = (
+            (
+                await session.execute(
+                    text(
+                        """
+                        SELECT c.assigned_user_id, a.visibility_scope
+                        FROM conversations c
+                        JOIN channel_accounts a
+                          ON a.tenant_id = c.tenant_id AND a.id = c.channel_account_id
+                        WHERE c.tenant_id = :tid AND c.id = :cid
+                        """
+                    ),
+                    {"tid": tenant_id, "cid": conversation.id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return AutoReplyDispatchBundle(
+            tenant_id=tenant_id,
+            outbound_payload=None,
+            sse_event={
+                "event": "proposal.created",
+                "conversation_id": str(conversation.id),
+                "proposal_id": str(proposal_id),
+                "assigned_user_id": (
+                    str(row["assigned_user_id"])
+                    if row is not None and row["assigned_user_id"] is not None
+                    else None
+                ),
+                "visibility_scope": (
+                    str(row["visibility_scope"])
+                    if row is not None and row["visibility_scope"]
+                    else "shared"
+                ),
+            },
+        )
+
     # ---------------------------------------------------------------------- execution
 
-    async def run(
+    async def run_with_dispatch(
         self,
         session: AsyncSession,
         principal: CurrentPrincipal,
@@ -1177,8 +1384,9 @@ class AutoReplyService:
         *,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> AutoReplyRunResponse:
-        """Execute one guarded auto-reply attempt for a conversation."""
+        prepare_dispatch: bool = True,
+    ) -> tuple[AutoReplyRunResponse, AutoReplyDispatchBundle | None]:
+        """Execute one guarded auto-reply attempt and optionally prepare its Redis dispatch."""
         conversation = await self.load_conversation(session, principal.tenant_id, conversation_id)
         self.assert_visibility(principal, conversation)
         enabled = await self._load_auto_reply_flag(session, principal.tenant_id, conversation_id)
@@ -1199,30 +1407,41 @@ class AutoReplyService:
             session, principal.tenant_id, conversation.customer_id
         )
 
+        courtesy = is_courtesy_message(message_text)
         decision = decide_auto_reply(
             mode=request.mode,
             auto_reply_enabled=enabled,
             has_evidence=bool(evidence),
             has_kb=bool(kb_hits),
             risk_flags=risk_flags,
+            is_courtesy=courtesy,
         )
         language = detect_reply_language(message_text)
         customer_name = customer.get("name") or customer.get("company") or ""
-        confidence = compute_confidence(evidence, kb_hits, risk_flags)
+        confidence = (
+            Decimal("0.850")
+            if decision.reason == "courtesy_auto_reply"
+            else compute_confidence(evidence, kb_hits, risk_flags)
+        )
 
         if decision.action == "abstained":
-            return AutoReplyRunResponse(
-                conversation_id=conversation.id,
-                action="abstained",
-                reply_text=build_abstain_reply(language=language, customer_name=customer_name),
-                kb_hits=kb_hits,
-                tool_evidence=evidence,
-                risk_flags=risk_flags,
-                confidence=confidence,
+            return (
+                AutoReplyRunResponse(
+                    conversation_id=conversation.id,
+                    action="abstained",
+                    reply_text=build_abstain_reply(language=language, customer_name=customer_name),
+                    kb_hits=kb_hits,
+                    tool_evidence=evidence,
+                    risk_flags=risk_flags,
+                    confidence=confidence,
+                ),
+                None,
             )
 
         if risk_flags:
             reply_text = build_risk_hold_reply(language=language, customer_name=customer_name)
+        elif decision.reason == "courtesy_auto_reply":
+            reply_text = build_courtesy_reply(language=language, customer_name=customer_name)
         else:
             reply_text = build_grounded_reply(
                 language=language,
@@ -1286,16 +1505,31 @@ class AutoReplyService:
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
-            return AutoReplyRunResponse(
-                conversation_id=conversation.id,
-                action="auto_replied",
-                message_id=message_id,
-                proposal_id=None,
-                reply_text=reply_text,
-                kb_hits=kb_hits,
-                tool_evidence=evidence,
-                risk_flags=risk_flags,
-                confidence=confidence,
+            dispatch_bundle = (
+                await self._build_outbound_dispatch(
+                    session,
+                    tenant_id=principal.tenant_id,
+                    conversation=conversation,
+                    message_id=message_id,
+                    body_text=reply_text,
+                    metadata=metadata,
+                )
+                if prepare_dispatch
+                else None
+            )
+            return (
+                AutoReplyRunResponse(
+                    conversation_id=conversation.id,
+                    action="auto_replied",
+                    message_id=message_id,
+                    proposal_id=None,
+                    reply_text=reply_text,
+                    kb_hits=kb_hits,
+                    tool_evidence=evidence,
+                    risk_flags=risk_flags,
+                    confidence=confidence,
+                ),
+                dispatch_bundle,
             )
 
         payload: dict[str, Any] = {
@@ -1338,17 +1572,55 @@ class AutoReplyService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        return AutoReplyRunResponse(
-            conversation_id=conversation.id,
-            action="proposal_created",
-            message_id=None,
-            proposal_id=proposal_id,
-            reply_text=reply_text,
-            kb_hits=kb_hits,
-            tool_evidence=evidence,
-            risk_flags=risk_flags,
-            confidence=confidence,
+        proposal_bundle = (
+            await self._build_proposal_dispatch(
+                session,
+                tenant_id=principal.tenant_id,
+                conversation=conversation,
+                proposal_id=proposal_id,
+            )
+            if prepare_dispatch
+            else None
         )
+        return (
+            AutoReplyRunResponse(
+                conversation_id=conversation.id,
+                action="proposal_created",
+                message_id=None,
+                proposal_id=proposal_id,
+                reply_text=reply_text,
+                kb_hits=kb_hits,
+                tool_evidence=evidence,
+                risk_flags=risk_flags,
+                confidence=confidence,
+            ),
+            proposal_bundle,
+        )
+
+    async def run(
+        self,
+        session: AsyncSession,
+        principal: CurrentPrincipal,
+        conversation_id: UUID,
+        request: AutoReplyRunRequest,
+        *,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        redis: Any = None,
+    ) -> AutoReplyRunResponse:
+        """Execute one guarded auto-reply attempt and optionally dispatch via Redis."""
+        response, bundle = await self.run_with_dispatch(
+            session,
+            principal,
+            conversation_id,
+            request,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            prepare_dispatch=redis is not None,
+        )
+        if redis is not None and bundle is not None:
+            await publish_auto_reply_dispatch(redis, bundle)
+        return response
 
     # ---------------------------------------------------------------------- profiling
 
@@ -1693,6 +1965,7 @@ __all__ = [
     "AutoReplyRunRequest",
     "AutoReplyRunResponse",
     "AutoReplyService",
+    "AutoReplyDispatchBundle",
     "AutoReplySettingRead",
     "AutoReplySettingUpdate",
     "CustomerAiProfileRead",
@@ -1703,6 +1976,7 @@ __all__ = [
     "ProfileQuote",
     "ProfileSources",
     "build_abstain_reply",
+    "build_courtesy_reply",
     "build_grounded_reply",
     "build_risk_hold_reply",
     "compute_confidence",
@@ -1715,7 +1989,9 @@ __all__ = [
     "extract_profile_from_sources",
     "extract_sku_tokens",
     "infer_country_code",
+    "is_courtesy_message",
     "normalize_country_code",
     "profile_to_json",
+    "publish_auto_reply_dispatch",
     "usd_order_total",
 ]

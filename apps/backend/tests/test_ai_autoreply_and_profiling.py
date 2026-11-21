@@ -942,3 +942,206 @@ def test_followup_next_action_window_is_one_day_for_qualified_leads() -> None:
     expected = (NOW + timedelta(days=1)).replace(microsecond=0)
     assert profile.purchase_intent_score >= 40
     assert expected > NOW
+
+
+# --------------------------------------------------------------------------------------
+# Courtesy auto-reply, outbound Redis dispatch & inbound webhook trigger
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text_value", "expected"),
+    [
+        ("ok thx", True),
+        ("thanks!", True),
+        ("Hello", True),
+        ("你好", True),
+        ("好的，谢谢", False),
+        ("谢谢！", True),
+        ("What is the price of LED-COB-24V-5M?", False),
+        ("ok I want a refund", False),
+        ("1000 pcs", False),
+    ],
+)
+def test_is_courtesy_message_only_matches_pure_short_acknowledgements(
+    text_value: str, expected: bool
+) -> None:
+    from erp_core.ai_engine.auto_reply_service import is_courtesy_message
+
+    assert is_courtesy_message(text_value) is expected
+
+
+@pytest.mark.asyncio
+async def test_auto_reply_enqueues_outbound_stream_and_publishes_sse() -> None:
+    import json
+
+    from erp_core.ai_engine.auto_reply_service import AutoReplyDispatchBundle
+
+    class _FakeRedis:
+        def __init__(self) -> None:
+            self.xadds: list[tuple[str, dict[str, Any]]] = []
+            self.publishes: list[tuple[str, str]] = []
+
+        async def xadd(self, stream: str, fields: dict[str, Any]) -> str:
+            self.xadds.append((stream, fields))
+            return "1-0"
+
+        async def publish(self, channel: str, payload: str) -> int:
+            self.publishes.append((channel, payload))
+            return 1
+
+    principal = _principal()
+    conversation = ConversationContext(
+        id=uuid4(),
+        customer_id=uuid4(),
+        channel_type="telegram",
+        assigned_user_id=None,
+        visibility_scope="shared",
+        owner_user_id=None,
+    )
+
+    class _DispatchingService(_StubAutoReplyService):
+        async def _build_outbound_dispatch(
+            self,
+            session: AsyncSession,
+            *,
+            tenant_id: UUID,
+            conversation: ConversationContext,
+            message_id: UUID,
+            body_text: str,
+            metadata: dict[str, Any],
+        ) -> AutoReplyDispatchBundle | None:
+            return AutoReplyDispatchBundle(
+                tenant_id=tenant_id,
+                outbound_payload={
+                    "tenant_id": str(tenant_id),
+                    "channel_account_id": str(uuid4()),
+                    "channel_type": conversation.channel_type,
+                    "external_account_id": "9197431516",
+                    "recipient_id": "7546465",
+                    "conversation_id": str(conversation.id),
+                    "message_id": str(message_id),
+                    "content_type": "text",
+                    "body_text": body_text,
+                    "metadata": metadata,
+                },
+                sse_event={
+                    "event": "message.created",
+                    "conversation_id": str(conversation.id),
+                    "message_id": str(message_id),
+                    "direction": "outbound",
+                },
+            )
+
+    service = _DispatchingService(
+        conversation=conversation,
+        enabled=True,
+        messages=[RecentMessage("inbound", "customer", "ok thx")],
+    )
+    fake_redis = _FakeRedis()
+
+    result = await service.run(
+        _DUMMY_SESSION,
+        principal,
+        conversation.id,
+        AutoReplyRunRequest(mode="auto"),
+        redis=fake_redis,
+    )
+
+    assert result.action == "auto_replied"
+    assert result.message_id is not None
+    assert len(fake_redis.xadds) == 1
+    stream_name, fields = fake_redis.xadds[0]
+    assert stream_name == "stream:outbound:messages"
+    payload = json.loads(fields["payload"])
+    assert payload["channel_type"] == "telegram"
+    assert payload["recipient_id"] == "7546465"
+    assert payload["message_id"] == str(result.message_id)
+    assert len(fake_redis.publishes) == 1
+    sse_channel, sse_body = fake_redis.publishes[0]
+    assert sse_channel == f"inbox:events:{principal.tenant_id}"
+    assert json.loads(sse_body)["event"] == "message.created"
+
+
+@pytest.mark.asyncio
+async def test_ingress_worker_maybe_run_auto_reply_respects_toggle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import asynccontextmanager
+
+    from erp_core.ai_engine.auto_reply_service import (
+        AutoReplyDispatchBundle,
+        AutoReplyRunResponse,
+    )
+    from erp_core.channels import ingress_worker
+
+    tenant_id = uuid4()
+    conv_id = uuid4()
+    msg_id = uuid4()
+    events_order: list[str] = []
+
+    class _FakeSession:
+        def __init__(self, enabled: bool) -> None:
+            self._enabled = enabled
+
+        async def scalar(self, *_args: Any, **_kwargs: Any) -> bool:
+            return self._enabled
+
+    class _FakeRedis:
+        async def xadd(self, stream: str, fields: dict[str, Any]) -> str:
+            events_order.append(f"xadd:{stream}")
+            return "1-0"
+
+        async def publish(self, channel: str, payload: str) -> int:
+            events_order.append(f"publish:{channel}")
+            return 1
+
+    class _FakeService:
+        async def run_with_dispatch(self, *_args: Any, **_kwargs: Any) -> Any:
+            events_order.append("run_in_tx")
+            return (
+                AutoReplyRunResponse(
+                    conversation_id=conv_id,
+                    action="auto_replied",
+                    message_id=msg_id,
+                    reply_text="You're welcome!",
+                    confidence=Decimal("0.850"),
+                ),
+                AutoReplyDispatchBundle(
+                    tenant_id=tenant_id,
+                    outbound_payload={"message_id": str(msg_id)},
+                    sse_event={"event": "message.created", "message_id": str(msg_id)},
+                ),
+            )
+
+    @asynccontextmanager
+    async def _fake_tenant_session_enabled(_factory: Any, _tid: Any) -> Any:
+        events_order.append("tx_enter")
+        yield _FakeSession(True)
+        events_order.append("tx_commit")
+
+    @asynccontextmanager
+    async def _fake_tenant_session_disabled(_factory: Any, _tid: Any) -> Any:
+        yield _FakeSession(False)
+
+    monkeypatch.setattr(ingress_worker, "_auto_reply_service", lambda: _FakeService())
+    monkeypatch.setattr(ingress_worker, "tenant_session", _fake_tenant_session_enabled)
+
+    handled = await ingress_worker._maybe_run_auto_reply(
+        cast(Any, object()), cast(Any, _FakeRedis()), tenant_id, conv_id
+    )
+    assert handled is True
+    # Outbound dispatch & SSE publish must happen strictly AFTER DB transaction commit.
+    assert events_order == [
+        "tx_enter",
+        "run_in_tx",
+        "tx_commit",
+        "xadd:stream:outbound:messages",
+        f"publish:inbox:events:{tenant_id}",
+    ]
+
+    monkeypatch.setattr(ingress_worker, "tenant_session", _fake_tenant_session_disabled)
+    handled_disabled = await ingress_worker._maybe_run_auto_reply(
+        cast(Any, object()), cast(Any, _FakeRedis()), tenant_id, conv_id
+    )
+    assert handled_disabled is False

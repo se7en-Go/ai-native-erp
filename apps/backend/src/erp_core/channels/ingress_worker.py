@@ -612,6 +612,70 @@ def _auto_proposal_service() -> Any:
     return AiProposalGeneratorService()
 
 
+def _auto_reply_service() -> Any:
+    """Factory seam so tests can inject a deterministic offline AutoReplyService."""
+    from erp_core.ai_engine.auto_reply_service import AutoReplyService
+
+    return AutoReplyService()
+
+
+async def _maybe_run_auto_reply(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+    tenant_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+) -> bool:
+    """Run guarded AI auto-reply when enabled on the conversation.
+
+    Returns ``True`` when the inbound turn was handled (either auto-sent to the channel
+    or held as an L1 proposal), so the caller skips duplicate proposal generation.
+    AI failures are logged and never fail or DLQ the webhook.
+    """
+    from erp_core.ai_engine.auto_reply_service import (
+        AutoReplyRunRequest,
+        publish_auto_reply_dispatch,
+    )
+
+    try:
+        dispatch_bundle: Any = None
+        action: str = "abstained"
+        async with tenant_session(session_factory, tenant_id) as ai_sess:
+            enabled = await ai_sess.scalar(
+                text(
+                    "SELECT ai_auto_reply_enabled FROM conversations "
+                    "WHERE tenant_id = :tid AND id = :cid"
+                ),
+                {"tid": tenant_id, "cid": conversation_id},
+            )
+            if not enabled:
+                return False
+            system_principal = CurrentPrincipal(
+                user_id=uuid.UUID(int=0),
+                tenant_id=tenant_id,
+                role=UserRole.OWNER,
+                email="ai-auto-reply@system.local",
+            )
+            result, dispatch_bundle = await _auto_reply_service().run_with_dispatch(
+                ai_sess,
+                system_principal,
+                conversation_id,
+                AutoReplyRunRequest(mode="auto"),
+                prepare_dispatch=True,
+            )
+            action = str(result.action)
+        # Transaction is now committed; safely enqueue outbound delivery & SSE push.
+        if dispatch_bundle is not None:
+            await publish_auto_reply_dispatch(redis, dispatch_bundle)
+        return action in ("auto_replied", "proposal_created")
+    except Exception:  # noqa: BLE001 - webhook durability outranks auto-reply
+        logger.warning(
+            "auto AI reply execution failed for conversation %s",
+            conversation_id,
+            exc_info=True,
+        )
+        return False
+
+
 async def _maybe_generate_auto_proposal(
     session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
@@ -798,11 +862,15 @@ async def process_raw_webhook_event(
         for ev in published_events:
             await redis.publish(f"inbox:events:{tenant_id}", json.dumps(ev))
 
-        if auto_proposal_conversations and _auto_ai_proposal_enabled():
+        if auto_proposal_conversations:
             for conv_id in auto_proposal_conversations:
-                await _maybe_generate_auto_proposal(
+                handled = await _maybe_run_auto_reply(
                     session_factory, redis, tenant_id, conv_id
                 )
+                if not handled and _auto_ai_proposal_enabled():
+                    await _maybe_generate_auto_proposal(
+                        session_factory, redis, tenant_id, conv_id
+                    )
         return "processed"
 
     except OutOfOrderParentError as exc:
