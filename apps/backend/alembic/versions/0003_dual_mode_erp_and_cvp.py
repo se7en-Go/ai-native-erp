@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import context, op
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0003"
@@ -42,7 +42,7 @@ def _apply_tenant_rls(table_name: str, append_only: bool = False) -> None:
     op.execute(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY")
     op.execute(f"ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY")
 
-    if context.is_offline_mode():
+    if op.get_context().as_sql:
         # `alembic upgrade head --sql` renders SQL against a mock connection whose
         # `execute()` returns None, so the `pg_roles` catalog cannot be queried.
         # Assume the runtime role exists and emit the policy DDL unconditionally;
