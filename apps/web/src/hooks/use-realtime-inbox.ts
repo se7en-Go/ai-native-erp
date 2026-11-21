@@ -32,7 +32,40 @@ export function useRealtimeInbox(enabled: boolean = true) {
       withCredentials: true,
     });
 
+    let hadOpen = false;
+    let hadError = false;
+
+    // After any drop (or a second open) reconcile the inbox baseline, because
+    // Pub/Sub has no replay: events published while the client was offline are
+    // gone, so the only safe recovery is a full refetch.
+    const reconcileInboxBaseline = () => {
+      void queryClient.invalidateQueries({ queryKey: ["inbox", "conversations"] });
+      void queryClient.invalidateQueries({ queryKey: ["inbox", "messages"] });
+    };
+
+    const onOpen = () => {
+      if (hadOpen || hadError) {
+        reconcileInboxBaseline();
+      }
+      hadOpen = true;
+      hadError = false;
+    };
+
+    const onError = () => {
+      hadError = true;
+    };
+
     const onMessageCreated = (ev: MessageEvent) => {
+      const payload = safeParseJson(ev.data);
+      void queryClient.invalidateQueries({ queryKey: ["inbox", "conversations"] });
+      if (payload.conversation_id) {
+        void queryClient.invalidateQueries({
+          queryKey: ["inbox", "messages", payload.conversation_id],
+        });
+      }
+    };
+
+    const onMessageStatusUpdated = (ev: MessageEvent) => {
       const payload = safeParseJson(ev.data);
       void queryClient.invalidateQueries({ queryKey: ["inbox", "conversations"] });
       if (payload.conversation_id) {
@@ -75,12 +108,18 @@ export function useRealtimeInbox(enabled: boolean = true) {
     };
 
     source.addEventListener("message.created", onMessageCreated as EventListener);
+    source.addEventListener(
+      "message.status_updated",
+      onMessageStatusUpdated as EventListener
+    );
     source.addEventListener("conversation.updated", onConversationUpdated as EventListener);
     source.addEventListener("proposal.created", onProposalEvent as EventListener);
     source.addEventListener("proposal.resolved", onProposalEvent as EventListener);
     source.addEventListener("shipment.updated", onShipmentUpdated as EventListener);
     source.addEventListener("wallet.updated", onWalletUpdated as EventListener);
     source.addEventListener("dlq.updated", onDlqUpdated as EventListener);
+    source.addEventListener("open", onOpen as EventListener);
+    source.addEventListener("error", onError as EventListener);
 
     return () => {
       source.close();

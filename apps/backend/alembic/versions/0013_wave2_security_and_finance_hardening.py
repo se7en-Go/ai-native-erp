@@ -120,6 +120,13 @@ def _downgrade_orders_non_negative_amounts() -> None:
 
 
 def _audit_partition_names() -> list[str]:
+    if op.get_context().as_sql:
+        # `alembic upgrade head --sql` renders against a mock connection whose
+        # `execute()` yields no rows, and partition discovery is inherently
+        # data-dependent, so the offline script cannot enumerate live children.
+        # Nothing is lost at runtime: `ensure_audit_child_rls` FORCEs RLS on every
+        # partition (including newly created ones) during application startup.
+        return []
     rows = op.get_bind().execute(
         sa.text(
             "SELECT c.relname "

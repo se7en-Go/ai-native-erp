@@ -43,9 +43,15 @@ RUN pnpm --filter @erp/widget build \
     && printf 'livechat-widget.iife.js: %s gzip bytes (limit %s)\n' "$bytes" "$WIDGET_GZIP_LIMIT_BYTES" \
     && if [ "$bytes" -ge "$WIDGET_GZIP_LIMIT_BYTES" ]; then echo "widget bundle exceeds gzip budget" >&2; exit 1; fi
 
-FROM nginx:1.27-alpine AS runtime
-COPY infra/docker/widget-nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /repo/apps/widget/dist/livechat-widget.iife.js /usr/share/nginx/html/livechat-widget.iife.js
+# The unprivileged nginx variant already defaults to uid/gid 101 and rewrites
+# pid/tmp paths under /tmp, so no root-owned directory is needed at runtime.
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+# Explicit non-root declaration: static scanners and `docker inspect` must see
+# the same guarantee the base image already enforces.
+USER 101:101
+COPY --chown=101:101 infra/docker/widget-nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder --chown=101:101 /repo/apps/widget/dist/livechat-widget.iife.js /usr/share/nginx/html/livechat-widget.iife.js
+# 3001 is above 1024, so uid 101 may bind it without NET_BIND_SERVICE.
 EXPOSE 3001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=5 \
     CMD wget --quiet --output-document=/dev/null http://127.0.0.1:3001/healthz || exit 1
