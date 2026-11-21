@@ -2,6 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 import {
+  BadgeDollarSign,
+  Building2,
   CheckCircle2,
   Globe,
   Instagram,
@@ -9,6 +11,7 @@ import {
   MessageCircle,
   MessageSquare,
   Music2,
+  Package,
   Plus,
   Search,
   Send,
@@ -25,6 +28,30 @@ import type { ChannelType } from "@/lib/contracts";
 
 export type MarketplaceCategory = "all" | "messaging" | "email_web" | "commerce";
 
+/**
+ * Pack F 新增的 3 个外贸高频渠道键（Alibaba.com 国际站 / Amazon / eBay）。
+ * 「渠道应用市场」总数因此从 11 升到 14。
+ */
+export type SourcingMarketplaceChannelKey = "alibaba_intl" | "amazon" | "ebay";
+
+/** 网格 / 抽屉 / 深链统一使用的渠道键集合（旧 11 个 + 新 3 个）。 */
+export type ExtendedMarketplaceChannelKey =
+  | MarketplaceChannelKey
+  | SourcingMarketplaceChannelKey;
+
+export const SOURCING_MARKETPLACE_KEYS: SourcingMarketplaceChannelKey[] = [
+  "alibaba_intl",
+  "amazon",
+  "ebay",
+];
+
+/** 是否属于 Pack F 新增的 3 个外贸渠道。 */
+export function isSourcingMarketplaceKey(
+  value: string | null | undefined,
+): value is SourcingMarketplaceChannelKey {
+  return typeof value === "string" && SOURCING_MARKETPLACE_KEYS.includes(value as SourcingMarketplaceChannelKey);
+}
+
 /** 官网客服小组件脚本地址（与 apps/widget 构建产物一致）。 */
 export const WIDGET_SCRIPT_SRC = "http://localhost:3001/widget.iife.js";
 
@@ -39,7 +66,7 @@ export function livechatEmbedSnippet(
 }
 
 export type ChannelMarketplaceItem = {
-  key: MarketplaceChannelKey;
+  key: ExtendedMarketplaceChannelKey;
   titleZh: string;
   titleEn: string;
   descriptionZh: string;
@@ -56,8 +83,8 @@ export type ChannelMarketplaceItem = {
 };
 
 /**
- * 渠道应用市场清单：11 个渠道 = 即时通讯 4 + 邮件与官网 2 + 独立站与电商 5。
- * 顺序即产品优先级，与 Inbox 渠道筛选一一对应。
+ * 渠道应用市场清单：14 个渠道 = 即时通讯 4 + 邮件与官网 2 + 独立站与电商 8。
+ * 顺序即产品优先级，与 Inbox 渠道筛选一一对应（末 3 个为 Pack F 外贸渠道）。
  */
 export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
   {
@@ -122,7 +149,7 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     icon: Mail,
     tile: "bg-emerald-50 text-emerald-700 ring-emerald-100",
     accent: "bg-emerald-500",
-    channelTypes: ["email", "alibaba_email", "made_in_china_email"],
+    channelTypes: ["email", "made_in_china_email"],
     adminOnly: false,
   },
   {
@@ -203,6 +230,45 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["tiktok_shop"],
     adminOnly: true,
   },
+  {
+    key: "alibaba_intl",
+    titleZh: "Alibaba.com 国际站",
+    titleEn: "Alibaba.com",
+    descriptionZh: "粘贴 App Key/Secret 与询盘邮箱快速绑定，询盘直接进 Inbox。",
+    descriptionEn: "Paste the app key/secret plus the inquiry mailbox to bind in one step.",
+    category: "commerce",
+    icon: Building2,
+    tile: "bg-orange-50 text-orange-700 ring-orange-100",
+    accent: "bg-orange-500",
+    channelTypes: ["alibaba_email"],
+    adminOnly: true,
+  },
+  {
+    key: "amazon",
+    titleZh: "Amazon 卖家中心",
+    titleEn: "Amazon Seller Central",
+    descriptionZh: "Seller ID / Marketplace ID / LWA 密钥与 Refresh Token 加密直连。",
+    descriptionEn: "Seller ID, marketplace ID, LWA keys and refresh token, encrypted.",
+    category: "commerce",
+    icon: Package,
+    tile: "bg-amber-50 text-amber-700 ring-amber-100",
+    accent: "bg-amber-500",
+    channelTypes: ["amazon_sp"],
+    adminOnly: true,
+  },
+  {
+    key: "ebay",
+    titleZh: "eBay",
+    titleEn: "eBay",
+    descriptionZh: "Seller Username / Site ID / App + Cert ID 与 Refresh Token 直连。",
+    descriptionEn: "Seller username, site ID, app/cert IDs and refresh token direct connect.",
+    category: "commerce",
+    icon: BadgeDollarSign,
+    tile: "bg-sky-50 text-sky-700 ring-sky-100",
+    accent: "bg-sky-600",
+    channelTypes: ["ebay"],
+    adminOnly: true,
+  },
 ];
 
 /** 业务员个人可绑定的 3 个渠道：Telegram、个人工作邮箱、WhatsApp 共存号。 */
@@ -212,17 +278,17 @@ export const AGENT_MARKETPLACE_KEYS: MarketplaceChannelKey[] = [
   "whatsapp",
 ];
 
-const MARKETPLACE_BY_KEY = new Map<MarketplaceChannelKey, ChannelMarketplaceItem>(
+const MARKETPLACE_BY_KEY = new Map<ExtendedMarketplaceChannelKey, ChannelMarketplaceItem>(
   CHANNEL_MARKETPLACE.map((item) => [item.key, item]),
 );
 
 /** URL `?connect=` 的白名单校验，避免非法参数打开空抽屉。 */
 export function isMarketplaceChannelKey(value: string | null): value is MarketplaceChannelKey {
   if (!value) return false;
-  return MARKETPLACE_BY_KEY.has(value as MarketplaceChannelKey);
+  return MARKETPLACE_BY_KEY.has(value as ExtendedMarketplaceChannelKey);
 }
 
-export function marketplaceChannel(key: MarketplaceChannelKey): ChannelMarketplaceItem {
+export function marketplaceChannel(key: ExtendedMarketplaceChannelKey): ChannelMarketplaceItem {
   return MARKETPLACE_BY_KEY.get(key)!;
 }
 
@@ -230,7 +296,9 @@ export function marketplaceChannel(key: MarketplaceChannelKey): ChannelMarketpla
  * Inbox 渠道筛选 → 市场抽屉键。WhatsApp Cloud/Coexistence 合并到 `whatsapp`，
  * Messenger 的筛选键是 `facebook_messenger`。
  */
-export function marketplaceKeyForChannelFilter(filter: string): MarketplaceChannelKey | null {
+export function marketplaceKeyForChannelFilter(
+  filter: string,
+): ExtendedMarketplaceChannelKey | null {
   switch (filter) {
     case "whatsapp":
     case "whatsapp_cloud":
@@ -244,9 +312,16 @@ export function marketplaceKeyForChannelFilter(filter: string): MarketplaceChann
     case "instagram_dm":
       return "instagram_dm";
     case "email":
-    case "alibaba_email":
     case "made_in_china_email":
       return "email";
+    case "alibaba_email":
+    case "alibaba_intl":
+      return "alibaba_intl";
+    case "amazon_sp":
+    case "amazon":
+      return "amazon";
+    case "ebay":
+      return "ebay";
     case "web_livechat":
       return "web_livechat";
     case "shopify":
@@ -392,9 +467,11 @@ export function ChannelMarketplaceGrid({
         </label>
       </div>
 
+      {/* 14 张渠道卡 + 1 张引导卡：md 两列时引导卡横跨整行、xl 三列时正好 15 格，
+          两种断点下都不留孤立空洞。 */}
       <div
         data-testid="marketplace-grid"
-        className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+        className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3"
       >
         {filtered.map((item) => {
           const Icon = item.icon;
@@ -463,7 +540,7 @@ export function ChannelMarketplaceGrid({
                 <button
                   type="button"
                   data-testid={`open-connect-${item.key}`}
-                  onClick={() => onOpen(item.key)}
+                  onClick={() => onOpen(item.key as MarketplaceChannelKey)}
                   className={`erp-btn shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold ${
                     connected > 0
                       ? "border border-slate-300 bg-white text-slate-900 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
@@ -478,13 +555,13 @@ export function ChannelMarketplaceGrid({
           );
         })}
 
-        {/* 第 12 张纯静态引导卡：只在「全部分类 + 无搜索词」时出现，
+        {/* 第 15 张纯静态引导卡：只在「全部分类 + 无搜索词」时出现，
             不参与已接入计数，也不复用 marketplace-card-* testid。
-            11 个渠道 + 1 张引导卡 → 3/4 列网格完全齐平，不留空洞。 */}
+            14 个渠道 + 1 张引导卡 → 3 列网格完全齐平、2 列时引导卡横跨两列，不留空洞。 */}
         {category === "all" && query.trim() === "" ? (
           <article
             data-testid="marketplace-custom-channel-card"
-            className="group flex min-w-0 flex-col rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/40 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-blue-700 dark:hover:bg-blue-950/30"
+            className="group flex min-w-0 flex-col rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/40 md:col-span-2 xl:col-span-1 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-blue-700 dark:hover:bg-blue-950/30"
           >
             <div className="flex items-start gap-3">
               <span

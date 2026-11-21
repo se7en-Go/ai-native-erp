@@ -7,12 +7,17 @@ import {
   Boxes,
   CheckCircle2,
   FileSpreadsheet,
+  Loader2,
   PackageSearch,
   Plus,
   Search,
   ShieldCheck,
+  Sparkles,
   Tags,
+  Trash2,
+  Truck,
   Upload,
+  Wand2,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -20,7 +25,25 @@ import { useAuthSession } from "@/components/providers";
 import { SkuMappingDrawer } from "@/components/catalog/sku-mapping-drawer";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Badge, EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/page";
-import type { CatalogCsvImportResponse } from "@/lib/api-client/types.gen";
+import { SegmentedTabs, type SegmentedTabOption } from "@/components/ui/segmented-tabs";
+import type {
+  CatalogCsvImportResponse,
+  SourcingCollectRequest,
+  SourcingDraftRead,
+  SourcingPublishResult,
+} from "@/lib/api-client/types.gen";
+import {
+  SOURCING_DEFAULT_FX_RATE,
+  SOURCING_DEFAULT_MARGIN_PCT,
+  collectSourcingDraft,
+  deleteSourcingDraft,
+  fetchSourcingDrafts,
+  importSourcingDraftToCatalog,
+  publishSourcingDraft,
+  sourcingStatusCopy,
+  sourcingStoreAccounts,
+  sourcingStoreLabel,
+} from "@/lib/api-client/pack-f-sourcing";
 import {
   CATALOG_CSV_SAMPLE,
   createCatalogProductAndVariant,
@@ -29,13 +52,49 @@ import {
   variantPayloadFromDraft,
   type CatalogSkuDraft,
 } from "@/lib/api-client/pack-a-erp";
-import { fetchCatalogVariants, fetchPendingProposalsCount } from "@/lib/data-source";
+import {
+  fetchCatalogVariants,
+  fetchChannelAccounts,
+  fetchPendingProposalsCount,
+} from "@/lib/data-source";
 import { isPrivilegedCostViewer } from "@/lib/auth-cookie";
 import { useI18n } from "@/lib/i18n";
 import { formatMoney } from "@/lib/contracts";
 
 /** Writer roles locked by the backend catalog router (`_WRITER_ROLES`). */
 const WRITER_ROLES = new Set(["owner", "admin", "manager"]);
+
+/** 顶部两个视图：主档 SKU 库（默认）与 1688 采集搬家 & 多平台刊登。 */
+type CatalogView = "master" | "sourcing";
+
+function catalogViewOptions(
+  bi: (zh: string, en: string) => string,
+  skuCount: number,
+): SegmentedTabOption<CatalogView>[] {
+  return [
+    {
+      value: "master",
+      testId: "catalog-tab-master",
+      badge: skuCount,
+      label: (
+        <span className="inline-flex items-center gap-1.5">
+          <Boxes className="h-3.5 w-3.5" />
+          {bi("主档 SKU 库", "Master SKU library")}
+        </span>
+      ),
+    },
+    {
+      value: "sourcing",
+      testId: "catalog-tab-sourcing",
+      label: (
+        <span className="inline-flex items-center gap-1.5">
+          <Wand2 className="h-3.5 w-3.5" />
+          {bi("1688 采集搬家 & 多平台刊登", "1688 sourcing & multi-platform publishing")}
+        </span>
+      ),
+    },
+  ];
+}
 
 interface SkuFormState {
   spu_code: string;
@@ -122,6 +181,8 @@ export default function CatalogPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  // 视图开关：主档 SKU 库（默认，保证既有单测零回归）↔ 1688 采集搬家 & 多平台刊登。
+  const [view, setView] = useState<CatalogView>("master");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState<SkuFormState>(EMPTY_SKU_FORM);
@@ -255,6 +316,28 @@ export default function CatalogPage() {
           }
         />
 
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SegmentedTabs<CatalogView>
+            ariaLabel={bi("商品主档视图切换", "Catalog view switch")}
+            value={view}
+            onChange={setView}
+            options={catalogViewOptions(bi, variants.length)}
+            className="flex-wrap"
+          />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-400">
+            <ShieldCheck className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+            {view === "master"
+              ? bi(
+                  "阶梯价与平台映射共享同一套主档 SKU",
+                  "Tier pricing and platform mappings share one master SKU",
+                )
+              : bi(
+                  "采集 → AI 改写 → 入主档 → 多平台刊登，全链路可追溯",
+                  "Collect → AI rewrite → import → publish, fully traceable",
+                )}
+          </span>
+        </div>
+
         {createdSku && (
           <div
             data-testid="create-sku-success"
@@ -278,6 +361,8 @@ export default function CatalogPage() {
           </div>
         )}
 
+        {view === "master" && (
+          <>
         <section
           aria-label={bi("商品主档关键指标", "Catalog key metrics")}
           className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
@@ -407,6 +492,10 @@ export default function CatalogPage() {
             </table>
           </TableWrap>
         )}
+          </>
+        )}
+
+        {view === "sourcing" && <SourcingWorkspace canWrite={canWriteCatalog} />}
       </Page>
 
       {createOpen && (
@@ -821,5 +910,664 @@ function Field({
         className="erp-input w-full rounded-xl tabular-nums"
       />
     </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 1688 采集搬家 & 多平台刊登（妙手 ERP 风格闭环）
+// ---------------------------------------------------------------------------
+
+const SOURCE_PLATFORM_OPTIONS = [
+  { value: "1688", zh: "1688 链接", en: "1688 link" },
+  { value: "url", zh: "供应商 URL", en: "Supplier URL" },
+  { value: "manual", zh: "粘贴中文文案", en: "Paste Chinese copy" },
+] as const;
+
+function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
+  const { bi } = useI18n();
+  const queryClient = useQueryClient();
+
+  const [platform, setPlatform] = useState<(typeof SOURCE_PLATFORM_OPTIONS)[number]["value"]>(
+    "1688",
+  );
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [rawTitle, setRawTitle] = useState("");
+  const [rawText, setRawText] = useState("");
+  const [priceCny, setPriceCny] = useState("18.60");
+  const [marginPct, setMarginPct] = useState(SOURCING_DEFAULT_MARGIN_PCT);
+  const [fxRate, setFxRate] = useState(SOURCING_DEFAULT_FX_RATE);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [collected, setCollected] = useState<string | null>(null);
+
+  const [publishDraftId, setPublishDraftId] = useState<string | null>(null);
+  const [publishSelection, setPublishSelection] = useState<string[]>([]);
+  const [multiplier, setMultiplier] = useState("1.00");
+  const [publishResults, setPublishResults] = useState<Record<string, SourcingPublishResult[]>>({});
+  const [publishError, setPublishError] = useState<string | null>(null);
+
+  const draftsQuery = useQuery({
+    queryKey: ["catalog", "sourcing", "drafts"],
+    queryFn: () => fetchSourcingDrafts(),
+  });
+
+  const accountsQuery = useQuery({
+    queryKey: ["channels", "accounts"],
+    queryFn: () => fetchChannelAccounts(),
+  });
+
+  const stores = useMemo(
+    () => sourcingStoreAccounts(accountsQuery.data?.items ?? []),
+    [accountsQuery.data],
+  );
+
+  const drafts = draftsQuery.data ?? [];
+
+  const invalidateDrafts = () => {
+    void queryClient.invalidateQueries({ queryKey: ["catalog", "sourcing", "drafts"] });
+  };
+
+  const collectMutation = useMutation({
+    mutationFn: (body: SourcingCollectRequest) => collectSourcingDraft(body),
+    onSuccess: (draft) => {
+      setCollected(draft.optimized_title_en);
+      setFormError(null);
+      setSourceUrl("");
+      setRawTitle("");
+      setRawText("");
+      invalidateDrafts();
+    },
+    onError: (error: Error) => {
+      setCollected(null);
+      setFormError(error.message);
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: (draftId: string) => importSourcingDraftToCatalog(draftId),
+    onSuccess: () => {
+      invalidateDrafts();
+      void queryClient.invalidateQueries({ queryKey: ["catalog", "variants"] });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: (input: { draftId: string; channelAccountIds: string[] }) =>
+      publishSourcingDraft(input.draftId, {
+        channel_account_ids: input.channelAccountIds,
+        price_multiplier: multiplier.trim() || "1.00",
+        stock_sync_ratio: "1.00",
+      }),
+    onSuccess: (results, input) => {
+      setPublishError(null);
+      setPublishResults((current) => ({ ...current, [input.draftId]: results }));
+      setPublishDraftId(null);
+      setPublishSelection([]);
+      invalidateDrafts();
+    },
+    onError: (error: Error) => setPublishError(error.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (draftId: string) => deleteSourcingDraft(draftId),
+    onSuccess: () => invalidateDrafts(),
+  });
+
+  function submitCollect(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const url = sourceUrl.trim();
+    const title = rawTitle.trim();
+    const text = rawText.trim();
+    const price = priceCny.trim();
+
+    if (platform !== "manual" && !/^https?:\/\/\S+$/i.test(url)) {
+      setFormError(bi("请粘贴以 http:// 或 https:// 开头的商品链接。", "Paste a product URL starting with http:// or https://."));
+      return;
+    }
+    if (platform === "manual" && !title && !text) {
+      setFormError(bi("至少粘贴中文标题或规格文案。", "Paste at least the Chinese title or spec copy."));
+      return;
+    }
+    if (!/^\d+(\.\d+)?$/.test(price) || Number(price) <= 0) {
+      setFormError(bi("进货价必须是大于 0 的金额（CNY）。", "The purchase price must be a positive CNY amount."));
+      return;
+    }
+    setFormError(null);
+    setCollected(null);
+    collectMutation.mutate({
+      source_platform: platform,
+      source_url: platform === "manual" ? null : url,
+      raw_title: title || null,
+      raw_text: text || null,
+      raw_price_cny: price,
+      target_margin_pct: marginPct.trim() || SOURCING_DEFAULT_MARGIN_PCT,
+      fx_rate_usd_cny: fxRate.trim() || SOURCING_DEFAULT_FX_RATE,
+    });
+  }
+
+  function toggleStore(storeId: string) {
+    setPublishError(null);
+    setPublishSelection((current) =>
+      current.includes(storeId) ? current.filter((id) => id !== storeId) : [...current, storeId],
+    );
+  }
+
+  return (
+    <div data-testid="sourcing-workspace" className="space-y-4">
+      <form
+        data-testid="sourcing-collect-form"
+        onSubmit={submitCollect}
+        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="inline-flex items-center gap-1.5 text-[14px] font-bold text-slate-950 dark:text-slate-100">
+              <Wand2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              {bi("一键采集并 AI 优化", "One-click collect & AI rewrite")}
+            </h3>
+            <p className="mt-0.5 text-[11.5px] leading-5 text-slate-600 dark:text-slate-400">
+              {bi(
+                "贴 1688 链接或中文文案，自动生成英文 SEO 标题、5 条海外卖点、USD 零售价与 3 档 MOQ 阶梯价。",
+                "Paste a 1688 link or Chinese copy — get an English SEO title, 5 selling points, a USD retail price and 3 MOQ tiers."
+              )}
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10.5px] font-semibold text-blue-800 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-300">
+            <Sparkles className="h-3 w-3" />
+            {bi("确定性模板 · 可复算价格", "Deterministic template · recomputable price")}
+          </span>
+        </div>
+
+        {canWrite ? (
+          <>
+            <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+              <label className="block">
+                <span className="erp-label">{bi("采集来源", "Source")}</span>
+                <select
+                  data-testid="sourcing-source-platform"
+                  value={platform}
+                  onChange={(event) =>
+                    setPlatform(event.target.value as (typeof SOURCE_PLATFORM_OPTIONS)[number]["value"])
+                  }
+                  className="erp-input mt-1 w-full rounded-xl"
+                >
+                  {SOURCE_PLATFORM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {bi(option.zh, option.en)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <Field
+                testId="sourcing-source-url"
+                label={bi("商品链接（1688 / 供应商）", "Product URL (1688 / supplier)")}
+                value={sourceUrl}
+                onChange={setSourceUrl}
+                placeholder="https://detail.1688.com/offer/680001234567.html"
+                disabled={platform === "manual"}
+              />
+              <Field
+                testId="sourcing-raw-title"
+                label={bi("中文标题（可空）", "Chinese title (optional)")}
+                value={rawTitle}
+                onChange={setRawTitle}
+                placeholder="COB 灯带 24V 5m 4000K 高显指"
+              />
+              <Field
+                testId="sourcing-raw-price-cny"
+                label={bi("进货价（CNY）", "Purchase price (CNY)")}
+                value={priceCny}
+                onChange={setPriceCny}
+                type="number"
+                step="0.01"
+                min={0}
+              />
+              <Field
+                testId="sourcing-target-margin"
+                label={bi("目标毛利率（%）", "Target margin (%)")}
+                value={marginPct}
+                onChange={setMarginPct}
+                type="number"
+                step="1"
+                min={1}
+                max={90}
+              />
+              <Field
+                testId="sourcing-fx-rate"
+                label={bi("实时汇率（USD/CNY）", "FX rate (USD/CNY)")}
+                value={fxRate}
+                onChange={setFxRate}
+                type="number"
+                step="0.01"
+                min={1}
+              />
+            </div>
+
+            <label className="mt-2.5 block">
+              <span className="erp-label">
+                {bi("中文规格 / 卖点文案（可空，用于 AI 改写）", "Chinese spec copy (optional, feeds the AI rewrite)")}
+              </span>
+              <textarea
+                data-testid="sourcing-raw-text"
+                value={rawText}
+                onChange={(event) => setRawText(event.target.value)}
+                rows={3}
+                placeholder={bi(
+                  "例：铝材灯体，IP65 防水，支持遥控调光，50 只起订，7 天出样。",
+                  "e.g. Aluminium body, IP65 waterproof, remote dimming, 50 pcs MOQ, 7-day samples."
+                )}
+                className="erp-input mt-1 w-full rounded-xl text-[12px] leading-5"
+              />
+            </label>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                {bi(
+                  "采集只抓公开商品页，绝不带登录态或内网地址。",
+                  "Collection only reads public product pages — no logged-in or internal URLs."
+                )}
+              </span>
+              <button
+                type="submit"
+                data-testid="sourcing-collect-submit"
+                disabled={collectMutation.isPending}
+                className="erp-btn rounded-xl bg-blue-600 px-4 py-2 text-[12.5px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40 dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                {collectMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {collectMutation.isPending
+                    ? bi("正在采集并优化…", "Collecting & rewriting…")
+                    : bi("采集并 AI 优化", "Collect & AI rewrite")}
+                </span>
+              </button>
+            </div>
+          </>
+        ) : (
+          <p
+            data-testid="sourcing-readonly-note"
+            className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+          >
+            {bi(
+              "当前角色可浏览采集箱，但采集、入主档与刊登需要 owner / admin / manager 权限。",
+              "You can browse the sourcing box; collecting, importing and publishing need owner / admin / manager."
+            )}
+          </p>
+        )}
+
+        {formError && (
+          <p
+            role="alert"
+            data-testid="sourcing-collect-error"
+            className="mt-2.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+          >
+            {formError}
+          </p>
+        )}
+
+        {collected && (
+          <div
+            data-testid="sourcing-collect-success"
+            className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <span>
+              {bi("已生成英文草稿：", "English draft created: ")}
+              <span className="font-semibold">{collected}</span>
+            </span>
+          </div>
+        )}
+      </form>
+
+      <section aria-label={bi("采集箱草稿", "Sourcing drafts")} className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="inline-flex items-center gap-1.5 text-[13.5px] font-bold text-slate-950 dark:text-slate-100">
+            <Truck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            {bi("采集箱", "Sourcing box")}
+            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              {drafts.length}
+            </span>
+          </h3>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            {bi(
+              "草稿 → 入主档 SKU → 多平台刊登，一步都不会丢。",
+              "Draft → master SKU → multi-platform listing, nothing gets lost."
+            )}
+          </span>
+        </div>
+
+        {draftsQuery.isLoading ? (
+          <EmptyState testId="sourcing-draft-loading">
+            {bi("正在加载采集箱…", "Loading the sourcing box…")}
+          </EmptyState>
+        ) : drafts.length === 0 ? (
+          <EmptyState testId="sourcing-draft-empty">
+            {bi(
+              "采集箱还是空的：贴一条 1688 链接开始吧。",
+              "The sourcing box is empty — paste a 1688 link to start."
+            )}
+          </EmptyState>
+        ) : (
+          <div data-testid="sourcing-draft-list" className="space-y-3">
+            {drafts.map((draft) => (
+              <SourcingDraftCard
+                key={draft.id}
+                draft={draft}
+                canWrite={canWrite}
+                stores={stores}
+                publishOpen={publishDraftId === draft.id}
+                publishSelection={publishSelection}
+                multiplier={multiplier}
+                publishPending={publishMutation.isPending && publishMutation.variables?.draftId === draft.id}
+                publishResults={publishResults[draft.id]}
+                publishError={publishDraftId === draft.id ? publishError : null}
+                importing={importMutation.isPending && importMutation.variables === draft.id}
+                deleting={deleteMutation.isPending && deleteMutation.variables === draft.id}
+                onTogglePublish={() => {
+                  setPublishError(null);
+                  setPublishDraftId((current) => (current === draft.id ? null : draft.id));
+                  setPublishSelection([]);
+                }}
+                onToggleStore={toggleStore}
+                onChangeMultiplier={setMultiplier}
+                onConfirmPublish={() =>
+                  publishMutation.mutate({
+                    draftId: draft.id,
+                    channelAccountIds: publishSelection,
+                  })
+                }
+                onImport={() => importMutation.mutate(draft.id)}
+                onDelete={() => deleteMutation.mutate(draft.id)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function SourcingDraftCard({
+  draft,
+  canWrite,
+  stores,
+  publishOpen,
+  publishSelection,
+  multiplier,
+  publishPending,
+  publishResults,
+  publishError,
+  importing,
+  deleting,
+  onTogglePublish,
+  onToggleStore,
+  onChangeMultiplier,
+  onConfirmPublish,
+  onImport,
+  onDelete,
+}: {
+  draft: SourcingDraftRead;
+  canWrite: boolean;
+  stores: Array<{ id: string; channel_type: string; display_name: string }>;
+  publishOpen: boolean;
+  publishSelection: string[];
+  multiplier: string;
+  publishPending: boolean;
+  publishResults?: SourcingPublishResult[];
+  publishError: string | null;
+  importing: boolean;
+  deleting: boolean;
+  onTogglePublish: () => void;
+  onToggleStore: (storeId: string) => void;
+  onChangeMultiplier: (value: string) => void;
+  onConfirmPublish: () => void;
+  onImport: () => void;
+  onDelete: () => void;
+}) {
+  const { bi } = useI18n();
+  const status = sourcingStatusCopy(draft.status);
+
+  return (
+    <article
+      data-testid={`sourcing-draft-${draft.id}`}
+      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition-colors hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-800"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              data-testid={`sourcing-draft-status-${draft.id}`}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${status.tone}`}
+            >
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+              {bi(status.zh, status.en)}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10.5px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+              {draft.source_platform}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[10.5px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+              {draft.suggested_sku}
+            </span>
+          </div>
+          <h4 className="mt-1.5 text-[13.5px] leading-5 font-bold text-slate-950 dark:text-slate-100">
+            {draft.optimized_title_en}
+          </h4>
+          {draft.source_url && (
+            <a
+              href={draft.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 block truncate text-[11px] font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:decoration-blue-700 dark:hover:text-blue-300"
+            >
+              {draft.source_url}
+            </a>
+          )}
+        </div>
+
+        <div className="shrink-0 text-right">
+          <div className="text-[15px] font-bold tabular-nums text-slate-950 dark:text-slate-100">
+            {formatMoney(draft.target_price_usd, "USD")}
+          </div>
+          <div className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">
+            {bi("建议零售价", "Suggested retail")}
+          </div>
+        </div>
+      </div>
+
+      <ul className="mt-2 space-y-1">
+        {draft.bullet_points.map((point) => (
+          <li
+            key={point}
+            className="flex items-start gap-1.5 text-[11.5px] leading-5 text-slate-600 dark:text-slate-400"
+          >
+            <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span>{point}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        {draft.moq_tiers.map((tier) => (
+          <span
+            key={tier.min_qty}
+            className="rounded-md border border-blue-100 bg-blue-50/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200"
+          >
+            {tier.min_qty}+ / {formatMoney(tier.unit_price_usd, "USD")}
+          </span>
+        ))}
+        <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+          {bi("进货", "Cost")} ¥{draft.raw_price_cny} → {formatMoney(draft.cost_usd, "USD")}
+        </span>
+        <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+          {bi("汇率", "FX")} {draft.fx_rate_usd_cny} · {bi("毛利", "Margin")} {draft.target_margin_pct}%
+        </span>
+      </div>
+
+      {canWrite && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            {draft.imported_variant_id
+              ? bi("已入主档，可直接刊登", "Imported — ready to publish")
+              : bi("先入主档 SKU，再一键刊登", "Import to a master SKU, then publish")}
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              data-testid={`sourcing-delete-${draft.id}`}
+              onClick={onDelete}
+              disabled={deleting}
+              aria-label={bi("移出采集箱", "Remove from the sourcing box")}
+              className="erp-btn rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11.5px] font-semibold text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-rose-700 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              data-testid={`sourcing-import-${draft.id}`}
+              onClick={onImport}
+              disabled={importing}
+              className="erp-btn rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[11.5px] font-semibold text-slate-900 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300"
+            >
+              {importing ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <PackageSearch className="h-3 w-3" />
+              )}
+              <span>{bi("一键入主档 SKU", "Import to master SKU")}</span>
+            </button>
+            <button
+              type="button"
+              data-testid={`sourcing-publish-${draft.id}`}
+              aria-expanded={publishOpen}
+              onClick={onTogglePublish}
+              className="erp-btn rounded-xl bg-blue-600 px-3 py-1.5 text-[11.5px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
+            >
+              <Truck className="h-3 w-3" />
+              <span>{bi("多平台一键刊登", "Publish to stores")}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {publishOpen && (
+        <div
+          data-testid={`sourcing-publish-panel-${draft.id}`}
+          className="mt-3 space-y-2 rounded-xl border border-blue-200 bg-blue-50/50 px-3 py-2.5 dark:border-blue-900/70 dark:bg-blue-950/30"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11.5px] font-semibold text-blue-900 dark:text-blue-200">
+              {bi("选择已接入店铺", "Pick the connected stores")}
+            </span>
+            <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+              <span>{bi("加价倍率", "Price multiplier")}</span>
+              <input
+                data-testid={`sourcing-publish-multiplier-${draft.id}`}
+                type="number"
+                step="0.01"
+                min={0.1}
+                max={10}
+                value={multiplier}
+                onChange={(event) => onChangeMultiplier(event.target.value)}
+                className="erp-input w-20 rounded-lg py-1 tabular-nums"
+              />
+            </label>
+          </div>
+
+          {stores.length === 0 ? (
+            <p className="text-[11.5px] font-medium text-slate-600 dark:text-slate-400">
+              {bi(
+                "还没有接入可刊登的店铺，先去渠道中心绑定 Shopify / Amazon / eBay。",
+                "No publishable store yet — bind Shopify / Amazon / eBay in the channel hub first."
+              )}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {stores.map((store) => {
+                const checked = publishSelection.includes(store.id);
+                return (
+                  <label
+                    key={store.id}
+                    data-testid={`sourcing-publish-store-${store.id}`}
+                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                      checked
+                        ? "border-blue-500 bg-blue-600 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-700"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      data-testid={`sourcing-publish-check-${store.id}`}
+                      checked={checked}
+                      onChange={() => onToggleStore(store.id)}
+                      className="sr-only"
+                    />
+                    <span>{sourcingStoreLabel(store.channel_type)}</span>
+                    <span className={checked ? "text-white/80" : "text-slate-500 dark:text-slate-400"}>
+                      {store.display_name}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {publishError && (
+            <p
+              role="alert"
+              data-testid={`sourcing-publish-error-${draft.id}`}
+              className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11.5px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+            >
+              {publishError}
+            </p>
+          )}
+
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={onTogglePublish}
+              className="erp-btn rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {bi("取消", "Cancel")}
+            </button>
+            <button
+              type="button"
+              data-testid={`sourcing-publish-confirm-${draft.id}`}
+              onClick={onConfirmPublish}
+              disabled={publishPending || publishSelection.length === 0}
+              className="erp-btn rounded-xl bg-blue-600 px-3 py-1 text-[11.5px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40 dark:bg-blue-600 dark:hover:bg-blue-500"
+            >
+              {publishPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Truck className="h-3 w-3" />
+              )}
+              <span>{bi("确认刊登", "Confirm publish")}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {publishResults && publishResults.length > 0 && (
+        <ul
+          data-testid={`sourcing-publish-results-${draft.id}`}
+          className="mt-2.5 space-y-1 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 dark:border-emerald-800/70 dark:bg-emerald-950/30"
+        >
+          {publishResults.map((result) => (
+            <li
+              key={result.mapping_id}
+              className="flex flex-wrap items-center gap-1.5 text-[11.5px] font-medium text-emerald-900 dark:text-emerald-200"
+            >
+              <CheckCircle2 className="h-3 w-3 shrink-0" />
+              <span className="font-semibold">{sourcingStoreLabel(result.channel_type)}</span>
+              <span className="font-mono text-[11px]">{result.external_sku}</span>
+              <span className="tabular-nums">{formatMoney(result.price_usd, "USD")}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
   );
 }

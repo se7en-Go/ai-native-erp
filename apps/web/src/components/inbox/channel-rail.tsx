@@ -3,12 +3,15 @@
 import React from "react";
 import Link from "next/link";
 import {
+  BadgeDollarSign,
+  Building2,
   Camera,
   Globe,
   Layers,
   Mail,
   MessageCircle,
   MessageSquare,
+  Package,
   Send,
   Settings,
   ShoppingBag,
@@ -30,7 +33,10 @@ export type ChannelFilterKey =
   | "woocommerce"
   | "shopline"
   | "shoplazza"
-  | "tiktok_shop";
+  | "tiktok_shop"
+  | "alibaba_email"
+  | "amazon_sp"
+  | "ebay";
 
 const CHANNEL_RAIL_ITEMS: Array<{
   key: ChannelFilterKey;
@@ -109,6 +115,24 @@ const CHANNEL_RAIL_ITEMS: Array<{
     zh: "TikTok 店铺",
     en: "TikTok",
     icon: Video,
+  },
+  {
+    key: "alibaba_email",
+    zh: "阿里国际站",
+    en: "Alibaba",
+    icon: Building2,
+  },
+  {
+    key: "amazon_sp",
+    zh: "Amazon",
+    en: "Amazon",
+    icon: Package,
+  },
+  {
+    key: "ebay",
+    zh: "eBay",
+    en: "eBay",
+    icon: BadgeDollarSign,
   },
 ];
 

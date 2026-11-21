@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pin, Plus, Tag, X } from "lucide-react";
+import { Pin, Plus, Sparkles, Tag, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { ChannelRail, type ChannelFilterKey } from "@/components/inbox/channel-rail";
@@ -30,6 +30,16 @@ import {
   updateConversationMeta,
   type ConversationMetaPatch,
 } from "@/lib/api-client/pack-b-inbox";
+import {
+  autoReplyActionLabel,
+  autoReplyActionTone,
+  autoReplyEvidenceCounts,
+  fetchAutoReplySetting,
+  formatConfidencePercent,
+  runAiAutoReply,
+  updateAutoReplySetting,
+  type AutoReplyRun,
+} from "@/lib/api-client/pack-e-autoreply";
 import { useI18n } from "@/lib/i18n";
 
 /** 管层视角切换：全部会话 / 只看我的 / 公司公海。 */
@@ -54,7 +64,7 @@ function metaOf(conversation: ConversationSummary): ConversationMeta {
 }
 
 export default function InboxPage() {
-  const { bi } = useI18n();
+  const { bi, locale } = useI18n();
   const { principal } = useAuthSession();
   const queryClient = useQueryClient();
   const [selectedChannel, setSelectedChannel] = useState<ChannelFilterKey>("all");
@@ -73,6 +83,9 @@ export default function InboxPage() {
   const [metaError, setMetaError] = useState<string | null>(null);
   // 抽屉 → 回复框的单向插入通道：nonce 变更即把片段追加到草稿。
   const [replyInsert, setReplyInsert] = useState<{ text: string; nonce: number } | null>(null);
+  // Pack E：AI 查库自动回复的结果条（可手动关闭）与错误提示。
+  const [autoReplyResult, setAutoReplyResult] = useState<AutoReplyRun | null>(null);
+  const [autoReplyError, setAutoReplyError] = useState<string | null>(null);
 
   const canOverseeOwnership =
     principal?.role === "owner" ||
@@ -147,6 +160,56 @@ export default function InboxPage() {
   const pendingProposalsQuery = useQuery({
     queryKey: ["ai", "proposals", "pending-count"],
     queryFn: () => fetchPendingProposalsCount(),
+  });
+
+  // Pack E：当前会话的 AI 自动回复开关（失败不影响页面，默认按「关」）。
+  const autoReplySettingQuery = useQuery({
+    queryKey: ["ai", "auto-reply-setting", activeConversation?.id],
+    enabled: Boolean(activeConversation?.id),
+    retry: false,
+    queryFn: () => fetchAutoReplySetting(activeConversation!.id),
+  });
+
+  const autoReplyEnabled = autoReplySettingQuery.data?.ai_auto_reply_enabled === true;
+
+  const autoReplyToggleMutation = useMutation({
+    mutationFn: ({ conversationId, enabled }: { conversationId: string; enabled: boolean }) =>
+      updateAutoReplySetting(conversationId, enabled),
+    onSuccess: (setting) => {
+      queryClient.setQueryData(
+        ["ai", "auto-reply-setting", setting.conversation_id],
+        setting,
+      );
+      setAutoReplyError(null);
+    },
+    onError: (error) => {
+      setAutoReplyError(
+        error instanceof Error && error.message
+          ? error.message
+          : bi("自动回复开关保存失败，请重试。", "Failed to save auto-reply toggle."),
+      );
+    },
+  });
+
+  const autoReplyRunMutation = useMutation({
+    mutationFn: ({ conversationId }: { conversationId: string }) =>
+      runAiAutoReply(conversationId, "auto"),
+    onSuccess: (result) => {
+      setAutoReplyResult(result);
+      setAutoReplyError(null);
+      // 自动回复往往已写入一条出站消息：立即刷新对话区。
+      void queryClient.invalidateQueries({
+        queryKey: ["inbox", "messages", result.conversation_id],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["inbox", "conversations"] });
+    },
+    onError: (error) => {
+      setAutoReplyError(
+        error instanceof Error && error.message
+          ? error.message
+          : bi("AI 自动回复执行失败，请重试。", "AI auto-reply failed. Please retry."),
+      );
+    },
   });
 
   // Pack B：会话元数据（置顶 / 标签）写回，失败回滚乐观覆盖。
@@ -261,6 +324,58 @@ export default function InboxPage() {
 
   const headerActions = activeConversation ? (
     <div className="flex flex-wrap items-center gap-1.5">
+      <button
+        type="button"
+        data-testid="inbox-ai-autoreply-toggle"
+        role="switch"
+        aria-checked={autoReplyEnabled}
+        aria-label={bi("AI 自动回复开关", "AI auto-reply switch")}
+        disabled={autoReplyToggleMutation.isPending || autoReplySettingQuery.isLoading}
+        onClick={() =>
+          autoReplyToggleMutation.mutate({
+            conversationId: activeConversation.id,
+            enabled: !autoReplyEnabled,
+          })
+        }
+        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11.5px] font-semibold transition-colors disabled:opacity-60 ${
+          autoReplyEnabled
+            ? "border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-500/60 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25"
+            : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+        }`}
+      >
+        <Sparkles className={`h-3 w-3 ${autoReplyEnabled ? "" : "opacity-60"}`} />
+        <span>
+          {bi("AI 自动回复", "AI auto-reply")}
+          <span
+            data-testid="inbox-ai-autoreply-state"
+            className={`ml-1 rounded px-1 py-px text-[10px] font-bold ${
+              autoReplyEnabled
+                ? "bg-blue-600 text-white dark:bg-blue-500"
+                : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+            }`}
+          >
+            {autoReplyEnabled ? bi("开", "On") : bi("关", "Off")}
+          </span>
+        </span>
+      </button>
+
+      <button
+        type="button"
+        data-testid="inbox-ai-autoreply-run-btn"
+        disabled={autoReplyRunMutation.isPending || !activeConversation.id}
+        onClick={() =>
+          autoReplyRunMutation.mutate({ conversationId: activeConversation.id })
+        }
+        className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2 py-1 text-[11.5px] font-semibold text-white shadow-[0_1px_8px_-3px_rgba(37,99,235,0.6)] transition-colors hover:bg-blue-700 disabled:opacity-60 dark:bg-blue-500 dark:hover:bg-blue-400"
+      >
+        <Sparkles className="h-3 w-3" />
+        <span>
+          {autoReplyRunMutation.isPending
+            ? bi("查库回复中…", "Grounded reply…")
+            : bi("AI 查库自动回复", "AI grounded reply")}
+        </span>
+      </button>
+
       <button
         type="button"
         data-testid="toggle-pin-conv-btn"
@@ -394,8 +509,31 @@ export default function InboxPage() {
           {metaError}
         </span>
       )}
+
+      {autoReplyError && (
+        <span
+          role="alert"
+          data-testid="inbox-ai-autoreply-error"
+          className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10.5px] font-medium text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30"
+        >
+          {autoReplyError}
+        </span>
+      )}
     </div>
   ) : undefined;
+
+  const autoReplyEvidence = autoReplyResult
+    ? autoReplyEvidenceCounts(autoReplyResult)
+    : null;
+  const autoReplyTone = autoReplyResult
+    ? autoReplyActionTone(autoReplyResult.action)
+    : "neutral";
+  const autoReplyToneClass =
+    autoReplyTone === "success"
+      ? "border-blue-200/80 bg-blue-50/70 text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100"
+      : autoReplyTone === "warning"
+        ? "border-amber-200/80 bg-amber-50/70 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+        : "border-gray-200 bg-white text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200";
 
   return (
     <AppShell pendingProposalsCount={pendingProposalsQuery.data?.total ?? 0}>
@@ -426,6 +564,62 @@ export default function InboxPage() {
           />
           <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {autoReplyResult && (
+                <div
+                  data-testid="inbox-autoreply-result"
+                  role="status"
+                  className={`mx-4 mt-3 flex items-start gap-2 rounded-xl border px-3 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${autoReplyToneClass}`}
+                >
+                  <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-semibold">
+                      {autoReplyActionLabel(autoReplyResult.action, locale)}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] font-medium">
+                      <span
+                        data-testid="inbox-autoreply-kb-hits"
+                        className="rounded-md bg-white/70 px-1.5 py-0.5 ring-1 ring-black/5 dark:bg-white/10 dark:ring-white/10"
+                      >
+                        {bi("知识库命中", "KB hits")} {autoReplyEvidence?.kbHits ?? 0}{" "}
+                        {bi("条", "chunks")}
+                      </span>
+                      <span
+                        data-testid="inbox-autoreply-tool-evidence"
+                        className="rounded-md bg-white/70 px-1.5 py-0.5 ring-1 ring-black/5 dark:bg-white/10 dark:ring-white/10"
+                      >
+                        {bi("ERP 工具证据", "ERP tool evidence")}{" "}
+                        {autoReplyEvidence?.toolEvidence ?? 0} {bi("条", "rows")}
+                      </span>
+                      <span className="tabular-nums opacity-80">
+                        {bi("置信度", "Confidence")}{" "}
+                        {formatConfidencePercent(autoReplyResult.confidence)}
+                      </span>
+                      {(autoReplyResult.risk_flags ?? []).length > 0 && (
+                        <span
+                          data-testid="inbox-autoreply-risk-flags"
+                          className="rounded-md bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-700 dark:bg-rose-500/20 dark:text-rose-200"
+                        >
+                          {bi("风险红线", "Risk red line")}：{(autoReplyResult.risk_flags ?? []).join(" · ")}
+                        </span>
+                      )}
+                    </div>
+                    {autoReplyResult.reply_text && (
+                      <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed opacity-80">
+                        {autoReplyResult.reply_text}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="inbox-autoreply-result-dismiss"
+                    aria-label={bi("关闭自动回复结果", "Dismiss auto-reply result")}
+                    onClick={() => setAutoReplyResult(null)}
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full opacity-60 transition-colors hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
               <MessageThread
                 conversation={activeConversation}
                 messages={messagesQuery.data?.items ?? []}
@@ -441,6 +635,7 @@ export default function InboxPage() {
             {drawerOpen && activeConversation && (
               <ContextDrawer
                 customerId={activeConversation.customer_id}
+                conversationId={activeConversation.id}
                 onInsertReplyText={(text) =>
                   setReplyInsert((previous) => ({
                     text,

@@ -1,17 +1,160 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { CircleDollarSign, Globe2, Users } from "lucide-react";
+import { CircleDollarSign, Globe2, Sparkles, Target, Users } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
+import {
+  buyerTypeLabel,
+  clampIntentScore,
+  fetchCustomerAiProfile,
+  priceSensitivityLabel,
+} from "@/lib/api-client/pack-e-autoreply";
 import { formatMoney } from "@/lib/contracts";
 import { fetchPhase3aCustomers } from "@/lib/phase3a-data";
 import { useI18n } from "@/lib/i18n";
 import { CrmAvatar, CrmStatusPill } from "../_components/crm-ui";
+
+/**
+ * Pack E：右侧详情面板里的精简版 AI 客户画像。
+ * 无画像时引导去 Inbox 聚合沟通一键提炼（提炼接口需要会话上下文）。
+ */
+function AiProfileCard({ customerId }: { customerId: string }) {
+  const { bi, locale } = useI18n();
+  const profileQuery = useQuery({
+    queryKey: ["ai", "customer-profile", customerId],
+    queryFn: () => fetchCustomerAiProfile(customerId),
+    retry: false,
+  });
+  const profile = profileQuery.data;
+  const intentScore = clampIntentScore(profile?.purchase_intent_score);
+
+  return (
+    <section
+      data-testid="crm-ai-profile-card"
+      className="mt-3 rounded-xl border border-blue-200/70 bg-blue-50/40 p-3 dark:border-blue-500/30 dark:bg-blue-500/5"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="inline-flex items-center gap-1 text-[12px] font-bold text-blue-900 dark:text-blue-200">
+          <Sparkles className="h-3.5 w-3.5" />
+          {bi("AI 客户画像", "AI buyer profile")}
+        </h3>
+        {profile && (
+          <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 ring-1 ring-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30">
+            {buyerTypeLabel(profile.buyer_type, locale)}
+          </span>
+        )}
+      </div>
+
+      {profile ? (
+        <div className="mt-2 space-y-2 text-[11.5px]">
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1 font-medium text-slate-600 dark:text-gray-300">
+                <Target className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                {bi("采购意向", "Purchase intent")}
+              </span>
+              <span
+                data-testid="crm-ai-intent-score"
+                className="font-bold tabular-nums text-blue-700 dark:text-blue-300"
+              >
+                {intentScore}/100
+              </span>
+            </div>
+            <div
+              role="progressbar"
+              aria-valuenow={intentScore}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={bi("采购意向分", "Purchase intent score")}
+              className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-white dark:bg-gray-800"
+            >
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500"
+                style={{ width: `${intentScore}%` }}
+              />
+            </div>
+          </div>
+
+          <dl className="grid grid-cols-2 gap-1">
+            {[
+              [
+                bi("预估采购额", "Est. order value"),
+                profile.estimated_order_value_usd
+                  ? formatMoney(profile.estimated_order_value_usd, "USD")
+                  : "—",
+              ],
+              [bi("目标贸易术语", "Incoterm"), profile.target_incoterm ?? "—"],
+              [
+                bi("价格敏感度", "Price sensitivity"),
+                priceSensitivityLabel(profile.price_sensitivity, locale),
+              ],
+              [
+                bi("国家 / 语种", "Country / language"),
+                `${profile.country_code ?? "—"} · ${(profile.preferred_language ?? "—").toUpperCase()}`,
+              ],
+            ].map(([term, value]) => (
+              <div
+                key={term}
+                className="rounded-lg bg-white/80 px-2 py-1 dark:bg-gray-900/60"
+              >
+                <dt className="text-[10px] font-medium text-slate-500 dark:text-gray-400">
+                  {term}
+                </dt>
+                <dd className="truncate font-semibold text-slate-900 dark:text-gray-100">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {(profile.interested_skus ?? []).length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {(profile.interested_skus ?? []).map((sku) => (
+                <span
+                  key={sku}
+                  className="rounded-md bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-blue-700 ring-1 ring-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30"
+                >
+                  {sku}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {profile.next_best_action && (
+            <p
+              data-testid="crm-ai-next-best-action"
+              className="rounded-lg bg-white/80 px-2 py-1.5 leading-relaxed text-slate-700 dark:bg-gray-900/60 dark:text-gray-300"
+            >
+              <span className="font-semibold text-blue-800 dark:text-blue-300">
+                {bi("下一步建议", "Next best action")}：
+              </span>
+              {profile.next_best_action}
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="mt-2 text-[11.5px] font-medium text-slate-600 dark:text-gray-400">
+          {profileQuery.isLoading
+            ? bi("正在读取画像…", "Loading profile…")
+            : bi("暂无 AI 画像。", "No AI profile yet.")}{" "}
+          <Link
+            data-testid="crm-ai-profile-extract-link"
+            href="/inbox"
+            className="font-semibold text-blue-700 underline-offset-2 hover:underline dark:text-blue-300"
+          >
+            {bi("去聚合沟通一键提炼 →", "Extract from the inbox thread →")}
+          </Link>
+        </p>
+      )}
+    </section>
+  );
+}
 
 export default function CrmCustomersPage() {
   const { bi } = useI18n();
@@ -201,6 +344,8 @@ export default function CrmCustomersPage() {
                     </div>
                   ))}
                 </dl>
+
+                <AiProfileCard customerId={selected.id} />
               </div>
             ) : (
               <p className="p-4 text-[12.5px] font-medium text-slate-500">

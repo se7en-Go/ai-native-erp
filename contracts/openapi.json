@@ -768,6 +768,115 @@
         "title": "AiProposalRead",
         "type": "object"
       },
+      "AlibabaIntlConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "app_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "App Key",
+            "type": "string"
+          },
+          "app_secret": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "App Secret",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "inquiry_email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inquiry Email"
+          },
+          "store_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Store Id",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "default": "shared",
+            "enum": [
+              "shared",
+              "private"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "store_id",
+          "app_key",
+          "app_secret"
+        ],
+        "title": "AlibabaIntlConnectRequest",
+        "type": "object"
+      },
+      "AmazonConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "lwa_client_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Lwa Client Id",
+            "type": "string"
+          },
+          "lwa_client_secret": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Lwa Client Secret",
+            "type": "string"
+          },
+          "marketplace_id": {
+            "default": "ATVPDKIKX0DER",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Marketplace Id",
+            "type": "string"
+          },
+          "refresh_token": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "seller_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Seller Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "seller_id",
+          "lwa_client_id",
+          "lwa_client_secret",
+          "refresh_token"
+        ],
+        "title": "AmazonConnectRequest",
+        "type": "object"
+      },
       "AssistantChatRequest": {
         "properties": {
           "capability": {
@@ -1076,6 +1185,148 @@
           "href"
         ],
         "title": "AutoExecutedCapability",
+        "type": "object"
+      },
+      "AutoReplyRunRequest": {
+        "properties": {
+          "max_kb_hits": {
+            "default": 3,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Kb Hits",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "proposal_only"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "AutoReplyRunRequest",
+        "type": "object"
+      },
+      "AutoReplyRunResponse": {
+        "properties": {
+          "action": {
+            "enum": [
+              "auto_replied",
+              "proposal_created",
+              "abstained"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "kb_hits": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Kb Hits",
+            "type": "array"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "reply_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Text"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risk Flags",
+            "type": "array"
+          },
+          "tool_evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tool Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "action",
+          "confidence"
+        ],
+        "title": "AutoReplyRunResponse",
+        "type": "object"
+      },
+      "AutoReplySettingRead": {
+        "description": "Per-conversation auto-reply toggle.",
+        "properties": {
+          "ai_auto_reply_enabled": {
+            "title": "Ai Auto Reply Enabled",
+            "type": "boolean"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "ai_auto_reply_enabled"
+        ],
+        "title": "AutoReplySettingRead",
+        "type": "object"
+      },
+      "AutoReplySettingUpdate": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "AutoReplySettingUpdate",
         "type": "object"
       },
       "AutonomyLevel": {
@@ -1989,6 +2240,55 @@
           "grounded_tool_call_id"
         ],
         "title": "CaptionRead",
+        "type": "object"
+      },
+      "CashflowSummaryRead": {
+        "description": "AR/AP position and net cash flow, all denominated in the tenant base currency.",
+        "properties": {
+          "ap_outstanding": {
+            "title": "Ap Outstanding",
+            "type": "string"
+          },
+          "ap_paid": {
+            "title": "Ap Paid",
+            "type": "string"
+          },
+          "ap_total": {
+            "title": "Ap Total",
+            "type": "string"
+          },
+          "ar_collected": {
+            "title": "Ar Collected",
+            "type": "string"
+          },
+          "ar_outstanding": {
+            "title": "Ar Outstanding",
+            "type": "string"
+          },
+          "ar_total": {
+            "title": "Ar Total",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "net_cashflow": {
+            "title": "Net Cashflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "ar_total",
+          "ar_collected",
+          "ar_outstanding",
+          "ap_total",
+          "ap_paid",
+          "ap_outstanding",
+          "net_cashflow"
+        ],
+        "title": "CashflowSummaryRead",
         "type": "object"
       },
       "CatalogCsvImportRequest": {
@@ -3415,6 +3715,163 @@
         "title": "CurrencyValue",
         "type": "object"
       },
+      "CustomerAiProfileRead": {
+        "properties": {
+          "ai_summary": {
+            "default": "",
+            "title": "Ai Summary",
+            "type": "string"
+          },
+          "buyer_type": {
+            "default": "unknown",
+            "enum": [
+              "b2b_buyer",
+              "b2b_distributor",
+              "b2c_consumer",
+              "unknown"
+            ],
+            "title": "Buyer Type",
+            "type": "string"
+          },
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "estimated_order_value_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Order Value Usd"
+          },
+          "interested_skus": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Interested Skus",
+            "type": "array"
+          },
+          "key_requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Requirements",
+            "type": "array"
+          },
+          "next_best_action": {
+            "default": "",
+            "title": "Next Best Action",
+            "type": "string"
+          },
+          "pain_points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pain Points",
+            "type": "array"
+          },
+          "preferred_language": {
+            "default": "en",
+            "title": "Preferred Language",
+            "type": "string"
+          },
+          "price_sensitivity": {
+            "default": "low",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Price Sensitivity",
+            "type": "string"
+          },
+          "purchase_intent_score": {
+            "default": 0,
+            "title": "Purchase Intent Score",
+            "type": "integer"
+          },
+          "synced_followup_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced Followup Id"
+          },
+          "synced_lead_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced Lead Id"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "target_incoterm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Incoterm"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "updated_at"
+        ],
+        "title": "CustomerAiProfileRead",
+        "type": "object"
+      },
       "CustomerIdentityRead": {
         "properties": {
           "confidence_level": {
@@ -3921,6 +4378,57 @@
           "channel_account_id"
         ],
         "title": "DisconnectChannelResponse",
+        "type": "object"
+      },
+      "EbayConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "app_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "App Id",
+            "type": "string"
+          },
+          "cert_id": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Cert Id",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "refresh_token": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "seller_username": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Seller Username",
+            "type": "string"
+          },
+          "site_id": {
+            "default": "EBAY_US",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Site Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "seller_username",
+          "app_id",
+          "cert_id",
+          "refresh_token"
+        ],
+        "title": "EbayConnectRequest",
         "type": "object"
       },
       "EmailConnectRequest": {
@@ -6121,6 +6629,57 @@
           "items"
         ],
         "title": "LowStockListRead",
+        "type": "object"
+      },
+      "MarketplaceConnectionRead": {
+        "description": "Non-secret projection of a freshly connected marketplace account.",
+        "properties": {
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "channel_type": {
+            "title": "Channel Type",
+            "type": "string"
+          },
+          "credential_type": {
+            "title": "Credential Type",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "external_account_id": {
+            "title": "External Account Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
+          }
+        },
+        "required": [
+          "channel_account_id",
+          "channel_type",
+          "external_account_id",
+          "display_name",
+          "credential_type"
+        ],
+        "title": "MarketplaceConnectionRead",
         "type": "object"
       },
       "MembershipItem": {
@@ -9098,6 +9657,210 @@
         "title": "PatrolFindingItem",
         "type": "object"
       },
+      "PayableListRead": {
+        "description": "The tenant AP ledger plus its base-currency totals.",
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PayableRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total_due": {
+            "title": "Total Due",
+            "type": "string"
+          },
+          "total_outstanding": {
+            "title": "Total Outstanding",
+            "type": "string"
+          },
+          "total_paid": {
+            "title": "Total Paid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "total_due",
+          "total_paid",
+          "total_outstanding",
+          "currency"
+        ],
+        "title": "PayableListRead",
+        "type": "object"
+      },
+      "PayablePaymentRequest": {
+        "description": "A supplier settlement. `amount` must be an exact decimal, never a float.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "payment_ref": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Payment Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "title": "PayablePaymentRequest",
+        "type": "object"
+      },
+      "PayableRead": {
+        "description": "One supplier AP document as stored in `public.payables`.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "due_amount": {
+            "title": "Due Amount",
+            "type": "string"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "paid_amount": {
+            "title": "Paid Amount",
+            "type": "string"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "payment_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Ref"
+          },
+          "po_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Po Id"
+          },
+          "po_no": {
+            "title": "Po No",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "supplier_name": {
+            "title": "Supplier Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "po_id",
+          "supplier_id",
+          "po_no",
+          "supplier_name",
+          "due_amount",
+          "paid_amount",
+          "currency",
+          "due_date",
+          "status",
+          "payment_ref",
+          "paid_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PayableRead",
+        "type": "object"
+      },
       "PaymentCreate": {
         "properties": {
           "actual_fx_rate": {
@@ -10170,6 +10933,17 @@
           "updated_at"
         ],
         "title": "ProductRead",
+        "type": "object"
+      },
+      "ProfileExtractionRequest": {
+        "properties": {
+          "sync_to_crm": {
+            "default": true,
+            "title": "Sync To Crm",
+            "type": "boolean"
+          }
+        },
+        "title": "ProfileExtractionRequest",
         "type": "object"
       },
       "ProfitSummaryRead": {
@@ -12939,6 +13713,92 @@
         "title": "SkuMargin",
         "type": "object"
       },
+      "SocialAttributionFunnelRead": {
+        "description": "Social -> CRM -> quote attribution for the whole tenant.",
+        "properties": {
+          "converted_crm_customers": {
+            "title": "Converted Crm Customers",
+            "type": "integer"
+          },
+          "lead_to_customer_rate_pct": {
+            "title": "Lead To Customer Rate Pct",
+            "type": "string"
+          },
+          "linked_quotes_count": {
+            "title": "Linked Quotes Count",
+            "type": "integer"
+          },
+          "platform_breakdown": {
+            "items": {
+              "$ref": "#/components/schemas/SocialPlatformFunnelItem"
+            },
+            "title": "Platform Breakdown",
+            "type": "array"
+          },
+          "published_posts": {
+            "title": "Published Posts",
+            "type": "integer"
+          },
+          "social_leads_captured": {
+            "title": "Social Leads Captured",
+            "type": "integer"
+          },
+          "total_posts": {
+            "title": "Total Posts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "published_posts",
+          "total_posts",
+          "social_leads_captured",
+          "converted_crm_customers",
+          "linked_quotes_count",
+          "lead_to_customer_rate_pct",
+          "platform_breakdown"
+        ],
+        "title": "SocialAttributionFunnelRead",
+        "type": "object"
+      },
+      "SocialPlatformFunnelItem": {
+        "description": "One platform's slice of the funnel.",
+        "properties": {
+          "converted_crm_customers": {
+            "title": "Converted Crm Customers",
+            "type": "integer"
+          },
+          "lead_to_customer_rate_pct": {
+            "title": "Lead To Customer Rate Pct",
+            "type": "string"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "published_posts": {
+            "title": "Published Posts",
+            "type": "integer"
+          },
+          "social_leads_captured": {
+            "title": "Social Leads Captured",
+            "type": "integer"
+          },
+          "total_posts": {
+            "title": "Total Posts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "platform",
+          "total_posts",
+          "published_posts",
+          "social_leads_captured",
+          "converted_crm_customers",
+          "lead_to_customer_rate_pct"
+        ],
+        "title": "SocialPlatformFunnelItem",
+        "type": "object"
+      },
       "SocialPlaybookItem": {
         "description": "Bilingual operating card for one platform: audience, funnel, practices, compliance.",
         "properties": {
@@ -13100,6 +13960,475 @@
           "supported_platforms"
         ],
         "title": "SocialSummary",
+        "type": "object"
+      },
+      "SourcingCollectRequest": {
+        "properties": {
+          "category": {
+            "default": "LED Lighting",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "fx_rate_usd_cny": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "7.200000",
+            "title": "Fx Rate Usd Cny"
+          },
+          "hs_code": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hs Code"
+          },
+          "images": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Images",
+            "type": "array"
+          },
+          "raw_price_cny": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Price Cny"
+          },
+          "raw_text": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text"
+          },
+          "raw_title": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Title"
+          },
+          "source_platform": {
+            "default": "1688",
+            "enum": [
+              "1688",
+              "url",
+              "manual"
+            ],
+            "title": "Source Platform",
+            "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "target_margin_pct": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 90.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "35.00",
+            "title": "Target Margin Pct"
+          }
+        },
+        "title": "SourcingCollectRequest",
+        "type": "object"
+      },
+      "SourcingDeleteResult": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "draft_id": {
+            "format": "uuid",
+            "title": "Draft Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted",
+          "draft_id"
+        ],
+        "title": "SourcingDeleteResult",
+        "type": "object"
+      },
+      "SourcingDraftRead": {
+        "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "title": "Attributes",
+            "type": "object"
+          },
+          "bullet_points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bullet Points",
+            "type": "array"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "fx_rate_usd_cny": {
+            "title": "Fx Rate Usd Cny",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "images": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Images",
+            "type": "array"
+          },
+          "imported_product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imported Product Id"
+          },
+          "imported_variant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imported Variant Id"
+          },
+          "moq_tiers": {
+            "items": {
+              "$ref": "#/components/schemas/SourcingMoqTier"
+            },
+            "title": "Moq Tiers",
+            "type": "array"
+          },
+          "optimized_title_en": {
+            "title": "Optimized Title En",
+            "type": "string"
+          },
+          "publish_history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Publish History",
+            "type": "array"
+          },
+          "raw_price_cny": {
+            "title": "Raw Price Cny",
+            "type": "string"
+          },
+          "raw_title": {
+            "title": "Raw Title",
+            "type": "string"
+          },
+          "source_platform": {
+            "title": "Source Platform",
+            "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suggested_category": {
+            "title": "Suggested Category",
+            "type": "string"
+          },
+          "suggested_hs_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Hs Code"
+          },
+          "suggested_sku": {
+            "title": "Suggested Sku",
+            "type": "string"
+          },
+          "target_margin_pct": {
+            "title": "Target Margin Pct",
+            "type": "string"
+          },
+          "target_price_usd": {
+            "title": "Target Price Usd",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "source_platform",
+          "source_url",
+          "raw_title",
+          "raw_price_cny",
+          "fx_rate_usd_cny",
+          "target_margin_pct",
+          "cost_usd",
+          "optimized_title_en",
+          "bullet_points",
+          "suggested_sku",
+          "suggested_category",
+          "suggested_hs_code",
+          "target_price_usd",
+          "moq_tiers",
+          "images",
+          "attributes",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SourcingDraftRead",
+        "type": "object"
+      },
+      "SourcingImportResult": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/SourcingDraftRead"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "retail_price_usd": {
+            "title": "Retail Price Usd",
+            "type": "string"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft",
+          "product_id",
+          "variant_id",
+          "sku",
+          "retail_price_usd",
+          "created"
+        ],
+        "title": "SourcingImportResult",
+        "type": "object"
+      },
+      "SourcingMoqTier": {
+        "properties": {
+          "min_qty": {
+            "exclusiveMinimum": 0.0,
+            "title": "Min Qty",
+            "type": "integer"
+          },
+          "unit_price_usd": {
+            "title": "Unit Price Usd",
+            "type": "string"
+          }
+        },
+        "required": [
+          "min_qty",
+          "unit_price_usd"
+        ],
+        "title": "SourcingMoqTier",
+        "type": "object"
+      },
+      "SourcingPublishRequest": {
+        "properties": {
+          "channel_account_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Channel Account Ids",
+            "type": "array"
+          },
+          "price_multiplier": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "1.00",
+            "title": "Price Multiplier"
+          },
+          "stock_sync_ratio": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "1.00",
+            "title": "Stock Sync Ratio"
+          }
+        },
+        "required": [
+          "channel_account_ids"
+        ],
+        "title": "SourcingPublishRequest",
+        "type": "object"
+      },
+      "SourcingPublishResult": {
+        "properties": {
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "channel_type": {
+            "title": "Channel Type",
+            "type": "string"
+          },
+          "external_product_id": {
+            "title": "External Product Id",
+            "type": "string"
+          },
+          "external_sku": {
+            "title": "External Sku",
+            "type": "string"
+          },
+          "mapping_id": {
+            "format": "uuid",
+            "title": "Mapping Id",
+            "type": "string"
+          },
+          "price_usd": {
+            "title": "Price Usd",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "stock_sync_ratio": {
+            "title": "Stock Sync Ratio",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_account_id",
+          "channel_type",
+          "external_sku",
+          "external_product_id",
+          "price_usd",
+          "stock_sync_ratio",
+          "mapping_id",
+          "published_at"
+        ],
+        "title": "SourcingPublishResult",
         "type": "object"
       },
       "SplitCustomerRequest": {
@@ -15790,6 +17119,274 @@
         ]
       }
     },
+    "/api/v1/ai/conversations/{conversation_id}/auto-reply": {
+      "get": {
+        "description": "Read the per-conversation AI auto-reply toggle.",
+        "operationId": "get_auto_reply_setting_api_v1_ai_conversations__conversation_id__auto_reply_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoReplySettingRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Auto Reply Setting",
+        "tags": [
+          "ai-autoreply"
+        ]
+      },
+      "patch": {
+        "description": "Toggle AI auto-reply for one conversation and write an audit event.",
+        "operationId": "update_auto_reply_setting_api_v1_ai_conversations__conversation_id__auto_reply_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoReplySettingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoReplySettingRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Auto Reply Setting",
+        "tags": [
+          "ai-autoreply"
+        ]
+      }
+    },
+    "/api/v1/ai/conversations/{conversation_id}/auto-reply/run": {
+      "post": {
+        "description": "Draft or send one grounded reply; risk-sensitive threads are forced to L1.",
+        "operationId": "run_auto_reply_api_v1_ai_conversations__conversation_id__auto_reply_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoReplyRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoReplyRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Auto Reply",
+        "tags": [
+          "ai-autoreply"
+        ]
+      }
+    },
+    "/api/v1/ai/conversations/{conversation_id}/extract-profile": {
+      "post": {
+        "description": "Extract the structured AI customer profile and optionally sync it to the CRM.",
+        "operationId": "extract_customer_profile_api_v1_ai_conversations__conversation_id__extract_profile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileExtractionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAiProfileRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extract Customer Profile",
+        "tags": [
+          "ai-autoreply"
+        ]
+      }
+    },
     "/api/v1/ai/conversations/{conversation_id}/propose-reply": {
       "post": {
         "description": "On-demand grounded reply draft backed by live ERP SQL tools.",
@@ -15847,6 +17444,66 @@
         "summary": "Propose Conversation Reply",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/api/v1/ai/customers/{customer_id}/profile": {
+      "get": {
+        "description": "Return the stored AI profile, or an empty-but-valid structure when unprofiled.",
+        "operationId": "get_customer_ai_profile_api_v1_ai_customers__customer_id__profile_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "customer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Customer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAiProfileRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Customer Ai Profile",
+        "tags": [
+          "ai-autoreply"
         ]
       }
     },
@@ -19911,6 +21568,369 @@
         ]
       }
     },
+    "/api/v1/catalog/sourcing/collect": {
+      "post": {
+        "description": "Collect a 1688 URL / supplier page / pasted copy into a priced English draft.",
+        "operationId": "collect_sourcing_draft_api_v1_catalog_sourcing_collect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcingCollectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcingDraftRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Collect Sourcing Draft",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
+    "/api/v1/catalog/sourcing/drafts": {
+      "get": {
+        "operationId": "list_sourcing_drafts_api_v1_catalog_sourcing_drafts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourcingDraftRead"
+                  },
+                  "title": "Response List Sourcing Drafts Api V1 Catalog Sourcing Drafts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sourcing Drafts",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
+    "/api/v1/catalog/sourcing/drafts/{draft_id}": {
+      "delete": {
+        "operationId": "delete_sourcing_draft_api_v1_catalog_sourcing_drafts__draft_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcingDeleteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Sourcing Draft",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      },
+      "get": {
+        "operationId": "get_sourcing_draft_api_v1_catalog_sourcing_drafts__draft_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcingDraftRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Sourcing Draft",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
+    "/api/v1/catalog/sourcing/drafts/{draft_id}/import-to-catalog": {
+      "post": {
+        "description": "Materialize the draft into real products + product_variants rows.",
+        "operationId": "import_sourcing_draft_to_catalog_api_v1_catalog_sourcing_drafts__draft_id__import_to_catalog_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcingImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Sourcing Draft To Catalog",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
+    "/api/v1/catalog/sourcing/drafts/{draft_id}/publish": {
+      "post": {
+        "description": "Publish a draft to the selected channel accounts via platform SKU mappings.",
+        "operationId": "publish_sourcing_draft_api_v1_catalog_sourcing_drafts__draft_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcingPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourcingPublishResult"
+                  },
+                  "title": "Response Publish Sourcing Draft Api V1 Catalog Sourcing Drafts  Draft Id  Publish Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Sourcing Draft",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
     "/api/v1/catalog/variants": {
       "get": {
         "operationId": "list_variants_api_v1_catalog_variants_get",
@@ -20514,6 +22534,124 @@
         ]
       }
     },
+    "/api/v1/channels/alibaba-intl/connect": {
+      "post": {
+        "operationId": "connect_alibaba_intl_api_v1_channels_alibaba_intl_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlibabaIntlConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Alibaba Intl",
+        "tags": [
+          "marketplace-connect"
+        ]
+      }
+    },
+    "/api/v1/channels/amazon/connect": {
+      "post": {
+        "operationId": "connect_amazon_api_v1_channels_amazon_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmazonConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Amazon",
+        "tags": [
+          "marketplace-connect"
+        ]
+      }
+    },
     "/api/v1/channels/consents": {
       "get": {
         "operationId": "list_channel_consents_api_v1_channels_consents_get",
@@ -20717,6 +22855,65 @@
         "summary": "Replay Dead Letter Event",
         "tags": [
           "channels-dlq"
+        ]
+      }
+    },
+    "/api/v1/channels/ebay/connect": {
+      "post": {
+        "operationId": "connect_ebay_api_v1_channels_ebay_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EbayConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Ebay",
+        "tags": [
+          "marketplace-connect"
         ]
       }
     },
@@ -22248,6 +24445,56 @@
         ]
       }
     },
+    "/api/v1/finance/cashflow-summary": {
+      "get": {
+        "description": "AR collected minus AP paid, with outstanding balances, in the base currency.",
+        "operationId": "get_cashflow_summary_api_v1_finance_cashflow_summary_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashflowSummaryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cashflow Summary",
+        "tags": [
+          "finance-ap"
+        ]
+      }
+    },
     "/api/v1/finance/cvp/export.csv": {
       "get": {
         "operationId": "export_cvp_csv_api_v1_finance_cvp_export_csv_get",
@@ -22471,6 +24718,126 @@
         "summary": "Get Finance Overview",
         "tags": [
           "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/payables": {
+      "get": {
+        "description": "Auto-book missing POs as `open` AP documents, then list the whole ledger.",
+        "operationId": "list_payables_api_v1_finance_payables_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayableListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Payables",
+        "tags": [
+          "finance-ap"
+        ]
+      }
+    },
+    "/api/v1/finance/payables/{payable_id}/pay": {
+      "post": {
+        "description": "Settle a payable; `open -> partial -> paid`, audited, never overpaid.",
+        "operationId": "pay_payable_api_v1_finance_payables__payable_id__pay_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payable_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payable Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayablePaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayableRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pay Payable",
+        "tags": [
+          "finance-ap"
         ]
       }
     },
@@ -26244,6 +28611,56 @@
         "summary": "Disconnect Account",
         "tags": [
           "social"
+        ]
+      }
+    },
+    "/api/v1/social/attribution-funnel": {
+      "get": {
+        "description": "Read-only funnel, open to every authenticated role of the tenant.",
+        "operationId": "get_attribution_funnel_api_v1_social_attribution_funnel_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialAttributionFunnelRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Attribution Funnel",
+        "tags": [
+          "social-attribution"
         ]
       }
     },
