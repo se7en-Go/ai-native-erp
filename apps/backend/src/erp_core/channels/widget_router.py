@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 import uuid
@@ -11,7 +12,16 @@ from typing import Annotated, Any
 
 import jwt
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -24,6 +34,8 @@ from erp_core.shared.db import system_session, tenant_session
 from erp_core.shared.enums import ChannelType, ConversationMode, ConversationStatus, IdentityType
 
 widget_router = APIRouter(prefix="/api/v1/widget", tags=["widget"])
+
+logger = logging.getLogger(__name__)
 
 # Short-lived visitor bearer token: a leaked widget token must not stay valid for a week.
 _WIDGET_JWT_TTL = timedelta(hours=2)
@@ -105,6 +117,29 @@ def _get_redis(request: Request) -> aioredis.Redis:
         client = aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
         request.app.state.redis = client
     return client
+
+
+async def _trigger_widget_auto_reply(
+    session_factory: async_sessionmaker[AsyncSession],
+    redis: aioredis.Redis,
+    tenant_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+) -> None:
+    """Best-effort guarded AI auto-reply for one committed visitor turn.
+
+    Module-level seam (so tests can assert it fires after commit without live LLMs).
+    It runs only after the inbound message transaction has committed and the
+    ``message.created`` SSE event has been published, and every AI failure is swallowed
+    here: a broken/slow LLM must never fail or delay visitor message delivery.
+    """
+    try:
+        from erp_core.channels.ingress_worker import _maybe_run_auto_reply
+
+        await _maybe_run_auto_reply(session_factory, redis, tenant_id, conversation_id)
+    except Exception:  # noqa: BLE001 - visitor delivery outranks AI auto-reply
+        logger.warning(
+            "widget auto-reply failed for conversation %s", conversation_id, exc_info=True
+        )
 
 
 def _widget_signing_secret() -> str:
@@ -575,6 +610,7 @@ async def send_widget_message(
     payload: WidgetSendMessageRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     claims: Annotated[WidgetTokenClaims, Depends(_decode_widget_token)],
 ) -> dict[str, Any]:
     session_factory = _get_session_factory(request)
@@ -662,6 +698,16 @@ async def send_widget_message(
                 ),
             }
         ),
+    )
+    # The visitor turn is now committed and the agent inbox SSE event is out; the guarded
+    # AI auto-reply runs afterwards as a background task so LLM latency/errors can never
+    # block, fail, or lose the visitor's message.
+    background_tasks.add_task(
+        _trigger_widget_auto_reply,
+        session_factory,
+        redis,
+        claims.tenant_id,
+        claims.conversation_id,
     )
     return {
         "id": str(msg_id),

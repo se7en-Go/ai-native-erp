@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
+import os
 import signal
+from collections.abc import Awaitable, Callable
+from uuid import UUID
 
+from redis.asyncio import Redis
+from sqlalchemy import text
 from taskiq import TaskiqScheduler
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import ListRedisScheduleSource, RedisStreamBroker
@@ -20,11 +26,13 @@ import erp_core.orders.models  # noqa: F401
 # The worker writes order rows outside FastAPI, so its mapping needs every table the
 # ORM foreign keys reference, exactly like api_main registers them.
 import erp_core.tenancy.models  # noqa: F401
+from erp_core.channels.ecommerce.shopify import process_shopify_webhook
 from erp_core.channels.ingress_worker import (
     register_channel_worker_tasks,
     run_webhook_worker_loop,
 )
-from erp_core.channels.webhook_delivery import drain_deliveries
+from erp_core.channels.webhook_delivery import SessionFactory, drain_deliveries
+from erp_core.channels.webhook_store import set_raw_webhook_processing_state
 from erp_core.orders.reconciliation_worker import reconcile_ecommerce_orders_cron
 from erp_core.orders.tracking_worker import monitor_stalled_shipments_cron, process_17track_webhook
 from erp_core.shared.config import get_settings
@@ -32,10 +40,28 @@ from erp_core.shared.db import (
     create_migrator_engine,
     create_runtime_engine,
     create_session_factory,
+    system_session,
 )
 from erp_core.shared.redis_client import create_redis_client
 
 logger = logging.getLogger(__name__)
+
+# Dedicated provider consumers (Shopify / 17TRACK / storefront platforms) used to be
+# only registered by the live E2E fixture, so their Redis streams grew without bound
+# in production. This module now owns that topology: one ingress loop plus one
+# commerce/tracking drain loop, both running until SIGINT/SIGTERM.
+COMMERCE_TRACKING_CHANNELS: tuple[str, ...] = (
+    "17track",
+    "shopify",
+    "woocommerce",
+    "shopline",
+    "shoplazza",
+    "tiktok_shop",
+)
+COMMERCE_DRAIN_INTERVAL_SECONDS = 2.0
+ECOMMERCE_RECONCILE_INTERVAL_SECONDS = 15 * 60.0
+STALLED_SHIPMENT_MONITOR_INTERVAL_SECONDS = 60 * 60.0
+
 _settings = get_settings()
 broker = RedisStreamBroker(url=_settings.REDIS_URL)
 schedule_source = ListRedisScheduleSource(url=_settings.REDIS_URL)
@@ -63,20 +89,183 @@ async def worker_ping() -> str:
     return "pong"
 
 
+async def _handle_storefront_webhook_delivery(
+    raw_event_id: str,
+    *,
+    broker_session_factory: SessionFactory | None = None,
+) -> int:
+    """Acknowledge a storefront webhook receipt so its stream cannot pile up.
+
+    ``drain_deliveries`` hands the consumer nothing but the persisted
+    ``raw_webhook_events.id``, so this handler only needs to move that receipt out of
+    the ``received``/``queued`` window. Order materialization for WooCommerce,
+    Shopline, Shoplazza and TikTok Shop is done by the scheduled
+    ``reconcile_ecommerce_orders_cron`` pull, exactly as for Shopify order topics.
+    """
+    factory = broker_session_factory or _broker_session_factory
+    try:
+        receipt_id = UUID(raw_event_id)
+    except (TypeError, ValueError):
+        logger.warning("storefront webhook delivery has non-UUID receipt id: %r", raw_event_id)
+        return 0
+    async with system_session(factory) as session:
+        row = (
+            await session.execute(
+                text(
+                    "SELECT channel_type FROM raw_webhook_events "
+                    "WHERE id = :id AND processing_status IN ('received', 'queued')"
+                ),
+                {"id": receipt_id},
+            )
+        ).one_or_none()
+        if row is None:
+            return 0
+        await set_raw_webhook_processing_state(
+            session,
+            raw_event_id=receipt_id,
+            status="processed",
+        )
+    logger.info(
+        "storefront webhook receipt acknowledged channel=%s receipt_id=%s", row[0], receipt_id
+    )
+    return 1
+
+
+def commerce_tracking_handlers(
+    broker_session_factory: SessionFactory,
+) -> dict[str, Callable[[str], Awaitable[int]]]:
+    """Map each dedicated provider stream to the consumer that drains it."""
+    storefront = {
+        channel: functools.partial(
+            _handle_storefront_webhook_delivery,
+            broker_session_factory=broker_session_factory,
+        )
+        for channel in ("woocommerce", "shopline", "shoplazza", "tiktok_shop")
+    }
+    return {
+        "17track": process_17track_webhook,
+        # process_shopify_webhook loads the verified receipt and applies it through
+        # process_shopify_webhook_event inside the owning tenant's RLS context.
+        "shopify": process_shopify_webhook,
+        **storefront,
+    }
+
+
+async def drain_commerce_and_tracking_once(
+    broker_session_factory: SessionFactory,
+    redis: Redis,
+) -> dict[str, int]:
+    """Drain one pass for every dedicated commerce/tracking stream.
+
+    A failing channel never starves the others: the exception is logged and that
+    channel reports ``0`` for this pass.
+    """
+    handlers = commerce_tracking_handlers(broker_session_factory)
+    counts: dict[str, int] = {}
+    for channel in COMMERCE_TRACKING_CHANNELS:
+        handler = handlers.get(channel)
+        if handler is None:  # pragma: no cover - defensive against channel drift
+            counts[channel] = 0
+            continue
+        try:
+            counts[channel] = await drain_deliveries(
+                broker_session_factory, redis, channel, handler
+            )
+        except Exception:
+            logger.exception("commerce/tracking drain failed channel=%s", channel)
+            counts[channel] = 0
+    return counts
+
+
+def _periodic_crons_enabled() -> bool:
+    raw = os.environ.get("WORKER_ENABLE_PERIODIC_CRONS", "true")
+    return raw.strip().lower() not in {"false", "0", "no", "off"}
+
+
+async def _wait_for_stop(stop: asyncio.Event, timeout: float) -> bool:
+    """Sleep up to ``timeout``; return True when the worker was asked to stop."""
+    try:
+        await asyncio.wait_for(stop.wait(), timeout=timeout)
+    except TimeoutError:
+        return False
+    return True
+
+
+async def _run_commerce_and_tracking_loop(
+    stop: asyncio.Event,
+    broker_session_factory: SessionFactory,
+    redis: Redis,
+    *,
+    drain_interval: float = COMMERCE_DRAIN_INTERVAL_SECONDS,
+    reconcile_interval: float = ECOMMERCE_RECONCILE_INTERVAL_SECONDS,
+    stalled_interval: float = STALLED_SHIPMENT_MONITOR_INTERVAL_SECONDS,
+    periodic_crons: bool | None = None,
+) -> None:
+    """Drain commerce/tracking streams and run the periodic commerce crons."""
+    loop = asyncio.get_running_loop()
+    crons = _periodic_crons_enabled() if periodic_crons is None else periodic_crons
+    next_reconcile = loop.time() + reconcile_interval
+    next_stalled = loop.time() + stalled_interval
+    logger.info("commerce/tracking worker loop starting (periodic_crons=%s)", crons)
+    while not stop.is_set():
+        try:
+            counts = await drain_commerce_and_tracking_once(broker_session_factory, redis)
+            drained = {channel: count for channel, count in counts.items() if count}
+            if drained:
+                logger.info("commerce/tracking drained %s", drained)
+        except Exception:
+            # Redis/DB hiccups must never kill the loop: retry on the next tick.
+            logger.exception("commerce/tracking drain pass crashed; retrying")
+        if crons:
+            now = loop.time()
+            if now >= next_reconcile:
+                try:
+                    reconciled = await reconcile_ecommerce_orders_cron()
+                    logger.info("ecommerce order reconcile: %s", reconciled)
+                except Exception:
+                    logger.exception("ecommerce order reconcile cron failed")
+                next_reconcile = now + reconcile_interval
+            if now >= next_stalled:
+                try:
+                    alerts = await monitor_stalled_shipments_cron()
+                    logger.info("stalled shipment monitor alerts: %s", alerts)
+                except Exception:
+                    logger.exception("stalled shipment monitor cron failed")
+                next_stalled = now + stalled_interval
+        if await _wait_for_stop(stop, drain_interval):
+            break
+    logger.info("commerce/tracking worker loop stopped")
+
+
 async def serve() -> None:
-    """Run the webhook stream loop until SIGINT or SIGTERM, then close resources."""
+    """Run the ingress plus commerce/tracking loops until SIGINT or SIGTERM."""
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
     logger.info("webhook worker loop starting")
+    tasks = [
+        asyncio.create_task(
+            run_webhook_worker_loop(
+                _session_factory,
+                _redis,
+                stop,
+                broker_session_factory=_broker_session_factory,
+            ),
+            name="webhook-ingress-loop",
+        ),
+        asyncio.create_task(
+            _run_commerce_and_tracking_loop(stop, _broker_session_factory, _redis),
+            name="commerce-tracking-loop",
+        ),
+    ]
     try:
-        await run_webhook_worker_loop(
-            _session_factory,
-            _redis,
-            stop,
-            broker_session_factory=_broker_session_factory,
-        )
+        await asyncio.gather(*tasks)
+    except BaseException:
+        # One loop died: stop the sibling before surfacing the failure.
+        stop.set()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
     finally:
         await _redis.aclose()
         await _runtime_engine.dispose()

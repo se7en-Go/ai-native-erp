@@ -32,6 +32,12 @@ from erp_core.shared.errors import AppError
 logger = logging.getLogger(__name__)
 webhook_router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 
+# Redis stream contract shared by webhook ingress, the outbox dispatcher and the
+# background worker. `STREAM_MAXLEN` bounds growth (~50k entries is weeks of traffic) so
+# a stalled consumer cannot fill Redis memory with an unbounded backlog.
+OUTBOUND_STREAM_KEY = "stream:outbound:messages"
+STREAM_MAXLEN = 50_000
+
 _CHANNEL_ALIASES: dict[str, ChannelType] = {
     "whatsapp": ChannelType.WHATSAPP_CLOUD,
     "whatsapp_cloud": ChannelType.WHATSAPP_CLOUD,
@@ -87,8 +93,13 @@ def sanitize_webhook_headers(headers: Mapping[str, str]) -> dict[str, str]:
     return sanitized
 
 
-def build_default_adapter_registry() -> AdapterRegistry:
-    """Register the gateway ingress adapter, then any later channel adapters."""
+def build_default_adapter_registry(redis: aioredis.Redis | None = None) -> AdapterRegistry:
+    """Register the gateway ingress adapter, then any later channel adapters.
+
+    ``redis`` is passed to adapters that also fan out to a live client (the web widget
+    reads its replies from Pub/Sub), so outbound delivery does not silently stop at the
+    database write.
+    """
     registry = AdapterRegistry()
     gateway = GatewayIngressAdapter()
     for key in (
@@ -102,6 +113,16 @@ def build_default_adapter_registry() -> AdapterRegistry:
         ChannelType.WEB_LIVECHAT.value,
     ):
         registry.register(key, gateway)
+    try:
+        from erp_core.channels.adapters.web_livechat import WebLiveChatAdapter
+
+        # Registered last so it wins over the gateway stub: the gateway adapter refuses
+        # outbound sends (UnsupportedOutbound), which used to dead-letter every agent
+        # reply to a widget visitor.
+        livechat = WebLiveChatAdapter(redis=redis)
+        registry.register(ChannelType.WEB_LIVECHAT.value, livechat)
+    except ImportError:
+        logger.debug("WebLiveChatAdapter not yet installed; skipping registration")
     try:
         from erp_core.channels.adapters.whatsapp import (
             WhatsAppAdapter,
@@ -177,7 +198,7 @@ def _get_redis(request: Request) -> aioredis.Redis:
 def _get_adapter_registry(request: Request) -> AdapterRegistry:
     registry = getattr(request.app.state, "adapter_registry", None)
     if registry is None:
-        registry = build_default_adapter_registry()
+        registry = build_default_adapter_registry(_get_redis(request))
         request.app.state.adapter_registry = registry
     return registry
 
@@ -460,6 +481,8 @@ async def _accept_events(
             await redis.xadd(
                 stream_key,
                 {"raw_event_id": raw_id_str, "channel_type": str(ctype_val), "attempt": "1"},
+                maxlen=STREAM_MAXLEN,
+                approximate=True,
             )
         except Exception:
             logger.exception("webhook row %s committed but redis enqueue failed", raw_id_str)

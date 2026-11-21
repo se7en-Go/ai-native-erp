@@ -76,6 +76,10 @@ async def accept_delivery(
             await redis.xadd(
                 _stream(channel),
                 {"raw_event_id": str(receipt_id), "channel_type": channel, "attempt": "1"},
+                # Streams are hints, not the durability boundary (SQL receipts are), so
+                # trimming is safe and keeps Redis memory bounded under a webhook storm.
+                maxlen=50_000,
+                approximate=True,
             )
         except RedisError as exc:
             raise AppError(
@@ -141,8 +145,28 @@ async def drain_deliveries(
     for raw_id, entry_ids in deliveries.items():
         try:
             await process(raw_id)
-        except Exception:
+        except Exception as exc:
             logger.exception("webhook_delivery_failed", receipt_id=raw_id, channel=channel)
+            try:
+                receipt_uuid = UUID(raw_id)
+                async with system_session(broker_factory) as err_sess:
+                    attempts = await err_sess.scalar(
+                        text(
+                            "UPDATE raw_webhook_events "
+                            "SET attempt_count = COALESCE(attempt_count, 0) + 1, "
+                            "    error_message = :err, "
+                            "    processing_status = CASE "
+                            "      WHEN COALESCE(attempt_count, 0) + 1 >= 5 THEN 'dead_letter' "
+                            "      ELSE processing_status END "
+                            "WHERE id = :id "
+                            "RETURNING attempt_count"
+                        ),
+                        {"id": receipt_uuid, "err": f"{type(exc).__name__}: {exc}"[:500]},
+                    )
+                if attempts is not None and int(attempts) >= 5 and entry_ids:
+                    await redis.xdel(_stream(channel), *entry_ids)
+            except Exception:  # noqa: BLE001 - never crash the drain loop on error tracking
+                logger.warning("webhook_delivery_error_tracking_failed", receipt_id=raw_id)
             continue
         if entry_ids:
             await redis.xdel(_stream(channel), *entry_ids)

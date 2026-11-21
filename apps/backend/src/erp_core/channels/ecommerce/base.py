@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 import structlog
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.catalog.service import CatalogService
@@ -20,7 +21,7 @@ from erp_core.finance.payment_service import PaymentService
 from erp_core.finance.profit_service import OrderProfitService
 from erp_core.identity.service import IdentityResolverService
 from erp_core.orders.order_service import OrderService
-from erp_core.orders.schemas import OrderCreateInternal, OrderItemInternal
+from erp_core.orders.schemas import OrderCreateInternal, OrderItemInternal, OrderRead
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.enums import FulfillmentStatus, IdentityType, OrderMode, PaymentStatus
@@ -373,6 +374,114 @@ class EcommerceOrderSyncService:
         code = str(value or "").strip().upper()
         return code if len(code) == 3 else "CNY"
 
+    async def _apply_existing_order(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        order_dto: NormalizedOrder,
+        order_id: UUID,
+    ) -> tuple[UUID, bool]:
+        """Refresh a known storefront order (idempotent replay / duplicate-race loser)."""
+        await self.orders.update_external_order_status(
+            session,
+            tenant_id=tenant_id,
+            order_id=order_id,
+            fulfillment_status=order_dto.fulfillment_status,
+            payment_status=order_dto.payment_status,
+            channel_metadata_patch=order_dto.channel_metadata,
+        )
+        await self.profits.recalculate_order_profit(
+            session,
+            tenant_id=tenant_id,
+            order_id=order_id,
+            platform_commission_base=order_dto.platform_commission_base,
+        )
+        return order_id, False
+
+    async def _existing_order_id(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        channel_account_id: UUID,
+        order_dto: NormalizedOrder,
+    ) -> UUID:
+        """Re-read the winner of a concurrent insert, or fail closed with a retryable 409."""
+        existing = await self.orders.find_by_external_order(
+            session, tenant_id, channel_account_id, order_dto.external_order_id
+        )
+        if existing is None:
+            raise AppError(
+                slug="external-order-race-missing",
+                status_code=409,
+                code="ERR_EXTERNAL_ORDER_RACE_MISSING",
+                title="External Order Reconciliation Conflict",
+                detail=(
+                    f"Order '{order_dto.external_order_id}' was inserted concurrently but is "
+                    "not visible in this transaction; the next reconciliation pass will "
+                    "pick it up."
+                ),
+            )
+        return existing.id
+
+    async def _create_order_or_delegate(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        channel_account_id: UUID,
+        default_warehouse_id: UUID,
+        order_dto: NormalizedOrder,
+        actor_id: str,
+        customer_id: UUID,
+        fx_rate_to_base: Decimal,
+        channel_metadata: dict[str, Any],
+        order_items: list[OrderItemInternal],
+    ) -> OrderRead | None:
+        """Insert the order inside a savepoint, or return None when a concurrent ingest won.
+
+        An order imported for the first time already cancelled/refunded must not reserve stock:
+        nothing will ever ship, so the reservation would strand available quantity forever.
+        """
+        reserve_stock = order_dto.fulfillment_status not in {
+            FulfillmentStatus.CANCELLED,
+            FulfillmentStatus.REFUNDED,
+        }
+        try:
+            async with session.begin_nested():
+                return await self.orders.create_order_atomic(
+                    session,
+                    tenant_id=tenant_id,
+                    actor_type="webhook",
+                    actor_id=actor_id,
+                    payload=OrderCreateInternal(
+                        order_mode=order_dto.order_mode,
+                        channel_account_id=channel_account_id,
+                        external_order_id=order_dto.external_order_id,
+                        customer_id=customer_id,
+                        warehouse_id=default_warehouse_id,
+                        currency=order_dto.currency.upper(),
+                        fx_rate_to_base=fx_rate_to_base,
+                        subtotal_amount=order_dto.subtotal_amount,
+                        shipping_charged=order_dto.shipping_charged,
+                        discount_amount=order_dto.discount_amount,
+                        tax_collected=order_dto.tax_collected,
+                        total_amount=order_dto.total_amount,
+                        initial_fulfillment_status=order_dto.fulfillment_status,
+                        initial_payment_status=order_dto.payment_status,
+                        channel_metadata=channel_metadata,
+                        items=order_items,
+                    ),
+                    reserve_stock=reserve_stock,
+                )
+        except IntegrityError:
+            logger.warning(
+                "ecommerce_order_duplicate_race_delegated_to_update",
+                tenant_id=str(tenant_id),
+                channel_account_id=str(channel_account_id),
+                external_order_id=order_dto.external_order_id,
+            )
+            return None
+
     async def ingest_normalized_order(
         self,
         session: AsyncSession,
@@ -387,21 +496,7 @@ class EcommerceOrderSyncService:
             session, tenant_id, channel_account_id, order_dto.external_order_id
         )
         if existing is not None:
-            await self.orders.update_external_order_status(
-                session,
-                tenant_id=tenant_id,
-                order_id=existing.id,
-                fulfillment_status=order_dto.fulfillment_status,
-                payment_status=order_dto.payment_status,
-                channel_metadata_patch=order_dto.channel_metadata,
-            )
-            await self.profits.recalculate_order_profit(
-                session,
-                tenant_id=tenant_id,
-                order_id=existing.id,
-                platform_commission_base=order_dto.platform_commission_base,
-            )
-            return existing.id, False
+            return await self._apply_existing_order(session, tenant_id, order_dto, existing.id)
 
         if order_dto.customer.email:
             id_type, id_val = IdentityType.EMAIL, order_dto.customer.email
@@ -503,30 +598,29 @@ class EcommerceOrderSyncService:
                 )
             )
 
-        created_order = await self.orders.create_order_atomic(
+        created_order = await self._create_order_or_delegate(
             session,
             tenant_id=tenant_id,
-            actor_type="webhook",
+            channel_account_id=channel_account_id,
+            default_warehouse_id=default_warehouse_id,
+            order_dto=order_dto,
             actor_id=actor_id,
-            payload=OrderCreateInternal(
-                order_mode=order_dto.order_mode,
-                channel_account_id=channel_account_id,
-                external_order_id=order_dto.external_order_id,
-                customer_id=customer_id,
-                warehouse_id=default_warehouse_id,
-                currency=order_dto.currency.upper(),
-                fx_rate_to_base=fx_rate_to_base,
-                subtotal_amount=order_dto.subtotal_amount,
-                shipping_charged=order_dto.shipping_charged,
-                discount_amount=order_dto.discount_amount,
-                tax_collected=order_dto.tax_collected,
-                total_amount=order_dto.total_amount,
-                initial_fulfillment_status=order_dto.fulfillment_status,
-                initial_payment_status=order_dto.payment_status,
-                channel_metadata=channel_metadata,
-                items=order_items,
-            ),
+            customer_id=customer_id,
+            fx_rate_to_base=fx_rate_to_base,
+            channel_metadata=channel_metadata,
+            order_items=order_items,
         )
+        if created_order is None:
+            # A concurrent ingest won the external_order_id unique index race: the savepoint
+            # rolled our insert back, so this delivery becomes an update of the winner's row.
+            return await self._apply_existing_order(
+                session,
+                tenant_id,
+                order_dto,
+                await self._existing_order_id(
+                    session, tenant_id, channel_account_id, order_dto
+                ),
+            )
 
         is_paid = order_dto.payment_status == PaymentStatus.PAID
         await self.payments.create_single_receivable(
