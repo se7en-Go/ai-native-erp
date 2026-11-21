@@ -23,11 +23,12 @@ message is traceable to a stored evidence row.
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Literal, Protocol
 from uuid import UUID, uuid4
 
@@ -41,9 +42,11 @@ from erp_core.ai_engine.models import AiProposal
 from erp_core.ai_engine.proposal_generator import (
     AiProposalGeneratorService,
     ConversationContext,
+    LlmClientPort,
     RecentMessage,
 )
 from erp_core.ai_engine.rag_service import build_websearch_tsquery
+from erp_core.ai_engine.router_llm import MODEL_CATALOG, AsyncMultiProviderClient
 from erp_core.ai_engine.tools import ErpToolRegistry
 from erp_core.shared.errors import AppError
 from erp_core.tenancy.audit import record_audit_event
@@ -521,6 +524,61 @@ def evidence_summary_lines(evidence: Sequence[dict[str, Any]]) -> list[str]:
     return lines
 
 
+_CHAT_CHANNELS = frozenset(
+    {
+        "telegram",
+        "whatsapp_cloud",
+        "whatsapp_coexistence",
+        "messenger",
+        "instagram_dm",
+        "web_livechat",
+    }
+)
+_NUM_TOKEN = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?")
+
+
+def _extract_normalized_numbers(text_value: str) -> set[Decimal]:
+    numbers: set[Decimal] = set()
+    for match in _NUM_TOKEN.findall(text_value):
+        try:
+            numbers.add(Decimal(match.replace(",", "")).normalize())
+        except InvalidOperation:
+            continue
+    return numbers
+
+
+def _collect_allowed_numbers(
+    *,
+    evidence: Sequence[dict[str, Any]],
+    kb_hits: Sequence[dict[str, Any]],
+    buyer_message: str,
+) -> set[Decimal]:
+    allowed = _extract_normalized_numbers(buyer_message)
+    allowed.update(_extract_normalized_numbers(json.dumps(list(evidence), default=str)))
+    for hit in kb_hits:
+        allowed.update(_extract_normalized_numbers(str(hit.get("snippet") or "")))
+        allowed.update(_extract_normalized_numbers(str(hit.get("doc_title") or "")))
+    return allowed
+
+
+def verify_reply_numbers_grounded(
+    candidate: str,
+    *,
+    evidence: Sequence[dict[str, Any]],
+    kb_hits: Sequence[dict[str, Any]],
+    buyer_message: str,
+) -> bool:
+    """Return True only if every numeric figure in ``candidate`` is grounded in facts."""
+    cleaned = candidate.strip()
+    if not cleaned or len(cleaned) > 1200:
+        return False
+    allowed = _collect_allowed_numbers(
+        evidence=evidence, kb_hits=kb_hits, buyer_message=buyer_message
+    )
+    candidate_numbers = _extract_normalized_numbers(cleaned)
+    return candidate_numbers.issubset(allowed)
+
+
 def _kb_lines(kb_hits: Sequence[dict[str, Any]]) -> list[str]:
     lines: list[str] = []
     for hit in kb_hits:
@@ -538,61 +596,71 @@ def build_grounded_reply(
     customer_name: str,
     evidence: Sequence[dict[str, Any]],
     kb_hits: Sequence[dict[str, Any]],
+    channel_type: str = "email",
 ) -> str:
-    """Compose an evidence-cited reply. Every digit is copied from stored evidence."""
-    name = customer_name.strip() or "there"
+    """Compose a natural, evidence-cited reply. Every digit is copied from stored evidence."""
+    name = customer_name.strip()
+    is_chat = channel_type in _CHAT_CHANNELS
     evidence_lines = evidence_summary_lines(evidence)
     knowledge_lines = _kb_lines(kb_hits)
 
     if language == "zh":
-        blocks = [f"您好 {name}，", "", "感谢您的来信。以下为系统实时核实的资料："]
-        blocks.extend(f"- {line}" for line in evidence_lines)
-        blocks.extend(f"- 知识库：{line}" for line in knowledge_lines)
-        blocks.append("")
+        greeting = f"{name} 您好！" if name else "您好！"
+        parts = [greeting]
         if evidence_lines:
-            blocks.append(
-                "以上价格与库存以正式形式发票（PI）为准。请告知目的港以及所需认证，"
-                "我们即刻为您出具 PI。"
-            )
+            parts.append("帮您核实了最新库存与报价：\n" + "\n".join(evidence_lines))
+        if knowledge_lines:
+            parts.append("\n".join(knowledge_lines))
+        if evidence_lines:
+            parts.append("方便告知一下目的港和所需认证吗？确认后马上给您出正式 PI。")
         else:
-            blocks.append("请告知目的港、目标数量与所需认证，我们即刻为您出具正式报价与 PI。")
-        blocks.extend(["", "顺祝商祺，", "外贸销售团队"])
-        return "\n".join(blocks)
+            parts.append("方便发一下具体型号、预计数量和目的港吗？我这边马上帮您核价出 PI。")
+        if not is_chat:
+            parts.append("顺祝商祺，\n外贸销售团队")
+        return "\n\n".join(parts)
 
     if language == "es":
-        blocks = [f"Hola {name},", "", "Gracias por su mensaje. Datos verificados en tiempo real:"]
-        blocks.extend(f"- {line}" for line in evidence_lines)
-        blocks.extend(f"- Base de conocimiento: {line}" for line in knowledge_lines)
-        blocks.append("")
+        greeting = f"Hola {name}," if name else "Hola,"
+        parts = [greeting]
         if evidence_lines:
-            blocks.append(
-                "Estos datos se confirman en la Factura Proforma (PI). Indiquenos el puerto de "
-                "destino y las certificaciones requeridas para emitir la PI."
+            parts.append(
+                "Acabo de verificar stock y precio en tiempo real:\n"
+                + "\n".join(evidence_lines)
             )
+        if knowledge_lines:
+            parts.append("\n".join(knowledge_lines))
+        if evidence_lines:
+            parts.append("¿Qué puerto de destino y certificaciones necesita para prepararle la PI?")
         else:
-            blocks.append(
-                "Indiquenos el puerto de destino, la cantidad objetivo y las certificaciones "
-                "requeridas para enviar la cotizacion y la Factura Proforma."
+            parts.append(
+                "¿Podría confirmarnos el SKU, la cantidad y el puerto de destino para cotizarle?"
             )
-        blocks.extend(["", "Saludos cordiales,", "Equipo de Ventas de Exportacion"])
-        return "\n".join(blocks)
+        if not is_chat:
+            parts.append("Saludos cordiales,\nEquipo de Ventas de Exportacion")
+        return "\n\n".join(parts)
 
-    blocks = [f"Hello {name},", "", "Thank you for your message. Verified live information:"]
-    blocks.extend(f"- {line}" for line in evidence_lines)
-    blocks.extend(f"- Knowledge base: {line}" for line in knowledge_lines)
-    blocks.append("")
+    greeting = f"Hi {name}," if name else "Hi there,"
+    parts = [greeting]
     if evidence_lines:
-        blocks.append(
-            "These figures are confirmed on the formal Proforma Invoice. Please share your "
-            "destination port and required certifications so we can issue the PI right away."
+        parts.append(
+            "Yes, we have this ready — here are the current details:\n"
+            + "\n".join(evidence_lines)
+        )
+    if knowledge_lines:
+        parts.append("\n".join(knowledge_lines))
+    if evidence_lines:
+        parts.append(
+            "Which destination port and certifications do you need? "
+            "Happy to prepare a formal PI for you."
         )
     else:
-        blocks.append(
-            "Please share your destination port, target quantity and required certifications "
-            "so we can send the formal quotation and Proforma Invoice."
+        parts.append(
+            "Could you share the target quantity and destination port "
+            "so I can prepare an exact quote and PI?"
         )
-    blocks.extend(["", "Best regards,", "Export Sales Team"])
-    return "\n".join(blocks)
+    if not is_chat:
+        parts.append("Best regards,\nExport Sales Team")
+    return "\n\n".join(parts)
 
 
 def build_risk_hold_reply(*, language: str, customer_name: str) -> str:
@@ -656,21 +724,15 @@ def build_abstain_reply(*, language: str, customer_name: str) -> str:
 
 def build_courtesy_reply(*, language: str, customer_name: str) -> str:
     """Short zero-claim acknowledgement for pure greetings or thank-you messages."""
-    name = customer_name.strip() or "there"
+    name = customer_name.strip()
     if language == "zh":
-        return (
-            f"您好 {name}，不客气！随时告诉我们您想咨询的产品型号、实时库存、MOQ 阶梯报价"
-            "或形式发票（PI），我会第一时间为您查询核实。"
-        )
+        prefix = f"{name}，" if name else ""
+        return f"{prefix}不客气！随时告诉我需要查什么型号的库存、报价或出 PI，我一直在。"
     if language == "es":
-        return (
-            f"Hola {name}, con mucho gusto. Avísenos cuando necesite consultar stock en tiempo "
-            "real, precios por MOQ o una Factura Proforma (PI)."
-        )
-    return (
-        f"You're welcome, {name}! Please let us know anytime you need live stock, "
-        "MOQ tier pricing, product specifications, or a formal Proforma Invoice (PI)."
-    )
+        prefix = f"{name}, " if name else ""
+        return f"¡Con gusto, {prefix}avísame cuando necesites precios, stock o una PI!"
+    prefix = f", {name}" if name else ""
+    return f"You're welcome{prefix}! Let me know anytime if you need a quote, stock check, or a PI."
 
 
 @dataclass(frozen=True, slots=True)
@@ -949,9 +1011,14 @@ class AutoReplyService:
         self,
         tool_registry: ErpToolRegistry | None = None,
         rag_service: KbSearchPort | None = None,
+        llm_client: LlmClientPort | None = None,
+        *,
+        enable_llm_polish: bool = True,
     ) -> None:
         self.tools = tool_registry or ErpToolRegistry()
         self.rag = rag_service
+        self._llm_client = llm_client
+        self._enable_llm_polish = enable_llm_polish
         self._scope_service = AiProposalGeneratorService(tool_registry=self.tools)
 
     # ------------------------------------------------------------- scope / security
@@ -1373,6 +1440,95 @@ class AutoReplyService:
             },
         )
 
+    async def _polish_reply_with_llm(
+        self,
+        *,
+        language: str,
+        channel_type: str,
+        customer_name: str,
+        buyer_message: str,
+        recent_messages: Sequence[RecentMessage],
+        evidence: Sequence[dict[str, Any]],
+        kb_hits: Sequence[dict[str, Any]],
+    ) -> str | None:
+        """Render verified ERP/KB facts in warm, natural human sales tone with numeric guard."""
+        if not self._enable_llm_polish:
+            return None
+        if os.environ.get("AUTO_REPLY_LLM_POLISH", "true").strip().lower() != "true":
+            return None
+        if self._llm_client is None and not (
+            os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        ):
+            return None
+        client = self._llm_client or AsyncMultiProviderClient()
+        if client.has_key("deepseek"):
+            provider, model_id = "deepseek", MODEL_CATALOG["deepseek-flash"].model_id
+        elif client.has_key("openai"):
+            provider, model_id = "openai", MODEL_CATALOG["gpt-5-mini"].model_id
+        else:
+            return None
+
+        is_chat = channel_type in _CHAT_CHANNELS
+        style_hint = (
+            "Write like a real, friendly, experienced B2B export sales rep on Telegram/WhatsApp: "
+            "2-4 concise natural sentences, conversational and direct. Do NOT use formal email "
+            "sign-offs like 'Best regards, Export Sales Team', and NEVER write robotic headings "
+            "like 'Verified live information:', 'Knowledge base:', or '- SKU ...:'."
+            if is_chat
+            else "Write a crisp, natural, human B2B export sales email. Avoid robotic headings "
+            "like 'Verified live information:' or 'Knowledge base:'."
+        )
+        system_prompt = (
+            "You are a senior export sales specialist for a B2B LED lighting factory.\n"
+            f"{style_hint}\n"
+            "STRICT FACTUAL RULES:\n"
+            "1. Only mention prices, MOQ tiers, stock quantities, lead times, tracking numbers, or "
+            "product specs that appear verbatim in VERIFIED_ERP_FACTS or KB_FACTS.\n"
+            "2. NEVER invent, estimate, round, or extrapolate ANY number, discount, or date.\n"
+            "3. Reply in the buyer's language (en / zh / es) and directly answer what they asked.\n"
+            "4. Keep it under 110 words, plain text only (no markdown bold/tables/bullet dumps), "
+            "and end with one natural helpful follow-up question.\n"
+            "5. Output ONLY the message body."
+        )
+        history_lines = [
+            f"{'Buyer' if m.direction == 'inbound' else 'Sales'}: {m.body_text.strip()}"
+            for m in list(recent_messages)[-5:]
+            if m.body_text.strip()
+        ]
+        erp_json = json.dumps(list(evidence), ensure_ascii=False, default=str)
+        kb_json = json.dumps(list(kb_hits), ensure_ascii=False, default=str)
+        user_prompt = (
+            f"Buyer name: {customer_name or 'Customer'}\n"
+            f"Target language: {language}\n"
+            f"Channel: {channel_type}\n\n"
+            f"RECENT_CHAT:\n" + ("\n".join(history_lines) or buyer_message) + "\n\n"
+            f"VERIFIED_ERP_FACTS:\n{erp_json}\n\n"
+            f"KB_FACTS:\n{kb_json}"
+        )
+        try:
+            resp = await client.complete(
+                model_id=model_id,
+                provider=provider,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=320,
+                temperature=0.35,
+            )
+        except Exception:  # noqa: BLE001 - deterministic fallback guarantees delivery
+            return None
+
+        candidate = (resp.text or "").strip()
+        if not verify_reply_numbers_grounded(
+            candidate,
+            evidence=evidence,
+            kb_hits=kb_hits,
+            buyer_message=buyer_message,
+        ):
+            return None
+        return candidate
+
     # ---------------------------------------------------------------------- execution
 
     async def run_with_dispatch(
@@ -1438,17 +1594,32 @@ class AutoReplyService:
                 None,
             )
 
+        llm_polished = False
         if risk_flags:
             reply_text = build_risk_hold_reply(language=language, customer_name=customer_name)
         elif decision.reason == "courtesy_auto_reply":
             reply_text = build_courtesy_reply(language=language, customer_name=customer_name)
         else:
-            reply_text = build_grounded_reply(
+            polished = await self._polish_reply_with_llm(
                 language=language,
+                channel_type=conversation.channel_type,
                 customer_name=customer_name,
+                buyer_message=message_text,
+                recent_messages=messages,
                 evidence=evidence,
                 kb_hits=kb_hits,
             )
+            if polished is not None:
+                reply_text = polished
+                llm_polished = True
+            else:
+                reply_text = build_grounded_reply(
+                    language=language,
+                    customer_name=customer_name,
+                    evidence=evidence,
+                    kb_hits=kb_hits,
+                    channel_type=conversation.channel_type,
+                )
 
         kb_citations = [
             {
@@ -1476,6 +1647,7 @@ class AutoReplyService:
         if decision.action == "auto_replied":
             metadata: dict[str, Any] = {
                 "ai_auto_reply": True,
+                "llm_polished": llm_polished,
                 "guardrail_decision": decision.reason,
                 "grounded_evidence": evidence,
                 "kb_citations": kb_citations,
@@ -1994,4 +2166,5 @@ __all__ = [
     "profile_to_json",
     "publish_auto_reply_dispatch",
     "usd_order_total",
+    "verify_reply_numbers_grounded",
 ]
