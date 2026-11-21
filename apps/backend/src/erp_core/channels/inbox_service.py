@@ -27,6 +27,7 @@ from erp_core.channels.inbox_schemas import (
     UpdateConversationRequest,
 )
 from erp_core.channels.models import ChannelAccount, Conversation, Message
+from erp_core.channels.webhook_router import OUTBOUND_STREAM_KEY, STREAM_MAXLEN
 from erp_core.identity.service import IdentityResolverService
 from erp_core.shared.enums import (
     AutonomyLevel,
@@ -493,7 +494,12 @@ class InboxService:
         if outbound_enqueue_fn is not None:
             await outbound_enqueue_fn(req_dict)
         else:
-            await redis.xadd("stream:outbound:messages", {"payload": json.dumps(req_dict)})
+            await redis.xadd(
+                OUTBOUND_STREAM_KEY,
+                {"payload": json.dumps(req_dict)},
+                maxlen=STREAM_MAXLEN,
+                approximate=True,
+            )
 
     async def _publish_message_created(
         self,

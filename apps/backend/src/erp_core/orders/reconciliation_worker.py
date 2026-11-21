@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
 import structlog
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from erp_core.channels.ecommerce.base import CommercePlatformAdapter, EcommerceOrderSyncService
@@ -42,6 +44,51 @@ CREDENTIAL_TYPES = {
 REPLAY_WINDOW = timedelta(minutes=30)
 
 
+async def resolve_default_warehouse_id(
+    session: AsyncSession,
+    tenant_id: UUID,
+    channel_account_id: UUID,
+    account_config: Mapping[str, Any] | None = None,
+    warehouse_override: UUID | None = None,
+) -> UUID:
+    """Resolve the warehouse a channel account's imported orders should reserve stock in.
+
+    Precedence: explicit ``channel_accounts.config.warehouse_id`` -> caller override -> the
+    tenant's oldest active warehouse. The historical ``channel_account_id`` fallback is only
+    kept for legacy tenants that have no ``warehouses`` row at all, so an imported order can
+    never silently reserve against a warehouse that does not exist.
+    """
+    configured = (account_config or {}).get("warehouse_id")
+    if configured:
+        try:
+            return UUID(str(configured))
+        except ValueError:
+            logger.warning(
+                "reconciliation_warehouse_config_invalid",
+                tenant_id=str(tenant_id),
+                channel_account_id=str(channel_account_id),
+                configured_warehouse_id=str(configured),
+            )
+    if warehouse_override is not None:
+        return warehouse_override
+    active_warehouse = await session.scalar(
+        text(
+            "SELECT id FROM warehouses WHERE tenant_id = :tid AND is_active = true "
+            "ORDER BY created_at ASC, id ASC LIMIT 1"
+        ),
+        {"tid": tenant_id},
+    )
+    if active_warehouse is not None:
+        return UUID(str(active_warehouse))
+    logger.warning(
+        "reconciliation_warehouse_legacy_fallback",
+        tenant_id=str(tenant_id),
+        channel_account_id=str(channel_account_id),
+        fallback_warehouse_id=str(channel_account_id),
+    )
+    return channel_account_id
+
+
 async def reconcile_channel_account_orders(
     session: AsyncSession,
     tenant_id: UUID,
@@ -51,8 +98,13 @@ async def reconcile_channel_account_orders(
     default_warehouse_id: UUID,
     since: datetime,
 ) -> dict[str, int]:
-    """Pull orders since `since`, import missing ones and refresh drifted ones."""
-    stats = {"recovered": 0, "updated": 0, "scanned": 0}
+    """Pull orders since `since`, import missing ones and refresh drifted ones.
+
+    Every order is ingested inside its own savepoint: an oversold or otherwise rejected order
+    rolls back to the savepoint (no orphan ``orders``/``order_items`` rows) while the rest of
+    the batch keeps committing.
+    """
+    stats = {"recovered": 0, "updated": 0, "failed": 0, "scanned": 0}
     sync = EcommerceOrderSyncService()
     cursor: str | None = None
     while True:
@@ -60,20 +112,35 @@ async def reconcile_channel_account_orders(
         for order in orders:
             stats["scanned"] += 1
             try:
-                _, created = await sync.ingest_normalized_order(
-                    session,
-                    tenant_id=tenant_id,
-                    channel_account_id=channel_account_id,
-                    default_warehouse_id=default_warehouse_id,
-                    order_dto=order,
-                    actor_id=f"reconciliation:{channel_type.value}",
-                )
+                async with session.begin_nested():
+                    _, created = await sync.ingest_normalized_order(
+                        session,
+                        tenant_id=tenant_id,
+                        channel_account_id=channel_account_id,
+                        default_warehouse_id=default_warehouse_id,
+                        order_dto=order,
+                        actor_id=f"reconciliation:{channel_type.value}",
+                    )
             except AppError as exc:
+                stats["failed"] += 1
                 logger.warning(
-                    "reconciliation_order_skipped",
+                    "reconciliation_order_rolled_back",
                     tenant_id=str(tenant_id),
+                    channel_account_id=str(channel_account_id),
                     external_order_id=order.external_order_id,
                     code=exc.code,
+                    status_code=exc.status_code,
+                )
+                continue
+            except IntegrityError as exc:
+                stats["failed"] += 1
+                logger.warning(
+                    "reconciliation_order_rolled_back",
+                    tenant_id=str(tenant_id),
+                    channel_account_id=str(channel_account_id),
+                    external_order_id=order.external_order_id,
+                    code="ERR_ORDER_INTEGRITY_CONFLICT",
+                    error=type(exc.orig).__name__,
                 )
                 continue
             stats["recovered" if created else "updated"] += 1
@@ -176,7 +243,7 @@ async def reconcile_tenant_orders(
     tenant_id: UUID,
     warehouse_override: UUID | None = None,
 ) -> dict[str, int]:
-    totals = {"recovered": 0, "updated": 0, "scanned": 0, "accounts": 0}
+    totals = {"recovered": 0, "updated": 0, "failed": 0, "scanned": 0, "accounts": 0}
     async with tenant_session(session_factory, tenant_id) as session:
         accounts = (
             await session.execute(
@@ -202,9 +269,12 @@ async def reconcile_tenant_orders(
                     code=exc.code,
                 )
                 continue
-            configured = (account.config or {}).get("warehouse_id")
-            warehouse_id = (
-                UUID(str(configured)) if configured else (warehouse_override or account.id)
+            warehouse_id = await resolve_default_warehouse_id(
+                session,
+                tenant_id=tenant_id,
+                channel_account_id=account.id,
+                account_config=account.config,
+                warehouse_override=warehouse_override,
             )
             adapter = await _instantiate_adapter(channel_type, credentials, warehouse_id)
             stats = await reconcile_channel_account_orders(
@@ -217,7 +287,7 @@ async def reconcile_tenant_orders(
                 since=datetime.now(UTC) - REPLAY_WINDOW,
             )
             totals["accounts"] += 1
-            for key in ("recovered", "updated", "scanned"):
+            for key in ("recovered", "updated", "failed", "scanned"):
                 totals[key] += stats[key]
     return totals
 
@@ -227,7 +297,14 @@ async def reconcile_ecommerce_orders_cron() -> dict[str, int]:
     settings = get_settings()
     directory_engine = create_migrator_engine(settings)
     runtime_engine = create_runtime_engine(settings)
-    totals = {"recovered": 0, "updated": 0, "scanned": 0, "accounts": 0, "tenants": 0}
+    totals = {
+        "recovered": 0,
+        "updated": 0,
+        "failed": 0,
+        "scanned": 0,
+        "accounts": 0,
+        "tenants": 0,
+    }
     try:
         runtime_factory = create_session_factory(runtime_engine)
         async with system_session(create_session_factory(directory_engine)) as directory:
@@ -240,7 +317,7 @@ async def reconcile_ecommerce_orders_cron() -> dict[str, int]:
         for tenant_id in tenant_ids:
             stats = await reconcile_tenant_orders(runtime_factory, tenant_id)
             totals["tenants"] += 1
-            for key in ("recovered", "updated", "scanned", "accounts"):
+            for key in ("recovered", "updated", "failed", "scanned", "accounts"):
                 totals[key] += stats[key]
         return totals
     finally:

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import logging
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from redis.asyncio import Redis
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.channels.adapters.base import (
@@ -25,6 +27,25 @@ from erp_core.shared.enums import (
     MessageSenderType,
 )
 
+logger = logging.getLogger(__name__)
+
+# Integrator-facing webhook signature headers, most specific first.
+_SIGNATURE_HEADERS: tuple[str, ...] = ("x-widget-signature", "x-webhook-signature")
+_SHA256_PREFIX = "sha256="
+
+
+def _provided_signature(headers: Mapping[str, str]) -> str:
+    """Return the lowercase hex digest from the first non-empty signature header."""
+    lowered = {str(key).lower(): str(value).strip() for key, value in headers.items()}
+    for header in _SIGNATURE_HEADERS:
+        value = lowered.get(header, "")
+        if not value:
+            continue
+        if value[: len(_SHA256_PREFIX)].lower() == _SHA256_PREFIX:
+            value = value[len(_SHA256_PREFIX) :].strip()
+        return value.lower()
+    return ""
+
 
 class WebLiveChatAdapter(MessagingChannelAdapter):
     """Self-hosted Web LiveChat adapter emitting live SSE replies back to storefront visitors."""
@@ -37,7 +58,19 @@ class WebLiveChatAdapter(MessagingChannelAdapter):
     def verify_webhook_signature(
         self, raw_body: bytes, headers: Mapping[str, str], secret: str
     ) -> bool:
-        return True
+        """Verify ``hex(HMAC-SHA256(secret, raw_body))`` from the widget signature header.
+
+        Accepts both a bare hex digest and the ``sha256=<hex>`` form. A missing/empty
+        secret or signature, or any mismatch, fails closed instead of accepting the
+        webhook, so an unsigned visitor payload can never be replayed into ingest.
+        """
+        if not secret or not secret.strip():
+            return False
+        provided = _provided_signature(headers)
+        if not provided:
+            return False
+        expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(provided.encode("utf-8"), expected.encode("ascii"))
 
     def extract_external_event_ids(
         self, payload: dict[str, Any], raw_body: bytes, headers: Mapping[str, str]
@@ -81,26 +114,41 @@ class WebLiveChatAdapter(MessagingChannelAdapter):
         credentials: dict[str, Any],
         request: OutboundMessageRequest,
     ) -> OutboundSendResult:
-        """Deliver outbound reply directly to visitor widget stream via Redis Pub/Sub."""
-        ext_id = f"wc_{request.message_id}"
-        await session.execute(
-            text(
-                "UPDATE messages SET delivery_status = 'delivered', external_message_id = :emid "
-                "WHERE tenant_id = :tid AND id = :mid"
-            ),
-            {"tid": tenant_id, "mid": request.message_id, "emid": ext_id},
-        )
-        if self._redis is not None:
+        """Acknowledge a widget reply; visitor clients pull it from the messages table.
+
+        A self-hosted widget has no external HTTP push. The agent-side outbound worker
+        already persists ``delivery_status = 'sent'`` and this ``external_message_id``
+        immediately after a successful send, so the adapter must not race that write.
+        Widget visitors read the committed reply through ``GET /api/v1/widget/messages``.
+        """
+        external_message_id = f"web:{request.message_id}"
+        await self._publish_widget_reply(request, external_message_id)
+        return OutboundSendResult(success=True, external_message_id=external_message_id)
+
+    async def _publish_widget_reply(
+        self, request: OutboundMessageRequest, external_message_id: str
+    ) -> None:
+        """Best-effort SSE nudge; a Redis hiccup must never fail the outbound send."""
+        if self._redis is None:
+            return
+        try:
             await self._redis.publish(
                 f"widget:conv:{request.conversation_id}",
                 json.dumps(
                     {
+                        "event": "message.created",
                         "id": str(request.message_id),
+                        "external_message_id": external_message_id,
+                        "conversation_id": str(request.conversation_id),
                         "direction": "outbound",
-                        "sender_type": "human_agent",
                         "body_text": request.body_text,
                         "created_at": datetime.now(UTC).isoformat(),
                     }
                 ),
             )
-        return OutboundSendResult(success=True, external_message_id=ext_id)
+        except Exception:  # noqa: BLE001 - widget push must not fail delivery
+            logger.warning(
+                "widget reply publish failed for conversation %s",
+                request.conversation_id,
+                exc_info=True,
+            )

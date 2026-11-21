@@ -6,6 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal, Protocol
 from uuid import UUID, uuid4
 
+import structlog
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,11 +36,71 @@ from erp_core.shared.pagination import PaginatedResponse
 from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.dependencies import CurrentPrincipal
 
+logger = structlog.get_logger(__name__)
+
+#: Forward-only fulfillment ladder. A status may only ever move right, so an out-of-order or
+#: replayed storefront webhook can never resurrect an already-shipped order.
+_FORWARD_FULFILLMENT_RANK: Mapping[FulfillmentStatus, int] = {
+    FulfillmentStatus.PENDING_PAYMENT: 0,
+    FulfillmentStatus.CONFIRMED_RESERVED: 1,
+    FulfillmentStatus.IN_PRODUCTION: 2,
+    FulfillmentStatus.PARTIALLY_SHIPPED: 3,
+    FulfillmentStatus.SHIPPED: 4,
+    FulfillmentStatus.DELIVERED: 5,
+}
+
+#: Absorbing statuses: once reached, an order never moves again.
+_TERMINAL_FULFILLMENT_STATUSES = frozenset(
+    {FulfillmentStatus.CANCELLED, FulfillmentStatus.REFUNDED}
+)
+
+#: Statuses that still hold a live stock reservation for the order's items.
+_STOCK_RESERVED_FULFILLMENT_STATUSES = frozenset(
+    {
+        FulfillmentStatus.PENDING_PAYMENT,
+        FulfillmentStatus.CONFIRMED_RESERVED,
+        FulfillmentStatus.IN_PRODUCTION,
+    }
+)
+
 
 class TrackingRegistrationPort(Protocol):
     async def register_tracking(
         self, tracking_number: str, carrier_code: str | None = None
     ) -> dict[str, Any]: ...
+
+
+def can_transition_fulfillment_status(
+    current: FulfillmentStatus, target: FulfillmentStatus
+) -> bool:
+    """Return whether ``current -> target`` is a legal, monotonic fulfillment transition.
+
+    Contract:
+    * ``PENDING_PAYMENT -> CONFIRMED_RESERVED -> IN_PRODUCTION -> PARTIALLY_SHIPPED ->
+      SHIPPED -> DELIVERED`` is the only forward ladder; steps may be skipped forward.
+    * ``CANCELLED`` / ``REFUNDED`` are absorbing: they are reachable from any non-terminal
+      state and can never be left again.
+    * Nothing ever downgrades: once ``SHIPPED`` / ``DELIVERED``, an order can never return to
+      ``PENDING_PAYMENT`` or ``CONFIRMED_RESERVED``.
+    * ``EXCEPTION`` is a recoverable side state: it may be flagged from any live status and
+      recovered forward from, but never back to ``PENDING_PAYMENT``.
+    """
+    if current == target:
+        return True
+    if current in _TERMINAL_FULFILLMENT_STATUSES:
+        return False
+    if target in _TERMINAL_FULFILLMENT_STATUSES:
+        return True
+    if target is FulfillmentStatus.EXCEPTION:
+        return True
+    if current is FulfillmentStatus.EXCEPTION:
+        return target is not FulfillmentStatus.PENDING_PAYMENT
+    current_rank = _FORWARD_FULFILLMENT_RANK.get(current)
+    target_rank = _FORWARD_FULFILLMENT_RANK.get(target)
+    if current_rank is None or target_rank is None:
+        # Unknown/future status token: refuse rather than guess.
+        return False
+    return target_rank > current_rank
 
 
 class OrderService:
@@ -304,7 +365,15 @@ class OrderService:
         actor_type: Literal["human_user", "ai_agent", "system_cron", "webhook"],
         actor_id: str,
         payload: OrderCreateInternal,
+        *,
+        reserve_stock: bool = True,
     ) -> OrderRead:
+        """Create the order, its items and (unless told otherwise) the stock reservation.
+
+        ``reserve_stock=False`` exists for orders imported for the first time already cancelled
+        or refunded: reserving units for an order that never ships would permanently shrink
+        available stock until someone intervened.
+        """
         now = datetime.now(UTC)
         order_no = payload.order_no_override or f"ORD-{now:%Y%m%d}-{uuid4().hex[:6].upper()}"
         fx_rate_to_base, fx_source = await self._resolve_fx_rate_to_base(
@@ -363,15 +432,16 @@ class OrderService:
             )
         await session.flush()
 
-        reserve_pairs = [(item.variant_id, item.quantity) for item in payload.items]
-        await self.inventory.reserve_for_order(
-            session,
-            tenant_id=tenant_id,
-            warehouse_id=payload.warehouse_id,
-            order_id=order.id,
-            items=reserve_pairs,
-            idempotency_prefix=f"order-reserve:{order.id}",
-        )
+        if reserve_stock:
+            reserve_pairs = [(item.variant_id, item.quantity) for item in payload.items]
+            await self.inventory.reserve_for_order(
+                session,
+                tenant_id=tenant_id,
+                warehouse_id=payload.warehouse_id,
+                order_id=order.id,
+                items=reserve_pairs,
+                idempotency_prefix=f"order-reserve:{order.id}",
+            )
 
         await record_audit_event(
             session,
@@ -584,6 +654,17 @@ class OrderService:
                 title="Order Inactive",
                 detail="Cannot ship cancelled/refunded order.",
             )
+        if order.fulfillment_status in {FulfillmentStatus.SHIPPED, FulfillmentStatus.DELIVERED}:
+            raise AppError(
+                slug="order-already-shipped",
+                status_code=409,
+                code="ERR_ORDER_ALREADY_SHIPPED",
+                title="Order Already Shipped",
+                detail=(
+                    f"Order '{order.order_no}' is already "
+                    f"'{order.fulfillment_status.value}'; a second shipment is not allowed."
+                ),
+            )
 
         # Enforce 70% balance gate on B2B wholesale orders
         if order.order_mode == OrderMode.B2B_WHOLESALE:
@@ -742,6 +823,105 @@ class OrderService:
         await session.flush()
         return await self._serialize_order(session, tenant_id, order)
 
+    @staticmethod
+    async def _reservation_warehouse_ids(
+        session: AsyncSession, tenant_id: UUID, order_id: UUID
+    ) -> list[UUID]:
+        """Warehouses that actually hold this order's reservation (from the immutable ledger)."""
+        rows = (
+            await session.execute(
+                text(
+                    """
+                    SELECT DISTINCT warehouse_id
+                    FROM inventory_ledger
+                    WHERE tenant_id = :tid AND reference_type = 'order'
+                      AND reference_id = :oid AND event_type = 'reserve_order'
+                    ORDER BY warehouse_id
+                    """
+                ),
+                {"tid": tenant_id, "oid": order_id},
+            )
+        ).all()
+        return [row.warehouse_id for row in rows]
+
+    async def _sync_inventory_for_external_transition(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        order: Order,
+        current: FulfillmentStatus,
+        target: FulfillmentStatus,
+    ) -> None:
+        """Move stock for an externally-driven status change (best-effort, idempotent).
+
+        The storefront is the source of truth for its own fulfillment status, so a stock
+        failure must never block the status sync - it is logged and left for the operator.
+        Both calls are idempotent through the order reference, so replayed webhooks are safe.
+        """
+        if current not in _STOCK_RESERVED_FULFILLMENT_STATUSES:
+            return
+        releases = target is FulfillmentStatus.CANCELLED
+        deducts = target in {FulfillmentStatus.SHIPPED, FulfillmentStatus.DELIVERED}
+        if not (releases or deducts):
+            return
+        warehouse_ids = await self._reservation_warehouse_ids(session, tenant_id, order.id)
+        if not warehouse_ids:
+            logger.info(
+                "external_status_inventory_sync_skipped",
+                tenant_id=str(tenant_id),
+                order_id=str(order.id),
+                external_order_id=order.external_order_id,
+                current_status=current.value,
+                target_status=target.value,
+                reason="no_reservation_recorded",
+            )
+            return
+        items = (
+            (
+                await session.execute(
+                    select(OrderItem).where(
+                        OrderItem.tenant_id == tenant_id, OrderItem.order_id == order.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        pairs = [(item.variant_id, item.quantity) for item in items]
+        if not pairs:
+            return
+        for warehouse_id in warehouse_ids:
+            try:
+                if releases:
+                    await self.inventory.release_reservation(
+                        session,
+                        tenant_id=tenant_id,
+                        warehouse_id=warehouse_id,
+                        order_id=order.id,
+                        items=pairs,
+                        idempotency_prefix=f"order-external-cancel:{order.id}",
+                    )
+                else:
+                    await self.inventory.deduct_shipped(
+                        session,
+                        tenant_id=tenant_id,
+                        warehouse_id=warehouse_id,
+                        shipment_id=order.id,
+                        items=pairs,
+                        idempotency_prefix=f"order-external-shipped:{order.id}",
+                    )
+            except AppError as exc:
+                logger.warning(
+                    "external_status_inventory_sync_failed",
+                    tenant_id=str(tenant_id),
+                    order_id=str(order.id),
+                    external_order_id=order.external_order_id,
+                    warehouse_id=str(warehouse_id),
+                    current_status=current.value,
+                    target_status=target.value,
+                    code=exc.code,
+                )
+
     async def update_external_order_status(
         self,
         session: AsyncSession,
@@ -766,8 +946,24 @@ class OrderService:
                 title="Order Not Found",
                 detail=f"Order '{order_id}' not found.",
             )
-        if fulfillment_status is not None:
-            order.fulfillment_status = fulfillment_status
+        if fulfillment_status is not None and fulfillment_status != order.fulfillment_status:
+            current_status = order.fulfillment_status
+            if can_transition_fulfillment_status(current_status, fulfillment_status):
+                await self._sync_inventory_for_external_transition(
+                    session, tenant_id, order, current_status, fulfillment_status
+                )
+                order.fulfillment_status = fulfillment_status
+            else:
+                # Preserve the more advanced local status instead of following the storefront
+                # backwards (late/replayed webhooks, out-of-order reconciliation pages).
+                logger.warning(
+                    "external_fulfillment_status_regression_ignored",
+                    tenant_id=str(tenant_id),
+                    order_id=str(order.id),
+                    external_order_id=order.external_order_id,
+                    current_status=current_status.value,
+                    rejected_status=fulfillment_status.value,
+                )
         if payment_status is not None:
             order.payment_status = payment_status
         current_metadata = dict(order.channel_metadata or {})

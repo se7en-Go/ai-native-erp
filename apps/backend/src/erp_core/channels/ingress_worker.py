@@ -22,7 +22,11 @@ from erp_core.channels.adapters.base import (
     OutboundMessageRequest,
 )
 from erp_core.channels.rate_limiter import DualTokenBucketLimiter
-from erp_core.channels.webhook_router import build_default_adapter_registry
+from erp_core.channels.webhook_router import (
+    OUTBOUND_STREAM_KEY,
+    STREAM_MAXLEN,
+    build_default_adapter_registry,
+)
 from erp_core.channels.webhook_store import (
     claim_raw_webhook_event,
     list_unenqueued_raw_webhook_ids,
@@ -48,6 +52,26 @@ _require_dlq_operator = require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.M
 
 MAX_INGRESS_ATTEMPTS = 5
 MAX_OUTBOUND_ATTEMPTS = 6
+# Once a message reached one of these states the channel accepted it: a redelivered
+# stream entry (crash between send and XACK) must never be dispatched a second time.
+ALREADY_SENT_STATUSES: frozenset[str] = frozenset(
+    {
+        DeliveryStatus.SENT.value,
+        DeliveryStatus.DELIVERED.value,
+        DeliveryStatus.READ.value,
+    }
+)
+# Monotonic delivery receipt ranking: queued < sent < delivered < read.
+_DELIVERY_STATUS_RANK: dict[str, int] = {
+    DeliveryStatus.QUEUED.value: 0,
+    DeliveryStatus.SENT.value: 1,
+    DeliveryStatus.DELIVERED.value: 2,
+    DeliveryStatus.READ.value: 3,
+}
+# A failure receipt is only meaningful before the channel confirmed delivery.
+_FAILURE_ALLOWED_FROM: frozenset[str] = frozenset(
+    {DeliveryStatus.QUEUED.value, DeliveryStatus.SENT.value}
+)
 _WORKER_CHANNELS: tuple[ChannelType, ...] = (
     ChannelType.WHATSAPP_CLOUD,
     ChannelType.WHATSAPP_COEXISTENCE,
@@ -65,6 +89,68 @@ def _defer_delay_seconds() -> float:
         return max(0.0, float(raw))
     except ValueError:
         return 30.0
+
+
+def can_transition_delivery_status(current: str, incoming: str) -> bool:
+    """Return whether a delivery receipt may move ``current`` to ``incoming``.
+
+    Receipts arrive out of order and are redelivered, so progression must be strictly
+    monotonic ``queued (0) < sent (1) < delivered (2) < read (3)``. ``failed`` is only
+    accepted while the message is still unconfirmed (``queued``/``sent``) and never
+    regresses a delivery (``read -> delivered``, ``delivered -> sent`` and
+    ``read -> failed`` are all rejected). Equal or unknown states are no-ops.
+    """
+    current_key = current.strip().lower()
+    incoming_key = incoming.strip().lower()
+    if incoming_key == DeliveryStatus.FAILED.value:
+        return current_key in _FAILURE_ALLOWED_FROM
+    incoming_rank = _DELIVERY_STATUS_RANK.get(incoming_key)
+    current_rank = _DELIVERY_STATUS_RANK.get(current_key)
+    if incoming_rank is None or current_rank is None:
+        return False
+    return incoming_rank > current_rank
+
+
+async def _load_message_event_scope(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    message_id: uuid.UUID,
+) -> dict[str, Any]:
+    """Ownership metadata for one message so AGENT SSE filters can scope it.
+
+    ``visibility_scope``/``assigned_user_id`` let the inbox SSE fan-out drop another
+    salesperson's private conversation without widening every event to the tenant.
+    """
+    row = (
+        (
+            await session.execute(
+                text(
+                    "SELECT m.conversation_id, c.assigned_user_id, a.visibility_scope "
+                    "FROM messages m "
+                    "JOIN conversations c ON c.tenant_id = m.tenant_id "
+                    "AND c.id = m.conversation_id "
+                    "JOIN channel_accounts a ON a.tenant_id = c.tenant_id "
+                    "AND a.id = c.channel_account_id "
+                    "WHERE m.tenant_id = :tid AND m.id = :mid"
+                ),
+                {"tid": tenant_id, "mid": message_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return {
+            "conversation_id": None,
+            "assigned_user_id": None,
+            "visibility_scope": None,
+        }
+    assigned_user_id = row["assigned_user_id"]
+    return {
+        "conversation_id": str(row["conversation_id"]),
+        "assigned_user_id": str(assigned_user_id) if assigned_user_id else None,
+        "visibility_scope": row["visibility_scope"],
+    }
 
 
 class OutOfOrderParentError(Exception):
@@ -580,6 +666,14 @@ async def _apply_status_event(
     status_event: NormalizedStatusEvent,
     channel_type: str | None = None,
 ) -> uuid.UUID | None:
+    """Apply one delivery receipt, refusing any non-monotonic status regression.
+
+    Meta/Telegram redeliver receipts out of sequence (``read`` before ``delivered``,
+    ``delivered`` before ``sent``). The row is locked so concurrent worker instances
+    cannot interleave, the metadata evidence is always merged, but
+    ``delivery_status`` only moves forward through
+    :func:`can_transition_delivery_status`.
+    """
     if status_event.read_through_recipient_id and channel_type:
         # Messenger/IG receipts may carry only a watermark for the thread. Advance every
         # outbound message at or before it in this customer's conversation, never later ones.
@@ -600,35 +694,70 @@ async def _apply_status_event(
                 "ts": status_event.timestamp,
             },
         )
-    updated_id = (
+    target = (
+        (
+            await session.execute(
+                text(
+                    "SELECT id, delivery_status FROM messages "
+                    "WHERE tenant_id = :tid AND external_message_id = :emid "
+                    "FOR UPDATE"
+                ),
+                {"tid": tenant_id, "emid": status_event.external_message_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if target is None:
+        if status_event.require_existing_message:
+            raise OutOfOrderParentError(
+                f"Status update arrived before message {status_event.external_message_id}"
+            )
+        return None
+
+    target_id = cast(uuid.UUID, target["id"])
+    receipt_metadata = json.dumps(
+        {
+            "status_error_code": status_event.error_code,
+            "status_error_message": status_event.error_message,
+            "pricing": status_event.pricing_metadata,
+        }
+    )
+    current_status = str(target["delivery_status"])
+    incoming_status = status_event.delivery_status.value
+    if not can_transition_delivery_status(current_status, incoming_status):
+        logger.info(
+            "ignoring non-monotonic delivery receipt %s -> %s for message %s",
+            current_status,
+            incoming_status,
+            target_id,
+        )
+        # Keep the evidence (error/pricing) but never regress the customer-visible state.
         await session.execute(
             text(
                 "UPDATE messages SET "
-                "delivery_status = :dstat, "
                 "channel_metadata = channel_metadata || CAST(:meta AS jsonb) "
-                "WHERE tenant_id = :tid AND external_message_id = :emid "
-                "RETURNING id"
+                "WHERE tenant_id = :tid AND id = :mid"
             ),
-            {
-                "tid": tenant_id,
-                "emid": status_event.external_message_id,
-                "dstat": status_event.delivery_status.value,
-                "meta": json.dumps(
-                    {
-                        "status_error_code": status_event.error_code,
-                        "status_error_message": status_event.error_message,
-                        "pricing": status_event.pricing_metadata,
-                    }
-                ),
-            },
+            {"tid": tenant_id, "mid": target_id, "meta": receipt_metadata},
         )
-    ).scalar_one_or_none()
+        return None
 
-    if updated_id is None and status_event.require_existing_message:
-        raise OutOfOrderParentError(
-            f"Status update arrived before message {status_event.external_message_id}"
-        )
-    return updated_id
+    await session.execute(
+        text(
+            "UPDATE messages SET "
+            "delivery_status = :dstat, "
+            "channel_metadata = channel_metadata || CAST(:meta AS jsonb) "
+            "WHERE tenant_id = :tid AND id = :mid"
+        ),
+        {
+            "tid": tenant_id,
+            "mid": target_id,
+            "dstat": incoming_status,
+            "meta": receipt_metadata,
+        },
+    )
+    return target_id
 
 
 async def _move_to_dlq(
@@ -792,7 +921,7 @@ async def process_raw_webhook_event(
     """Process one persisted raw webhook event with out-of-order retry and DLQ fallback."""
     if broker_session_factory is None:
         raise RuntimeError("webhook broker session is not configured")
-    registry = adapter_registry or build_default_adapter_registry()
+    registry = adapter_registry or build_default_adapter_registry(redis)
 
     async with system_session(broker_session_factory) as sys_sess:
         row = await claim_raw_webhook_event(sys_sess, raw_event_id)
@@ -950,11 +1079,15 @@ async def process_raw_webhook_event(
                     channel_type=channel_type,
                 )
                 if updated_msg_id is not None:
+                    status_scope = await _load_message_event_scope(
+                        t_sess, tenant_id, updated_msg_id
+                    )
                     published_events.append(
                         {
                             "event": "message.status_updated",
                             "message_id": str(updated_msg_id),
                             "delivery_status": status_ev.delivery_status.value,
+                            **status_scope,
                         }
                     )
 
@@ -1156,6 +1289,8 @@ async def compensate_unenqueued_webhooks(
         await redis.xadd(
             f"stream:webhooks:{channel_type}",
             {"raw_event_id": str(raw_id), "channel_type": channel_type, "attempt": "1"},
+            maxlen=STREAM_MAXLEN,
+            approximate=True,
         )
         async with system_session(broker_session_factory) as session:
             await set_raw_webhook_processing_state(
@@ -1208,7 +1343,7 @@ async def consume_outbound_stream_batch(
     adapter_registry: AdapterRegistry | None = None,
 ) -> int:
     """Consume queued outbound replies from `stream:outbound:messages` and dispatch them."""
-    stream_key = "stream:outbound:messages"
+    stream_key = OUTBOUND_STREAM_KEY
     try:
         await redis.xgroup_create(stream_key, group_name, id="0", mkstream=True)
     except Exception as exc:
@@ -1227,6 +1362,14 @@ async def consume_outbound_stream_batch(
                 continue
             try:
                 req_obj = OutboundMessageRequest.model_validate(json.loads(raw_payload))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                # Undecodable entries can never become valid on retry: drop them.
+                logger.warning(
+                    "dropping undecodable outbound stream entry %s", stream_msg_id
+                )
+                await redis.xack(stream_key, group_name, stream_msg_id)
+                continue
+            try:
                 await send_outbound_message(
                     session_factory=session_factory,
                     redis=redis,
@@ -1234,8 +1377,16 @@ async def consume_outbound_stream_batch(
                     request_payload=req_obj,
                     adapter_registry=adapter_registry,
                 )
-            except Exception:
-                logger.exception("Failed dispatching outbound message %s", stream_msg_id)
+            except Exception:  # noqa: BLE001 - never lose a message to a crash
+                # Leave the entry in the pending list so XAUTOCLAIM retries it once
+                # the transient failure clears; XACK here would silently drop it.
+                logger.warning(
+                    "outbound dispatch of %s raised unexpectedly; leaving it pending "
+                    "for xautoclaim retry",
+                    stream_msg_id,
+                    exc_info=True,
+                )
+                continue
             await redis.xack(stream_key, group_name, stream_msg_id)
             done += 1
         return done
@@ -1361,6 +1512,65 @@ async def run_webhook_worker_loop(
             continue
 
 
+async def _load_outbound_credentials(
+    session: AsyncSession,
+    crypto_service: EnvelopeCryptoService,
+    request_payload: OutboundMessageRequest,
+) -> dict[str, Any]:
+    """Decrypt the newest channel credential bundle for one outbound send."""
+    cred_row = (
+        await session.execute(
+            text(
+                "SELECT ciphertext, nonce, auth_tag, key_version, credential_type "
+                "FROM channel_credentials "
+                "WHERE tenant_id = :tid AND channel_account_id = :aid "
+                "ORDER BY updated_at DESC LIMIT 1"
+            ),
+            {
+                "tid": request_payload.tenant_id,
+                "aid": request_payload.channel_account_id,
+            },
+        )
+    ).mappings().first()
+    if cred_row is None:
+        return {}
+    decrypted = await crypto_service.decrypt_secret(
+        session=session,
+        tenant_id=request_payload.tenant_id,
+        account_id=request_payload.channel_account_id,
+        cred_type=str(cred_row["credential_type"]),
+        ciphertext=bytes(cred_row["ciphertext"]),
+        nonce=bytes(cred_row["nonce"]),
+        auth_tag=bytes(cred_row["auth_tag"]),
+        key_version=int(cred_row["key_version"]),
+    )
+    try:
+        parsed = json.loads(decrypted)
+    except json.JSONDecodeError:
+        return {"access_token": decrypted}
+    return parsed if isinstance(parsed, dict) else {"access_token": decrypted}
+
+
+async def _lock_outbound_delivery_status(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    message_id: uuid.UUID,
+) -> str | None:
+    """Lock the outbound message row and return its current delivery status."""
+    return cast(
+        str | None,
+        (
+            await session.execute(
+                text(
+                    "SELECT delivery_status FROM messages "
+                    "WHERE tenant_id = :tid AND id = :mid FOR UPDATE"
+                ),
+                {"tid": tenant_id, "mid": message_id},
+            )
+        ).scalar_one_or_none(),
+    )
+
+
 async def send_outbound_message(
     session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
@@ -1369,168 +1579,209 @@ async def send_outbound_message(
     adapter_registry: AdapterRegistry | None = None,
     attempt: int = 1,
 ) -> str:
-    """Rate-limited outbound dispatch with 4^X retry scheduling and DLQ fallback."""
-    registry = adapter_registry or build_default_adapter_registry()
-    limiter = DualTokenBucketLimiter(redis)
+    """Rate-limited, idempotent outbound dispatch with 4^X retry and DLQ fallback.
 
-    async with tenant_session(session_factory, request_payload.tenant_id) as t_sess:
+    The message row is locked ``FOR UPDATE`` before the adapter is touched, so a stream
+    entry redelivered after a crash between send and ``XACK`` returns ``already_sent``
+    instead of sending the customer a second copy. Nothing here raises on a permanent
+    failure: a message that cannot be sent (missing adapter, retries exhausted) is
+    marked ``failed``, announced over SSE and dead-lettered rather than left ``queued``.
+    """
+    registry = adapter_registry or build_default_adapter_registry(redis)
+    limiter = DualTokenBucketLimiter(redis)
+    tenant_id = request_payload.tenant_id
+    message_id = request_payload.message_id
+
+    dlq_error: tuple[str, str] | None = None
+    event_scope: dict[str, Any] = {}
+    published_status: str | None = None
+
+    async with tenant_session(session_factory, tenant_id) as t_sess:
+        current_status = await _lock_outbound_delivery_status(t_sess, tenant_id, message_id)
+        if current_status in ALREADY_SENT_STATUSES:
+            logger.info(
+                "outbound message %s is already %s; skipping duplicate dispatch",
+                message_id,
+                current_status,
+            )
+            return "already_sent"
+
         acct = (
             await t_sess.execute(
                 text(
                     "SELECT channel_type, external_account_id, rate_limit_profile "
                     "FROM channel_accounts WHERE tenant_id = :tid AND id = :aid"
                 ),
-                {
-                    "tid": request_payload.tenant_id,
-                    "aid": request_payload.channel_account_id,
-                },
+                {"tid": tenant_id, "aid": request_payload.channel_account_id},
             )
         ).mappings().first()
         if acct is None:
             return "channel_account_missing"
 
-        is_coexistence = bool((acct["rate_limit_profile"] or {}).get("coexistence", False))
-        allowed, wait_ms = await limiter.acquire(
-            channel_type=request_payload.channel_type,
-            account_id=str(acct["external_account_id"]),
-            recipient_id=request_payload.recipient_id,
-            is_coexistence=is_coexistence,
-        )
-        if not allowed:
-            retry_at = datetime.now(UTC).timestamp() + (max(wait_ms, 500) / 1000.0)
-            await redis.zadd(
-                "queue:outbound:delayed",
-                {
-                    json.dumps(
-                        {
-                            "payload": request_payload.model_dump(mode="json"),
-                            "attempt": attempt,
-                        }
-                    ): retry_at
-                },
-            )
-            return "rate_limited_requeued"
-
-        cred_row = (
-            await t_sess.execute(
-                text(
-                    "SELECT ciphertext, nonce, auth_tag, key_version, credential_type "
-                    "FROM channel_credentials "
-                    "WHERE tenant_id = :tid AND channel_account_id = :aid "
-                    "ORDER BY updated_at DESC LIMIT 1"
-                ),
-                {
-                    "tid": request_payload.tenant_id,
-                    "aid": request_payload.channel_account_id,
-                },
-            )
-        ).mappings().first()
-
-        credentials: dict[str, Any] = {}
-        if cred_row is not None:
-            decrypted = await crypto_service.decrypt_secret(
-                session=t_sess,
-                tenant_id=request_payload.tenant_id,
-                account_id=request_payload.channel_account_id,
-                cred_type=str(cred_row["credential_type"]),
-                ciphertext=bytes(cred_row["ciphertext"]),
-                nonce=bytes(cred_row["nonce"]),
-                auth_tag=bytes(cred_row["auth_tag"]),
-                key_version=int(cred_row["key_version"]),
-            )
-            try:
-                credentials = json.loads(decrypted)
-            except json.JSONDecodeError:
-                credentials = {"access_token": decrypted}
-
         adapter = registry.get(request_payload.channel_type.value)
         if adapter is None:
-            raise RuntimeError(f"Missing adapter for {request_payload.channel_type.value}")
-
-        result = await adapter.send_message(
-            session=t_sess,
-            tenant_id=request_payload.tenant_id,
-            credentials=credentials,
-            request=request_payload,
-        )
-
-        if result.success:
+            # Permanent, non-retryable: fail the message loudly instead of raising and
+            # leaving the row in 'queued' forever (the queue would redeliver endlessly).
+            channel_key = request_payload.channel_type.value
+            detail = f"No adapter registered for {channel_key}"
+            logger.warning(
+                "outbound message %s has no adapter for %s; dead-lettering",
+                message_id,
+                channel_key,
+            )
             await t_sess.execute(
                 text(
-                    "UPDATE messages SET "
-                    "delivery_status = 'sent', "
-                    "external_message_id = COALESCE(:emid, external_message_id), "
-                    "channel_msg_cost = :cost, "
+                    "UPDATE messages SET delivery_status = 'failed', "
                     "channel_metadata = channel_metadata || CAST(:meta AS jsonb) "
                     "WHERE tenant_id = :tid AND id = :mid"
                 ),
                 {
-                    "tid": request_payload.tenant_id,
-                    "mid": request_payload.message_id,
-                    "emid": result.external_message_id,
-                    "cost": result.estimated_cost_usd,
-                    "meta": json.dumps({"pricing_category": result.pricing_category}),
+                    "tid": tenant_id,
+                    "mid": message_id,
+                    "meta": json.dumps(
+                        {"error_code": "ERR_ADAPTER_MISSING", "error_message": detail}
+                    ),
                 },
             )
-            await redis.publish(
-                f"inbox:events:{request_payload.tenant_id}",
-                json.dumps(
-                    {
-                        "event": "message.status_updated",
-                        "message_id": str(request_payload.message_id),
-                        "delivery_status": DeliveryStatus.SENT.value,
-                    }
-                ),
+            dlq_error = ("ERR_ADAPTER_MISSING", detail)
+            event_scope = await _load_message_event_scope(t_sess, tenant_id, message_id)
+            published_status = DeliveryStatus.FAILED.value
+        else:
+            is_coexistence = bool(
+                (acct["rate_limit_profile"] or {}).get("coexistence", False)
             )
-            return "sent"
-
-        if result.retryable and attempt < MAX_OUTBOUND_ATTEMPTS:
-            backoff_sec = limiter.compute_backoff_seconds(attempt, result.error_code)
-            retry_at = datetime.now(UTC).timestamp() + backoff_sec
-            await redis.zadd(
-                "queue:outbound:delayed",
-                {
-                    json.dumps(
-                        {
-                            "payload": request_payload.model_dump(mode="json"),
-                            "attempt": attempt + 1,
-                        }
-                    ): retry_at
-                },
+            allowed, wait_ms = await limiter.acquire(
+                channel_type=request_payload.channel_type,
+                account_id=str(acct["external_account_id"]),
+                recipient_id=request_payload.recipient_id,
+                is_coexistence=is_coexistence,
             )
-            return "retry_scheduled"
-
-        await t_sess.execute(
-            text(
-                "UPDATE messages SET delivery_status = 'failed', "
-                "channel_metadata = channel_metadata || CAST(:meta AS jsonb) "
-                "WHERE tenant_id = :tid AND id = :mid"
-            ),
-            {
-                "tid": request_payload.tenant_id,
-                "mid": request_payload.message_id,
-                "meta": json.dumps(
+            if not allowed:
+                retry_at = datetime.now(UTC).timestamp() + (max(wait_ms, 500) / 1000.0)
+                await redis.zadd(
+                    "queue:outbound:delayed",
                     {
-                        "error_code": result.error_code,
-                        "error_message": result.error_message,
-                    }
-                ),
-            },
+                        json.dumps(
+                            {
+                                "payload": request_payload.model_dump(mode="json"),
+                                "attempt": attempt,
+                            }
+                        ): retry_at
+                    },
+                )
+                return "rate_limited_requeued"
+
+            credentials = await _load_outbound_credentials(
+                t_sess, crypto_service, request_payload
+            )
+            result = await adapter.send_message(
+                session=t_sess,
+                tenant_id=tenant_id,
+                credentials=credentials,
+                request=request_payload,
+            )
+
+            if result.success:
+                # An adapter may already have confirmed 'delivered' (web livechat does):
+                # never downgrade that receipt to 'sent'.
+                await t_sess.execute(
+                    text(
+                        "UPDATE messages SET "
+                        "delivery_status = CASE WHEN delivery_status IN "
+                        "('delivered', 'read') THEN delivery_status ELSE 'sent' END, "
+                        "external_message_id = COALESCE(:emid, external_message_id), "
+                        "channel_msg_cost = :cost, "
+                        "channel_metadata = channel_metadata || CAST(:meta AS jsonb) "
+                        "WHERE tenant_id = :tid AND id = :mid"
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "mid": message_id,
+                        "emid": result.external_message_id,
+                        "cost": result.estimated_cost_usd,
+                        "meta": json.dumps({"pricing_category": result.pricing_category}),
+                    },
+                )
+                persisted_status = cast(
+                    str | None,
+                    await t_sess.scalar(
+                        text(
+                            "SELECT delivery_status FROM messages "
+                            "WHERE tenant_id = :tid AND id = :mid"
+                        ),
+                        {"tid": tenant_id, "mid": message_id},
+                    ),
+                )
+                event_scope = await _load_message_event_scope(t_sess, tenant_id, message_id)
+                published_status = persisted_status or DeliveryStatus.SENT.value
+            elif result.retryable and attempt < MAX_OUTBOUND_ATTEMPTS:
+                backoff_sec = limiter.compute_backoff_seconds(attempt, result.error_code)
+                retry_at = datetime.now(UTC).timestamp() + backoff_sec
+                await redis.zadd(
+                    "queue:outbound:delayed",
+                    {
+                        json.dumps(
+                            {
+                                "payload": request_payload.model_dump(mode="json"),
+                                "attempt": attempt + 1,
+                            }
+                        ): retry_at
+                    },
+                )
+                return "retry_scheduled"
+            else:
+                await t_sess.execute(
+                    text(
+                        "UPDATE messages SET delivery_status = 'failed', "
+                        "channel_metadata = channel_metadata || CAST(:meta AS jsonb) "
+                        "WHERE tenant_id = :tid AND id = :mid"
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "mid": message_id,
+                        "meta": json.dumps(
+                            {
+                                "error_code": result.error_code,
+                                "error_message": result.error_message,
+                            }
+                        ),
+                    },
+                )
+                dlq_error = (
+                    str(result.error_code) if result.error_code else "ERR_OUTBOUND_FAILED",
+                    result.error_message or "Outbound delivery permanently failed",
+                )
+                event_scope = await _load_message_event_scope(t_sess, tenant_id, message_id)
+                published_status = DeliveryStatus.FAILED.value
+
+    if dlq_error is not None:
+        await _move_to_dlq(
+            session_factory,
+            tenant_id=tenant_id,
+            raw_event_id=None,
+            channel_type=request_payload.channel_type.value,
+            direction="outbound",
+            external_event_id=str(message_id),
+            payload=request_payload.model_dump(mode="json"),
+            error_code=dlq_error[0],
+            error_detail=dlq_error[1],
+            attempt_count=attempt,
         )
 
-    await _move_to_dlq(
-        session_factory,
-        tenant_id=request_payload.tenant_id,
-        raw_event_id=None,
-        channel_type=request_payload.channel_type.value,
-        direction="outbound",
-        external_event_id=str(request_payload.message_id),
-        payload=request_payload.model_dump(mode="json"),
-        error_code=str(result.error_code) if result.error_code else "ERR_OUTBOUND_FAILED",
-        error_detail=result.error_message or "Outbound delivery permanently failed",
-        attempt_count=attempt,
-    )
-    return "dead_letter"
+    if published_status is not None:
+        await redis.publish(
+            f"inbox:events:{tenant_id}",
+            json.dumps(
+                {
+                    "event": "message.status_updated",
+                    "message_id": str(message_id),
+                    "delivery_status": published_status,
+                    **event_scope,
+                }
+            ),
+        )
+
+    return "dead_letter" if dlq_error is not None else "sent"
 
 
 @dlq_router.post("/{event_id}/replay")
@@ -1601,12 +1852,19 @@ async def replay_dead_letter_event(
                 "channel_type": str(dlq_row["channel_type"]),
                 "attempt": "1",
             },
+            maxlen=STREAM_MAXLEN,
+            approximate=True,
         )
     elif dlq_row["direction"] == "outbound":
+        # Replay onto the stream the outbound worker actually consumes; the old
+        # `stream:outbound:replay` key had no consumer, so replays vanished.
         await redis.xadd(
-            "stream:outbound:replay",
+            OUTBOUND_STREAM_KEY,
             {"payload": json.dumps(dlq_row["payload"])},
+            maxlen=STREAM_MAXLEN,
+            approximate=True,
         )
+        outcome = "outbound_requeued"
 
     return {
         "event_id": str(event_id),
