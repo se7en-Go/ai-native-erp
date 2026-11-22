@@ -218,6 +218,7 @@ describe("Sidebar navigation registry", () => {
 describe("AppShell streamlined sidebar and Ctrl+K", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.sessionStorage.clear();
   });
 
   it("renders five groups, keeps legacy links and collapses a section", () => {
@@ -245,7 +246,7 @@ describe("AppShell streamlined sidebar and Ctrl+K", () => {
     expect(screen.queryByRole("link", { name: /Leads/i })).toBeNull();
   });
 
-  it("starts with 财务与增长 / AI 与设置 collapsed and shows their item counts", () => {
+  it("starts with 财务与增长 / AI 与设置 collapsed without misleading item-count circles", () => {
     renderShell(
       <AppShell currentPath="/dashboard">
         <div>home</div>
@@ -261,11 +262,74 @@ describe("AppShell streamlined sidebar and Ctrl+K", () => {
       "aria-expanded",
       "false"
     );
-    expect(screen.getByTestId("nav-section-count-growth_finance").textContent).toBe("5");
-    expect(screen.getByTestId("nav-section-count-ai_system").textContent).toBe("6");
+    // 折叠分组绝不把菜单条目数渲染成类似未读角标的圆圈。
+    expect(screen.queryByTestId("nav-section-count-growth_finance")).toBeNull();
+    expect(screen.queryByTestId("nav-section-count-ai_system")).toBeNull();
+    expect(screen.queryByTestId("sidebar-group-pending-badge")).toBeNull();
     // 折叠组的条目默认不渲染，侧边栏保持清爽。
     expect(screen.queryByRole("link", { name: /Finance & CVP/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /AI Proposals/i })).toBeNull();
+  });
+
+  it("shows only the real pending badge on collapsed AI & Settings and never duplicates counts", () => {
+    renderShell(
+      <AppShell currentPath="/dashboard" pendingProposalsCount={6}>
+        <div>home</div>
+      </AppShell>,
+      makePrincipal("owner")
+    );
+
+    const aiToggle = screen.getByTestId("nav-section-toggle-ai_system");
+    expect(aiToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("sidebar-group-pending-badge").textContent).toBe("6");
+    // Only one badge ("6") inside the collapsed AI & Settings header — no secondary item count.
+    expect(aiToggle.querySelectorAll("span.rounded-full")).toHaveLength(1);
+    // Other collapsed groups with zero pending items render zero badges.
+    const financeToggle = screen.getByTestId("nav-section-toggle-growth_finance");
+    expect(financeToggle.querySelectorAll("span.rounded-full")).toHaveLength(0);
+  });
+
+  it("preserves sidebar scroll position and manual group toggles across route remounts", () => {
+    const first = renderShell(
+      <AppShell currentPath="/ai/proposals" pendingProposalsCount={6}>
+        <div>proposals</div>
+      </AppShell>,
+      makePrincipal("owner")
+    );
+
+    // User manually collapses Business & Customers and scrolls down to the AI section.
+    fireEvent.click(screen.getByTestId("nav-section-toggle-business"));
+    expect(screen.getByTestId("nav-section-toggle-business")).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+
+    const navBefore = screen.getByTestId("sidebar-nav-scroll");
+    navBefore.scrollTop = 340;
+    fireEvent.scroll(navBefore);
+
+    // Clicking AI Knowledge Base triggers a page-level AppShell unmount + remount.
+    const kbLink = navBefore.querySelector<HTMLAnchorElement>('a[href="/ai/capabilities"]');
+    expect(kbLink).not.toBeNull();
+    fireEvent.click(kbLink!);
+    first.unmount();
+
+    renderShell(
+      <AppShell currentPath="/ai/capabilities" pendingProposalsCount={6}>
+        <div>kb</div>
+      </AppShell>,
+      makePrincipal("owner")
+    );
+
+    expect(screen.getByTestId("sidebar-nav-scroll").scrollTop).toBe(340);
+    expect(screen.getByTestId("nav-section-toggle-business")).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(screen.getByTestId("nav-section-toggle-ai_system")).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
   });
 
   it("auto-expands the group that owns the active route", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -33,6 +33,47 @@ const ROLE_LABEL: Record<string, { zh: string; en: string }> = {
   finance: { zh: "财务", en: "Finance" },
 };
 
+const SIDEBAR_SCROLL_KEY = "erp_sidebar_scroll_top";
+const SIDEBAR_SECTIONS_KEY = "erp_sidebar_section_overrides";
+const SIDEBAR_COLLAPSED_KEY = "erp_sidebar_collapsed";
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+function readSessionStorage(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionStorage(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // Ignore quota or disabled storage errors.
+  }
+}
+
+function readSavedSectionOverrides(): Record<string, boolean> {
+  const raw = readSessionStorage(SIDEBAR_SECTIONS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const clean: Record<string, boolean> = {};
+    for (const [key, val] of Object.entries(parsed)) {
+      if (typeof val === "boolean") clean[key] = val;
+    }
+    return clean;
+  } catch {
+    return {};
+  }
+}
+
 export function AppShell({
   children,
   currentPath,
@@ -50,7 +91,10 @@ export function AppShell({
   // Manual section overrides: `{ [sectionId]: true }` = expanded, `false` = collapsed.
   // Sections without an override fall back to their `defaultCollapsed` flag.
   const [sectionOverrides, setSectionOverrides] = useState<Record<string, boolean>>({});
+  const [sidebarHydrated, setSidebarHydrated] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
+  const navRef = useRef<HTMLElement | null>(null);
+  const restoredPathRef = useRef<string | null>(null);
   const palette = useCommandPalette();
 
   useRealtimeInbox(Boolean(principal && canAccessRoute(principal.role, "/inbox")));
@@ -66,13 +110,59 @@ export function AppShell({
   );
   const activeSectionId = activeSection?.id;
 
-  // 默认折叠的分组（财务与增长 / AI 与设置）一旦被当前路由命中，自动展开。
-  useEffect(() => {
-    if (!activeSectionId) return;
-    setSectionOverrides((previous) =>
-      previous[activeSectionId] ? previous : { ...previous, [activeSectionId]: true }
-    );
+  const persistSidebarScroll = useCallback(() => {
+    if (!navRef.current) return;
+    writeSessionStorage(SIDEBAR_SCROLL_KEY, String(Math.max(0, Math.round(navRef.current.scrollTop))));
+  }, []);
+
+  // Hydrate persisted sidebar UI state (collapsed rail + manual section toggles) on mount
+  // so route navigation does not wipe user choices when page-level AppShell remounts.
+  useIsomorphicLayoutEffect(() => {
+    const savedCollapsed = readSessionStorage(SIDEBAR_COLLAPSED_KEY);
+    if (savedCollapsed === "true") {
+      setCollapsed(true);
+    }
+    const savedOverrides = readSavedSectionOverrides();
+    if (Object.keys(savedOverrides).length > 0 || activeSectionId) {
+      setSectionOverrides((previous) => {
+        const merged = { ...savedOverrides, ...previous };
+        if (activeSectionId) {
+          merged[activeSectionId] = true;
+        }
+        return merged;
+      });
+    }
+    setSidebarHydrated(true);
   }, [activeSectionId]);
+
+  // Restore sidebar scroll position once per route transition after sections expand so
+  // clicking lower items (e.g. AI 知识库) keeps the sidebar anchored instead of jumping to top.
+  useIsomorphicLayoutEffect(() => {
+    if (!sidebarHydrated || restoredPathRef.current === pathname) return;
+    const navEl = navRef.current;
+    if (!navEl) return;
+    restoredPathRef.current = pathname;
+
+    const rawScroll = readSessionStorage(SIDEBAR_SCROLL_KEY);
+    if (rawScroll !== null) {
+      const savedTop = Number(rawScroll);
+      if (Number.isFinite(savedTop) && savedTop >= 0) {
+        navEl.scrollTop = savedTop;
+      }
+    }
+    const activeLink = navEl.querySelector<HTMLElement>('a[aria-current="page"]');
+    if (activeLink && typeof activeLink.getBoundingClientRect === "function") {
+      const navRect = navEl.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+      if (
+        navRect.height > 0 &&
+        (linkRect.top < navRect.top || linkRect.bottom > navRect.bottom)
+      ) {
+        activeLink.scrollIntoView?.({ block: "nearest" });
+        persistSidebarScroll();
+      }
+    }
+  }, [sidebarHydrated, pathname, persistSidebarScroll]);
 
   const visibleSections = useMemo(() => visibleNavSections(role), [role]);
   const isFiltering = filterQuery.trim().length > 0;
@@ -152,7 +242,12 @@ export function AppShell({
         )}
 
         {/* 5-Group Navigation */}
-        <nav className="flex-1 space-y-2 overflow-y-auto px-2 py-3">
+        <nav
+          ref={navRef}
+          data-testid="sidebar-nav-scroll"
+          onScroll={persistSidebarScroll}
+          className="flex-1 space-y-2 overflow-y-auto px-2 py-3"
+        >
           {sections.map((section) => {
             const containsActiveRoute = activeSectionId === section.id;
             const expanded =
@@ -174,7 +269,11 @@ export function AppShell({
                     data-testid={`nav-section-toggle-${section.id}`}
                     aria-expanded={expanded}
                     onClick={() =>
-                      setSectionOverrides((previous) => ({ ...previous, [section.id]: !expanded }))
+                      setSectionOverrides((previous) => {
+                        const next = { ...previous, [section.id]: !expanded };
+                        writeSessionStorage(SIDEBAR_SECTIONS_KEY, JSON.stringify(next));
+                        return next;
+                      })
                     }
                     className="mb-1 flex w-full items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold tracking-wider text-gray-400 uppercase transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
                   >
@@ -193,14 +292,6 @@ export function AppShell({
                         {pendingProposalsCount}
                       </span>
                     )}
-                    {!expanded && (
-                      <span
-                        data-testid={`nav-section-count-${section.id}`}
-                        className="rounded-full border border-gray-200 bg-gray-50 px-1.5 py-px text-[10px] font-semibold tracking-normal text-gray-500 tabular-nums dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
-                      >
-                        {section.items.length}
-                      </span>
-                    )}
                   </button>
                 )}
                 {expanded && (
@@ -212,6 +303,7 @@ export function AppShell({
                         <Link
                           key={item.href}
                           href={item.href}
+                          onClick={persistSidebarScroll}
                           aria-current={active ? "page" : undefined}
                           title={collapsed ? t(item.labelKey) : undefined}
                           className={`group relative flex h-10 items-center justify-between gap-2 rounded-md px-2.5 text-[13.5px] transition-all duration-150 ${
@@ -299,7 +391,13 @@ export function AppShell({
         <button
           type="button"
           data-testid="sidebar-collapse-btn"
-          onClick={() => setCollapsed((prev) => !prev)}
+          onClick={() =>
+            setCollapsed((prev) => {
+              const next = !prev;
+              writeSessionStorage(SIDEBAR_COLLAPSED_KEY, String(next));
+              return next;
+            })
+          }
           aria-label={bi("收起或展开侧边栏", "Toggle sidebar")}
           className="flex items-center border-t border-gray-200 px-3 py-2.5 text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
         >
