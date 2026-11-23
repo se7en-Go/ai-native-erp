@@ -31,6 +31,7 @@ from erp_core.channels.ecommerce.base import (
     NormalizedLineItem,
     NormalizedOrder,
     NormalizedProduct,
+    attach_financial_metadata,
     register_channel_routing,
     resolve_routing_tenant,
 )
@@ -637,6 +638,20 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             shop_money = (node.get(field) or {}).get("shopMoney") or {}
             return Decimal(str(shop_money.get("amount", "0.00")))
 
+        refunded_val = (
+            money("totalRefundedSet")
+            if node.get("totalRefundedSet")
+            else Decimal(str(node.get("refunded_amount") or "0.00"))
+        )
+        commission_val = Decimal(
+            str(node.get("platform_commission_base") or node.get("platform_commission") or "0.00")
+        )
+        attach_financial_metadata(
+            channel_metadata,
+            refunded_amount=refunded_val,
+            platform_commission_base=commission_val,
+        )
+
         first = customer_node.get("firstName") or ""
         last = customer_node.get("lastName") or ""
         items = [
@@ -664,6 +679,9 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             shipping_charged=money("totalShippingPriceSet"),
             tax_collected=money("totalTaxSet"),
             total_amount=money("currentTotalPriceSet"),
+            platform_commission_base=commission_val.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            ),
             fulfillment_status=fulfillment_status,
             payment_status=payment_status,
             customer=NormalizedCustomer(

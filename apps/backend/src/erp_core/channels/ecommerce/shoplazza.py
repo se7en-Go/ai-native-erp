@@ -21,6 +21,7 @@ from erp_core.channels.ecommerce.base import (
     NormalizedLineItem,
     NormalizedOrder,
     NormalizedProduct,
+    attach_financial_metadata,
 )
 from erp_core.shared.enums import FulfillmentStatus, IdentityType, OrderMode, PaymentStatus
 from erp_core.shared.errors import AppError
@@ -148,6 +149,17 @@ class ShoplazzaAdapter(CommercePlatformAdapter):
         metadata: dict[str, Any] = {"shoplazza_order_number": order.get("number")}
         if order.get("note"):
             metadata["po_number"] = order["note"]
+        refunded_val = self._decimal(
+            order.get("total_refunded") or order.get("refunded_amount")
+        )
+        commission_val = self._decimal(
+            order.get("platform_commission") or order.get("platform_fee")
+        )
+        attach_financial_metadata(
+            metadata,
+            refunded_amount=refunded_val,
+            platform_commission_base=commission_val,
+        )
         financial = str(order.get("financial_status") or "").lower()
         payment_status = (
             PaymentStatus.PAID
@@ -166,6 +178,9 @@ class ShoplazzaAdapter(CommercePlatformAdapter):
             shipping_charged=self._decimal(order.get("total_shipping_price")),
             tax_collected=self._decimal(order.get("total_tax")),
             total_amount=self._decimal(order.get("total_price")),
+            platform_commission_base=commission_val.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            ),
             fulfillment_status=FulfillmentStatus.CONFIRMED_RESERVED,
             payment_status=payment_status,
             customer=NormalizedCustomer(

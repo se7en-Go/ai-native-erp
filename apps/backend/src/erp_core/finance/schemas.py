@@ -171,3 +171,100 @@ class LiveFxRatesRead(BaseModel):
     fetched_at: datetime
     is_live: bool
     refresh_interval_seconds: int
+
+
+class ChannelBreakdownItem(BaseModel):
+    channel_key: str
+    channel_account_id: UUID | None = None
+    channel_type: str
+    channel_label: str
+    order_count: int = 0
+    units_sold: int = 0
+    gmv_base: Decimal = Decimal("0.00")
+    refunded_amount_base: Decimal = Decimal("0.00")
+    refund_rate_pct: Decimal = Decimal("0.00")
+    cogs_base: Decimal = Decimal("0.00")
+    platform_commission_base: Decimal = Decimal("0.00")
+    ad_spend_base: Decimal = Decimal("0.00")
+    net_margin_base: Decimal = Decimal("0.00")
+    margin_pct: Decimal = Decimal("0.00")
+    roas: Decimal | None = None
+
+
+class ChannelDailyTrendPoint(BaseModel):
+    metric_date: date
+    order_count: int = 0
+    units_sold: int = 0
+    gmv_base: Decimal = Decimal("0.00")
+    net_margin_base: Decimal = Decimal("0.00")
+    ad_spend_base: Decimal = Decimal("0.00")
+
+
+class ChannelAnalyticsOverviewRead(BaseModel):
+    window: str
+    base_currency: str
+    totals: ChannelBreakdownItem
+    channels: list[ChannelBreakdownItem]
+    daily_trend: list[ChannelDailyTrendPoint]
+
+
+class SkuChannelBreakdownItem(BaseModel):
+    channel_type: str
+    channel_label: str
+    units_sold: int
+    revenue_base: Decimal
+
+
+class SkuVelocityItem(BaseModel):
+    variant_id: UUID
+    product_id: UUID
+    sku: str
+    product_name: str
+    total_units_sold: int
+    avg_daily_units: Decimal
+    available_qty: int
+    days_of_cover: Decimal | None = None
+    lead_time_days: int
+    stockout_risk: str
+    recommended_reorder_qty: int
+    cost_price_base: Decimal | None = None
+    channel_breakdown: list[SkuChannelBreakdownItem]
+    sourcing_url: str | None = None
+    sourcing_draft_id: UUID | None = None
+
+
+class SkuVelocityResponse(BaseModel):
+    window: str
+    base_currency: str
+    items: list[SkuVelocityItem]
+    total: int
+
+
+class ChannelDailyMetricUpsert(BaseModel):
+    channel_account_id: UUID
+    variant_id: UUID | None = None
+    metric_date: date
+    impressions: int = Field(default=0, ge=0)
+    clicks: int = Field(default=0, ge=0)
+    ad_spend_base: ExactDecimal = Field(
+        default=Decimal("0.00"), ge=Decimal("0"), max_digits=14, decimal_places=2
+    )
+    external_sessions: int = Field(default=0, ge=0)
+    source: str = Field(default="manual", min_length=1, max_length=64)
+
+
+class ChannelDailyMetricRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    channel_account_id: UUID
+    variant_id: UUID | None = None
+    metric_date: date
+    impressions: int
+    clicks: int
+    ad_spend_base: Decimal
+    external_sessions: int
+    source: str
+    created_at: datetime
+    updated_at: datetime

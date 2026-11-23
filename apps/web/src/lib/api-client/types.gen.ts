@@ -445,6 +445,32 @@ export type ChannelAccountRead = {
     visibility_scope?: 'shared' | 'personal';
 };
 
+export type ChannelAnalyticsOverviewRead = {
+    base_currency: string;
+    channels: Array<ChannelBreakdownItem>;
+    daily_trend: Array<ChannelDailyTrendPoint>;
+    totals: ChannelBreakdownItem;
+    window: string;
+};
+
+export type ChannelBreakdownItem = {
+    ad_spend_base?: string;
+    channel_account_id?: string | null;
+    channel_key: string;
+    channel_label: string;
+    channel_type: string;
+    cogs_base?: string;
+    gmv_base?: string;
+    margin_pct?: string;
+    net_margin_base?: string;
+    order_count?: number;
+    platform_commission_base?: string;
+    refund_rate_pct?: string;
+    refunded_amount_base?: string;
+    roas?: string | null;
+    units_sold?: number;
+};
+
 export type ChannelConsentRead = {
     channel_type: ChannelType;
     consent_status: 'opted_in' | 'opted_out';
@@ -452,6 +478,41 @@ export type ChannelConsentRead = {
     id: string;
     proof_source: string;
     recorded_at: string;
+};
+
+export type ChannelDailyMetricRead = {
+    ad_spend_base: string;
+    channel_account_id: string;
+    clicks: number;
+    created_at: string;
+    external_sessions: number;
+    id: string;
+    impressions: number;
+    metric_date: string;
+    source: string;
+    tenant_id: string;
+    updated_at: string;
+    variant_id?: string | null;
+};
+
+export type ChannelDailyMetricUpsert = {
+    ad_spend_base?: number | string;
+    channel_account_id: string;
+    clicks?: number;
+    external_sessions?: number;
+    impressions?: number;
+    metric_date: string;
+    source?: string;
+    variant_id?: string | null;
+};
+
+export type ChannelDailyTrendPoint = {
+    ad_spend_base?: string;
+    gmv_base?: string;
+    metric_date: string;
+    net_margin_base?: string;
+    order_count?: number;
+    units_sold?: number;
 };
 
 export type ChannelDlqRead = {
@@ -1252,6 +1313,7 @@ export type LowStockItemRead = {
     reserved_qty: number;
     safety_stock_qty: number;
     sku: string;
+    sourcing_url?: string | null;
     suggested_reorder_qty: number;
     variant_id: string;
     warehouse_id: string;
@@ -2615,6 +2677,13 @@ export type ShoplineConnectRequest = {
     warehouse_id?: string | null;
 };
 
+export type SkuChannelBreakdownItem = {
+    channel_label: string;
+    channel_type: string;
+    revenue_base: string;
+    units_sold: number;
+};
+
 export type SkuMappingCreate = {
     bundle_multiplier?: number;
     channel_account_id: string;
@@ -2661,6 +2730,31 @@ export type SkuMargin = {
     sku: string;
     units: number;
     variant_id: string;
+};
+
+export type SkuVelocityItem = {
+    available_qty: number;
+    avg_daily_units: string;
+    channel_breakdown: Array<SkuChannelBreakdownItem>;
+    cost_price_base?: string | null;
+    days_of_cover?: string | null;
+    lead_time_days: number;
+    product_id: string;
+    product_name: string;
+    recommended_reorder_qty: number;
+    sku: string;
+    sourcing_draft_id?: string | null;
+    sourcing_url?: string | null;
+    stockout_risk: string;
+    total_units_sold: number;
+    variant_id: string;
+};
+
+export type SkuVelocityResponse = {
+    base_currency: string;
+    items: Array<SkuVelocityItem>;
+    total: number;
+    window: string;
 };
 
 /**
@@ -6844,6 +6938,95 @@ export type GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponses = {
 };
 
 export type GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponse = GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponses[keyof GetCashflowSummaryApiV1FinanceCashflowSummaryGetResponses];
+
+export type UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostData = {
+    body: ChannelDailyMetricUpsert;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/finance/channel-analytics/daily-metrics';
+};
+
+export type UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostError = UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostErrors[keyof UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostErrors];
+
+export type UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ChannelDailyMetricRead;
+};
+
+export type UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostResponse = UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostResponses[keyof UpsertChannelDailyMetricApiV1FinanceChannelAnalyticsDailyMetricsPostResponses];
+
+export type GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        window?: string;
+    };
+    url: '/api/v1/finance/channel-analytics/overview';
+};
+
+export type GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetError = GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetErrors[keyof GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetErrors];
+
+export type GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChannelAnalyticsOverviewRead;
+};
+
+export type GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetResponse = GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetResponses[keyof GetChannelAnalyticsOverviewApiV1FinanceChannelAnalyticsOverviewGetResponses];
+
+export type GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        window?: string;
+        limit?: number;
+    };
+    url: '/api/v1/finance/channel-analytics/sku-velocity';
+};
+
+export type GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetError = GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetErrors[keyof GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetErrors];
+
+export type GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SkuVelocityResponse;
+};
+
+export type GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetResponse = GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetResponses[keyof GetChannelSkuVelocityApiV1FinanceChannelAnalyticsSkuVelocityGetResponses];
 
 export type ExportCvpCsvApiV1FinanceCvpExportCsvGetData = {
     body?: never;

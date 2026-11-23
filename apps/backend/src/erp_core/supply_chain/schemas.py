@@ -189,6 +189,7 @@ class LowStockItemRead(BaseModel):
     available_qty: int
     safety_stock_qty: int
     suggested_reorder_qty: int
+    sourcing_url: str | None = None
 
 
 class LowStockListRead(BaseModel):

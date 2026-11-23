@@ -108,3 +108,36 @@ class OrderProfitSnapshot(Base):
     recalculated_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
     )
+
+
+class ChannelDailyMetric(Base):
+    __tablename__ = "channel_daily_metrics"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    channel_account_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("channel_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    variant_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("product_variants.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    metric_date: Mapped[date] = mapped_column(sa.Date(), nullable=False)
+    impressions: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
+    clicks: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
+    ad_spend_base: Mapped[Decimal] = mapped_column(
+        sa.Numeric(14, 2), nullable=False, default=Decimal("0.00")
+    )
+    external_sessions: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
+    source: Mapped[str] = mapped_column(sa.Text(), nullable=False, default="manual")
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )

@@ -26,6 +26,7 @@ from erp_core.channels.ecommerce.base import (
     NormalizedLineItem,
     NormalizedOrder,
     NormalizedProduct,
+    attach_financial_metadata,
 )
 from erp_core.shared.enums import FulfillmentStatus, IdentityType, OrderMode, PaymentStatus
 from erp_core.shared.errors import AppError
@@ -296,6 +297,22 @@ class WooCommerceAdapter(CommercePlatformAdapter):
             metadata["po_number"] = str(meta["po_number"])
         if "tracking_number" in meta:
             metadata["tracking_number"] = str(meta["tracking_number"])
+        refunded_sum = sum(
+            (
+                self._decimal(r.get("total")).copy_abs()
+                for r in (order.get("refunds") or ())
+                if isinstance(r, Mapping)
+            ),
+            start=self._decimal(order.get("refunded_amount")),
+        )
+        commission_val = self._decimal(
+            order.get("platform_commission") or meta.get("platform_commission")
+        )
+        attach_financial_metadata(
+            metadata,
+            refunded_amount=refunded_sum,
+            platform_commission_base=commission_val,
+        )
         name = f"{billing.get('first_name') or ''} {billing.get('last_name') or ''}".strip()
         return NormalizedOrder(
             external_order_id=str(order["id"]),
@@ -307,6 +324,9 @@ class WooCommerceAdapter(CommercePlatformAdapter):
             discount_amount=discount,
             tax_collected=tax,
             total_amount=total,
+            platform_commission_base=commission_val.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            ),
             fulfillment_status=FulfillmentStatus.CONFIRMED_RESERVED,
             payment_status=payment_status,
             customer=NormalizedCustomer(

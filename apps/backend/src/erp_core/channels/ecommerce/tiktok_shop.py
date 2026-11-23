@@ -23,6 +23,7 @@ from erp_core.channels.ecommerce.base import (
     NormalizedLineItem,
     NormalizedOrder,
     NormalizedProduct,
+    attach_financial_metadata,
 )
 from erp_core.shared.enums import FulfillmentStatus, IdentityType, OrderMode, PaymentStatus
 from erp_core.shared.errors import AppError
@@ -189,6 +190,17 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
         }
         if order.get("packages"):
             metadata["tiktok_package_id"] = (order["packages"][0] or {}).get("id")
+        refunded_val = self._decimal(
+            order.get("refund_amount") or payment.get("seller_refund_amount")
+        )
+        commission_val = self._decimal(
+            payment.get("platform_commission") or payment.get("referral_fee")
+        )
+        attach_financial_metadata(
+            metadata,
+            refunded_amount=refunded_val,
+            platform_commission_base=commission_val,
+        )
         return NormalizedOrder(
             external_order_id=str(order["id"]),
             external_order_number=str(order.get("id")),
@@ -199,6 +211,9 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
             discount_amount=self._decimal(payment.get("platform_discount")),
             tax_collected=self._decimal(payment.get("tax")),
             total_amount=self._decimal(payment.get("total_amount")),
+            platform_commission_base=commission_val.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            ),
             fulfillment_status=_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED),
             payment_status=(
                 PaymentStatus.REFUNDED if status == "CANCELLED" else PaymentStatus.PAID
