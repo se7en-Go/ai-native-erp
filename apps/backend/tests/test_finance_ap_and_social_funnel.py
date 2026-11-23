@@ -531,6 +531,24 @@ async def test_cashflow_summary_uses_real_ar_and_ap_sql(workspace) -> None:
     assert summary.net_cashflow == summary.ar_collected - summary.ap_paid
 
 
+async def test_cashflow_summary_includes_new_purchase_orders_without_prior_payables_call(
+    workspace,
+) -> None:
+    factory, tid, owner = workspace["factory"], workspace["tenant"], workspace["user_id"]
+    async with tenant_session(factory, tid) as session:
+        supplier = await _supplier(session, tid, "Ningbo PCB")
+        await _purchase_order(session, tid, supplier, owner, "PO-5009", "2500.00")
+
+    async with client_for(factory, workspace["finance"]) as client:
+        response = await client.get(f"{AP_BASE}/cashflow-summary")
+        assert response.status_code == 200, response.text
+        summary = CashflowSummaryRead.model_validate(response.json())
+
+    assert summary.ap_total == Decimal("2500.00")
+    assert summary.ap_paid == Decimal("0.00")
+    assert summary.ap_outstanding == Decimal("2500.00")
+
+
 async def test_cashflow_summary_is_tenant_isolated(workspace) -> None:
     factory, tid, owner = workspace["factory"], workspace["tenant"], workspace["user_id"]
     async with tenant_session(factory, tid) as session:

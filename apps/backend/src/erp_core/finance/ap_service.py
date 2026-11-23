@@ -568,9 +568,13 @@ class PayableService:
         return self._to_read(updated)
 
     async def cashflow_summary(
-        self, session: AsyncSession, tenant_id: UUID
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        principal: CurrentPrincipal | None = None,
     ) -> CashflowSummaryRead:
-        """AR vs AP position and net cash flow, straight from SQL aggregates."""
+        """Sync fresh POs, then compute AR vs AP position and net cash flow from SQL."""
+        await self.sync_purchase_orders(session, tenant_id, principal)
         currency = await self._base_currency(session, tenant_id)
         ar = (
             (

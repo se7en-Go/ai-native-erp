@@ -88,4 +88,4 @@ async def get_cashflow_summary(
     principal: ApReader,
 ) -> CashflowSummaryRead:
     """AR collected minus AP paid in the base currency, plus the per-currency breakdown."""
-    return await _service.cashflow_summary(session, principal.tenant_id)
+    return await _service.cashflow_summary(session, principal.tenant_id, principal)
