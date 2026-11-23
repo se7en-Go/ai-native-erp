@@ -34,6 +34,7 @@ from erp_core.channels.ecommerce.alibaba_intl import AlibabaIntlAdapter
 from erp_core.channels.ecommerce.amazon_sp import AmazonSpApiAdapter
 from erp_core.channels.ecommerce.base import CommercePlatformAdapter, CredentialVaultHelper
 from erp_core.channels.ecommerce.ebay import EbayConnectorAdapter
+from erp_core.channels.ecommerce.shopify import ShopifyGraphqlAdapter
 from erp_core.shared.errors import AppError
 
 logger = structlog.get_logger(__name__)
@@ -41,17 +42,25 @@ logger = structlog.get_logger(__name__)
 AMAZON_SP_CHANNEL_TYPE = "amazon_sp"
 EBAY_CHANNEL_TYPE = "ebay"
 ALIBABA_INTL_CHANNEL_TYPE = "alibaba_email"
+SHOPIFY_CHANNEL_TYPE = "shopify"
 
 AMAZON_CREDENTIAL_TYPE = "amazon_sp_api"
 EBAY_CREDENTIAL_TYPE = "ebay_api"
 ALIBABA_INTL_CREDENTIAL_TYPE = "alibaba_intl_app"
+SHOPIFY_CREDENTIAL_TYPE = "shopify_custom_app"
+SHOPIFY_FALLBACK_CREDENTIAL_TYPE = "oauth_token"
 
 DEFAULT_AMAZON_MARKETPLACE_ID = "ATVPDKIKX0DER"
 DEFAULT_EBAY_SITE_ID = "EBAY_US"
 
 #: Marketplace channels that can actually be pushed to a live API today.
 SUPPORTED_CHANNEL_TYPES: frozenset[str] = frozenset(
-    {AMAZON_SP_CHANNEL_TYPE, EBAY_CHANNEL_TYPE, ALIBABA_INTL_CHANNEL_TYPE}
+    {
+        AMAZON_SP_CHANNEL_TYPE,
+        EBAY_CHANNEL_TYPE,
+        ALIBABA_INTL_CHANNEL_TYPE,
+        SHOPIFY_CHANNEL_TYPE,
+    }
 )
 
 #: ``channel_accounts.channel_type`` -> ``channel_credentials.credential_type``.
@@ -59,6 +68,7 @@ CREDENTIAL_TYPES: dict[str, str] = {
     AMAZON_SP_CHANNEL_TYPE: AMAZON_CREDENTIAL_TYPE,
     EBAY_CHANNEL_TYPE: EBAY_CREDENTIAL_TYPE,
     ALIBABA_INTL_CHANNEL_TYPE: ALIBABA_INTL_CREDENTIAL_TYPE,
+    SHOPIFY_CHANNEL_TYPE: SHOPIFY_CREDENTIAL_TYPE,
 }
 
 #: Keys every decrypted credential blob must carry before an adapter is built.
@@ -71,6 +81,7 @@ REQUIRED_CREDENTIAL_KEYS: dict[str, tuple[str, ...]] = {
     ),
     EBAY_CHANNEL_TYPE: ("seller_username", "app_id", "cert_id", "refresh_token"),
     ALIBABA_INTL_CHANNEL_TYPE: ("store_id", "app_key", "app_secret"),
+    SHOPIFY_CHANNEL_TYPE: ("shop_domain",),
 }
 
 
@@ -119,6 +130,11 @@ def build_marketplace_adapter(
     credentials: Mapping[str, Any],
     *,
     transport: httpx.AsyncBaseTransport | None = None,
+    expires_at: Any = None,
+    tenant_id: UUID | None = None,
+    channel_account_id: UUID | None = None,
+    vault: CredentialVaultHelper | None = None,
+    session: AsyncSession | None = None,
 ) -> CommercePlatformAdapter | None:
     """Instantiate the real adapter for one marketplace channel from decrypted credentials.
 
@@ -135,6 +151,30 @@ def build_marketplace_adapter(
     )
     if missing:
         raise _invalid_credentials(normalized, missing)
+
+    if normalized == SHOPIFY_CHANNEL_TYPE:
+        access_token = _text(credentials, "access_token")
+        client_id = _text(credentials, "client_id") or None
+        client_secret = _text(credentials, "client_secret") or None
+        if not access_token and not (client_id and client_secret):
+            raise _invalid_credentials(normalized, ("access_token",))
+        auth_mode = _text(credentials, "auth_mode") or (
+            "client_credentials" if client_id and client_secret and not access_token else "oauth"
+        )
+        return ShopifyGraphqlAdapter(
+            shop_domain=_text(credentials, "shop_domain"),
+            access_token=access_token,
+            webhook_secret=client_secret or "",
+            auth_mode=auth_mode,
+            client_id=client_id,
+            client_secret=client_secret,
+            expires_at=expires_at,
+            transport=transport,
+            tenant_id=tenant_id,
+            channel_account_id=channel_account_id,
+            vault=vault,
+            session=session,
+        )
 
     if normalized == AMAZON_SP_CHANNEL_TYPE:
         return AmazonSpApiAdapter(
@@ -186,6 +226,31 @@ class MarketplaceListingDispatcher:
         #: Test seam: a ``MockTransport`` here means zero real network traffic.
         self._transport = transport
 
+    async def _load_credentials(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        channel_account_id: UUID,
+        channel_type: str,
+        primary_credential_type: str,
+    ) -> tuple[Mapping[str, Any], Any]:
+        try:
+            return await self._vault.load_secret_json(
+                session, tenant_id, channel_account_id, primary_credential_type
+            )
+        except AppError as exc:
+            if (
+                channel_type == SHOPIFY_CHANNEL_TYPE
+                and exc.code == "ERR_CREDENTIAL_NOT_FOUND"
+            ):
+                return await self._vault.load_secret_json(
+                    session,
+                    tenant_id,
+                    channel_account_id,
+                    SHOPIFY_FALLBACK_CREDENTIAL_TYPE,
+                )
+            raise
+
     async def publish_listing(
         self,
         session: AsyncSession,
@@ -197,18 +262,33 @@ class MarketplaceListingDispatcher:
         if credential_type is None:
             raise unsupported_channel_error(channel_type)
 
-        credentials, _expires_at = await self._vault.load_secret_json(
-            session, tenant_id, payload.channel_account_id, credential_type
+        credentials, expires_at = await self._load_credentials(
+            session,
+            tenant_id,
+            payload.channel_account_id,
+            channel_type,
+            credential_type,
         )
         adapter = build_marketplace_adapter(
-            channel_type, credentials, transport=self._transport
+            channel_type,
+            credentials,
+            transport=self._transport,
+            expires_at=expires_at,
+            tenant_id=tenant_id,
+            channel_account_id=payload.channel_account_id,
+            vault=self._vault,
+            session=session,
         )
         if adapter is None:  # pragma: no cover - guarded by CREDENTIAL_TYPES above
             raise unsupported_channel_error(channel_type)
         # `build_marketplace_adapter` returns the shared connector ABC (it also feeds the
-        # order reconciler), so narrow to the three classes that really implement publishing.
+        # order reconciler), so narrow to the four classes that really implement publishing.
         listing_adapter = cast(
-            AmazonSpApiAdapter | EbayConnectorAdapter | AlibabaIntlAdapter, adapter
+            AmazonSpApiAdapter
+            | EbayConnectorAdapter
+            | AlibabaIntlAdapter
+            | ShopifyGraphqlAdapter,
+            adapter,
         )
 
         receipt = await listing_adapter.publish_listing(
@@ -260,6 +340,9 @@ __all__ = [
     "EBAY_CREDENTIAL_TYPE",
     "MarketplaceListingDispatcher",
     "REQUIRED_CREDENTIAL_KEYS",
+    "SHOPIFY_CHANNEL_TYPE",
+    "SHOPIFY_CREDENTIAL_TYPE",
+    "SHOPIFY_FALLBACK_CREDENTIAL_TYPE",
     "SUPPORTED_CHANNEL_TYPES",
     "build_marketplace_adapter",
     "unsupported_channel_error",
