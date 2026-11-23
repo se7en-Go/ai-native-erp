@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI-Native ERP Collector</title>
+    <style>
+      :root {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+      body {
+        width: 360px;
+        margin: 0;
+        padding: 12px;
+        font-size: 12px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .badge {
+        font-size: 10px;
+        background: #dbeafe;
+        color: #1d4ed8;
+        padding: 2px 6px;
+        border-radius: 999px;
+      }
+      .card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+      }
+      label span {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 3px;
+        color: #334155;
+      }
+      input,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 12px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .stats {
+        display: flex;
+        gap: 8px;
+        font-size: 11px;
+        color: #475569;
+        margin-bottom: 8px;
+      }
+      .stats span {
+        background: #f1f5f9;
+        padding: 2px 7px;
+        border-radius: 6px;
+      }
+      button {
+        width: 100%;
+        border: none;
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+        background: #2563eb;
+        color: #ffffff;
+      }
+      button:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: #e2e8f0;
+        color: #0f172a;
+        margin-bottom: 6px;
+      }
+      .status {
+        margin-top: 8px;
+        padding: 8px;
+        border-radius: 8px;
+        font-size: 11.5px;
+        line-height: 1.45;
+        display: none;
+      }
+      .status.ok {
+        display: block;
+        background: #ecfdf5;
+        color: #065f46;
+        border: 1px solid #a7f3d0;
+      }
+      .status.err {
+        display: block;
+        background: #fff1f2;
+        color: #9f1239;
+        border: 1px solid #fecdd3;
+      }
+      a.open-link {
+        display: inline-block;
+        margin-top: 4px;
+        color: #1d4ed8;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>
+      <span>AI-Native ERP 一键采品</span>
+      <span id="platformBadge" class="badge">READY</span>
+    </h1>
+
+    <div class="card">
+      <label>
+        <span>ERP API 地址</span>
+        <input id="apiBaseUrl" type="url" placeholder="http://localhost:8000" />
+      </label>
+      <label>
+        <span>采集授权码 (X-Collector-Token)</span>
+        <input id="collectorToken" type="password" placeholder="erp_col_..." />
+      </label>
+    </div>
+
+    <div class="card">
+      <button id="refreshBtn" class="secondary" type="button">重新识别当前商品页</button>
+      <label>
+        <span>商品标题</span>
+        <input id="rawTitle" type="text" placeholder="自动识别或手动补充标题" />
+      </label>
+      <div class="row">
+        <label>
+          <span>采购价 (CNY)</span>
+          <input id="rawPriceCny" type="text" placeholder="12.50" />
+        </label>
+        <label>
+          <span>目标毛利率 (%)</span>
+          <input id="targetMarginPct" type="text" value="35.00" />
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          <span>USD/CNY 汇率</span>
+          <input id="fxRate" type="text" value="7.200000" />
+        </label>
+        <label>
+          <span>类目 (Category)</span>
+          <input id="category" type="text" value="LED Lighting" />
+        </label>
+      </div>
+      <div class="stats">
+        <span id="variantCount">规格: 0</span>
+        <span id="imageCount">图片: 0</span>
+      </div>
+      <button id="collectBtn" type="button">一键采集到 ERP 选品箱</button>
+      <div id="statusBox" class="status"></div>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

@@ -3051,6 +3051,125 @@
         "title": "CollectionSummary",
         "type": "object"
       },
+      "CollectorTokenCreateRequest": {
+        "properties": {
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CollectorTokenCreateRequest",
+        "type": "object"
+      },
+      "CollectorTokenCreateResponse": {
+        "properties": {
+          "plain_token": {
+            "title": "Plain Token",
+            "type": "string"
+          },
+          "token": {
+            "$ref": "#/components/schemas/CollectorTokenRead"
+          }
+        },
+        "required": [
+          "token",
+          "plain_token"
+        ],
+        "title": "CollectorTokenCreateResponse",
+        "type": "object"
+      },
+      "CollectorTokenRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "token_prefix": {
+            "title": "Token Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "token_prefix",
+          "scopes",
+          "created_at"
+        ],
+        "title": "CollectorTokenRead",
+        "type": "object"
+      },
       "ConfidenceLevel": {
         "enum": [
           "deterministic",
@@ -5260,6 +5379,28 @@
           "status"
         ],
         "title": "EnrichedProspectItem",
+        "type": "object"
+      },
+      "ExtensionCollectResponse": {
+        "properties": {
+          "catalog_url": {
+            "title": "Catalog Url",
+            "type": "string"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/SourcingDraftRead"
+          },
+          "mirrored_images_count": {
+            "title": "Mirrored Images Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "draft",
+          "catalog_url",
+          "mirrored_images_count"
+        ],
+        "title": "ExtensionCollectResponse",
         "type": "object"
       },
       "FinanceOverviewRead": {
@@ -15326,6 +15467,9 @@
             "default": "1688",
             "enum": [
               "1688",
+              "taobao",
+              "pdd",
+              "alibaba",
               "url",
               "manual"
             ],
@@ -23521,6 +23665,234 @@
           }
         },
         "summary": "Collect Sourcing Draft",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
+    "/api/v1/catalog/sourcing/collect-from-extension": {
+      "post": {
+        "operationId": "collect_sourcing_draft_from_extension_api_v1_catalog_sourcing_collect_from_extension_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Collector-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Collector-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcingCollectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionCollectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Collect Sourcing Draft From Extension",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
+    "/api/v1/catalog/sourcing/collector-tokens": {
+      "get": {
+        "operationId": "list_collector_tokens_api_v1_catalog_sourcing_collector_tokens_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CollectorTokenRead"
+                  },
+                  "title": "Response List Collector Tokens Api V1 Catalog Sourcing Collector Tokens Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Collector Tokens",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      },
+      "post": {
+        "operationId": "create_collector_token_api_v1_catalog_sourcing_collector_tokens_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorTokenCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectorTokenCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Collector Token",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
+    "/api/v1/catalog/sourcing/collector-tokens/{token_id}": {
+      "delete": {
+        "operationId": "revoke_collector_token_api_v1_catalog_sourcing_collector_tokens__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectorTokenRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Collector Token",
         "tags": [
           "catalog-sourcing"
         ]

@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "AI-Native ERP Multi-Source Product Collector",
+  "version": "1.0.0",
+  "description": "One-click product extraction from 1688, Taobao/Tmall, Pinduoduo, Alibaba.com, and generic sourcing pages into AI-Native ERP.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": [
+    "https://*.1688.com/*",
+    "https://*.taobao.com/*",
+    "https://*.tmall.com/*",
+    "https://*.yangkeduo.com/*",
+    "https://*.pinduoduo.com/*",
+    "https://*.alibaba.com/*",
+    "http://localhost:*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Collect to AI-Native ERP"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.1688.com/*",
+        "https://*.taobao.com/*",
+        "https://*.tmall.com/*",
+        "https://*.yangkeduo.com/*",
+        "https://*.pinduoduo.com/*",
+        "https://*.alibaba.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

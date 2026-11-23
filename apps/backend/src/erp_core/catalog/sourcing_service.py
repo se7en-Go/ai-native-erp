@@ -472,7 +472,7 @@ class MarketplaceListingPublisher(Protocol):
 
 
 class SourcingCollectRequest(BaseModel):
-    source_platform: Literal["1688", "url", "manual"] = "1688"
+    source_platform: Literal["1688", "taobao", "pdd", "alibaba", "url", "manual"] = "1688"
     source_url: str | None = Field(default=None, max_length=2048)
     raw_title: str | None = Field(default=None, max_length=512)
     raw_text: str | None = Field(default=None, max_length=20000)
@@ -1057,9 +1057,14 @@ class SourcingService:
             return SourcingPageMetadata()
         return parse_page_metadata(body)
 
-    async def resolve_source(self, payload: SourcingCollectRequest) -> SourcingSource:
+    async def resolve_source(
+        self, payload: SourcingCollectRequest, *, skip_remote_fetch: bool = False
+    ) -> SourcingSource:
         pasted = parse_supplier_copy(payload.raw_title, payload.raw_text)
         if not payload.source_url:
+            return pasted
+        if skip_remote_fetch:
+            validate_source_url(payload.source_url)
             return pasted
         metadata = await self.fetch_source_metadata(payload.source_url)
         images = _dedupe([*pasted.images, *([metadata.og_image] if metadata.og_image else [])])
@@ -1076,8 +1081,10 @@ class SourcingService:
         tenant_id: UUID,
         actor_id: str,
         payload: SourcingCollectRequest,
+        *,
+        skip_remote_fetch: bool = False,
     ) -> SourcingDraftRead:
-        source = await self.resolve_source(payload)
+        source = await self.resolve_source(payload, skip_remote_fetch=skip_remote_fetch)
         planned = plan_sourcing_draft(payload, source)
         draft_id = uuid4()
         row = (
