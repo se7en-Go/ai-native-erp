@@ -24,10 +24,9 @@ function renderWithSession(ui: React.ReactElement, role: Principal["role"] = "ow
   };
   const session: AuthSessionState = {
     principal,
-    loading: false,
-    error: null,
-    refresh: vi.fn(),
-    logout: vi.fn(),
+    isLoading: false,
+    logout: vi.fn(async () => {}),
+    refreshSession: vi.fn(async () => {}),
   };
   return render(
     <QueryClientProvider client={queryClient}>
