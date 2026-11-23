@@ -15,7 +15,11 @@ import {
   X,
 } from "lucide-react";
 
-import { fetchChannelAccounts, sendQuotePiEmail } from "@/lib/data-source";
+import {
+  fetchChannelAccounts,
+  fetchPiTemplateSettings,
+  sendQuotePiEmail,
+} from "@/lib/data-source";
 import type {
   ChannelAccountApiItem,
   EmailLanguage,
@@ -31,12 +35,24 @@ export function defaultPiEmailSubject(quote: QuoteRecord): string {
   return `Proforma Invoice ${quote.quote_no} (${quote.incoterm} · ${quote.quote_currency} ${quote.total_amount})`;
 }
 
+const QUOTE_STATUS_COPY: Record<string, { zh: string; en: string }> = {
+  draft: { zh: "草稿", en: "Draft" },
+  pending_approval: { zh: "待审批", en: "Pending approval" },
+  sent: { zh: "已发送", en: "Sent" },
+  accepted: { zh: "客户已接受", en: "Accepted" },
+  converted: { zh: "已转订单", en: "Converted" },
+  rejected: { zh: "已驳回", en: "Rejected" },
+  expired: { zh: "已过期", en: "Expired" },
+};
+
 /** 礼貌的出口随函：默认中英双版，用户可任意改写后再发。 */
 export function defaultPiEmailBody(
   quote: QuoteRecord,
   language: EmailLanguage,
+  senderSignature?: string | null,
 ): string {
   const total = formatMoney(quote.total_amount, quote.quote_currency);
+  const cleanedSignature = senderSignature?.trim() || "";
   if (language === "zh") {
     return [
       "尊敬的客户，您好：",
@@ -47,7 +63,8 @@ export function defaultPiEmailBody(
       "",
       "如需调整数量、包装或贸易术语，请直接回复本邮件，我们会立即更新版本。",
       "",
-      "顺祝商祺",
+      "顺祝商祺，",
+      cleanedSignature || "外贸销售团队",
     ].join("\n");
   }
   return [
@@ -60,6 +77,7 @@ export function defaultPiEmailBody(
     "If you need a different quantity, packaging or incoterm, reply to this email and we will issue an updated version immediately.",
     "",
     "Best regards,",
+    cleanedSignature || "Export Sales Team",
   ].join("\n");
 }
 
@@ -107,11 +125,18 @@ export function SendPiEmailModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  // 语言切换时，未被手动改过的主题/正文自动换成对应语言模板。
+  const piTemplateQuery = useQuery({
+    queryKey: ["settings", "pi-template"],
+    queryFn: () => fetchPiTemplateSettings(),
+    retry: false,
+  });
+  const companySignature = piTemplateQuery.data?.company_legal_name?.trim() || null;
+
+  // 语言切换或企业抬头加载完成后，未被手动改过的主题/正文自动更新。
   useEffect(() => {
     if (!subjectTouched) setSubject(defaultPiEmailSubject(quote));
-    if (!bodyTouched) setMessageBody(defaultPiEmailBody(quote, language));
-  }, [bodyTouched, language, quote, subjectTouched]);
+    if (!bodyTouched) setMessageBody(defaultPiEmailBody(quote, language, companySignature));
+  }, [bodyTouched, companySignature, language, quote, subjectTouched]);
 
   const accountsQuery = useQuery({
     queryKey: ["channels", "accounts"],
@@ -208,40 +233,49 @@ export function SendPiEmailModal({
                 <span>{bi("PI 邮件已发出", "PI email delivered")}</span>
               </div>
               <dl className="space-y-1.5 text-[12px] leading-5 text-emerald-950 dark:text-emerald-100">
-                <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="shrink-0 font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("发件邮箱", "From")}
                   </dt>
-                  <dd className="truncate font-semibold">{receipt.from_email}</dd>
+                  <dd className="min-w-0 truncate text-right font-semibold">
+                    {receipt.from_email}
+                  </dd>
                 </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="shrink-0 font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("收件人", "Recipient")}
                   </dt>
-                  <dd className="truncate font-semibold">{receipt.recipient_email}</dd>
+                  <dd className="min-w-0 truncate text-right font-semibold">
+                    {receipt.recipient_email}
+                  </dd>
                 </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="shrink-0 font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("发送通道", "Provider")}
                   </dt>
-                  <dd className="font-semibold">
+                  <dd className="min-w-0 truncate text-right font-semibold">
                     {receipt.provider === "resend" ? "Resend" : "SMTP / IMAP"}
                   </dd>
                 </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="shrink-0 font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("附件", "Attachment")}
                   </dt>
                   <dd className="min-w-0 truncate text-right font-semibold tabular-nums">
                     {receipt.pdf_filename} · {formatBytes(receipt.pdf_size_bytes)}
                   </dd>
                 </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="font-medium text-emerald-800 dark:text-emerald-300/90">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="shrink-0 font-medium text-emerald-800 dark:text-emerald-300/90">
                     {bi("报价状态", "Quote status")}
                   </dt>
-                  <dd className="font-mono text-[11.5px] font-semibold">
-                    {receipt.quote_status}
+                  <dd className="min-w-0 truncate text-right text-[12px] font-semibold">
+                    {QUOTE_STATUS_COPY[receipt.quote_status]
+                      ? bi(
+                          QUOTE_STATUS_COPY[receipt.quote_status].zh,
+                          QUOTE_STATUS_COPY[receipt.quote_status].en
+                        )
+                      : receipt.quote_status}
                   </dd>
                 </div>
               </dl>

@@ -106,6 +106,23 @@ vi.mock("@/lib/data-source", async (importOriginal) => {
   return {
     ...actual,
     fetchChannelAccounts: vi.fn(async () => EMAIL_ACCOUNTS),
+    fetchPiTemplateSettings: vi.fn(async () => ({
+      company_legal_name: "Quanzhou Smart LED Optoelectronics Co., Ltd.",
+      company_address: "",
+      contact_phone: "",
+      contact_email: "sales@301go.net",
+      website: "",
+      tax_id: "",
+      bank_beneficiary: "",
+      bank_name: "",
+      bank_account_no: "",
+      bank_swift_code: "",
+      bank_address: "",
+      default_payment_terms: "",
+      default_incoterm: "FOB",
+      default_validity_days: 14,
+      footer_note: "",
+    })),
     sendQuotePiEmail: vi.fn(async () => ({
       quote_id: "q-1",
       quote_no: "PI-202611-0042",
@@ -479,5 +496,42 @@ describe("Track 1 · PI PDF preview & one-click PI email", () => {
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>
     );
     vi.unstubAllGlobals();
+  });
+
+  it("appends company sign-off to cover note and localizes receipt quote status in Chinese", async () => {
+    expect(defaultPiEmailBody(QUOTE, "en")).toContain("Best regards,\nExport Sales Team");
+    expect(defaultPiEmailBody(QUOTE, "zh")).toContain("顺祝商祺，\n外贸销售团队");
+    expect(
+      defaultPiEmailBody(QUOTE, "en", "Quanzhou Smart LED Optoelectronics Co., Ltd.")
+    ).toContain("Best regards,\nQuanzhou Smart LED Optoelectronics Co., Ltd.");
+
+    vi.mocked(sendQuotePiEmail).mockResolvedValueOnce({
+      quote_id: "q-1",
+      quote_no: "PI-202611-0042",
+      recipient_email: "buyer@example.com",
+      from_email: "sales@301go.net",
+      provider: "resend",
+      external_message_id: "re-999",
+      pdf_filename: "PI-202611-0042-v1.pdf",
+      pdf_size_bytes: 4096,
+      quote_status: "pending_approval",
+    });
+
+    wrap(<SendPiEmailModal quote={QUOTE} onClose={vi.fn()} />, "zh");
+
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId("send-pi-email-body") as HTMLTextAreaElement).value
+      ).toContain("Quanzhou Smart LED Optoelectronics Co., Ltd.");
+    });
+
+    fireEvent.change(screen.getByTestId("send-pi-email-recipient"), {
+      target: { value: "buyer@example.com" },
+    });
+    fireEvent.click(screen.getByTestId("send-pi-email-submit"));
+
+    const receipt = await screen.findByTestId("send-pi-email-success");
+    expect(receipt.textContent).toContain("待审批");
+    expect(receipt.textContent).not.toContain("pending_approval");
   });
 });
