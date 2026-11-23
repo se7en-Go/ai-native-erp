@@ -14,6 +14,9 @@ import type { MessagingConnectResult } from "@/lib/api-client/live-client";
 import type {
   AlibabaIntlConnectRequest,
   AmazonConnectRequest,
+  CollectorTokenCreateRequest,
+  CollectorTokenCreateResponse,
+  CollectorTokenRead,
   EbayConnectRequest,
   MediaAssetRead,
   MediaUrlIngestRequest,
@@ -818,4 +821,83 @@ export function sourcingStatusCopy(status: string): { zh: string; en: string; to
         tone: "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
       };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Multi-Source Browser Collector Extension Tokens
+// ---------------------------------------------------------------------------
+
+let mockCollectorTokens: CollectorTokenRead[] = [
+  {
+    id: "col-tok-mock-1",
+    name: "Chrome 1688/淘宝选品插件",
+    token_prefix: "erp_col_demo1234",
+    scopes: ["sourcing:collect"],
+    last_used_at: null,
+    expires_at: null,
+    revoked_at: null,
+    created_at: "2026-11-23T08:00:00Z",
+  },
+];
+
+export async function fetchCollectorTokens(): Promise<CollectorTokenRead[]> {
+  if (shouldUseMockApi()) {
+    return mockCollectorTokens.map((item) => ({ ...item }));
+  }
+  return bffFetch<CollectorTokenRead[]>("/v1/catalog/sourcing/collector-tokens", {
+    method: "GET",
+  });
+}
+
+export async function createCollectorToken(
+  body: CollectorTokenCreateRequest,
+): Promise<CollectorTokenCreateResponse> {
+  if (shouldUseMockApi()) {
+    const suffix = String(mockCollectorTokens.length + 1).padStart(2, "0");
+    const plain = `erp_col_mock_secret_${suffix}_${Math.random().toString(36).slice(2, 10)}`;
+    const token: CollectorTokenRead = {
+      id: `col-tok-mock-${suffix}`,
+      name: body.name.trim() || `Extension ${suffix}`,
+      token_prefix: plain.slice(0, 16),
+      scopes: ["sourcing:collect"],
+      last_used_at: null,
+      expires_at: null,
+      revoked_at: null,
+      created_at: new Date().toISOString(),
+    };
+    mockCollectorTokens = [token, ...mockCollectorTokens];
+    return { token, plain_token: plain };
+  }
+  return bffFetch<CollectorTokenCreateResponse>("/v1/catalog/sourcing/collector-tokens", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function revokeCollectorToken(tokenId: string): Promise<CollectorTokenRead> {
+  if (shouldUseMockApi()) {
+    const now = new Date().toISOString();
+    let updated: CollectorTokenRead | undefined;
+    mockCollectorTokens = mockCollectorTokens.map((item) => {
+      if (item.id !== tokenId) return item;
+      updated = { ...item, revoked_at: item.revoked_at ?? now };
+      return updated;
+    });
+    return (
+      updated ?? {
+        id: tokenId,
+        name: "Revoked",
+        token_prefix: "erp_col_mock",
+        scopes: ["sourcing:collect"],
+        last_used_at: null,
+        expires_at: null,
+        revoked_at: now,
+        created_at: now,
+      }
+    );
+  }
+  return bffFetch<CollectorTokenRead>(
+    `/v1/catalog/sourcing/collector-tokens/${encodeURIComponent(tokenId)}`,
+    { method: "DELETE" },
+  );
 }

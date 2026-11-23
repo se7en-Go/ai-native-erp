@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeCheck,
   Boxes,
   CheckCircle2,
+  Copy,
   FileSpreadsheet,
   ImagePlus,
+  KeyRound,
   Loader2,
   PackageSearch,
   Plus,
@@ -29,6 +31,7 @@ import { Badge, EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/
 import { SegmentedTabs, type SegmentedTabOption } from "@/components/ui/segmented-tabs";
 import type {
   CatalogCsvImportResponse,
+  CollectorTokenRead,
   MediaAssetRead,
   SourcingCollectRequest,
   SourcingDraftRead,
@@ -39,11 +42,14 @@ import {
   SOURCING_DEFAULT_FX_RATE,
   SOURCING_DEFAULT_MARGIN_PCT,
   collectSourcingDraft,
+  createCollectorToken,
   deleteSourcingDraft,
+  fetchCollectorTokens,
   fetchSourcingDrafts,
   importSourcingDraftToCatalog,
   publishMasterProduct,
   publishSourcingDraft,
+  revokeCollectorToken,
   sourcingStatusCopy,
   sourcingStoreAccounts,
   sourcingStoreLabel,
@@ -188,6 +194,12 @@ export default function CatalogPage() {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   // 视图开关：主档 SKU 库（默认，保证既有单测零回归）↔ 1688 采集搬家 & 多平台刊登。
   const [view, setView] = useState<CatalogView>("master");
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      if (tab === "sourcing") setView("sourcing");
+    }
+  }, []);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState<SkuFormState>(EMPTY_SKU_FORM);
@@ -1140,6 +1152,9 @@ function Field({
 
 const SOURCE_PLATFORM_OPTIONS = [
   { value: "1688", zh: "1688 链接", en: "1688 link" },
+  { value: "taobao", zh: "淘宝 / 天猫", en: "Taobao / Tmall" },
+  { value: "pdd", zh: "拼多多", en: "Pinduoduo" },
+  { value: "alibaba", zh: "Alibaba 国际站", en: "Alibaba.com" },
   { value: "url", zh: "供应商 URL", en: "Supplier URL" },
   { value: "manual", zh: "粘贴中文文案", en: "Paste Chinese copy" },
 ] as const;
@@ -1147,6 +1162,11 @@ const SOURCE_PLATFORM_OPTIONS = [
 function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
   const { bi } = useI18n();
   const queryClient = useQueryClient();
+
+  const [tokenName, setTokenName] = useState("");
+  const [revealedToken, setRevealedToken] = useState<string | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   const [platform, setPlatform] = useState<(typeof SOURCE_PLATFORM_OPTIONS)[number]["value"]>(
     "1688",
@@ -1179,6 +1199,32 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
   const draftsQuery = useQuery({
     queryKey: ["catalog", "sourcing", "drafts"],
     queryFn: () => fetchSourcingDrafts(),
+  });
+
+  const collectorTokensQuery = useQuery({
+    queryKey: ["catalog", "sourcing", "collector-tokens"],
+    queryFn: () => fetchCollectorTokens(),
+  });
+
+  const createTokenMutation = useMutation({
+    mutationFn: (name: string) => createCollectorToken({ name }),
+    onSuccess: (res) => {
+      setRevealedToken(res.plain_token);
+      setCopiedToken(false);
+      setTokenName("");
+      setTokenError(null);
+      void queryClient.invalidateQueries({ queryKey: ["catalog", "sourcing", "collector-tokens"] });
+    },
+    onError: (err: Error) => setTokenError(err.message),
+  });
+
+  const revokeTokenMutation = useMutation({
+    mutationFn: (tokenId: string) => revokeCollectorToken(tokenId),
+    onSuccess: () => {
+      setTokenError(null);
+      void queryClient.invalidateQueries({ queryKey: ["catalog", "sourcing", "collector-tokens"] });
+    },
+    onError: (err: Error) => setTokenError(err.message),
   });
 
   const accountsQuery = useQuery({
@@ -1597,6 +1643,135 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
           </div>
         )}
       </form>
+
+      <section
+        data-testid="collector-tokens-card"
+        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="inline-flex items-center gap-1.5 text-[13.5px] font-bold text-slate-950 dark:text-slate-100">
+              <KeyRound className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              {bi("浏览器一键采集插件授权码", "Browser collector extension tokens")}
+            </h3>
+            <p className="mt-0.5 text-[11.5px] text-slate-600 dark:text-slate-400">
+              {bi(
+                "在 Chrome / Ego Lite 加载 apps/collector-extension 后，填入此授权码即可从 1688 / 淘宝 / 拼多多 / Alibaba 详情页一键采集入库。",
+                "Load apps/collector-extension in Chrome / Ego Lite and paste a token below to capture products from 1688, Taobao, PDD, and Alibaba."
+              )}
+            </p>
+          </div>
+          {canWrite && (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                data-testid="collector-token-name-input"
+                value={tokenName}
+                onChange={(e) => setTokenName(e.target.value)}
+                placeholder={bi("例如：Chrome 1688 插件", "e.g. Chrome collector")}
+                className="erp-input h-8 w-44 rounded-lg text-[12px]"
+              />
+              <button
+                type="button"
+                data-testid="collector-token-create-btn"
+                disabled={createTokenMutation.isPending || !tokenName.trim()}
+                onClick={() => createTokenMutation.mutate(tokenName.trim())}
+                className="inline-flex h-8 items-center gap-1 rounded-lg bg-slate-900 px-3 text-[12px] font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                {createTokenMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" />
+                )}
+                {bi("生成授权码", "Generate token")}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {tokenError && (
+          <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11.5px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+            {tokenError}
+          </p>
+        )}
+
+        {revealedToken && (
+          <div
+            data-testid="collector-token-revealed"
+            className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-950 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+          >
+            <div className="min-w-0">
+              <p className="font-semibold">
+                {bi("请立即复制（明文仅展示这一次）：", "Copy now (shown once only):")}
+              </p>
+              <code className="break-all font-mono text-[11.5px]">{revealedToken}</code>
+            </div>
+            <button
+              type="button"
+              data-testid="collector-token-copy-btn"
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                  void navigator.clipboard.writeText(revealedToken);
+                }
+                setCopiedToken(true);
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-200"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              {copiedToken ? bi("已复制", "Copied") : bi("复制", "Copy")}
+            </button>
+          </div>
+        )}
+
+        {(collectorTokensQuery.data?.length ?? 0) > 0 && (
+          <div data-testid="collector-token-list" className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+            {(collectorTokensQuery.data as CollectorTokenRead[]).map((tok) => {
+              const isRevoked = Boolean(tok.revoked_at);
+              return (
+                <div
+                  key={tok.id}
+                  data-testid={`collector-token-row-${tok.id}`}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2 text-[12px]"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                      {tok.name}
+                    </span>
+                    <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {tok.token_prefix}…
+                    </code>
+                    <span
+                      className={
+                        isRevoked
+                          ? "rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          : "rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                      }
+                    >
+                      {isRevoked ? bi("已吊销", "Revoked") : bi("有效", "Active")}
+                    </span>
+                    {tok.last_used_at && (
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {bi("最近使用", "Last used")}: {tok.last_used_at.slice(0, 10)}
+                      </span>
+                    )}
+                  </div>
+                  {canWrite && !isRevoked && (
+                    <button
+                      type="button"
+                      data-testid={`collector-token-revoke-${tok.id}`}
+                      disabled={revokeTokenMutation.isPending}
+                      onClick={() => revokeTokenMutation.mutate(tok.id)}
+                      className="rounded-lg border border-rose-200 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                    >
+                      {bi("吊销", "Revoke")}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <section aria-label={bi("采集箱草稿", "Sourcing drafts")} className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">

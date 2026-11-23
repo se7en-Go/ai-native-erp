@@ -5,9 +5,18 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, status
+import structlog
+from fastapi import APIRouter, Depends, Header, Request, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.catalog.collector_token_service import (
+    CollectorTokenCreateRequest,
+    CollectorTokenCreateResponse,
+    CollectorTokenRead,
+    CollectorTokenService,
+)
+from erp_core.catalog.media_service import CatalogMediaService
 from erp_core.catalog.sourcing_service import (
     SourcingCollectRequest,
     SourcingDeleteResult,
@@ -21,7 +30,15 @@ from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import UserRole
 from erp_core.tenancy.dependencies import CurrentPrincipal, get_current_principal, require_roles
 
+logger = structlog.get_logger(__name__)
+
 router = APIRouter(prefix="/api/v1/catalog/sourcing", tags=["catalog-sourcing"])
+
+
+class ExtensionCollectResponse(BaseModel):
+    draft: SourcingDraftRead
+    catalog_url: str
+    mirrored_images_count: int
 
 _service = SourcingService()
 
@@ -38,6 +55,102 @@ def _get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
     if factory is None:
         raise RuntimeError("session_factory is not initialized on app.state")
     return factory
+
+
+def _token_service() -> CollectorTokenService:
+    return CollectorTokenService()
+
+
+@router.post(
+    "/collector-tokens",
+    response_model=CollectorTokenCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_collector_token(
+    request: Request,
+    principal: WriterPrincipal,
+    body: CollectorTokenCreateRequest,
+) -> CollectorTokenCreateResponse:
+    service = _token_service()
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await service.create_token(session, principal.tenant_id, principal.user_id, body)
+
+
+@router.get("/collector-tokens", response_model=list[CollectorTokenRead])
+async def list_collector_tokens(
+    request: Request,
+    principal: ReaderPrincipal,
+) -> list[CollectorTokenRead]:
+    service = _token_service()
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await service.list_tokens(session, principal.tenant_id)
+
+
+@router.delete("/collector-tokens/{token_id}", response_model=CollectorTokenRead)
+async def revoke_collector_token(
+    request: Request,
+    token_id: UUID,
+    principal: WriterPrincipal,
+) -> CollectorTokenRead:
+    service = _token_service()
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await service.revoke_token(
+            session, principal.tenant_id, token_id, str(principal.user_id)
+        )
+
+
+@router.post(
+    "/collect-from-extension",
+    response_model=ExtensionCollectResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def collect_sourcing_draft_from_extension(
+    request: Request,
+    body: SourcingCollectRequest,
+    x_collector_token: Annotated[str | None, Header(alias="X-Collector-Token")] = None,
+) -> ExtensionCollectResponse:
+    session_factory = _get_session_factory(request)
+    token_service = _token_service()
+    resolved = await token_service.authenticate_token(session_factory, x_collector_token)
+
+    sourcing_service = SourcingService()
+    async with tenant_session(session_factory, resolved.tenant_id) as session:
+        draft = await sourcing_service.collect(
+            session,
+            resolved.tenant_id,
+            str(resolved.created_by_user_id),
+            body,
+            skip_remote_fetch=True,
+        )
+
+    mirrored_count = 0
+    if body.images:
+        media_service = CatalogMediaService(storage=getattr(request.app.state, "storage", None))
+        async with tenant_session(session_factory, resolved.tenant_id) as media_session:
+            for img_url in body.images[:8]:
+                try:
+                    async with media_session.begin_nested():
+                        ingested = await media_service.ingest_external_urls(
+                            media_session,
+                            resolved.tenant_id,
+                            urls=[img_url],
+                            sourcing_draft_id=draft.id,
+                            alt_text=draft.optimized_title_en[:120],
+                        )
+                        mirrored_count += len(ingested)
+                except Exception as exc:
+                    logger.warning(
+                        "collector.image_mirror_failed",
+                        draft_id=str(draft.id),
+                        image_url=img_url,
+                        error=str(exc),
+                    )
+
+    return ExtensionCollectResponse(
+        draft=draft,
+        catalog_url="/catalog?tab=sourcing",
+        mirrored_images_count=mirrored_count,
+    )
 
 
 @router.post("/collect", response_model=SourcingDraftRead, status_code=status.HTTP_201_CREATED)

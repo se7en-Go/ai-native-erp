@@ -556,6 +556,27 @@ export type CollectionSummary = {
     synced: number;
 };
 
+export type CollectorTokenCreateRequest = {
+    expires_in_days?: number | null;
+    name: string;
+};
+
+export type CollectorTokenCreateResponse = {
+    plain_token: string;
+    token: CollectorTokenRead;
+};
+
+export type CollectorTokenRead = {
+    created_at: string;
+    expires_at?: string | null;
+    id: string;
+    last_used_at?: string | null;
+    name: string;
+    revoked_at?: string | null;
+    scopes: Array<string>;
+    token_prefix: string;
+};
+
 export type ConfidenceLevel = 'deterministic' | 'human_verified' | 'probabilistic';
 
 export type ConnectMessagingResponse = {
@@ -922,6 +943,12 @@ export type EnrichedProspectItem = {
     prospect_id: string;
     status: 'enriched' | 'no_email_found' | 'blocked' | 'invalid_website' | 'skipped_no_website' | 'already_has_email' | 'not_found';
     website: string | null;
+};
+
+export type ExtensionCollectResponse = {
+    catalog_url: string;
+    draft: SourcingDraftRead;
+    mirrored_images_count: number;
 };
 
 export type FinanceOverviewRead = {
@@ -2824,7 +2851,7 @@ export type SourcingCollectRequest = {
     raw_price_cny?: number | string | null;
     raw_text?: string | null;
     raw_title?: string | null;
-    source_platform?: '1688' | 'url' | 'manual';
+    source_platform?: '1688' | 'taobao' | 'pdd' | 'alibaba' | 'url' | 'manual';
     source_url?: string | null;
     target_margin_pct?: number | string;
     variants_spec?: Array<SourcingVariantSpecInput>;
@@ -5633,6 +5660,120 @@ export type CollectSourcingDraftApiV1CatalogSourcingCollectPostResponses = {
 };
 
 export type CollectSourcingDraftApiV1CatalogSourcingCollectPostResponse = CollectSourcingDraftApiV1CatalogSourcingCollectPostResponses[keyof CollectSourcingDraftApiV1CatalogSourcingCollectPostResponses];
+
+export type CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostData = {
+    body: SourcingCollectRequest;
+    headers?: {
+        'X-Collector-Token'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/sourcing/collect-from-extension';
+};
+
+export type CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostError = CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostErrors[keyof CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostErrors];
+
+export type CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ExtensionCollectResponse;
+};
+
+export type CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostResponse = CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostResponses[keyof CollectSourcingDraftFromExtensionApiV1CatalogSourcingCollectFromExtensionPostResponses];
+
+export type ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/sourcing/collector-tokens';
+};
+
+export type ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetError = ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetErrors[keyof ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetErrors];
+
+export type ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<CollectorTokenRead>;
+};
+
+export type ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetResponse = ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetResponses[keyof ListCollectorTokensApiV1CatalogSourcingCollectorTokensGetResponses];
+
+export type CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostData = {
+    body: CollectorTokenCreateRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/sourcing/collector-tokens';
+};
+
+export type CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostError = CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostErrors[keyof CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostErrors];
+
+export type CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CollectorTokenCreateResponse;
+};
+
+export type CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostResponse = CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostResponses[keyof CreateCollectorTokenApiV1CatalogSourcingCollectorTokensPostResponses];
+
+export type RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        token_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/sourcing/collector-tokens/{token_id}';
+};
+
+export type RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteError = RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteErrors[keyof RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteErrors];
+
+export type RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: CollectorTokenRead;
+};
+
+export type RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteResponse = RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteResponses[keyof RevokeCollectorTokenApiV1CatalogSourcingCollectorTokensTokenIdDeleteResponses];
 
 export type ListSourcingDraftsApiV1CatalogSourcingDraftsGetData = {
     body?: never;

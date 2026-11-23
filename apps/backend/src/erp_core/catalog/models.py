@@ -140,3 +140,28 @@ class ProductMediaAsset(Base):
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
     )
+
+
+class CollectorApiToken(Base):
+    __tablename__ = "collector_api_tokens"
+    __table_args__ = (sa.UniqueConstraint("token_hash", name="uq_collector_api_tokens_hash"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    token_prefix: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    token_hash: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text()), nullable=False, default=lambda: ["sourcing:collect"]
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
