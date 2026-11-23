@@ -443,6 +443,21 @@ async def connect_email(
 router.include_router(email_router)
 
 
+def _derive_livechat_allowed_origins(raw: str, normalized_domain: str) -> list[str]:
+    """Derive safe explicit allowed origins (with optional scheme/port) for widget CORS."""
+    origins: list[str] = []
+    cleaned = raw.strip().lower()
+    if cleaned.startswith(("https://", "http://")):
+        scheme, _, rest = cleaned.partition("://")
+        netloc = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+        if netloc:
+            origins.append(f"{scheme}://{netloc}")
+    for candidate in (f"https://{normalized_domain}", f"http://{normalized_domain}"):
+        if candidate not in origins:
+            origins.append(candidate)
+    return origins
+
+
 @router.post("/web-livechat/connect", response_model=ConnectMessagingResponse)
 async def connect_web_livechat(
     payload: WebLivechatConnectRequest,
@@ -454,6 +469,7 @@ async def connect_web_livechat(
     The normalized domain doubles as the ``site_key`` the widget resolves its tenant from.
     """
     normalized_domain = normalize_site_domain(payload.site_domain)
+    allowed_origins = _derive_livechat_allowed_origins(payload.site_domain, normalized_domain)
     effective_name = (payload.display_name or "").strip() or f"LiveChat · {normalized_domain}"
     tenant = principal.tenant_id
     async with tenant_session(messaging_sessions(request), tenant) as session:
@@ -474,7 +490,10 @@ async def connect_web_livechat(
             visibility_scope=vis_scope,
             actor_user_id=principal.user_id,
             actor_is_admin=True,
-            config_patch={"site_domain": normalized_domain},
+            config_patch={
+                "site_domain": normalized_domain,
+                "allowed_origins": allowed_origins,
+            },
         )
         await record_audit_event(
             session=session,

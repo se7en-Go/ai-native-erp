@@ -33,6 +33,7 @@ from erp_core.channels.ecommerce.shopify import (
     ORDERS_GRAPHQL_QUERY,
     SHOPIFY_API_PATH,
     ShopifyGraphqlAdapter,
+    build_shopify_oauth_install_url,
     process_shopify_webhook_event,
     verify_shopify_webhook_hmac,
 )
@@ -410,6 +411,17 @@ def test_shopify_orders_query_uses_company_address_country_code() -> None:
     normalized = ShopifyGraphqlAdapter._normalize_order_node(_order_node())
     assert normalized.b2b_company is not None
     assert normalized.b2b_company.country_code == "SE"
+
+
+def test_shopify_oauth_install_url_requests_fulfillment_order_scopes() -> None:
+    url = build_shopify_oauth_install_url(
+        "qzled.myshopify.com",
+        "https://erp.example.com/callback",
+        state="t1",
+        client_id="cid_test",
+    )
+    assert "read_merchant_managed_fulfillment_orders" in url
+    assert "write_merchant_managed_fulfillment_orders" in url
 
 
 def _admin_url() -> str:

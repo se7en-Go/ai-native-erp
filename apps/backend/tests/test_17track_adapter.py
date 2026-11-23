@@ -335,3 +335,112 @@ async def test_signed_17track_webhook_is_persisted_once_and_delivers_shipment(
             await session.execute(text("DELETE FROM orders"))
             await session.execute(text("DELETE FROM customers"))
             await session.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
+
+
+async def test_ship_order_unconfigured_17track_raises_422_instead_of_500(
+    runtime_session_factory: async_sessionmaker[AsyncSession],
+    migrator_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    from erp_core.orders.order_service import OrderService
+    from erp_core.orders.schemas import ShipOrderRequest
+    from erp_core.orders.tracking_adapter import Tracking17TrackAdapter
+    from erp_core.shared.enums import UserRole
+    from erp_core.shared.errors import AppError
+    from erp_core.tenancy.dependencies import CurrentPrincipal
+
+    tenant_id, customer_id, order_id, warehouse_id, variant_id = (uuid4() for _ in range(5))
+    product_id = uuid4()
+    async with tenant_session(runtime_session_factory, tenant_id) as session:
+        await session.execute(
+            text("INSERT INTO tenants (id, name, slug) VALUES (:tid, 'Ship422', :slug)"),
+            {"tid": tenant_id, "slug": f"ship422-{tenant_id.hex}"},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO customers (id, tenant_id, customer_type, display_name) "
+                "VALUES (:cid, :tid, 'b2c_consumer', 'Ship Buyer')"
+            ),
+            {"cid": customer_id, "tid": tenant_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO warehouses (id, tenant_id, code, name, country_code) "
+                "VALUES (:wid, :tid, 'WH-1', 'Main', 'CN')"
+            ),
+            {"wid": warehouse_id, "tid": tenant_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO products (id, tenant_id, spu_code, category) "
+                "VALUES (:pid, :tid, 'SPU-S422', 'Lighting')"
+            ),
+            {"pid": product_id, "tid": tenant_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO product_variants (id, tenant_id, product_id, sku, cost_price_base, "
+                "retail_price_usd, weight_grams) VALUES (:vid, :tid, :pid, 'SKU-S422', 5, 10, 100)"
+            ),
+            {"vid": variant_id, "tid": tenant_id, "pid": product_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO inventory_balances (tenant_id, warehouse_id, variant_id, "
+                "on_hand_qty, reserved_qty) VALUES (:tid, :wid, :vid, 10, 1)"
+            ),
+            {"tid": tenant_id, "wid": warehouse_id, "vid": variant_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO orders (id, tenant_id, order_no, order_mode, customer_id, "
+                "currency, fx_rate_to_base, subtotal_amount, total_amount, "
+                "fulfillment_status, payment_status) VALUES (:oid, :tid, 'ORD-S422', "
+                "'b2c_retail', :cid, 'USD', 1, 10, 10, 'confirmed_reserved', 'paid')"
+            ),
+            {"oid": order_id, "tid": tenant_id, "cid": customer_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO order_items (id, tenant_id, order_id, variant_id, sku_snapshot, "
+                "quantity, unit_price, unit_cost_base_snapshot, line_total) "
+                "VALUES (:iid, :tid, :oid, :vid, 'SKU-S422', 1, 10, 5, 10)"
+            ),
+            {"iid": uuid4(), "tid": tenant_id, "oid": order_id, "vid": variant_id},
+        )
+
+    principal = CurrentPrincipal(
+        user_id=uuid4(),
+        tenant_id=tenant_id,
+        role=UserRole.OWNER,
+        email="owner@ship422.example.com",
+    )
+    try:
+        with pytest.raises(AppError) as exc_info:
+            async with tenant_session(runtime_session_factory, tenant_id) as session:
+                await OrderService().ship_order(
+                    session,
+                    tenant_id,
+                    principal=principal,
+                    order_id=order_id,
+                    payload=ShipOrderRequest(warehouse_id=warehouse_id, tracking_number="TRK123"),
+                    tracking_adapter=Tracking17TrackAdapter(api_key=""),
+                )
+        assert exc_info.value.status_code == 422
+        assert exc_info.value.code == "ERR_TRACKING_PROVIDER_NOT_CONFIGURED"
+    finally:
+        async with system_session(migrator_session_factory) as session:
+            for tbl in (
+                "inventory_ledger",
+                "inventory_balances",
+                "shipments",
+                "order_items",
+                "orders",
+                "product_variants",
+                "products",
+                "warehouses",
+                "customers",
+            ):
+                await session.execute(
+                    text(f"DELETE FROM {tbl} WHERE tenant_id = :tid"), {"tid": tenant_id}
+                )
+            await session.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
