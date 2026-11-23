@@ -35,6 +35,9 @@ export const ChannelTypeSchema = z.enum([
   "walmart",
   "shopee",
   "lazada",
+  "shein",
+  "aliexpress",
+  "ozon",
 ]);
 export type ChannelType = z.infer<typeof ChannelTypeSchema>;
 

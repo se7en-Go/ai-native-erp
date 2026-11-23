@@ -81,9 +81,9 @@ def test_alembic_offline_sql_reaches_head_without_error(offline_sql: str) -> Non
     )
     assert rendered[0] == "0001_tenancy_rls_and_audit"
     assert "0003" in rendered
-    assert rendered[-1] == "0017_collector_api_tokens"
+    assert rendered[-1] == "0018_marketplace_channels"
     # Head is stamped only after the last migration body rendered successfully.
-    assert "UPDATE alembic_version SET version_num='0017_collector_api_tokens'" in offline_sql
+    assert "UPDATE alembic_version SET version_num='0018_marketplace_channels'" in offline_sql
     assert offline_sql.rstrip().endswith("COMMIT;")
 
 

@@ -324,9 +324,9 @@ describe("pack-f sourcing collect → import → publish transport", () => {
 // ---------------------------------------------------------------------------
 
 describe("3 new foreign-trade channels in the marketplace & inbox rail", () => {
-  it("grows the marketplace to 14 channels with the 3 new keys", () => {
-    expect(CHANNEL_MARKETPLACE).toHaveLength(14);
-    expect(visibleMarketplaceItems(true)).toHaveLength(14);
+  it("grows the marketplace to 22 channels with the 3 new sourcing keys", () => {
+    expect(CHANNEL_MARKETPLACE).toHaveLength(22);
+    expect(visibleMarketplaceItems(true)).toHaveLength(22);
 
     const alibaba = marketplaceChannel("alibaba_intl");
     expect(alibaba.channelTypes).toEqual(["alibaba_email"]);

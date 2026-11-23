@@ -42,6 +42,9 @@ class ChannelType(StrEnum):
     WALMART = "walmart"
     SHOPEE = "shopee"
     LAZADA = "lazada"
+    SHEIN = "shein"
+    ALIEXPRESS = "aliexpress"
+    OZON = "ozon"
 
 
 class ChannelVisibilityScope(StrEnum):

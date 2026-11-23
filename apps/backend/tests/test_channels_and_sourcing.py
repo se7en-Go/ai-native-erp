@@ -315,11 +315,31 @@ async def test_remote_fetch_parses_page_and_degrades_gracefully_when_blocked() -
 
 def test_credential_aad_binds_tenant_account_and_credential_type() -> None:
     tenant_id, account_id = uuid4(), uuid4()
-    assert set(marketplace.CREDENTIAL_TYPES) == {"alibaba_email", "amazon_sp", "ebay"}
+    assert set(marketplace.CREDENTIAL_TYPES) == {
+        "alibaba_email",
+        "amazon_sp",
+        "ebay",
+        "shopee",
+        "lazada",
+        "temu",
+        "shein",
+        "aliexpress",
+        "ozon",
+        "walmart",
+        "mercado_libre",
+    }
     assert set(marketplace.CREDENTIAL_TYPES.values()) == {
         "alibaba_intl_app",
         "amazon_sp_api",
         "ebay_api",
+        "shopee_app",
+        "lazada_app",
+        "temu_app",
+        "shein_app",
+        "aliexpress_app",
+        "ozon_app",
+        "walmart_app",
+        "mercado_libre_app",
     }
 
     aad = EnvelopeCryptoService._build_aad(

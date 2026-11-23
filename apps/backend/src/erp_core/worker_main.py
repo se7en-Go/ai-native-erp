@@ -66,6 +66,14 @@ COMMERCE_TRACKING_CHANNELS: tuple[str, ...] = (
     "shopline",
     "shoplazza",
     "tiktok_shop",
+    "shopee",
+    "lazada",
+    "temu",
+    "shein",
+    "aliexpress",
+    "ozon",
+    "walmart",
+    "mercado_libre",
 )
 COMMERCE_DRAIN_INTERVAL_SECONDS = 2.0
 ECOMMERCE_RECONCILE_INTERVAL_SECONDS = 15 * 60.0
@@ -108,12 +116,13 @@ async def _handle_storefront_webhook_delivery(
     *,
     broker_session_factory: SessionFactory | None = None,
 ) -> int:
-    """Acknowledge a storefront webhook receipt so its stream cannot pile up.
+    """Acknowledge a storefront/marketplace webhook receipt so its stream cannot pile up.
 
     ``drain_deliveries`` hands the consumer nothing but the persisted
     ``raw_webhook_events.id``, so this handler only needs to move that receipt out of
     the ``received``/``queued`` window. Order materialization for WooCommerce,
-    Shopline, Shoplazza and TikTok Shop is done by the scheduled
+    Shopline, Shoplazza, TikTok Shop and the eight global marketplaces (Shopee, Lazada,
+    Temu, SHEIN, AliExpress, Ozon, Walmart, Mercado Libre) is done by the scheduled
     ``reconcile_ecommerce_orders_cron`` pull, exactly as for Shopify order topics.
     """
     factory = broker_session_factory or _broker_session_factory
@@ -154,7 +163,20 @@ def commerce_tracking_handlers(
             _handle_storefront_webhook_delivery,
             broker_session_factory=broker_session_factory,
         )
-        for channel in ("woocommerce", "shopline", "shoplazza", "tiktok_shop")
+        for channel in (
+            "woocommerce",
+            "shopline",
+            "shoplazza",
+            "tiktok_shop",
+            "shopee",
+            "lazada",
+            "temu",
+            "shein",
+            "aliexpress",
+            "ozon",
+            "walmart",
+            "mercado_libre",
+        )
     }
     return {
         "17track": process_17track_webhook,

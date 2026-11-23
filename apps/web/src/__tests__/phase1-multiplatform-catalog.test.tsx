@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   planSourcingDraft,
   publishMasterProduct,
+  SOURCING_PUBLISHABLE_CHANNEL_TYPES,
   uploadCatalogMedia,
   sourcingStoreLabel,
 } from "@/lib/api-client/pack-f-sourcing";
@@ -28,7 +29,8 @@ describe("Phase 1 Multiplatform Media & Variants helpers", () => {
     expect(draft.variants_spec?.[1].retail_price_usd).toBe("10.00");
   });
 
-  it("exposes localized labels for all 8 publishable storefronts", () => {
+  it("exposes localized labels for all 16 publishable storefronts", () => {
+    expect(SOURCING_PUBLISHABLE_CHANNEL_TYPES).toHaveLength(16);
     for (const type of [
       "shopify",
       "tiktok_shop",
@@ -38,6 +40,14 @@ describe("Phase 1 Multiplatform Media & Variants helpers", () => {
       "woocommerce",
       "shopline",
       "shoplazza",
+      "shopee",
+      "lazada",
+      "temu",
+      "shein",
+      "aliexpress",
+      "ozon",
+      "walmart",
+      "mercado_libre",
     ]) {
       expect(sourcingStoreLabel(type).length).toBeGreaterThan(2);
     }

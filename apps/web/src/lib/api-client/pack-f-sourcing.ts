@@ -1,8 +1,10 @@
 // Pack F（外贸选品 Sourcing）专用 API 模块。
 //
-// 两件事，全部经同源 `bffFetch`（/api/bff → FastAPI /api/v1/*）：
+// 三件事，全部经同源 `bffFetch`（/api/bff → FastAPI /api/v1/*）：
 //   1. 三个外贸高频渠道接入：Alibaba.com 国际站、Amazon 卖家中心、eBay；
-//   2. 1688 / URL 采集搬家闭环：采集 → 草稿箱 → 一键入主档 SKU → 多平台刊登。
+//   2. 8 个全球化电商平台接入：Shopee / Lazada / Temu / SHEIN / AliExpress /
+//      Ozon / Walmart / Mercado Libre（与后端 `ChannelType` 一一对应）；
+//   3. 1688 / URL 采集搬家闭环：采集 → 草稿箱 → 一键入主档 SKU → 多平台刊登。
 //
 // 契约类型来自 `types.gen.ts`（由后端统一重新生成，前端不得手改），
 // 字段名一字不改：`AlibabaIntlConnectRequest` / `AmazonConnectRequest` /
@@ -13,13 +15,19 @@ import { shouldUseMockApi } from "@/lib/data-source";
 import type { MessagingConnectResult } from "@/lib/api-client/live-client";
 import type {
   AlibabaIntlConnectRequest,
+  AliExpressConnectRequest,
   AmazonConnectRequest,
   CollectorTokenCreateRequest,
   CollectorTokenCreateResponse,
   CollectorTokenRead,
   EbayConnectRequest,
+  LazadaConnectRequest,
   MediaAssetRead,
   MediaUrlIngestRequest,
+  MercadoLibreConnectRequest,
+  OzonConnectRequest,
+  SheinConnectRequest,
+  ShopeeConnectRequest,
   SourcingCollectRequest,
   SourcingDeleteResult,
   SourcingDraftRead,
@@ -28,6 +36,8 @@ import type {
   SourcingPublishRequest,
   SourcingPublishResult,
   SourcingVariantSpecOutput,
+  TemuConnectRequest,
+  WalmartConnectRequest,
 } from "@/lib/api-client/types.gen";
 
 // ---------------------------------------------------------------------------
@@ -152,6 +162,246 @@ export function connectSourcingChannel(
       return connectAmazon(body.amazon);
     case "ebay":
       return connectEbay(body.ebay);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8 个全球化电商平台
+//
+// 与后端 `ChannelType` 的 `shopee` / `lazada` / `temu` / `shein` /
+// `aliexpress` / `ozon` / `walmart` / `mercado_libre` 一一对应；
+// 上面的 `SOURCING_CHANNEL_KEYS`（alibaba_intl / amazon / ebay）保持不变。
+// ---------------------------------------------------------------------------
+
+/** 8 个全球化电商平台键，顺序与后端 `ChannelType` 声明顺序一致。 */
+export const GLOBAL_MARKETPLACE_CHANNEL_KEYS = [
+  "shopee",
+  "lazada",
+  "temu",
+  "shein",
+  "aliexpress",
+  "ozon",
+  "walmart",
+  "mercado_libre",
+] as const;
+
+export type GlobalMarketplaceChannelKey = (typeof GLOBAL_MARKETPLACE_CHANNEL_KEYS)[number];
+
+export function isGlobalMarketplaceChannelKey(
+  value: unknown,
+): value is GlobalMarketplaceChannelKey {
+  return (
+    typeof value === "string" &&
+    (GLOBAL_MARKETPLACE_CHANNEL_KEYS as readonly string[]).includes(value)
+  );
+}
+
+/** 每个平台「外部账号 ID」的表单字段（提交成功后回显，绝不回显任何密钥）。 */
+export function globalMarketplaceExternalAccountId(
+  key: GlobalMarketplaceChannelKey,
+  values: {
+    shop_id?: string;
+    seller_id?: string;
+    mall_id?: string;
+    client_id?: string;
+  },
+): string {
+  switch (key) {
+    case "shopee":
+      return (values.shop_id ?? "").trim();
+    case "temu":
+      return (values.mall_id ?? "").trim();
+    case "ozon":
+      return (values.client_id ?? "").trim();
+    case "lazada":
+    case "shein":
+    case "aliexpress":
+    case "walmart":
+    case "mercado_libre":
+      return (values.seller_id ?? "").trim();
+  }
+}
+
+/** POST /v1/channels/shopee/connect — Shop ID + Partner ID/Key + Access Token。 */
+export async function connectShopee(
+  body: ShopeeConnectRequest,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mapSourcingConnection({
+      channel_account_id: "mock-shopee-account",
+      external_account_id: body.shop_id.trim(),
+      display_name: body.display_name,
+      visibility_scope: "shared",
+    });
+  }
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/shopee/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapSourcingConnection(raw);
+}
+
+/** POST /v1/channels/lazada/connect — Seller ID + App Key/Secret + Access Token。 */
+export async function connectLazada(
+  body: LazadaConnectRequest,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mapSourcingConnection({
+      channel_account_id: "mock-lazada-account",
+      external_account_id: body.seller_id.trim(),
+      display_name: body.display_name,
+      visibility_scope: "shared",
+    });
+  }
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/lazada/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapSourcingConnection(raw);
+}
+
+/** POST /v1/channels/temu/connect — Mall ID + App Key/Secret + Access Token。 */
+export async function connectTemu(body: TemuConnectRequest): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mapSourcingConnection({
+      channel_account_id: "mock-temu-account",
+      external_account_id: body.mall_id.trim(),
+      display_name: body.display_name,
+      visibility_scope: "shared",
+    });
+  }
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/temu/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapSourcingConnection(raw);
+}
+
+/** POST /v1/channels/shein/connect — Seller ID + Open Key ID / Secret Key。 */
+export async function connectShein(body: SheinConnectRequest): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mapSourcingConnection({
+      channel_account_id: "mock-shein-account",
+      external_account_id: body.seller_id.trim(),
+      display_name: body.display_name,
+      visibility_scope: "shared",
+    });
+  }
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/shein/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapSourcingConnection(raw);
+}
+
+/** POST /v1/channels/aliexpress/connect — Seller ID + App Key/Secret + Access Token。 */
+export async function connectAliExpress(
+  body: AliExpressConnectRequest,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mapSourcingConnection({
+      channel_account_id: "mock-aliexpress-account",
+      external_account_id: body.seller_id.trim(),
+      display_name: body.display_name,
+      visibility_scope: "shared",
+    });
+  }
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/aliexpress/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapSourcingConnection(raw);
+}
+
+/** POST /v1/channels/ozon/connect — Client ID + API Key（仓库 ID 归后端 config）。 */
+export async function connectOzon(body: OzonConnectRequest): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mapSourcingConnection({
+      channel_account_id: "mock-ozon-account",
+      external_account_id: body.client_id.trim(),
+      display_name: body.display_name,
+      visibility_scope: "shared",
+    });
+  }
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/ozon/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapSourcingConnection(raw);
+}
+
+/** POST /v1/channels/walmart/connect — Seller ID + Client ID/Secret（Access Token 可选）。 */
+export async function connectWalmart(
+  body: WalmartConnectRequest,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mapSourcingConnection({
+      channel_account_id: "mock-walmart-account",
+      external_account_id: body.seller_id.trim(),
+      display_name: body.display_name,
+      visibility_scope: "shared",
+    });
+  }
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/walmart/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapSourcingConnection(raw);
+}
+
+/** POST /v1/channels/mercado-libre/connect — Seller ID + Site ID + Access Token。 */
+export async function connectMercadoLibre(
+  body: MercadoLibreConnectRequest,
+): Promise<MessagingConnectResult> {
+  if (shouldUseMockApi()) {
+    return mapSourcingConnection({
+      channel_account_id: "mock-mercado-libre-account",
+      external_account_id: body.seller_id.trim(),
+      display_name: body.display_name,
+      visibility_scope: "shared",
+    });
+  }
+  const raw = await bffFetch<Record<string, unknown>>("/v1/channels/mercado-libre/connect", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapSourcingConnection(raw);
+}
+
+/** 8 个平台的请求体映射（抽屉统一分发用）。 */
+export type GlobalMarketplaceConnectRequests = {
+  shopee: ShopeeConnectRequest;
+  lazada: LazadaConnectRequest;
+  temu: TemuConnectRequest;
+  shein: SheinConnectRequest;
+  aliexpress: AliExpressConnectRequest;
+  ozon: OzonConnectRequest;
+  walmart: WalmartConnectRequest;
+  mercado_libre: MercadoLibreConnectRequest;
+};
+
+/** 抽屉/页面统一分发：8 个平台各自打自己的 `/connect` 端点。 */
+export function connectGlobalMarketplaceChannel(
+  key: GlobalMarketplaceChannelKey,
+  body: GlobalMarketplaceConnectRequests,
+): Promise<MessagingConnectResult> {
+  switch (key) {
+    case "shopee":
+      return connectShopee(body.shopee);
+    case "lazada":
+      return connectLazada(body.lazada);
+    case "temu":
+      return connectTemu(body.temu);
+    case "shein":
+      return connectShein(body.shein);
+    case "aliexpress":
+      return connectAliExpress(body.aliexpress);
+    case "ozon":
+      return connectOzon(body.ozon);
+    case "walmart":
+      return connectWalmart(body.walmart);
+    case "mercado_libre":
+      return connectMercadoLibre(body.mercado_libre);
   }
 }
 
@@ -706,7 +956,7 @@ export async function triggerMarketplaceOrderSync(
 // 刊登目标店铺展示
 // ---------------------------------------------------------------------------
 
-/** 可刊登的渠道类型（与后端 `_PUBLISHABLE_CHANNEL_TYPES` 对齐）。 */
+/** 可刊登的渠道类型（与后端 `_PUBLISHABLE_CHANNEL_TYPES` 对齐，共 16 个平台）。 */
 export const SOURCING_PUBLISHABLE_CHANNEL_TYPES = [
   "shopify",
   "amazon_sp",
@@ -716,6 +966,14 @@ export const SOURCING_PUBLISHABLE_CHANNEL_TYPES = [
   "woocommerce",
   "shopline",
   "shoplazza",
+  "shopee",
+  "lazada",
+  "temu",
+  "shein",
+  "aliexpress",
+  "ozon",
+  "walmart",
+  "mercado_libre",
 ] as const;
 
 const STORE_LABELS: Record<string, string> = {
@@ -727,6 +985,14 @@ const STORE_LABELS: Record<string, string> = {
   woocommerce: "WooCommerce",
   shopline: "SHOPLINE",
   shoplazza: "Shoplazza",
+  shopee: "Shopee",
+  lazada: "Lazada",
+  temu: "Temu",
+  shein: "SHEIN",
+  aliexpress: "AliExpress",
+  ozon: "Ozon",
+  walmart: "Walmart",
+  mercado_libre: "Mercado Libre",
   web_livechat: "Web chat",
   email: "Email",
   telegram: "Telegram",
@@ -742,7 +1008,14 @@ export function sourcingStoreLabel(channelType: string): string {
   return STORE_LABELS[channelType] ?? channelType.replace(/_/g, " ").toUpperCase();
 }
 
-/** 演示店铺账号：mock 模式且租户尚未接入任何店铺时用于补齐刊登目标。 */
+/**
+ * 演示店铺账号：mock 模式且租户尚未接入任何店铺时用于补齐刊登目标。
+ *
+ * 前 5 条顺序被 `pack-f-sourcing-channels-ui.test.tsx` 的演示回退断言锁住，
+ * 新增的 8 个全球化平台放在 `MOCK_GLOBAL_MARKETPLACE_STORE_ACCOUNTS`，
+ * 需要 13 个演示店铺时用 `MOCK_ALL_SOURCING_STORE_ACCOUNTS` /
+ * `sourcingStoreAccountsWithGlobalMarketplaces()`，不影响既有 5 店铺 mock。
+ */
 export const MOCK_SOURCING_STORE_ACCOUNTS: ReadonlyArray<{
   id: string;
   channel_type: string;
@@ -755,9 +1028,36 @@ export const MOCK_SOURCING_STORE_ACCOUNTS: ReadonlyArray<{
   { id: "ch-tiktok-qzled", channel_type: "tiktok_shop", display_name: "QZ LED · TikTok Shop" },
 ];
 
+/** 8 个全球化电商平台的演示店铺（刊登目标）。 */
+export const MOCK_GLOBAL_MARKETPLACE_STORE_ACCOUNTS: ReadonlyArray<{
+  id: string;
+  channel_type: string;
+  display_name: string;
+}> = [
+  { id: "ch-shopee-qzled", channel_type: "shopee", display_name: "QZ LED · Shopee SG" },
+  { id: "ch-lazada-qzled", channel_type: "lazada", display_name: "QZ LED · Lazada SG" },
+  { id: "ch-temu-qzled", channel_type: "temu", display_name: "QZ LED · Temu US" },
+  { id: "ch-shein-qzled", channel_type: "shein", display_name: "QZ LED · SHEIN US" },
+  { id: "ch-aliexpress-qzled", channel_type: "aliexpress", display_name: "QZ LED · AliExpress" },
+  { id: "ch-ozon-qzled", channel_type: "ozon", display_name: "QZ LED · Ozon RU" },
+  { id: "ch-walmart-qzled", channel_type: "walmart", display_name: "QZ LED · Walmart US" },
+  {
+    id: "ch-mercado-libre-qzled",
+    channel_type: "mercado_libre",
+    display_name: "QZ LED · Mercado Libre MX",
+  },
+];
+
+/** 全部 13 个演示店铺：5 个既有店铺 + 8 个全球化平台（顺序稳定）。 */
+export const MOCK_ALL_SOURCING_STORE_ACCOUNTS: ReadonlyArray<{
+  id: string;
+  channel_type: string;
+  display_name: string;
+}> = [...MOCK_SOURCING_STORE_ACCOUNTS, ...MOCK_GLOBAL_MARKETPLACE_STORE_ACCOUNTS];
+
 function mockStoreChannelType(accountId: string): string {
   return (
-    MOCK_SOURCING_STORE_ACCOUNTS.find((store) => store.id === accountId)?.channel_type ??
+    MOCK_ALL_SOURCING_STORE_ACCOUNTS.find((store) => store.id === accountId)?.channel_type ??
     "shopify"
   );
 }
@@ -777,6 +1077,26 @@ export function sourcingStoreAccounts(
     }));
   if (publishable.length > 0) return publishable;
   return shouldUseMockApi() ? MOCK_SOURCING_STORE_ACCOUNTS.map((store) => ({ ...store })) : [];
+}
+
+/**
+ * 同 `sourcingStoreAccounts`，但 mock 回退补齐全部 13 个演示店铺
+ * （含 8 个全球化电商平台），供已升级到 16 平台刊登口的页面使用。
+ */
+export function sourcingStoreAccountsWithGlobalMarketplaces(
+  accounts: ReadonlyArray<{ id: string; channel_type: string; display_name: string }>,
+): Array<{ id: string; channel_type: string; display_name: string }> {
+  const publishable = accounts
+    .filter((account) =>
+      (SOURCING_PUBLISHABLE_CHANNEL_TYPES as readonly string[]).includes(account.channel_type),
+    )
+    .map((account) => ({
+      id: account.id,
+      channel_type: account.channel_type,
+      display_name: account.display_name,
+    }));
+  if (publishable.length > 0) return publishable;
+  return shouldUseMockApi() ? MOCK_ALL_SOURCING_STORE_ACCOUNTS.map((store) => ({ ...store })) : [];
 }
 
 /** 草稿状态徽标：草稿 / 已入主档 / 本地映射就绪 / 已刊登（本地记录）/ 已上线刊登。

@@ -96,6 +96,80 @@ const CHANNEL_DOT: Record<string, string> = {
   telegram: "bg-cyan-500",
   messenger: "bg-blue-600",
   instagram_dm: "bg-violet-600",
+  alibaba_email: "bg-orange-500",
+  amazon_sp: "bg-amber-500",
+  ebay: "bg-sky-600",
+  // 本轮 8 个全球电商渠道：每个都是独立色相，扫一眼就能分开。
+  shopee: "bg-orange-500",
+  lazada: "bg-pink-500",
+  temu: "bg-red-500",
+  shein: "bg-fuchsia-600",
+  aliexpress: "bg-amber-600",
+  ozon: "bg-cyan-600",
+  walmart: "bg-indigo-600",
+  mercado_libre: "bg-yellow-500",
+};
+
+/**
+ * 渠道胶囊的展示标签（仅新增渠道做本地化展示，旧渠道保持原始 `channel_type`，
+ * 避免改动既有 Inbox 单测与运维口径）。
+ */
+const CHANNEL_LABEL: Record<string, { zh: string; en: string }> = {
+  shopee: { zh: "Shopee", en: "Shopee" },
+  lazada: { zh: "Lazada", en: "Lazada" },
+  temu: { zh: "Temu", en: "Temu" },
+  shein: { zh: "SHEIN", en: "SHEIN" },
+  aliexpress: { zh: "速卖通", en: "AliExpress" },
+  ozon: { zh: "Ozon", en: "Ozon" },
+  walmart: { zh: "沃尔玛", en: "Walmart" },
+  mercado_libre: { zh: "美客多", en: "Mercado Libre" },
+};
+
+/** 新增渠道的胶囊配色（旧渠道不在此表，继续用原灰色胶囊样式）。 */
+const CHANNEL_CHIP: Record<
+  string,
+  { className: string; dot: string }
+> = {
+  shopee: {
+    className:
+      "bg-orange-50 text-orange-700 ring-orange-200/80 dark:bg-orange-500/10 dark:text-orange-300 dark:ring-orange-500/30",
+    dot: "bg-orange-500",
+  },
+  lazada: {
+    className:
+      "bg-pink-50 text-pink-700 ring-pink-200/80 dark:bg-pink-500/10 dark:text-pink-300 dark:ring-pink-500/30",
+    dot: "bg-pink-500",
+  },
+  temu: {
+    className:
+      "bg-red-50 text-red-700 ring-red-200/80 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30",
+    dot: "bg-red-500",
+  },
+  shein: {
+    className:
+      "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200/80 dark:bg-fuchsia-500/10 dark:text-fuchsia-300 dark:ring-fuchsia-500/30",
+    dot: "bg-fuchsia-600",
+  },
+  aliexpress: {
+    className:
+      "bg-amber-50 text-amber-800 ring-amber-200/80 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30",
+    dot: "bg-amber-600",
+  },
+  ozon: {
+    className:
+      "bg-cyan-50 text-cyan-700 ring-cyan-200/80 dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/30",
+    dot: "bg-cyan-600",
+  },
+  walmart: {
+    className:
+      "bg-indigo-50 text-indigo-700 ring-indigo-200/80 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/30",
+    dot: "bg-indigo-600",
+  },
+  mercado_libre: {
+    className:
+      "bg-yellow-50 text-yellow-800 ring-yellow-200/80 dark:bg-yellow-500/10 dark:text-yellow-300 dark:ring-yellow-500/30",
+    dot: "bg-yellow-500",
+  },
 };
 
 type OwnershipPill = { zh: string; en: string; className: string };
@@ -354,15 +428,27 @@ export function ConversationList({
                     )}
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] font-medium">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-gray-700 ring-1 ring-gray-200/70 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">
-                        <span
-                          aria-hidden="true"
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            CHANNEL_DOT[conv.channel_type] ?? "bg-slate-400"
-                          }`}
-                        />
-                        {conv.channel_type}
-                      </span>
+                      {(() => {
+                        const chip = CHANNEL_CHIP[conv.channel_type];
+                        const label = CHANNEL_LABEL[conv.channel_type];
+                        return (
+                          <span
+                            data-testid={`conversation-channel-${conv.id}`}
+                            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ring-1 ${
+                              chip?.className ??
+                              "bg-gray-100 text-gray-700 ring-gray-200/70 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700"
+                            }`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                chip?.dot ?? CHANNEL_DOT[conv.channel_type] ?? "bg-slate-400"
+                              }`}
+                            />
+                            {label ? bi(label.zh, label.en) : conv.channel_type}
+                          </span>
+                        );
+                      })()}
                       <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-blue-700 ring-1 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30">
                         {conv.conversation_mode}
                       </span>

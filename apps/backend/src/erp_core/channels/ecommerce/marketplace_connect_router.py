@@ -1,4 +1,7 @@
-"""Marketplace onboarding for Alibaba International, Amazon SP-API, and eBay sellers.
+"""Marketplace onboarding for the global marketplace fleet.
+
+Covers Alibaba International, Amazon SP-API, eBay plus the eight global marketplaces
+(Shopee, Lazada, Temu, SHEIN, AliExpress, Ozon, Walmart, Mercado Libre).
 
 Every endpoint follows the same fail-closed contract as ``connectors_router``:
 
@@ -13,7 +16,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Final, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -44,23 +47,65 @@ SyncPrincipal = Annotated[CurrentPrincipal, Depends(require_roles(*_SYNC_ROLES))
 ALIBABA_INTL_CREDENTIAL_TYPE = "alibaba_intl_app"
 AMAZON_CREDENTIAL_TYPE = "amazon_sp_api"
 EBAY_CREDENTIAL_TYPE = "ebay_api"
+SHOPEE_CREDENTIAL_TYPE = "shopee_app"
+LAZADA_CREDENTIAL_TYPE = "lazada_app"
+TEMU_CREDENTIAL_TYPE = "temu_app"
+SHEIN_CREDENTIAL_TYPE = "shein_app"
+ALIEXPRESS_CREDENTIAL_TYPE = "aliexpress_app"
+OZON_CREDENTIAL_TYPE = "ozon_app"
+WALMART_CREDENTIAL_TYPE = "walmart_app"
+MERCADO_LIBRE_CREDENTIAL_TYPE = "mercado_libre_app"
 
 ALIBABA_INTL_CHANNEL_TYPE = "alibaba_email"
 AMAZON_CHANNEL_TYPE = "amazon_sp"
 EBAY_CHANNEL_TYPE = "ebay"
+SHOPEE_CHANNEL_TYPE = "shopee"
+LAZADA_CHANNEL_TYPE = "lazada"
+TEMU_CHANNEL_TYPE = "temu"
+SHEIN_CHANNEL_TYPE = "shein"
+ALIEXPRESS_CHANNEL_TYPE = "aliexpress"
+OZON_CHANNEL_TYPE = "ozon"
+WALMART_CHANNEL_TYPE = "walmart"
+MERCADO_LIBRE_CHANNEL_TYPE = "mercado_libre"
 
 DEFAULT_AMAZON_MARKETPLACE_ID = "ATVPDKIKX0DER"
 DEFAULT_EBAY_SITE_ID = "EBAY_US"
+DEFAULT_SHOPEE_REGION = "GLOBAL"
+DEFAULT_LAZADA_REGION = "SG"
+DEFAULT_TEMU_REGION = "US"
+DEFAULT_SHEIN_REGION = "US"
+DEFAULT_MERCADO_LIBRE_SITE_ID = "MLM"
+DEFAULT_OZON_FULFILLMENT_MODE: Final = "fbs"
 
 #: Channels with a real order-feed adapter behind the on-demand sync endpoint.
 SYNC_SUPPORTED_CHANNEL_TYPES: frozenset[str] = frozenset(
-    {AMAZON_CHANNEL_TYPE, EBAY_CHANNEL_TYPE, ALIBABA_INTL_CHANNEL_TYPE}
+    {
+        ALIBABA_INTL_CHANNEL_TYPE,
+        AMAZON_CHANNEL_TYPE,
+        EBAY_CHANNEL_TYPE,
+        SHOPEE_CHANNEL_TYPE,
+        LAZADA_CHANNEL_TYPE,
+        TEMU_CHANNEL_TYPE,
+        SHEIN_CHANNEL_TYPE,
+        ALIEXPRESS_CHANNEL_TYPE,
+        OZON_CHANNEL_TYPE,
+        WALMART_CHANNEL_TYPE,
+        MERCADO_LIBRE_CHANNEL_TYPE,
+    }
 )
 
 CREDENTIAL_TYPES: dict[str, str] = {
     ALIBABA_INTL_CHANNEL_TYPE: ALIBABA_INTL_CREDENTIAL_TYPE,
     AMAZON_CHANNEL_TYPE: AMAZON_CREDENTIAL_TYPE,
     EBAY_CHANNEL_TYPE: EBAY_CREDENTIAL_TYPE,
+    SHOPEE_CHANNEL_TYPE: SHOPEE_CREDENTIAL_TYPE,
+    LAZADA_CHANNEL_TYPE: LAZADA_CREDENTIAL_TYPE,
+    TEMU_CHANNEL_TYPE: TEMU_CREDENTIAL_TYPE,
+    SHEIN_CHANNEL_TYPE: SHEIN_CREDENTIAL_TYPE,
+    ALIEXPRESS_CHANNEL_TYPE: ALIEXPRESS_CREDENTIAL_TYPE,
+    OZON_CHANNEL_TYPE: OZON_CREDENTIAL_TYPE,
+    WALMART_CHANNEL_TYPE: WALMART_CREDENTIAL_TYPE,
+    MERCADO_LIBRE_CHANNEL_TYPE: MERCADO_LIBRE_CREDENTIAL_TYPE,
 }
 
 
@@ -109,6 +154,96 @@ class EbayConnectRequest(BaseModel):
     refresh_token: str = Field(min_length=8, max_length=4096)
 
 
+class ShopeeConnectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=128)
+    shop_id: str = Field(min_length=1, max_length=128)
+    partner_id: str = Field(min_length=1, max_length=64)
+    partner_key: str = Field(min_length=8, max_length=512)
+    access_token: str = Field(min_length=8, max_length=4096)
+    region: str = Field(default=DEFAULT_SHOPEE_REGION, min_length=2, max_length=32)
+    fulfillment_mode: Literal["standard", "full_managed", "light_export"] = "standard"
+
+
+class LazadaConnectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=128)
+    seller_id: str = Field(min_length=1, max_length=128)
+    app_key: str = Field(min_length=1, max_length=256)
+    app_secret: str = Field(min_length=8, max_length=512)
+    access_token: str = Field(min_length=8, max_length=4096)
+    region: str = Field(default=DEFAULT_LAZADA_REGION, min_length=2, max_length=32)
+    fulfillment_mode: Literal["standard", "full_managed"] = "standard"
+
+
+class TemuConnectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=128)
+    mall_id: str = Field(min_length=1, max_length=128)
+    app_key: str = Field(min_length=1, max_length=256)
+    app_secret: str = Field(min_length=8, max_length=512)
+    access_token: str = Field(min_length=8, max_length=4096)
+    region: str = Field(default=DEFAULT_TEMU_REGION, min_length=2, max_length=32)
+    fulfillment_mode: Literal["standard", "semi_managed", "local"] = "standard"
+
+
+class SheinConnectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=128)
+    seller_id: str = Field(min_length=1, max_length=128)
+    open_key_id: str = Field(min_length=1, max_length=256)
+    secret_key: str = Field(min_length=8, max_length=512)
+    region: str = Field(default=DEFAULT_SHEIN_REGION, min_length=2, max_length=32)
+    fulfillment_mode: Literal["standard", "semi_managed"] = "standard"
+
+
+class AliExpressConnectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=128)
+    seller_id: str = Field(min_length=1, max_length=128)
+    app_key: str = Field(min_length=1, max_length=256)
+    app_secret: str = Field(min_length=8, max_length=512)
+    access_token: str = Field(min_length=8, max_length=4096)
+    fulfillment_mode: Literal["standard", "managed"] = "standard"
+
+
+class OzonConnectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=128)
+    client_id: str = Field(min_length=1, max_length=64)
+    api_key: str = Field(min_length=8, max_length=512)
+    warehouse_id: str = Field(default="", max_length=128)
+    fulfillment_mode: Literal["fbs", "fbo"] = DEFAULT_OZON_FULFILLMENT_MODE
+
+
+class WalmartConnectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=128)
+    seller_id: str = Field(min_length=1, max_length=128)
+    client_id: str = Field(min_length=1, max_length=256)
+    client_secret: str = Field(min_length=8, max_length=512)
+    access_token: str | None = Field(default=None, max_length=4096)
+    fulfillment_mode: Literal["standard", "wfs"] = "standard"
+
+
+class MercadoLibreConnectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=128)
+    seller_id: str = Field(min_length=1, max_length=128)
+    access_token: str = Field(min_length=8, max_length=4096)
+    site_id: str = Field(default=DEFAULT_MERCADO_LIBRE_SITE_ID, min_length=3, max_length=8)
+    refresh_token: str = Field(default="", max_length=4096)
+    fulfillment_mode: Literal["standard", "full_managed"] = "standard"
+
+
 class MarketplaceConnectionRead(BaseModel):
     """Non-secret projection of a freshly connected marketplace account."""
 
@@ -119,6 +254,10 @@ class MarketplaceConnectionRead(BaseModel):
     credential_type: str
     status: str = "active"
     visibility_scope: str | None = None
+
+
+#: Public name of the connect contract — never carries a plaintext secret.
+ConnectResponse = MarketplaceConnectionRead
 
 
 class MarketplaceOrderSyncResult(BaseModel):
@@ -437,14 +576,299 @@ async def connect_ebay(
         )
 
 
+@router.post(
+    "/shopee/connect",
+    response_model=MarketplaceConnectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_shopee(
+    request: Request,
+    payload: ShopeeConnectRequest,
+    principal: AdminPrincipal,
+) -> MarketplaceConnectionRead:
+    shop_id = payload.shop_id.strip()
+    partner_id = payload.partner_id.strip()
+    region = payload.region.strip().upper()
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await provision_marketplace_account(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_type=SHOPEE_CHANNEL_TYPE,
+            external_account_id=shop_id,
+            display_name=payload.display_name.strip(),
+            secret_payload={
+                "shop_id": shop_id,
+                "partner_id": partner_id,
+                "partner_key": payload.partner_key,
+                "access_token": payload.access_token,
+                "region": region,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            config={
+                "shop_id": shop_id,
+                "partner_id": partner_id,
+                "region": region,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            actor_id=str(principal.user_id),
+        )
+
+
+@router.post(
+    "/lazada/connect",
+    response_model=MarketplaceConnectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_lazada(
+    request: Request,
+    payload: LazadaConnectRequest,
+    principal: AdminPrincipal,
+) -> MarketplaceConnectionRead:
+    seller_id = payload.seller_id.strip()
+    region = payload.region.strip().upper()
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await provision_marketplace_account(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_type=LAZADA_CHANNEL_TYPE,
+            external_account_id=seller_id,
+            display_name=payload.display_name.strip(),
+            secret_payload={
+                "seller_id": seller_id,
+                "app_key": payload.app_key,
+                "app_secret": payload.app_secret,
+                "access_token": payload.access_token,
+                "region": region,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            config={
+                "seller_id": seller_id,
+                "region": region,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            actor_id=str(principal.user_id),
+        )
+
+
+@router.post(
+    "/temu/connect",
+    response_model=MarketplaceConnectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_temu(
+    request: Request,
+    payload: TemuConnectRequest,
+    principal: AdminPrincipal,
+) -> MarketplaceConnectionRead:
+    mall_id = payload.mall_id.strip()
+    region = payload.region.strip().upper()
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await provision_marketplace_account(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_type=TEMU_CHANNEL_TYPE,
+            external_account_id=mall_id,
+            display_name=payload.display_name.strip(),
+            secret_payload={
+                "mall_id": mall_id,
+                "app_key": payload.app_key,
+                "app_secret": payload.app_secret,
+                "access_token": payload.access_token,
+                "region": region,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            config={
+                "mall_id": mall_id,
+                "region": region,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            actor_id=str(principal.user_id),
+        )
+
+
+@router.post(
+    "/shein/connect",
+    response_model=MarketplaceConnectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_shein(
+    request: Request,
+    payload: SheinConnectRequest,
+    principal: AdminPrincipal,
+) -> MarketplaceConnectionRead:
+    seller_id = payload.seller_id.strip()
+    region = payload.region.strip().upper()
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await provision_marketplace_account(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_type=SHEIN_CHANNEL_TYPE,
+            external_account_id=seller_id,
+            display_name=payload.display_name.strip(),
+            secret_payload={
+                "seller_id": seller_id,
+                "open_key_id": payload.open_key_id,
+                "secret_key": payload.secret_key,
+                "region": region,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            config={
+                "seller_id": seller_id,
+                "region": region,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            actor_id=str(principal.user_id),
+        )
+
+
+@router.post(
+    "/aliexpress/connect",
+    response_model=MarketplaceConnectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_aliexpress(
+    request: Request,
+    payload: AliExpressConnectRequest,
+    principal: AdminPrincipal,
+) -> MarketplaceConnectionRead:
+    seller_id = payload.seller_id.strip()
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await provision_marketplace_account(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_type=ALIEXPRESS_CHANNEL_TYPE,
+            external_account_id=seller_id,
+            display_name=payload.display_name.strip(),
+            secret_payload={
+                "seller_id": seller_id,
+                "app_key": payload.app_key,
+                "app_secret": payload.app_secret,
+                "access_token": payload.access_token,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            config={"seller_id": seller_id, "fulfillment_mode": payload.fulfillment_mode},
+            actor_id=str(principal.user_id),
+        )
+
+
+@router.post(
+    "/ozon/connect",
+    response_model=MarketplaceConnectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_ozon(
+    request: Request,
+    payload: OzonConnectRequest,
+    principal: AdminPrincipal,
+) -> MarketplaceConnectionRead:
+    client_id = payload.client_id.strip()
+    marketplace_warehouse_id = payload.warehouse_id.strip()
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await provision_marketplace_account(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_type=OZON_CHANNEL_TYPE,
+            external_account_id=client_id,
+            display_name=payload.display_name.strip(),
+            secret_payload={
+                "client_id": client_id,
+                "api_key": payload.api_key,
+                "warehouse_id": marketplace_warehouse_id,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            # Ozon's ``warehouse_id`` is a marketplace-side identifier, so it must never
+            # shadow ``config.warehouse_id`` (the tenant's own ERP warehouse UUID).
+            config={
+                "client_id": client_id,
+                "ozon_warehouse_id": marketplace_warehouse_id,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            actor_id=str(principal.user_id),
+        )
+
+
+@router.post(
+    "/walmart/connect",
+    response_model=MarketplaceConnectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_walmart(
+    request: Request,
+    payload: WalmartConnectRequest,
+    principal: AdminPrincipal,
+) -> MarketplaceConnectionRead:
+    seller_id = payload.seller_id.strip()
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await provision_marketplace_account(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_type=WALMART_CHANNEL_TYPE,
+            external_account_id=seller_id,
+            display_name=payload.display_name.strip(),
+            secret_payload={
+                "seller_id": seller_id,
+                "client_id": payload.client_id,
+                "client_secret": payload.client_secret,
+                "access_token": (payload.access_token or "").strip(),
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            config={"seller_id": seller_id, "fulfillment_mode": payload.fulfillment_mode},
+            actor_id=str(principal.user_id),
+        )
+
+
+@router.post(
+    "/mercado-libre/connect",
+    response_model=MarketplaceConnectionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_mercado_libre(
+    request: Request,
+    payload: MercadoLibreConnectRequest,
+    principal: AdminPrincipal,
+) -> MarketplaceConnectionRead:
+    seller_id = payload.seller_id.strip()
+    site_id = payload.site_id.strip().upper()
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await provision_marketplace_account(
+            session,
+            tenant_id=principal.tenant_id,
+            channel_type=MERCADO_LIBRE_CHANNEL_TYPE,
+            external_account_id=seller_id,
+            display_name=payload.display_name.strip(),
+            secret_payload={
+                "seller_id": seller_id,
+                "access_token": payload.access_token,
+                "site_id": site_id,
+                "refresh_token": payload.refresh_token.strip(),
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            config={
+                "seller_id": seller_id,
+                "site_id": site_id,
+                "fulfillment_mode": payload.fulfillment_mode,
+            },
+            actor_id=str(principal.user_id),
+        )
+
+
 __all__ = [
     "ALIBABA_INTL_CREDENTIAL_TYPE",
+    "ALIEXPRESS_CREDENTIAL_TYPE",
     "AMAZON_CREDENTIAL_TYPE",
     "CREDENTIAL_TYPES",
+    "ConnectResponse",
     "EBAY_CREDENTIAL_TYPE",
+    "LAZADA_CREDENTIAL_TYPE",
+    "MERCADO_LIBRE_CREDENTIAL_TYPE",
     "MarketplaceConnectionRead",
     "MarketplaceOrderSyncResult",
+    "OZON_CREDENTIAL_TYPE",
+    "SHEIN_CREDENTIAL_TYPE",
+    "SHOPEE_CREDENTIAL_TYPE",
     "SYNC_SUPPORTED_CHANNEL_TYPES",
+    "TEMU_CREDENTIAL_TYPE",
+    "WALMART_CREDENTIAL_TYPE",
     "provision_marketplace_account",
     "router",
 ]

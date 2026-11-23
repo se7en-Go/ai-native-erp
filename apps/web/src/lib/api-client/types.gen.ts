@@ -124,6 +124,15 @@ export type AiProposalRead = {
     target_entity_type: string | null;
 };
 
+export type AliExpressConnectRequest = {
+    access_token: string;
+    app_key: string;
+    app_secret: string;
+    display_name: string;
+    fulfillment_mode?: 'standard' | 'managed';
+    seller_id: string;
+};
+
 export type AlibabaIntlConnectRequest = {
     app_key: string;
     app_secret: string;
@@ -539,7 +548,7 @@ export type ChannelSuppressionRead = {
     reason: string;
 };
 
-export type ChannelType = 'whatsapp_cloud' | 'whatsapp_coexistence' | 'email' | 'web_livechat' | 'shopify' | 'woocommerce' | 'shopline' | 'shoplazza' | 'tiktok_shop' | 'made_in_china_email' | 'alibaba_email' | 'messenger' | 'instagram_dm' | 'telegram' | 'amazon_sp' | 'ebay' | 'mercado_libre' | 'temu' | 'walmart' | 'shopee' | 'lazada';
+export type ChannelType = 'whatsapp_cloud' | 'whatsapp_coexistence' | 'email' | 'web_livechat' | 'shopify' | 'woocommerce' | 'shopline' | 'shoplazza' | 'tiktok_shop' | 'made_in_china_email' | 'alibaba_email' | 'messenger' | 'instagram_dm' | 'telegram' | 'amazon_sp' | 'ebay' | 'mercado_libre' | 'temu' | 'walmart' | 'shopee' | 'lazada' | 'shein' | 'aliexpress' | 'ozon';
 
 export type ChannelVolume = {
     channel: string;
@@ -1198,6 +1207,16 @@ export type KbSearchRequest = {
     top_k?: number;
 };
 
+export type LazadaConnectRequest = {
+    access_token: string;
+    app_key: string;
+    app_secret: string;
+    display_name: string;
+    fulfillment_mode?: 'standard' | 'full_managed';
+    region?: string;
+    seller_id: string;
+};
+
 /**
  * Create a collection job.
  *
@@ -1435,6 +1454,15 @@ export type MentionRead = {
     social_account_id: string | null;
 };
 
+export type MercadoLibreConnectRequest = {
+    access_token: string;
+    display_name: string;
+    fulfillment_mode?: 'standard' | 'full_managed';
+    refresh_token?: string;
+    seller_id: string;
+    site_id?: string;
+};
+
 export type MergeCustomersRequest = {
     reason: string;
     source_customer_id: string;
@@ -1649,6 +1677,14 @@ export type OverviewRead = {
     funnel: Array<FunnelStage>;
     sku_margins?: Array<SkuMargin> | null;
     won_conversion_pct: string;
+};
+
+export type OzonConnectRequest = {
+    api_key: string;
+    client_id: string;
+    display_name: string;
+    fulfillment_mode?: 'fbs' | 'fbo';
+    warehouse_id?: string;
 };
 
 export type PaginatedResponseAccountRead = {
@@ -2643,6 +2679,15 @@ export type SendRealCampaignResponse = {
     suppressed_count: number;
 };
 
+export type SheinConnectRequest = {
+    display_name: string;
+    fulfillment_mode?: 'standard' | 'semi_managed';
+    open_key_id: string;
+    region?: string;
+    secret_key: string;
+    seller_id: string;
+};
+
 export type ShipOrderRequest = {
     actual_shipping_cost_base?: number | string;
     carrier_code?: string | null;
@@ -2674,6 +2719,16 @@ export type ShipmentRead = {
     }>;
     tracking_number: string;
     tracking_provider: TrackingProvider;
+};
+
+export type ShopeeConnectRequest = {
+    access_token: string;
+    display_name: string;
+    fulfillment_mode?: 'standard' | 'full_managed' | 'light_export';
+    partner_id: string;
+    partner_key: string;
+    region?: string;
+    shop_id: string;
 };
 
 export type ShopifyConnectResponse = {
@@ -3078,6 +3133,16 @@ export type TelegramConnectRequest = {
     visibility_scope?: ('shared' | 'personal') | null;
 };
 
+export type TemuConnectRequest = {
+    access_token: string;
+    app_key: string;
+    app_secret: string;
+    display_name: string;
+    fulfillment_mode?: 'standard' | 'semi_managed' | 'local';
+    mall_id: string;
+    region?: string;
+};
+
 export type TenantMembershipOption = {
     is_active: boolean;
     role: UserRole;
@@ -3270,6 +3335,15 @@ export type VariantUpdate = {
 export type VerifyEmailDnsRequest = {
     dkim_selector?: string;
     domain: string;
+};
+
+export type WalmartConnectRequest = {
+    access_token?: string | null;
+    client_id: string;
+    client_secret: string;
+    display_name: string;
+    fulfillment_mode?: 'standard' | 'wfs';
+    seller_id: string;
 };
 
 export type WarehouseCreateRequest = {
@@ -6194,6 +6268,34 @@ export type ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostResponses = {
 
 export type ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostResponse = ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostResponses[keyof ConnectAlibabaIntlApiV1ChannelsAlibabaIntlConnectPostResponses];
 
+export type ConnectAliexpressApiV1ChannelsAliexpressConnectPostData = {
+    body: AliExpressConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/aliexpress/connect';
+};
+
+export type ConnectAliexpressApiV1ChannelsAliexpressConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectAliexpressApiV1ChannelsAliexpressConnectPostError = ConnectAliexpressApiV1ChannelsAliexpressConnectPostErrors[keyof ConnectAliexpressApiV1ChannelsAliexpressConnectPostErrors];
+
+export type ConnectAliexpressApiV1ChannelsAliexpressConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectAliexpressApiV1ChannelsAliexpressConnectPostResponse = ConnectAliexpressApiV1ChannelsAliexpressConnectPostResponses[keyof ConnectAliexpressApiV1ChannelsAliexpressConnectPostResponses];
+
 export type ConnectAmazonApiV1ChannelsAmazonConnectPostData = {
     body: AmazonConnectRequest;
     headers?: {
@@ -6400,6 +6502,34 @@ export type ConnectInstagramApiV1ChannelsInstagramConnectPostResponses = {
 
 export type ConnectInstagramApiV1ChannelsInstagramConnectPostResponse = ConnectInstagramApiV1ChannelsInstagramConnectPostResponses[keyof ConnectInstagramApiV1ChannelsInstagramConnectPostResponses];
 
+export type ConnectLazadaApiV1ChannelsLazadaConnectPostData = {
+    body: LazadaConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/lazada/connect';
+};
+
+export type ConnectLazadaApiV1ChannelsLazadaConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectLazadaApiV1ChannelsLazadaConnectPostError = ConnectLazadaApiV1ChannelsLazadaConnectPostErrors[keyof ConnectLazadaApiV1ChannelsLazadaConnectPostErrors];
+
+export type ConnectLazadaApiV1ChannelsLazadaConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectLazadaApiV1ChannelsLazadaConnectPostResponse = ConnectLazadaApiV1ChannelsLazadaConnectPostResponses[keyof ConnectLazadaApiV1ChannelsLazadaConnectPostResponses];
+
 export type SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostData = {
     body?: never;
     headers?: {
@@ -6432,6 +6562,34 @@ export type SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrd
 
 export type SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostResponse = SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostResponses[keyof SyncMarketplaceOrdersApiV1ChannelsMarketplaceChannelAccountIdSyncOrdersPostResponses];
 
+export type ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostData = {
+    body: MercadoLibreConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/mercado-libre/connect';
+};
+
+export type ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostError = ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostErrors[keyof ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostErrors];
+
+export type ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostResponse = ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostResponses[keyof ConnectMercadoLibreApiV1ChannelsMercadoLibreConnectPostResponses];
+
 export type ConnectMessengerApiV1ChannelsMessengerConnectPostData = {
     body: MessengerConnectRequest;
     headers?: {
@@ -6459,6 +6617,90 @@ export type ConnectMessengerApiV1ChannelsMessengerConnectPostResponses = {
 };
 
 export type ConnectMessengerApiV1ChannelsMessengerConnectPostResponse = ConnectMessengerApiV1ChannelsMessengerConnectPostResponses[keyof ConnectMessengerApiV1ChannelsMessengerConnectPostResponses];
+
+export type ConnectOzonApiV1ChannelsOzonConnectPostData = {
+    body: OzonConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/ozon/connect';
+};
+
+export type ConnectOzonApiV1ChannelsOzonConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectOzonApiV1ChannelsOzonConnectPostError = ConnectOzonApiV1ChannelsOzonConnectPostErrors[keyof ConnectOzonApiV1ChannelsOzonConnectPostErrors];
+
+export type ConnectOzonApiV1ChannelsOzonConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectOzonApiV1ChannelsOzonConnectPostResponse = ConnectOzonApiV1ChannelsOzonConnectPostResponses[keyof ConnectOzonApiV1ChannelsOzonConnectPostResponses];
+
+export type ConnectSheinApiV1ChannelsSheinConnectPostData = {
+    body: SheinConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/shein/connect';
+};
+
+export type ConnectSheinApiV1ChannelsSheinConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectSheinApiV1ChannelsSheinConnectPostError = ConnectSheinApiV1ChannelsSheinConnectPostErrors[keyof ConnectSheinApiV1ChannelsSheinConnectPostErrors];
+
+export type ConnectSheinApiV1ChannelsSheinConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectSheinApiV1ChannelsSheinConnectPostResponse = ConnectSheinApiV1ChannelsSheinConnectPostResponses[keyof ConnectSheinApiV1ChannelsSheinConnectPostResponses];
+
+export type ConnectShopeeApiV1ChannelsShopeeConnectPostData = {
+    body: ShopeeConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/shopee/connect';
+};
+
+export type ConnectShopeeApiV1ChannelsShopeeConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectShopeeApiV1ChannelsShopeeConnectPostError = ConnectShopeeApiV1ChannelsShopeeConnectPostErrors[keyof ConnectShopeeApiV1ChannelsShopeeConnectPostErrors];
+
+export type ConnectShopeeApiV1ChannelsShopeeConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectShopeeApiV1ChannelsShopeeConnectPostResponse = ConnectShopeeApiV1ChannelsShopeeConnectPostResponses[keyof ConnectShopeeApiV1ChannelsShopeeConnectPostResponses];
 
 export type ListChannelSuppressionsApiV1ChannelsSuppressionsGetData = {
     body?: never;
@@ -6518,6 +6760,62 @@ export type ConnectTelegramApiV1ChannelsTelegramConnectPostResponses = {
 };
 
 export type ConnectTelegramApiV1ChannelsTelegramConnectPostResponse = ConnectTelegramApiV1ChannelsTelegramConnectPostResponses[keyof ConnectTelegramApiV1ChannelsTelegramConnectPostResponses];
+
+export type ConnectTemuApiV1ChannelsTemuConnectPostData = {
+    body: TemuConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/temu/connect';
+};
+
+export type ConnectTemuApiV1ChannelsTemuConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectTemuApiV1ChannelsTemuConnectPostError = ConnectTemuApiV1ChannelsTemuConnectPostErrors[keyof ConnectTemuApiV1ChannelsTemuConnectPostErrors];
+
+export type ConnectTemuApiV1ChannelsTemuConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectTemuApiV1ChannelsTemuConnectPostResponse = ConnectTemuApiV1ChannelsTemuConnectPostResponses[keyof ConnectTemuApiV1ChannelsTemuConnectPostResponses];
+
+export type ConnectWalmartApiV1ChannelsWalmartConnectPostData = {
+    body: WalmartConnectRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/channels/walmart/connect';
+};
+
+export type ConnectWalmartApiV1ChannelsWalmartConnectPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectWalmartApiV1ChannelsWalmartConnectPostError = ConnectWalmartApiV1ChannelsWalmartConnectPostErrors[keyof ConnectWalmartApiV1ChannelsWalmartConnectPostErrors];
+
+export type ConnectWalmartApiV1ChannelsWalmartConnectPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MarketplaceConnectionRead;
+};
+
+export type ConnectWalmartApiV1ChannelsWalmartConnectPostResponse = ConnectWalmartApiV1ChannelsWalmartConnectPostResponses[keyof ConnectWalmartApiV1ChannelsWalmartConnectPostResponses];
 
 export type ConnectWebLivechatApiV1ChannelsWebLivechatConnectPostData = {
     body: WebLivechatConnectRequest;
@@ -10012,6 +10310,114 @@ export type Receive17TrackWebhookApiV1Webhooks17TrackPostResponses = {
 
 export type Receive17TrackWebhookApiV1Webhooks17TrackPostResponse = Receive17TrackWebhookApiV1Webhooks17TrackPostResponses[keyof Receive17TrackWebhookApiV1Webhooks17TrackPostResponses];
 
+export type ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/aliexpress';
+};
+
+export type ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponse = ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses[keyof ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses];
+
+export type ReceiveLazadaWebhookApiV1WebhooksLazadaPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/lazada';
+};
+
+export type ReceiveLazadaWebhookApiV1WebhooksLazadaPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveLazadaWebhookApiV1WebhooksLazadaPostResponse = ReceiveLazadaWebhookApiV1WebhooksLazadaPostResponses[keyof ReceiveLazadaWebhookApiV1WebhooksLazadaPostResponses];
+
+export type ReceiveMercadoLibreWebhookApiV1WebhooksMercadoLibrePostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/mercado-libre';
+};
+
+export type ReceiveMercadoLibreWebhookApiV1WebhooksMercadoLibrePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveMercadoLibreWebhookApiV1WebhooksMercadoLibrePostResponse = ReceiveMercadoLibreWebhookApiV1WebhooksMercadoLibrePostResponses[keyof ReceiveMercadoLibreWebhookApiV1WebhooksMercadoLibrePostResponses];
+
+export type ReceiveOzonWebhookApiV1WebhooksOzonPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/ozon';
+};
+
+export type ReceiveOzonWebhookApiV1WebhooksOzonPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveOzonWebhookApiV1WebhooksOzonPostResponse = ReceiveOzonWebhookApiV1WebhooksOzonPostResponses[keyof ReceiveOzonWebhookApiV1WebhooksOzonPostResponses];
+
+export type ReceiveSheinWebhookApiV1WebhooksSheinPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/shein';
+};
+
+export type ReceiveSheinWebhookApiV1WebhooksSheinPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveSheinWebhookApiV1WebhooksSheinPostResponse = ReceiveSheinWebhookApiV1WebhooksSheinPostResponses[keyof ReceiveSheinWebhookApiV1WebhooksSheinPostResponses];
+
+export type ReceiveShopeeWebhookApiV1WebhooksShopeePostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/shopee';
+};
+
+export type ReceiveShopeeWebhookApiV1WebhooksShopeePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveShopeeWebhookApiV1WebhooksShopeePostResponse = ReceiveShopeeWebhookApiV1WebhooksShopeePostResponses[keyof ReceiveShopeeWebhookApiV1WebhooksShopeePostResponses];
+
 export type ReceiveShopifyWebhookApiV1WebhooksShopifyPostData = {
     body?: never;
     headers?: {
@@ -10080,6 +10486,24 @@ export type ReceiveShoplineWebhookApiV1WebhooksShoplinePostResponses = {
 
 export type ReceiveShoplineWebhookApiV1WebhooksShoplinePostResponse = ReceiveShoplineWebhookApiV1WebhooksShoplinePostResponses[keyof ReceiveShoplineWebhookApiV1WebhooksShoplinePostResponses];
 
+export type ReceiveTemuWebhookApiV1WebhooksTemuPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/temu';
+};
+
+export type ReceiveTemuWebhookApiV1WebhooksTemuPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveTemuWebhookApiV1WebhooksTemuPostResponse = ReceiveTemuWebhookApiV1WebhooksTemuPostResponses[keyof ReceiveTemuWebhookApiV1WebhooksTemuPostResponses];
+
 export type ReceiveTiktokWebhookApiV1WebhooksTiktokPostData = {
     body?: never;
     path?: never;
@@ -10097,6 +10521,24 @@ export type ReceiveTiktokWebhookApiV1WebhooksTiktokPostResponses = {
 };
 
 export type ReceiveTiktokWebhookApiV1WebhooksTiktokPostResponse = ReceiveTiktokWebhookApiV1WebhooksTiktokPostResponses[keyof ReceiveTiktokWebhookApiV1WebhooksTiktokPostResponses];
+
+export type ReceiveWalmartWebhookApiV1WebhooksWalmartPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/walmart';
+};
+
+export type ReceiveWalmartWebhookApiV1WebhooksWalmartPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveWalmartWebhookApiV1WebhooksWalmartPostResponse = ReceiveWalmartWebhookApiV1WebhooksWalmartPostResponses[keyof ReceiveWalmartWebhookApiV1WebhooksWalmartPostResponses];
 
 export type ReceiveWoocommerceWebhookApiV1WebhooksWoocommercePostData = {
     body?: never;

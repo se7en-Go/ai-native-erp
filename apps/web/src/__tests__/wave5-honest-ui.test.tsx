@@ -42,18 +42,26 @@ const EXPECTED_TIER_BY_KEY: Record<string, ChannelCapabilityTier> = {
   alibaba_intl: "order_sync",
   amazon: "order_sync",
   ebay: "order_sync",
+  shopee: "order_sync",
+  lazada: "order_sync",
+  temu: "order_sync",
+  shein: "order_sync",
+  aliexpress: "order_sync",
+  ozon: "order_sync",
+  walmart: "order_sync",
+  mercado_libre: "order_sync",
 };
 
 describe("wave5 honest channel capability badges", () => {
-  it("assigns an accurate capability tier to all 14 channels", () => {
-    expect(CHANNEL_MARKETPLACE).toHaveLength(14);
+  it("assigns an accurate capability tier to all 22 channels", () => {
+    expect(CHANNEL_MARKETPLACE).toHaveLength(22);
     expect(
       Object.fromEntries(CHANNEL_MARKETPLACE.map((item) => [item.key, item.capabilityTier])),
     ).toEqual(EXPECTED_TIER_BY_KEY);
 
     const tiers = CHANNEL_MARKETPLACE.map((item) => item.capabilityTier);
     expect(tiers.filter((tier) => tier === "live_messaging")).toHaveLength(6);
-    expect(tiers.filter((tier) => tier === "order_sync")).toHaveLength(8);
+    expect(tiers.filter((tier) => tier === "order_sync")).toHaveLength(16);
     expect(tiers.filter((tier) => tier === "credentials_only")).toHaveLength(0);
 
     for (const item of CHANNEL_MARKETPLACE) {
@@ -72,7 +80,7 @@ describe("wave5 honest channel capability badges", () => {
       expect(badge).toHaveAttribute("data-capability-tier", item.capabilityTier);
     }
 
-    expect(screen.getAllByTestId(/^channel-capability-/)).toHaveLength(14);
+    expect(screen.getAllByTestId(/^channel-capability-/)).toHaveLength(22);
     expect(screen.getByTestId("channel-capability-whatsapp").textContent).toContain(
       "实时消息收发",
     );
@@ -119,7 +127,7 @@ describe("wave5 honest channel capability badges", () => {
 
     expect(screen.getByTestId("channel-marketplace")).toBeInTheDocument();
     expect(screen.getByTestId("marketplace-grid")).toBeInTheDocument();
-    expect(screen.getAllByTestId(/^marketplace-card-/)).toHaveLength(14);
+    expect(screen.getAllByTestId(/^marketplace-card-/)).toHaveLength(22);
     for (const item of CHANNEL_MARKETPLACE) {
       expect(screen.getByTestId(`marketplace-status-${item.key}`)).toBeInTheDocument();
       expect(screen.getByTestId(`open-connect-${item.key}`)).toBeInTheDocument();
