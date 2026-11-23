@@ -1,11 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BadgeDollarSign,
   Building2,
   Camera,
+  ChevronLeft,
+  ChevronRight,
   Globe,
   Layers,
   Mail,
@@ -154,6 +156,97 @@ export function ChannelRail({
 }) {
   const { bi } = useI18n();
   const settingsHref = settingsHrefOf(selectedChannel);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const syncScrollState = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+    setCanScrollLeft(el.scrollLeft > 1);
+    setCanScrollRight(maxScroll - el.scrollLeft > 1);
+  }, []);
+
+  useEffect(() => {
+    if (variant !== "compact") return;
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    syncScrollState();
+
+    const handleWheel = (event: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth + 1) return;
+      // Let native two-finger horizontal trackpad gestures work unobstructed.
+      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      if (event.deltaY === 0) return;
+
+      const unit =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? el.clientWidth
+            : 1;
+      const delta = event.deltaY * unit;
+      const prev = el.scrollLeft;
+      const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+      const next = Math.max(0, Math.min(maxScroll, prev + delta));
+      event.preventDefault();
+      if (next !== prev) {
+        el.scrollLeft = next;
+        syncScrollState();
+      }
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    el.addEventListener("scroll", syncScrollState, { passive: true });
+    window.addEventListener("resize", syncScrollState);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(syncScrollState);
+      observer.observe(el);
+    }
+
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+      el.removeEventListener("scroll", syncScrollState);
+      window.removeEventListener("resize", syncScrollState);
+      observer?.disconnect();
+    };
+  }, [variant, syncScrollState]);
+
+  useEffect(() => {
+    if (variant !== "compact") return;
+    const el = scrollerRef.current;
+    if (!el) return;
+    const activeButton = el.querySelector<HTMLElement>(
+      `[data-channel-key="${selectedChannel}"]`
+    );
+    if (activeButton && typeof activeButton.scrollIntoView === "function") {
+      activeButton.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: "smooth",
+      });
+    }
+    syncScrollState();
+  }, [variant, selectedChannel, syncScrollState]);
+
+  const scrollByDirection = useCallback(
+    (direction: -1 | 1) => {
+      const el = scrollerRef.current;
+      if (!el) return;
+      const step = Math.max(220, Math.round(el.clientWidth * 0.65));
+      if (typeof el.scrollBy === "function") {
+        el.scrollBy({ left: direction * step, behavior: "smooth" });
+      } else {
+        el.scrollLeft += direction * step;
+      }
+      syncScrollState();
+    },
+    [syncScrollState]
+  );
 
   if (variant === "compact") {
     return (
@@ -161,39 +254,76 @@ export function ChannelRail({
         data-testid="inbox-channel-rail"
         className="flex items-center gap-2 border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {CHANNEL_RAIL_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = selectedChannel === item.key;
-            const unread = unreadByChannel[item.key] ?? 0;
-            return (
+        <div className="relative flex min-w-0 flex-1 items-center">
+          {canScrollLeft && (
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-white via-white/95 to-transparent pr-5 dark:from-gray-900 dark:via-gray-900/95">
               <button
-                key={item.key}
                 type="button"
-                aria-pressed={active}
-                onClick={() => onSelectChannel(item.key)}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                  active
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-blue-500/15 dark:hover:text-blue-300"
-                }`}
+                data-testid="inbox-channel-rail-scroll-left"
+                aria-label={bi("向左滚动渠道", "Scroll channels left")}
+                title={bi("向左滚动渠道", "Scroll channels left")}
+                onClick={() => scrollByDirection(-1)}
+                className="pointer-events-auto grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-xs transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/15 dark:hover:text-blue-300"
               >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{bi(item.zh, item.en)}</span>
-                {unread > 0 && (
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                      active
-                        ? "bg-white/20 text-white"
-                        : "bg-white text-blue-600 dark:bg-gray-900 dark:text-blue-300"
-                    }`}
-                  >
-                    {unread}
-                  </span>
-                )}
+                <ChevronLeft className="h-4 w-4" />
               </button>
-            );
-          })}
+            </div>
+          )}
+
+          <div
+            ref={scrollerRef}
+            data-testid="inbox-channel-rail-scroll"
+            className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {CHANNEL_RAIL_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = selectedChannel === item.key;
+              const unread = unreadByChannel[item.key] ?? 0;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  data-channel-key={item.key}
+                  aria-pressed={active}
+                  onClick={() => onSelectChannel(item.key)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                    active
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-blue-500/15 dark:hover:text-blue-300"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{bi(item.zh, item.en)}</span>
+                  {unread > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                        active
+                          ? "bg-white/20 text-white"
+                          : "bg-white text-blue-600 dark:bg-gray-900 dark:text-blue-300"
+                      }`}
+                    >
+                      {unread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {canScrollRight && (
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-white via-white/95 to-transparent pl-5 dark:from-gray-900 dark:via-gray-900/95">
+              <button
+                type="button"
+                data-testid="inbox-channel-rail-scroll-right"
+                aria-label={bi("向右滚动渠道", "Scroll channels right")}
+                title={bi("向右滚动渠道", "Scroll channels right")}
+                onClick={() => scrollByDirection(1)}
+                className="pointer-events-auto grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-xs transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/15 dark:hover:text-blue-300"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         <Link
