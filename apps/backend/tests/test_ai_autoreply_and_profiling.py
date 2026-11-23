@@ -31,6 +31,7 @@ from erp_core.ai_engine.auto_reply_service import (
     compute_confidence,
     decide_auto_reply,
     default_profile,
+    detect_below_floor_price,
     detect_reply_language,
     detect_risk_flags,
     evidence_summary_lines,
@@ -1197,9 +1198,7 @@ def test_verify_reply_numbers_grounded_accepts_verified_and_rejects_hallucinated
         buyer_message="Do you have LED-COB-24V-5M in stock? Price for 1000 pcs?",
     )
 
-    hallucinated = (
-        "Hi Seven! For 1,000 pcs we can offer $9.50/pc with 3-day express shipping."
-    )
+    hallucinated = "Hi Seven! For 1,000 pcs we can offer $9.50/pc with 3-day express shipping."
     assert not verify_reply_numbers_grounded(
         hallucinated,
         evidence=evidence,
@@ -1291,3 +1290,106 @@ async def test_auto_reply_uses_llm_polish_when_grounded_and_falls_back_on_halluc
     assert "8.88" not in res_bad.reply_text
     assert "Verified live information" not in res_bad.reply_text
     assert svc_bad.inserted_messages[0]["metadata"]["llm_polished"] is False
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Please confirm order right now.",
+        "Can you place the order for 500 pcs today?",
+        "请确认下单，今天发货",
+        "直接帮我锁单 500 套",
+    ],
+)
+def test_risk_guardrail_detects_order_confirmation_requests(message: str) -> None:
+    assert "order_confirmation" in detect_risk_flags(message)
+
+
+def test_risk_guardrail_does_not_flag_order_tracking_or_normal_quote_as_confirmation() -> None:
+    assert "order_confirmation" not in detect_risk_flags("Where is my order ORD-1001?")
+    assert (
+        detect_risk_flags(
+            "Hi, do you have LED-COB-24V-5M in stock? What is your unit price for 500 pcs?"
+        )
+        == []
+    )
+
+
+def test_detect_below_floor_price_flags_underpriced_counteroffers_only() -> None:
+    evidence = [_sku_evidence(sku="LED-COB-24V-5M", unit_price="12.00", qty=500, available=4300)]
+
+    assert detect_below_floor_price("Can you sell 500 pcs at $5 per unit?", evidence) is True
+    assert detect_below_floor_price("How about 11.50 USD/pc for 500 pcs?", evidence) is True
+    assert detect_below_floor_price("可以按5美金每个卖给我吗", evidence) is True
+
+    # Exact ERP tier price, higher prices, or total order budgets must NOT false-positive.
+    assert detect_below_floor_price("Can you quote $12.00 per unit for 500 pcs?", evidence) is False
+    assert detect_below_floor_price("Is $15/pc possible with express air?", evidence) is False
+    assert detect_below_floor_price("My total budget is $6000 for 500 pcs.", evidence) is False
+    assert detect_below_floor_price("Do you have 500 pcs in stock?", evidence) is False
+
+
+def test_grounded_fallback_avoids_committal_yes_and_duplicate_moq_tier_qty() -> None:
+    evidence = [
+        _sku_evidence(sku="LED-COB-24V-5M", unit_price="12.00", qty=500, tier=500, available=4300)
+    ]
+    lines = evidence_summary_lines(evidence)
+    assert "MOQ tier 500 pcs" in lines[0]
+    assert "for 500 pcs" not in lines[0]
+
+    reply = build_grounded_reply(
+        language="en",
+        customer_name="seven",
+        evidence=evidence,
+        kb_hits=[],
+        channel_type="telegram",
+    )
+    assert not reply.lower().startswith("hi seven,\n\nyes,")
+    assert "Yes, we have this ready" not in reply
+    assert "12.00" in reply
+
+
+async def test_run_auto_reply_holds_below_floor_price_and_order_confirmation_for_l1_review() -> (
+    None
+):
+    conv = ConversationContext(
+        id=uuid4(),
+        customer_id=uuid4(),
+        channel_type="telegram",
+        assigned_user_id=None,
+        visibility_scope="shared",
+        owner_user_id=None,
+    )
+    evidence = [
+        _sku_evidence(sku="LED-COB-24V-5M", unit_price="12.00", qty=500, tier=500, available=4300)
+    ]
+    msgs = [
+        RecentMessage(
+            direction="inbound",
+            sender_type="customer",
+            body_text=(
+                "Can you sell me 500 pcs of LED-COB-24V-5M at $5 per unit? "
+                "Please confirm order right now."
+            ),
+        )
+    ]
+    svc = _StubAutoReplyService(
+        conversation=conv,
+        enabled=True,
+        messages=msgs,
+        evidence=evidence,
+        kb_hits=[_kb_hit()],
+    )
+
+    res = await svc.run(_DUMMY_SESSION, _principal(), conv.id, AutoReplyRunRequest(mode="auto"))
+
+    assert res.action == "proposal_created"
+    assert res.message_id is None
+    assert res.proposal_id is not None
+    assert "order_confirmation" in res.risk_flags
+    assert "below_floor_price" in res.risk_flags
+    assert svc.inserted_messages == []
+    assert len(svc.created_proposals) == 1
+    assert res.reply_text is not None
+    assert "Yes, we have this ready" not in res.reply_text
+    assert not _DIGITS.findall(res.reply_text)
