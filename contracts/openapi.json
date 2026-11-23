@@ -1464,6 +1464,66 @@
         "title": "Body_submit_receivable_payment_api_v1_finance_receivables__rp_id__payments_post",
         "type": "object"
       },
+      "Body_upload_catalog_media_api_v1_catalog_media_upload_post": {
+        "properties": {
+          "alt_text": {
+            "default": "",
+            "title": "Alt Text",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "sort_order": {
+            "default": 0,
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "sourcing_draft_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcing Draft Id"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_catalog_media_api_v1_catalog_media_upload_post",
+        "type": "object"
+      },
       "Body_upload_kb_document_api_v1_ai_kb_documents_post": {
         "properties": {
           "file": {
@@ -6776,6 +6836,185 @@
           "failed"
         ],
         "title": "MarketplaceOrderSyncResult",
+        "type": "object"
+      },
+      "MediaAssetRead": {
+        "properties": {
+          "alt_text": {
+            "default": "",
+            "title": "Alt Text",
+            "type": "string"
+          },
+          "byte_size": {
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "content_path": {
+            "title": "Content Path",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "presigned_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presigned Url"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "sort_order": {
+            "default": 0,
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "sourcing_draft_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcing Draft Id"
+          },
+          "storage_key": {
+            "title": "Storage Key",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "storage_key",
+          "sha256",
+          "mime_type",
+          "byte_size",
+          "content_path",
+          "created_at"
+        ],
+        "title": "MediaAssetRead",
+        "type": "object"
+      },
+      "MediaUrlIngestRequest": {
+        "properties": {
+          "alt_text": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Alt Text",
+            "type": "string"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "sourcing_draft_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcing Draft Id"
+          },
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Urls",
+            "type": "array"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          }
+        },
+        "required": [
+          "urls"
+        ],
+        "title": "MediaUrlIngestRequest",
         "type": "object"
       },
       "MembershipItem": {
@@ -13712,6 +13951,17 @@
             "title": "Channel Account Id",
             "type": "string"
           },
+          "external_inventory_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Inventory Item Id"
+          },
           "external_product_id": {
             "minLength": 1,
             "title": "External Product Id",
@@ -13721,6 +13971,23 @@
             "minLength": 1,
             "title": "External Sku",
             "type": "string"
+          },
+          "external_variant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Variant Id"
+          },
+          "safety_stock": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Safety Stock",
+            "type": "integer"
           },
           "sync_inventory_enabled": {
             "default": true,
@@ -13758,6 +14025,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "external_inventory_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Inventory Item Id"
+          },
           "external_product_id": {
             "title": "External Product Id",
             "type": "string"
@@ -13766,10 +14044,65 @@
             "title": "External Sku",
             "type": "string"
           },
+          "external_variant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Variant Id"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "last_inventory_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Inventory Synced At"
+          },
+          "last_inventory_synced_qty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Inventory Synced Qty"
+          },
+          "last_sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Error"
+          },
+          "last_sync_status": {
+            "default": "idle",
+            "title": "Last Sync Status",
+            "type": "string"
+          },
+          "safety_stock": {
+            "default": 0,
+            "title": "Safety Stock",
+            "type": "integer"
           },
           "sync_inventory_enabled": {
             "title": "Sync Inventory Enabled",
@@ -13825,6 +14158,18 @@
               }
             ],
             "title": "External Sku"
+          },
+          "safety_stock": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safety Stock"
           },
           "sync_inventory_enabled": {
             "anyOf": [
@@ -14176,6 +14521,14 @@
             "title": "Images",
             "type": "array"
           },
+          "options_spec": {
+            "items": {
+              "$ref": "#/components/schemas/SourcingOptionSpec"
+            },
+            "maxItems": 5,
+            "title": "Options Spec",
+            "type": "array"
+          },
           "raw_price_cny": {
             "anyOf": [
               {
@@ -14250,6 +14603,14 @@
             ],
             "default": "35.00",
             "title": "Target Margin Pct"
+          },
+          "variants_spec": {
+            "items": {
+              "$ref": "#/components/schemas/SourcingVariantSpec-Input"
+            },
+            "maxItems": 50,
+            "title": "Variants Spec",
+            "type": "array"
           }
         },
         "title": "SourcingCollectRequest",
@@ -14359,6 +14720,13 @@
             "title": "Optimized Title En",
             "type": "string"
           },
+          "options_spec": {
+            "items": {
+              "$ref": "#/components/schemas/SourcingOptionSpec"
+            },
+            "title": "Options Spec",
+            "type": "array"
+          },
           "publish_history": {
             "items": {
               "additionalProperties": true,
@@ -14430,6 +14798,13 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "variants_spec": {
+            "items": {
+              "$ref": "#/components/schemas/SourcingVariantSpec-Output"
+            },
+            "title": "Variants Spec",
+            "type": "array"
           }
         },
         "required": [
@@ -14514,6 +14889,31 @@
           "unit_price_usd"
         ],
         "title": "SourcingMoqTier",
+        "type": "object"
+      },
+      "SourcingOptionSpec": {
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "values"
+        ],
+        "title": "SourcingOptionSpec",
         "type": "object"
       },
       "SourcingPublishRequest": {
@@ -14647,6 +15047,132 @@
           "published_at"
         ],
         "title": "SourcingPublishResult",
+        "type": "object"
+      },
+      "SourcingVariantSpec-Input": {
+        "properties": {
+          "cost_price_cny": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Cost Price Cny"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "initial_stock": {
+            "default": 100,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Initial Stock",
+            "type": "integer"
+          },
+          "option_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Option Values",
+            "type": "object"
+          },
+          "retail_price_usd": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retail Price Usd"
+          },
+          "sku_suffix": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Sku Suffix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku_suffix",
+          "cost_price_cny"
+        ],
+        "title": "SourcingVariantSpec",
+        "type": "object"
+      },
+      "SourcingVariantSpec-Output": {
+        "properties": {
+          "cost_price_cny": {
+            "title": "Cost Price Cny",
+            "type": "string"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "initial_stock": {
+            "default": 100,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Initial Stock",
+            "type": "integer"
+          },
+          "option_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Option Values",
+            "type": "object"
+          },
+          "retail_price_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retail Price Usd"
+          },
+          "sku_suffix": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Sku Suffix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku_suffix",
+          "cost_price_cny"
+        ],
+        "title": "SourcingVariantSpec",
         "type": "object"
       },
       "SplitCustomerRequest": {
@@ -16258,6 +16784,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "external_inventory_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Inventory Item Id"
+          },
           "external_product_id": {
             "title": "External Product Id",
             "type": "string"
@@ -16266,10 +16803,65 @@
             "title": "External Sku",
             "type": "string"
           },
+          "external_variant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Variant Id"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "last_inventory_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Inventory Synced At"
+          },
+          "last_inventory_synced_qty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Inventory Synced Qty"
+          },
+          "last_sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Error"
+          },
+          "last_sync_status": {
+            "default": "idle",
+            "title": "Last Sync Status",
+            "type": "string"
+          },
+          "safety_stock": {
+            "default": 0,
+            "title": "Safety Stock",
+            "type": "integer"
           },
           "sync_inventory_enabled": {
             "title": "Sync Inventory Enabled",
@@ -21495,6 +22087,267 @@
         ]
       }
     },
+    "/api/v1/catalog/media": {
+      "get": {
+        "operationId": "list_catalog_media_api_v1_catalog_media_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "product_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourcing_draft_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sourcing Draft Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaAssetRead"
+                  },
+                  "title": "Response List Catalog Media Api V1 Catalog Media Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Catalog Media",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/media/ingest-urls": {
+      "post": {
+        "operationId": "ingest_catalog_media_urls_api_v1_catalog_media_ingest_urls_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaUrlIngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaAssetRead"
+                  },
+                  "title": "Response Ingest Catalog Media Urls Api V1 Catalog Media Ingest Urls Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Catalog Media Urls",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/media/upload": {
+      "post": {
+        "operationId": "upload_catalog_media_api_v1_catalog_media_upload_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_catalog_media_api_v1_catalog_media_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaAssetRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Catalog Media",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/media/{asset_id}/content": {
+      "get": {
+        "operationId": "get_catalog_media_content_api_v1_catalog_media__asset_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Catalog Media Content",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/v1/catalog/products": {
       "get": {
         "operationId": "list_products_api_v1_catalog_products_get",
@@ -21635,6 +22488,79 @@
           }
         },
         "summary": "Create Product",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/products/{product_id}/publish": {
+      "post": {
+        "operationId": "publish_master_product_api_v1_catalog_products__product_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcingPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourcingPublishResult"
+                  },
+                  "title": "Response Publish Master Product Api V1 Catalog Products  Product Id  Publish Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Master Product",
         "tags": [
           "catalog"
         ]

@@ -5,12 +5,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-from collections.abc import Mapping
+import html
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, Field
 
 from erp_core.channels.ecommerce.base import (
     CommercePlatformAdapter,
@@ -56,6 +58,14 @@ def verify_shoplazza_webhook(
     return hmac.compare_digest(expected, signature.strip())
 
 
+class ShoplazzaListingReceipt(BaseModel):
+    external_product_id: str
+    external_sku: str
+    status: str = "published"
+    variant_receipts: list[dict[str, Any]] = Field(default_factory=list)
+    raw_response: dict[str, Any] = Field(default_factory=dict)
+
+
 class ShoplazzaAdapter(CommercePlatformAdapter):
     """Shoplazza OpenAPI adapter with client-credentials bearer tokens."""
 
@@ -64,11 +74,13 @@ class ShoplazzaAdapter(CommercePlatformAdapter):
         store_domain: str,
         access_token: str,
         http_client: httpx.AsyncClient | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
         webhook_secret: str = "",
     ) -> None:
         self.store_domain = store_domain.strip().lower()
         self.access_token = access_token
         self._http_client = http_client
+        self._transport = transport
         self.webhook_secret = webhook_secret
 
     async def _request(
@@ -85,7 +97,7 @@ class ShoplazzaAdapter(CommercePlatformAdapter):
                 method, url, params=params, json=json_body, headers=headers
             )
         else:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0, transport=self._transport) as client:
                 response = await client.request(
                     method, url, params=params, json=json_body, headers=headers
                 )
@@ -237,6 +249,126 @@ class ShoplazzaAdapter(CommercePlatformAdapter):
                 "tracking_url": tracking_url,
                 "notify_customer": notify_customer,
             },
+        )
+
+    async def publish_listing(
+        self,
+        *,
+        sku: str,
+        title: str,
+        description: str,
+        bullet_points: Sequence[str],
+        price_usd: Decimal,
+        quantity: int = 0,
+        images: Sequence[str] | None = None,
+        category: str = "",
+        hs_code: str | None = None,
+        moq_tiers: Sequence[Mapping[str, Any]] | None = None,
+        options: Sequence[Mapping[str, Any]] | None = None,
+        variants: Sequence[Mapping[str, Any]] | None = None,
+        image_blobs: Sequence[Mapping[str, Any]] | None = None,
+    ) -> ShoplazzaListingReceipt:
+        """Create a single- or multi-variant listing via Shoplazza OpenAPI."""
+        del category, hs_code, moq_tiers, image_blobs
+        clean_sku = sku.strip()
+        clean_title = title.strip()
+        if not clean_sku or not clean_title:
+            raise AppError(
+                slug="shoplazza-listing-rejected",
+                status_code=422,
+                code="ERR_SHOPLAZZA_LISTING_REJECTED",
+                title="Shoplazza Listing Rejected",
+                detail="Shoplazza listing requires a non-empty SKU and title.",
+            )
+        norm_price = Decimal(str(price_usd)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        desc_parts = [
+            f"<p>{html.escape(line.strip())}</p>"
+            for line in description.splitlines()
+            if line.strip()
+        ]
+        if bullet_points:
+            items = "".join(
+                f"<li>{html.escape(b.strip())}</li>" for b in bullet_points if b.strip()
+            )
+            if items:
+                desc_parts.append(f"<ul>{items}</ul>")
+
+        variant_list = list(variants or ())
+        sz_variants: list[dict[str, Any]] = []
+        if variant_list:
+            for var in variant_list:
+                opt_vals = list((var.get("option_values") or {}).values())
+                v_entry: dict[str, Any] = {
+                    "sku": str(var.get("external_sku") or clean_sku),
+                    "price": str(
+                        Decimal(str(var.get("price_usd") or norm_price)).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "inventory_quantity": max(
+                        0,
+                        int(var["quantity"]) if var.get("quantity") is not None else quantity,
+                    ),
+                }
+                for idx, val in enumerate(opt_vals[:3], start=1):
+                    v_entry[f"option{idx}"] = str(val)
+                sz_variants.append(v_entry)
+        else:
+            sz_variants.append(
+                {
+                    "sku": clean_sku,
+                    "price": str(norm_price),
+                    "inventory_quantity": max(0, int(quantity)),
+                    "option1": "Default Title",
+                }
+            )
+        product_body: dict[str, Any] = {
+            "title": clean_title,
+            "body_html": "".join(desc_parts) or f"<p>{html.escape(clean_title)}</p>",
+            "published": True,
+            "variants": sz_variants,
+        }
+        sz_options = [
+            {"name": str(opt["name"]), "values": [str(v) for v in opt.get("values") or ()]}
+            for opt in (options or ())
+            if opt.get("name")
+        ]
+        if sz_options:
+            product_body["options"] = sz_options
+        img_list = [
+            {"src": url.strip()}
+            for url in (images or ())
+            if url and url.strip().startswith("https://")
+        ]
+        if img_list:
+            product_body["images"] = img_list[:15]
+
+        res = await self._request("POST", "/products", json_body={"product": product_body})
+        prod = res.get("product") if isinstance(res.get("product"), Mapping) else res
+        product_id = str((prod or {}).get("id") or "").strip()
+        if not product_id:
+            raise AppError(
+                slug="shoplazza-listing-rejected",
+                status_code=502,
+                code="ERR_SHOPLAZZA_LISTING_REJECTED",
+                title="Shoplazza Listing Rejected",
+                detail=f"Shoplazza returned no product id for '{clean_sku}'.",
+            )
+        variant_receipts = [
+            {
+                "external_sku": str(v.get("sku") or clean_sku),
+                "external_variant_id": str(v.get("id") or "") or None,
+                "external_inventory_item_id": None,
+            }
+            for v in (prod or {}).get("variants") or []
+            if isinstance(v, Mapping)
+        ]
+        return ShoplazzaListingReceipt(
+            external_product_id=product_id,
+            external_sku=clean_sku,
+            status="published",
+            variant_receipts=variant_receipts,
+            raw_response=dict(res),
         )
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:

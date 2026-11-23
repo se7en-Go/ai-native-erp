@@ -93,8 +93,50 @@ class PlatformSkuMapping(Base):
     )
     external_product_id: Mapped[str] = mapped_column(sa.Text(), nullable=False)
     external_sku: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    external_variant_id: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    external_inventory_item_id: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     bundle_multiplier: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=1)
     sync_inventory_enabled: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, default=True)
+    safety_stock: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
+    last_inventory_synced_qty: Mapped[int | None] = mapped_column(sa.Integer(), nullable=True)
+    last_inventory_synced_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
+    last_sync_status: Mapped[str] = mapped_column(sa.Text(), nullable=False, default="idle")
+    last_sync_error: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+
+
+class ProductMediaAsset(Base):
+    __tablename__ = "product_media_assets"
+    __table_args__ = (
+        sa.UniqueConstraint("tenant_id", "storage_key", name="uq_product_media_tenant_key"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("tenants.id"), nullable=False
+    )
+    product_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("products.id", ondelete="CASCADE"), nullable=True
+    )
+    variant_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("product_variants.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    sourcing_draft_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    storage_key: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    sha256: Mapped[str] = mapped_column(sa.CHAR(64), nullable=False)
+    mime_type: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    byte_size: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
+    sort_order: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
+    alt_text: Mapped[str] = mapped_column(sa.Text(), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
     )

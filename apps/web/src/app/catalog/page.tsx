@@ -7,6 +7,7 @@ import {
   Boxes,
   CheckCircle2,
   FileSpreadsheet,
+  ImagePlus,
   Loader2,
   PackageSearch,
   Plus,
@@ -28,9 +29,11 @@ import { Badge, EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/
 import { SegmentedTabs, type SegmentedTabOption } from "@/components/ui/segmented-tabs";
 import type {
   CatalogCsvImportResponse,
+  MediaAssetRead,
   SourcingCollectRequest,
   SourcingDraftRead,
   SourcingPublishResult,
+  SourcingVariantSpecInput,
 } from "@/lib/api-client/types.gen";
 import {
   SOURCING_DEFAULT_FX_RATE,
@@ -39,10 +42,12 @@ import {
   deleteSourcingDraft,
   fetchSourcingDrafts,
   importSourcingDraftToCatalog,
+  publishMasterProduct,
   publishSourcingDraft,
   sourcingStatusCopy,
   sourcingStoreAccounts,
   sourcingStoreLabel,
+  uploadCatalogMedia,
 } from "@/lib/api-client/pack-f-sourcing";
 import {
   CATALOG_CSV_SAMPLE,
@@ -194,6 +199,19 @@ export default function CatalogPage() {
   const [csvResult, setCsvResult] = useState<CatalogCsvImportResponse | null>(null);
   const [csvError, setCsvError] = useState<string | null>(null);
 
+  const [masterPublishProduct, setMasterPublishProduct] = useState<{
+    productId: string;
+    spuCode: string;
+    sku: string;
+  } | null>(null);
+  const [masterStores, setMasterStores] = useState<string[]>([]);
+  const [masterLivePush, setMasterLivePush] = useState(true);
+  const [masterPublishResults, setMasterPublishResults] = useState<SourcingPublishResult[] | null>(
+    null,
+  );
+  const [masterPublishError, setMasterPublishError] = useState<string | null>(null);
+  const [masterUploadedAsset, setMasterUploadedAsset] = useState<MediaAssetRead | null>(null);
+
   const canViewCost = isPrivilegedCostViewer(principal?.role);
   const canWriteCatalog = WRITER_ROLES.has(principal?.role ?? "");
 
@@ -205,6 +223,30 @@ export default function CatalogPage() {
   const variantsQuery = useQuery({
     queryKey: ["catalog", "variants", search],
     queryFn: () => fetchCatalogVariants(search),
+  });
+
+  const masterAccountsQuery = useQuery({
+    queryKey: ["channels", "accounts"],
+    queryFn: () => fetchChannelAccounts(),
+    enabled: masterPublishProduct !== null,
+  });
+
+  const masterPublishMutation = useMutation({
+    mutationFn: (input: { productId: string; channelAccountIds: string[]; push: boolean }) =>
+      publishMasterProduct(input.productId, {
+        channel_account_ids: input.channelAccountIds,
+        price_multiplier: "1.00",
+        stock_sync_ratio: "1.00",
+        push_to_marketplace: input.push,
+        initial_stock_quantity: 50,
+      }),
+    onSuccess: (res) => {
+      setMasterPublishError(null);
+      setMasterPublishResults(res);
+    },
+    onError: (err: Error) => {
+      setMasterPublishError(err.message);
+    },
   });
 
   const createSkuMutation = useMutation({
@@ -476,15 +518,38 @@ export default function CatalogPage() {
                       </div>
                     </td>
                     <td className="text-right">
-                      <button
-                        type="button"
-                        data-testid={`open-sku-drawer-${v.id}`}
-                        onClick={() => setSelectedVariantId(v.id)}
-                        className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
-                      >
-                        <PackageSearch className="h-3.5 w-3.5" />
-                        <span>{bi("配置映射", "Configure mappings")}</span>
-                      </button>
+                      <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                        {canWriteCatalog && (
+                          <button
+                            type="button"
+                            data-testid={`open-product-publish-${v.product_id}`}
+                            onClick={() => {
+                              setMasterPublishProduct({
+                                productId: v.product_id,
+                                spuCode: v.spu_code,
+                                sku: v.sku,
+                              });
+                              setMasterStores([]);
+                              setMasterPublishResults(null);
+                              setMasterPublishError(null);
+                              setMasterUploadedAsset(null);
+                            }}
+                            className="erp-btn rounded-xl border border-blue-200 bg-blue-50 py-1 px-2.5 text-[12px] font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-300"
+                          >
+                            <Truck className="h-3.5 w-3.5" />
+                            <span>{bi("全平台刊登", "Multi-publish")}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          data-testid={`open-sku-drawer-${v.id}`}
+                          onClick={() => setSelectedVariantId(v.id)}
+                          className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
+                        >
+                          <PackageSearch className="h-3.5 w-3.5" />
+                          <span>{bi("配置映射", "Configure mappings")}</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -820,6 +885,162 @@ export default function CatalogPage() {
           onClose={() => setSelectedVariantId(null)}
         />
       )}
+
+      {masterPublishProduct && (
+        <Overlay testId="master-publish-modal" labelledBy="master-publish-title">
+          <div className="space-y-3.5">
+            <ModalHeading
+              id="master-publish-title"
+              title={bi("主档商品全平台一键刊登", "Multi-platform master product publish")}
+              description={`${masterPublishProduct.spuCode} · ${masterPublishProduct.sku}`}
+              closeLabel={bi("关闭主档刊登弹窗", "Close master publish dialog")}
+              onClose={() => setMasterPublishProduct(null)}
+            />
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[12px] font-semibold text-slate-800 dark:text-slate-200">
+                  {bi("商品图片（直传统一图床 MinIO/R2）", "Product image (unified MinIO/R2 media)")}
+                </span>
+                <label className="erp-btn erp-btn-secondary cursor-pointer rounded-lg py-1 px-2.5 text-[11.5px]">
+                  <ImagePlus className="h-3.5 w-3.5" />
+                  <span>{bi("上传实图", "Upload image")}</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    data-testid="master-media-upload-input"
+                    className="sr-only"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file || !masterPublishProduct) return;
+                      try {
+                        const uploaded = await uploadCatalogMedia(file, {
+                          productId: masterPublishProduct.productId,
+                        });
+                        setMasterUploadedAsset(uploaded);
+                        setMasterPublishError(null);
+                      } catch (err) {
+                        setMasterPublishError(err instanceof Error ? err.message : "Upload error");
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+              {masterUploadedAsset && (
+                <p
+                  data-testid="master-media-uploaded-ok"
+                  className="mt-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                >
+                  {bi("已上传至图床：", "Uploaded to media hub: ")}
+                  {masterUploadedAsset.mime_type} ({masterUploadedAsset.byte_size} B)
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[12px] font-semibold text-slate-800 dark:text-slate-200">
+                {bi("选择目标销售店铺", "Select target sales channels")}
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {sourcingStoreAccounts(masterAccountsQuery.data?.items ?? []).map((store) => {
+                  const checked = masterStores.includes(store.id);
+                  return (
+                    <label
+                      key={store.id}
+                      data-testid={`master-publish-store-${store.id}`}
+                      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        checked
+                          ? "border-blue-500 bg-blue-600 text-white"
+                          : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setMasterStores((cur) =>
+                            cur.includes(store.id)
+                              ? cur.filter((x) => x !== store.id)
+                              : [...cur, store.id],
+                          )
+                        }
+                        className="sr-only"
+                      />
+                      <span>{sourcingStoreLabel(store.channel_type)}</span>
+                      <span className={checked ? "text-white/80" : "text-slate-500"}>
+                        {store.display_name}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-2 text-[12px] font-semibold text-slate-800 dark:text-slate-200">
+              <input
+                type="checkbox"
+                data-testid="master-publish-live-toggle"
+                checked={masterLivePush}
+                onChange={() => setMasterLivePush((v) => !v)}
+                className="h-3.5 w-3.5 rounded accent-blue-600"
+              />
+              <span>
+                {bi(
+                  "通过官方 API 实时推送到所选电商平台（全变体与图床图片）",
+                  "Push live via official platform APIs (all variants & media)",
+                )}
+              </span>
+            </label>
+
+            {masterPublishError && (
+              <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-800">
+                {masterPublishError}
+              </p>
+            )}
+
+            {masterPublishResults && masterPublishResults.length > 0 && (
+              <ul
+                data-testid="master-publish-results"
+                className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11.5px] text-emerald-900"
+              >
+                {masterPublishResults.map((res) => (
+                  <li key={res.mapping_id} className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{sourcingStoreLabel(res.channel_type)}</span>
+                    <span className="font-mono">{res.external_sku}</span>
+                    <span>{res.external_product_id}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setMasterPublishProduct(null)}
+                className="erp-btn erp-btn-secondary rounded-xl"
+              >
+                {bi("关闭", "Close")}
+              </button>
+              <button
+                type="button"
+                data-testid="master-publish-submit"
+                disabled={masterPublishMutation.isPending || masterStores.length === 0}
+                onClick={() =>
+                  masterPublishProduct &&
+                  masterPublishMutation.mutate({
+                    productId: masterPublishProduct.productId,
+                    channelAccountIds: masterStores,
+                    push: masterLivePush,
+                  })
+                }
+                className="erp-btn rounded-xl bg-blue-600 px-4 py-1.5 text-[12.5px] font-semibold text-white hover:bg-blue-700 disabled:opacity-40"
+              >
+                {masterPublishMutation.isPending ? bi("刊登中…", "Publishing…") : bi("立即刊登", "Publish now")}
+              </button>
+            </div>
+          </div>
+        </Overlay>
+      )}
     </AppShell>
   );
 }
@@ -946,6 +1167,14 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
   const [pushToMarketplace, setPushToMarketplace] = useState(false);
   const [publishResults, setPublishResults] = useState<Record<string, SourcingPublishResult[]>>({});
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [optionName, setOptionName] = useState("Spec");
+  const [variantRows, setVariantRows] = useState<
+    Array<{ suffix: string; value: string; costCny: string }>
+  >([]);
+  const [imageUrlsText, setImageUrlsText] = useState("");
+  const [draftMedia, setDraftMedia] = useState<Record<string, MediaAssetRead[]>>({});
+  const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
 
   const draftsQuery = useQuery({
     queryKey: ["catalog", "sourcing", "drafts"],
@@ -976,6 +1205,8 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
       setSourceUrl("");
       setRawTitle("");
       setRawText("");
+      setVariantRows([]);
+      setImageUrlsText("");
       invalidateDrafts();
     },
     onError: (error: Error) => {
@@ -1040,12 +1271,34 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
     }
     setFormError(null);
     setCollected(null);
+    const cleanedImages = imageUrlsText
+      .split(/[\n,]+/)
+      .map((u) => u.trim())
+      .filter((u) => /^https?:\/\/\S+$/i.test(u));
+    const validVariants: SourcingVariantSpecInput[] = variantRows
+      .filter((r) => r.suffix.trim() && Number(r.costCny) > 0)
+      .map((r) => ({
+        sku_suffix: r.suffix.trim(),
+        option_values: { [optionName.trim() || "Spec"]: r.value.trim() || r.suffix.trim() },
+        cost_price_cny: r.costCny.trim(),
+      }));
+    const optionValues = Array.from(
+      new Set(
+        validVariants.map((v) => Object.values(v.option_values ?? {})[0]).filter(Boolean),
+      ),
+    );
     collectMutation.mutate({
       source_platform: platform,
       source_url: platform === "manual" ? null : url,
       raw_title: title || null,
       raw_text: text || null,
       raw_price_cny: price,
+      images: cleanedImages,
+      options_spec:
+        validVariants.length > 0 && optionValues.length > 0
+          ? [{ name: optionName.trim() || "Spec", values: optionValues }]
+          : [],
+      variants_spec: validVariants,
       target_margin_pct: marginPct.trim() || SOURCING_DEFAULT_MARGIN_PCT,
       fx_rate_usd_cny: fxRate.trim() || SOURCING_DEFAULT_FX_RATE,
     });
@@ -1166,6 +1419,122 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
                 className="erp-input mt-1 w-full rounded-xl text-[12px] leading-5"
               />
             </label>
+
+            <div className="mt-2.5">
+              <button
+                type="button"
+                data-testid="sourcing-variants-toggle"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-blue-700 hover:underline dark:text-blue-400"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>
+                  {advancedOpen
+                    ? bi("收起多规格与图片配置", "Hide multi-variant & image options")
+                    : bi("展开多规格矩阵与图片链接（可选）", "Multi-variant SKUs & image URLs (optional)")}
+                </span>
+              </button>
+
+              {advancedOpen && (
+                <div
+                  data-testid="sourcing-variants-panel"
+                  className="mt-2 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="inline-flex items-center gap-2 text-[11.5px] font-semibold text-slate-700 dark:text-slate-300">
+                      <span>{bi("规格维度名", "Option name")}</span>
+                      <input
+                        data-testid="sourcing-option-name"
+                        value={optionName}
+                        onChange={(e) => setOptionName(e.target.value)}
+                        className="erp-input w-32 rounded-lg py-1"
+                        placeholder="Color Temp"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      data-testid="sourcing-add-variant-row"
+                      onClick={() =>
+                        setVariantRows((cur) => [
+                          ...cur,
+                          { suffix: `V${cur.length + 1}`, value: "", costCny: priceCny || "36.00" },
+                        ])
+                      }
+                      className="erp-btn erp-btn-secondary rounded-lg py-1 px-2.5 text-[11px]"
+                    >
+                      <Plus className="h-3 w-3" />
+                      <span>{bi("添加规格 SKU", "Add variant SKU")}</span>
+                    </button>
+                  </div>
+
+                  {variantRows.length > 0 && (
+                    <div className="space-y-1.5">
+                      {variantRows.map((row, idx) => (
+                        <div key={idx} className="grid grid-cols-12 gap-2">
+                          <input
+                            data-testid={`sourcing-variant-suffix-${idx}`}
+                            value={row.suffix}
+                            onChange={(e) =>
+                              setVariantRows((cur) =>
+                                cur.map((r, i) => (i === idx ? { ...r, suffix: e.target.value } : r)),
+                              )
+                            }
+                            placeholder="SKU Suffix (3000K)"
+                            className="erp-input col-span-3 rounded-lg py-1 text-[11.5px]"
+                          />
+                          <input
+                            data-testid={`sourcing-variant-value-${idx}`}
+                            value={row.value}
+                            onChange={(e) =>
+                              setVariantRows((cur) =>
+                                cur.map((r, i) => (i === idx ? { ...r, value: e.target.value } : r)),
+                              )
+                            }
+                            placeholder={bi("规格值 (3000K Warm)", "Option value")}
+                            className="erp-input col-span-5 rounded-lg py-1 text-[11.5px]"
+                          />
+                          <input
+                            data-testid={`sourcing-variant-cost-${idx}`}
+                            type="number"
+                            step="0.01"
+                            value={row.costCny}
+                            onChange={(e) =>
+                              setVariantRows((cur) =>
+                                cur.map((r, i) => (i === idx ? { ...r, costCny: e.target.value } : r)),
+                              )
+                            }
+                            placeholder="CNY"
+                            className="erp-input col-span-3 rounded-lg py-1 text-[11.5px]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setVariantRows((cur) => cur.filter((_, i) => i !== idx))}
+                            className="col-span-1 grid place-items-center rounded-lg border border-slate-200 text-slate-500 hover:text-rose-600"
+                            aria-label="Remove variant"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <label className="block">
+                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                      {bi("外部商品图 URL（每行一条，可选）", "External image URLs (one per line, optional)")}
+                    </span>
+                    <textarea
+                      data-testid="sourcing-image-urls"
+                      rows={2}
+                      value={imageUrlsText}
+                      onChange={(e) => setImageUrlsText(e.target.value)}
+                      placeholder="https://cdn.example.com/product-main.jpg"
+                      className="erp-input mt-1 w-full rounded-lg text-[11.5px]"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
@@ -1291,6 +1660,24 @@ function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
                 }
                 onImport={() => importMutation.mutate(draft.id)}
                 onDelete={() => deleteMutation.mutate(draft.id)}
+                uploadedMedia={draftMedia[draft.id] ?? []}
+                mediaUploadError={mediaUploadError}
+                onUploadMedia={async (file) => {
+                  try {
+                    const asset = await uploadCatalogMedia(file, {
+                      sourcingDraftId: draft.id,
+                      productId: draft.imported_product_id ?? undefined,
+                      altText: draft.optimized_title_en,
+                    });
+                    setMediaUploadError(null);
+                    setDraftMedia((cur) => ({
+                      ...cur,
+                      [draft.id]: [...(cur[draft.id] ?? []), asset],
+                    }));
+                  } catch (err) {
+                    setMediaUploadError(err instanceof Error ? err.message : "Upload failed");
+                  }
+                }}
               />
             ))}
           </div>
@@ -1320,6 +1707,9 @@ function SourcingDraftCard({
   onConfirmPublish,
   onImport,
   onDelete,
+  uploadedMedia = [],
+  mediaUploadError = null,
+  onUploadMedia,
 }: {
   draft: SourcingDraftRead;
   canWrite: boolean;
@@ -1340,6 +1730,9 @@ function SourcingDraftCard({
   onConfirmPublish: () => void;
   onImport: () => void;
   onDelete: () => void;
+  uploadedMedia?: MediaAssetRead[];
+  mediaUploadError?: string | null;
+  onUploadMedia?: (file: File) => void;
 }) {
   const { bi } = useI18n();
   // 草稿徽标优先使用真实刊登状态（`live_published` 只能由平台回执写入）。
@@ -1419,7 +1812,31 @@ function SourcingDraftCard({
         <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
           {bi("汇率", "FX")} {draft.fx_rate_usd_cny} · {bi("毛利", "Margin")} {draft.target_margin_pct}%
         </span>
+        {(draft.variants_spec ?? []).map((v) => (
+          <span
+            key={v.sku_suffix}
+            data-testid={`sourcing-draft-variant-${draft.id}-${v.sku_suffix}`}
+            className="rounded-md border border-violet-200 bg-violet-50/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-violet-900 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-200"
+          >
+            {v.sku_suffix}: {formatMoney(v.retail_price_usd ?? draft.target_price_usd, "USD")}
+          </span>
+        ))}
+        {uploadedMedia.map((asset) => (
+          <span
+            key={asset.id}
+            data-testid={`sourcing-draft-media-${draft.id}-${asset.id}`}
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50/70 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-200"
+          >
+            <ImagePlus className="h-3 w-3" />
+            {asset.mime_type.replace("image/", "").toUpperCase()} · {asset.byte_size}B
+          </span>
+        ))}
       </div>
+      {mediaUploadError && (
+        <p role="alert" className="mt-1.5 text-[11px] font-medium text-rose-700">
+          {mediaUploadError}
+        </p>
+      )}
 
       {canWrite && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
@@ -1429,6 +1846,22 @@ function SourcingDraftCard({
               : bi("先入主档 SKU，再一键刊登", "Import to a master SKU, then publish")}
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
+            {onUploadMedia && (
+              <label className="erp-btn cursor-pointer rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
+                <ImagePlus className="h-3 w-3" />
+                <span>{bi("上传实图", "Upload image")}</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  data-testid={`sourcing-media-upload-${draft.id}`}
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) onUploadMedia(file);
+                  }}
+                />
+              </label>
+            )}
             <button
               type="button"
               data-testid={`sourcing-delete-${draft.id}`}
@@ -1550,8 +1983,8 @@ function SourcingDraftCard({
             />
             <span className="min-w-0">
               {bi(
-                "同时通过官方 API 实时上架到 Shopify / Amazon / eBay / Alibaba",
-                "Push live listing via official API (Shopify / Amazon / eBay / Alibaba)"
+                "同时通过官方 API 实时上架到全平台（Shopify / TikTok / Amazon / eBay / Woo / Shopline / Shoplazza / Alibaba）",
+                "Push live listing via official APIs (Shopify / TikTok / Amazon / eBay / Woo / Shopline / Shoplazza / Alibaba)"
               )}
               <span className="mt-0.5 block text-[10.5px] font-normal text-slate-500 dark:text-slate-400">
                 {bi(

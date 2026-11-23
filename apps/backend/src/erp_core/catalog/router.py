@@ -3,9 +3,16 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.catalog.media_service import (
+    MAX_MEDIA_BYTES,
+    CatalogMediaService,
+    MediaAssetRead,
+    MediaUrlIngestRequest,
+)
 from erp_core.catalog.schemas import (
     CatalogCsvImportRequest,
     CatalogCsvImportResponse,
@@ -21,6 +28,11 @@ from erp_core.catalog.schemas import (
     VariantUpdate,
 )
 from erp_core.catalog.service import CatalogService
+from erp_core.catalog.sourcing_service import (
+    SourcingPublishRequest,
+    SourcingPublishResult,
+    SourcingService,
+)
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import UserRole
 from erp_core.shared.pagination import PaginatedResponse
@@ -28,6 +40,7 @@ from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 _service = CatalogService()
+_sourcing = SourcingService()
 
 _READER_ROLES = (
     UserRole.OWNER,
@@ -209,4 +222,113 @@ async def update_sku_mapping(
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
         return await _service.update_sku_mapping(
             session, principal.tenant_id, str(principal.user_id), mapping_id, payload
+        )
+
+
+def _media_service(request: Request) -> CatalogMediaService:
+    storage = getattr(request.app.state, "storage", None)
+    return CatalogMediaService(storage=storage)
+
+
+@router.post("/media/upload", response_model=MediaAssetRead, status_code=status.HTTP_201_CREATED)
+async def upload_catalog_media(
+    request: Request,
+    principal: WriterPrincipal,
+    file: Annotated[UploadFile, File(...)],
+    product_id: Annotated[UUID | None, Form()] = None,
+    variant_id: Annotated[UUID | None, Form()] = None,
+    sourcing_draft_id: Annotated[UUID | None, Form()] = None,
+    alt_text: Annotated[str, Form()] = "",
+    sort_order: Annotated[int, Form()] = 0,
+) -> MediaAssetRead:
+    raw = await file.read(MAX_MEDIA_BYTES + 1)
+    media = _media_service(request)
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await media.upload_image_bytes(
+            session,
+            principal.tenant_id,
+            filename=file.filename or "upload.jpg",
+            data=raw,
+            product_id=product_id,
+            variant_id=variant_id,
+            sourcing_draft_id=sourcing_draft_id,
+            alt_text=alt_text,
+            sort_order=sort_order,
+        )
+
+
+@router.post(
+    "/media/ingest-urls",
+    response_model=list[MediaAssetRead],
+    status_code=status.HTTP_201_CREATED,
+)
+async def ingest_catalog_media_urls(
+    request: Request,
+    payload: MediaUrlIngestRequest,
+    principal: WriterPrincipal,
+) -> list[MediaAssetRead]:
+    media = _media_service(request)
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await media.ingest_external_urls(
+            session,
+            principal.tenant_id,
+            urls=payload.urls,
+            product_id=payload.product_id,
+            variant_id=payload.variant_id,
+            sourcing_draft_id=payload.sourcing_draft_id,
+            alt_text=payload.alt_text,
+        )
+
+
+@router.get("/media", response_model=list[MediaAssetRead])
+async def list_catalog_media(
+    request: Request,
+    principal: ReaderPrincipal,
+    product_id: UUID | None = None,
+    sourcing_draft_id: UUID | None = None,
+) -> list[MediaAssetRead]:
+    media = _media_service(request)
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await media.list_assets(
+            session,
+            principal.tenant_id,
+            product_id=product_id,
+            sourcing_draft_id=sourcing_draft_id,
+        )
+
+
+@router.get("/media/{asset_id}/content", response_class=Response)
+async def get_catalog_media_content(
+    request: Request,
+    asset_id: UUID,
+    principal: ReaderPrincipal,
+) -> Response:
+    media = _media_service(request)
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        data, mime_type, filename = await media.read_asset_content(
+            session, principal.tenant_id, asset_id
+        )
+    return Response(
+        content=data,
+        media_type=mime_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.post("/products/{product_id}/publish", response_model=list[SourcingPublishResult])
+async def publish_master_product(
+    request: Request,
+    product_id: UUID,
+    payload: SourcingPublishRequest,
+    principal: WriterPrincipal,
+) -> list[SourcingPublishResult]:
+    publisher = getattr(request.app.state, "marketplace_listing_publisher", None)
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await _sourcing.publish_master_product(
+            session,
+            principal.tenant_id,
+            str(principal.user_id),
+            product_id,
+            payload,
+            listing_publisher=publisher,
         )

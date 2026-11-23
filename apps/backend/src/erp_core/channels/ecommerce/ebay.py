@@ -732,12 +732,16 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
         category: str | None = None,
         hs_code: str | None = None,
         moq_tiers: Sequence[Mapping[str, Any]] = (),
+        options: Sequence[Mapping[str, Any]] | None = None,
+        variants: Sequence[Mapping[str, Any]] | None = None,
+        image_blobs: Sequence[Mapping[str, Any]] | None = None,
     ) -> EbayListingReceipt:
         """3-step eBay Inventory publish: inventory item -> offer -> offer publish.
 
         ``category``/``hs_code``/``moq_tiers`` are merchandising context rendered into the
         listing description; the eBay leaf category is ``category_id``.
         """
+        del options, variants, image_blobs
         cleaned_sku = sku.strip()
         if not cleaned_sku:
             raise AppError(

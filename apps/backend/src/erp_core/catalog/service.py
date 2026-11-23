@@ -503,8 +503,17 @@ class CatalogService:
             channel_account_id=payload.channel_account_id,
             external_product_id=payload.external_product_id.strip(),
             external_sku=payload.external_sku.strip(),
+            external_variant_id=(
+                payload.external_variant_id.strip() if payload.external_variant_id else None
+            ),
+            external_inventory_item_id=(
+                payload.external_inventory_item_id.strip()
+                if payload.external_inventory_item_id
+                else None
+            ),
             bundle_multiplier=payload.bundle_multiplier,
             sync_inventory_enabled=payload.sync_inventory_enabled,
+            safety_stock=payload.safety_stock,
         )
         session.add(mapping)
         try:
@@ -695,8 +704,11 @@ class CatalogService:
                     """
                     SELECT m.id, m.tenant_id, m.variant_id, m.channel_account_id,
                            ca.display_name AS channel_label, m.external_product_id,
-                           m.external_sku, m.bundle_multiplier,
-                           m.sync_inventory_enabled, m.created_at
+                           m.external_sku, m.external_variant_id,
+                           m.external_inventory_item_id, m.bundle_multiplier,
+                           m.sync_inventory_enabled, m.safety_stock,
+                           m.last_inventory_synced_qty, m.last_inventory_synced_at,
+                           m.last_sync_status, m.last_sync_error, m.created_at
                     FROM platform_sku_mappings m
                     LEFT JOIN channel_accounts ca
                         ON ca.id = m.channel_account_id AND ca.tenant_id = m.tenant_id
@@ -716,8 +728,15 @@ class CatalogService:
                 channel_label=r.channel_label,
                 external_product_id=r.external_product_id,
                 external_sku=r.external_sku,
+                external_variant_id=r.external_variant_id,
+                external_inventory_item_id=r.external_inventory_item_id,
                 bundle_multiplier=int(r.bundle_multiplier),
                 sync_inventory_enabled=bool(r.sync_inventory_enabled),
+                safety_stock=int(r.safety_stock or 0),
+                last_inventory_synced_qty=r.last_inventory_synced_qty,
+                last_inventory_synced_at=r.last_inventory_synced_at,
+                last_sync_status=str(r.last_sync_status or "idle"),
+                last_sync_error=r.last_sync_error,
                 created_at=r.created_at,
             )
             for r in rows
@@ -753,6 +772,8 @@ class CatalogService:
             mapping.bundle_multiplier = payload.bundle_multiplier
         if payload.sync_inventory_enabled is not None:
             mapping.sync_inventory_enabled = payload.sync_inventory_enabled
+        if payload.safety_stock is not None:
+            mapping.safety_stock = payload.safety_stock
         await session.flush()
         await record_audit_event(
             session,

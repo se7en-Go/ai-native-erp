@@ -845,8 +845,12 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
         category: str | None = None,
         hs_code: str | None = None,
         moq_tiers: Sequence[Mapping[str, Any]] = (),
+        options: Sequence[Mapping[str, Any]] | None = None,
+        variants: Sequence[Mapping[str, Any]] | None = None,
+        image_blobs: Sequence[Mapping[str, Any]] | None = None,
     ) -> AlibabaListingReceipt:
         """Publish one ICBU product and return the external product id ICBU assigned."""
+        del options, variants, image_blobs
         clean_sku = sku.strip()
         if not clean_sku:
             raise AppError(

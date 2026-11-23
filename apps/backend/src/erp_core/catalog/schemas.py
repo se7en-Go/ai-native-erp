@@ -94,8 +94,11 @@ class SkuMappingCreate(BaseModel):
     channel_account_id: UUID
     external_product_id: str = Field(min_length=1)
     external_sku: str = Field(min_length=1)
+    external_variant_id: str | None = None
+    external_inventory_item_id: str | None = None
     bundle_multiplier: int = Field(default=1, ge=1)
     sync_inventory_enabled: bool = True
+    safety_stock: int = Field(default=0, ge=0)
 
 
 class SkuMappingRead(BaseModel):
@@ -107,8 +110,15 @@ class SkuMappingRead(BaseModel):
     channel_account_id: UUID
     external_product_id: str
     external_sku: str
+    external_variant_id: str | None = None
+    external_inventory_item_id: str | None = None
     bundle_multiplier: int
     sync_inventory_enabled: bool
+    safety_stock: int = 0
+    last_inventory_synced_qty: int | None = None
+    last_inventory_synced_at: datetime | None = None
+    last_sync_status: str = "idle"
+    last_sync_error: str | None = None
     created_at: datetime
 
 
@@ -123,6 +133,7 @@ class SkuMappingUpdate(BaseModel):
     external_sku: str | None = Field(default=None, min_length=1)
     bundle_multiplier: int | None = Field(default=None, ge=1)
     sync_inventory_enabled: bool | None = None
+    safety_stock: int | None = Field(default=None, ge=0)
 
 
 class VariantMappingWithLabelRead(SkuMappingRead):

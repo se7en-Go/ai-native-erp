@@ -29,12 +29,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from erp_core.catalog.sourcing_service import (
     MarketplaceListingDispatchReceipt,
     MarketplaceListingPayload,
+    MarketplaceVariantReceipt,
 )
 from erp_core.channels.ecommerce.alibaba_intl import AlibabaIntlAdapter
 from erp_core.channels.ecommerce.amazon_sp import AmazonSpApiAdapter
 from erp_core.channels.ecommerce.base import CommercePlatformAdapter, CredentialVaultHelper
 from erp_core.channels.ecommerce.ebay import EbayConnectorAdapter
 from erp_core.channels.ecommerce.shopify import ShopifyGraphqlAdapter
+from erp_core.channels.ecommerce.shoplazza import ShoplazzaAdapter
+from erp_core.channels.ecommerce.shopline import ShoplineAdapter
+from erp_core.channels.ecommerce.tiktok_shop import TikTokShopCoreAdapter
+from erp_core.channels.ecommerce.woocommerce import WooCommerceAdapter
 from erp_core.shared.errors import AppError
 
 logger = structlog.get_logger(__name__)
@@ -43,12 +48,20 @@ AMAZON_SP_CHANNEL_TYPE = "amazon_sp"
 EBAY_CHANNEL_TYPE = "ebay"
 ALIBABA_INTL_CHANNEL_TYPE = "alibaba_email"
 SHOPIFY_CHANNEL_TYPE = "shopify"
+WOOCOMMERCE_CHANNEL_TYPE = "woocommerce"
+SHOPLINE_CHANNEL_TYPE = "shopline"
+SHOPLAZZA_CHANNEL_TYPE = "shoplazza"
+TIKTOK_SHOP_CHANNEL_TYPE = "tiktok_shop"
 
 AMAZON_CREDENTIAL_TYPE = "amazon_sp_api"
 EBAY_CREDENTIAL_TYPE = "ebay_api"
 ALIBABA_INTL_CREDENTIAL_TYPE = "alibaba_intl_app"
 SHOPIFY_CREDENTIAL_TYPE = "shopify_custom_app"
 SHOPIFY_FALLBACK_CREDENTIAL_TYPE = "oauth_token"
+WOOCOMMERCE_CREDENTIAL_TYPE = "woocommerce_keys"
+SHOPLINE_CREDENTIAL_TYPE = "shopline_app"
+SHOPLAZZA_CREDENTIAL_TYPE = "shoplazza_app"
+TIKTOK_SHOP_CREDENTIAL_TYPE = "tiktok_shop_app"
 
 DEFAULT_AMAZON_MARKETPLACE_ID = "ATVPDKIKX0DER"
 DEFAULT_EBAY_SITE_ID = "EBAY_US"
@@ -60,6 +73,10 @@ SUPPORTED_CHANNEL_TYPES: frozenset[str] = frozenset(
         EBAY_CHANNEL_TYPE,
         ALIBABA_INTL_CHANNEL_TYPE,
         SHOPIFY_CHANNEL_TYPE,
+        WOOCOMMERCE_CHANNEL_TYPE,
+        SHOPLINE_CHANNEL_TYPE,
+        SHOPLAZZA_CHANNEL_TYPE,
+        TIKTOK_SHOP_CHANNEL_TYPE,
     }
 )
 
@@ -69,6 +86,10 @@ CREDENTIAL_TYPES: dict[str, str] = {
     EBAY_CHANNEL_TYPE: EBAY_CREDENTIAL_TYPE,
     ALIBABA_INTL_CHANNEL_TYPE: ALIBABA_INTL_CREDENTIAL_TYPE,
     SHOPIFY_CHANNEL_TYPE: SHOPIFY_CREDENTIAL_TYPE,
+    WOOCOMMERCE_CHANNEL_TYPE: WOOCOMMERCE_CREDENTIAL_TYPE,
+    SHOPLINE_CHANNEL_TYPE: SHOPLINE_CREDENTIAL_TYPE,
+    SHOPLAZZA_CHANNEL_TYPE: SHOPLAZZA_CREDENTIAL_TYPE,
+    TIKTOK_SHOP_CHANNEL_TYPE: TIKTOK_SHOP_CREDENTIAL_TYPE,
 }
 
 #: Keys every decrypted credential blob must carry before an adapter is built.
@@ -82,6 +103,10 @@ REQUIRED_CREDENTIAL_KEYS: dict[str, tuple[str, ...]] = {
     EBAY_CHANNEL_TYPE: ("seller_username", "app_id", "cert_id", "refresh_token"),
     ALIBABA_INTL_CHANNEL_TYPE: ("store_id", "app_key", "app_secret"),
     SHOPIFY_CHANNEL_TYPE: ("shop_domain",),
+    WOOCOMMERCE_CHANNEL_TYPE: ("store_url", "consumer_key", "consumer_secret"),
+    SHOPLINE_CHANNEL_TYPE: ("store_domain", "access_token"),
+    SHOPLAZZA_CHANNEL_TYPE: ("store_domain", "access_token"),
+    TIKTOK_SHOP_CHANNEL_TYPE: ("app_key", "app_secret", "access_token", "shop_cipher"),
 }
 
 
@@ -200,6 +225,39 @@ def build_marketplace_adapter(
             sandbox=_sandbox(credentials),
             transport=transport,
         )
+    if normalized == WOOCOMMERCE_CHANNEL_TYPE:
+        return WooCommerceAdapter(
+            store_url=_text(credentials, "store_url"),
+            consumer_key=_text(credentials, "consumer_key"),
+            consumer_secret=_text(credentials, "consumer_secret"),
+            webhook_secret=_text(credentials, "webhook_secret"),
+            transport=transport,
+        )
+    if normalized == SHOPLINE_CHANNEL_TYPE:
+        return ShoplineAdapter(
+            store_domain=_text(credentials, "store_domain"),
+            access_token=_text(credentials, "access_token"),
+            webhook_secret=_text(credentials, "webhook_secret"),
+            transport=transport,
+        )
+    if normalized == SHOPLAZZA_CHANNEL_TYPE:
+        return ShoplazzaAdapter(
+            store_domain=_text(credentials, "store_domain"),
+            access_token=_text(credentials, "access_token"),
+            webhook_secret=_text(credentials, "client_secret"),
+            transport=transport,
+        )
+    if normalized == TIKTOK_SHOP_CHANNEL_TYPE:
+        return TikTokShopCoreAdapter(
+            app_key=_text(credentials, "app_key"),
+            app_secret=_text(credentials, "app_secret"),
+            access_token=_text(credentials, "access_token"),
+            shop_cipher=_text(credentials, "shop_cipher"),
+            app_mode=_text(credentials, "app_mode", "seller_byok"),
+            webhook_secret=_text(credentials, "webhook_secret") or _text(credentials, "app_secret"),
+            warehouse_id=_text(credentials, "warehouse_id") or None,
+            transport=transport,
+        )
     return AlibabaIntlAdapter(
         store_id=_text(credentials, "store_id"),
         app_key=_text(credentials, "app_key"),
@@ -287,7 +345,11 @@ class MarketplaceListingDispatcher:
             AmazonSpApiAdapter
             | EbayConnectorAdapter
             | AlibabaIntlAdapter
-            | ShopifyGraphqlAdapter,
+            | ShopifyGraphqlAdapter
+            | WooCommerceAdapter
+            | ShoplineAdapter
+            | ShoplazzaAdapter
+            | TikTokShopCoreAdapter,
             adapter,
         )
 
@@ -310,6 +372,27 @@ class MarketplaceListingDispatcher:
                 }
                 for tier in payload.moq_tiers
             ],
+            options=[opt.model_dump() for opt in payload.options],
+            variants=[
+                {
+                    "local_sku": v.local_sku,
+                    "external_sku": v.external_sku,
+                    "option_values": dict(v.option_values),
+                    "price_usd": v.price_usd,
+                    "quantity": v.quantity,
+                    "image_url": v.image_url,
+                }
+                for v in payload.variants
+            ],
+            image_blobs=[
+                {
+                    "filename": b.filename,
+                    "mime_type": b.mime_type,
+                    "data": b.data,
+                    "alt_text": b.alt_text,
+                }
+                for b in payload.image_blobs
+            ],
         )
         logger.info(
             "marketplace_listing_dispatched",
@@ -320,10 +403,21 @@ class MarketplaceListingDispatcher:
             external_product_id=receipt.external_product_id,
             status=receipt.status,
         )
+        raw_variant_receipts = getattr(receipt, "variant_receipts", None) or []
+        variant_receipts = [
+            MarketplaceVariantReceipt(
+                external_sku=str(vr.get("external_sku") or receipt.external_sku),
+                external_variant_id=vr.get("external_variant_id"),
+                external_inventory_item_id=vr.get("external_inventory_item_id"),
+            )
+            for vr in raw_variant_receipts
+            if isinstance(vr, Mapping)
+        ]
         return MarketplaceListingDispatchReceipt(
             external_product_id=receipt.external_product_id,
             external_sku=receipt.external_sku,
             status=receipt.status,
+            variant_receipts=variant_receipts,
             raw_response=dict(receipt.raw_response),
         )
 
@@ -343,7 +437,15 @@ __all__ = [
     "SHOPIFY_CHANNEL_TYPE",
     "SHOPIFY_CREDENTIAL_TYPE",
     "SHOPIFY_FALLBACK_CREDENTIAL_TYPE",
+    "SHOPLAZZA_CHANNEL_TYPE",
+    "SHOPLAZZA_CREDENTIAL_TYPE",
+    "SHOPLINE_CHANNEL_TYPE",
+    "SHOPLINE_CREDENTIAL_TYPE",
     "SUPPORTED_CHANNEL_TYPES",
+    "TIKTOK_SHOP_CHANNEL_TYPE",
+    "TIKTOK_SHOP_CREDENTIAL_TYPE",
+    "WOOCOMMERCE_CHANNEL_TYPE",
+    "WOOCOMMERCE_CREDENTIAL_TYPE",
     "build_marketplace_adapter",
     "unsupported_channel_error",
 ]
