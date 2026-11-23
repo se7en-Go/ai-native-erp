@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from erp_core.catalog.media_service import CatalogMediaService
 from erp_core.catalog.schemas import MoqTierInput, ProductCreate, VariantCreate
 from erp_core.catalog.service import CatalogService
 from erp_core.shared.enums import UserRole
@@ -387,6 +388,43 @@ class SourcingMoqTier(BaseModel):
     unit_price_usd: Decimal = Field(gt=Decimal("0"))
 
 
+class SourcingOptionSpec(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    values: list[str] = Field(min_length=1, max_length=50)
+
+
+class SourcingVariantSpec(BaseModel):
+    sku_suffix: str = Field(min_length=1, max_length=40)
+    option_values: dict[str, str] = Field(default_factory=dict)
+    cost_price_cny: Decimal = Field(gt=Decimal("0"))
+    retail_price_usd: Decimal | None = Field(default=None, gt=Decimal("0"))
+    image_url: str | None = Field(default=None, max_length=2048)
+    initial_stock: int = Field(default=100, ge=0, le=1_000_000)
+
+
+class MarketplaceImageBlob(BaseModel):
+    filename: str
+    mime_type: str
+    data: bytes
+    alt_text: str = ""
+
+
+class MarketplaceVariantPayload(BaseModel):
+    local_variant_id: UUID | None = None
+    local_sku: str
+    external_sku: str
+    option_values: dict[str, str] = Field(default_factory=dict)
+    price_usd: Decimal
+    quantity: int = 0
+    image_url: str | None = None
+
+
+class MarketplaceVariantReceipt(BaseModel):
+    external_sku: str
+    external_variant_id: str | None = None
+    external_inventory_item_id: str | None = None
+
+
 class MarketplaceListingPayload(BaseModel):
     """Everything a marketplace API needs to create one live listing.
 
@@ -407,6 +445,9 @@ class MarketplaceListingPayload(BaseModel):
     category: str
     hs_code: str | None = None
     moq_tiers: list[SourcingMoqTier] = Field(default_factory=list)
+    options: list[SourcingOptionSpec] = Field(default_factory=list)
+    variants: list[MarketplaceVariantPayload] = Field(default_factory=list)
+    image_blobs: list[MarketplaceImageBlob] = Field(default_factory=list)
 
 
 class MarketplaceListingDispatchReceipt(BaseModel):
@@ -416,6 +457,7 @@ class MarketplaceListingDispatchReceipt(BaseModel):
     external_sku: str
     status: str
     raw_response: dict[str, Any] = Field(default_factory=dict)
+    variant_receipts: list[MarketplaceVariantReceipt] = Field(default_factory=list)
 
 
 class MarketplaceListingPublisher(Protocol):
@@ -442,6 +484,8 @@ class SourcingCollectRequest(BaseModel):
     fx_rate_usd_cny: Decimal = Field(default=Decimal("7.200000"), gt=Decimal("0"))
     category: str = Field(default="LED Lighting", min_length=1, max_length=128)
     hs_code: str | None = Field(default=None, max_length=32)
+    options_spec: list[SourcingOptionSpec] = Field(default_factory=list, max_length=5)
+    variants_spec: list[SourcingVariantSpec] = Field(default_factory=list, max_length=50)
 
 
 class SourcingPageMetadata(BaseModel):
@@ -493,6 +537,8 @@ class PlannedSourcingDraft(BaseModel):
     moq_tiers: list[SourcingMoqTier]
     images: list[str]
     attributes: dict[str, Any]
+    options_spec: list[SourcingOptionSpec] = Field(default_factory=list)
+    variants_spec: list[SourcingVariantSpec] = Field(default_factory=list)
 
 
 class SourcingDraftRead(BaseModel):
@@ -514,6 +560,8 @@ class SourcingDraftRead(BaseModel):
     moq_tiers: list[SourcingMoqTier]
     images: list[str]
     attributes: dict[str, Any]
+    options_spec: list[SourcingOptionSpec] = Field(default_factory=list)
+    variants_spec: list[SourcingVariantSpec] = Field(default_factory=list)
     status: str
     imported_product_id: UUID | None = None
     imported_variant_id: UUID | None = None
@@ -561,6 +609,7 @@ class SourcingPublishResult(BaseModel):
     listing_state: Literal["mapping_ready", "live_published"] = "mapping_ready"
     external_listing_confirmed: bool = False
     publish_mode: Literal["local_sku_mapping", "live_marketplace_api"] = "local_sku_mapping"
+    remote_status: str | None = Field(default=None, exclude=True)
 
 
 class SourcingDeleteResult(BaseModel):
@@ -837,6 +886,8 @@ def plan_sourcing_draft(
             "A product title is required: provide raw_title/raw_text or a fetchable source_url.",
         )
     raw_price = payload.raw_price_cny if payload.raw_price_cny is not None else source.price_cny
+    if raw_price is None and payload.variants_spec:
+        raw_price = min(v.cost_price_cny for v in payload.variants_spec)
     if raw_price is None:
         raise _sourcing_error(
             "sourcing-price-required",
@@ -849,6 +900,43 @@ def plan_sourcing_draft(
     images = _dedupe([*payload.images, *source.images], limit=10)
     optimized_title_en = build_english_title(title, payload.category)
     hs_code = (payload.hs_code or "").strip() or None
+    normalized_variants: list[SourcingVariantSpec] = []
+    seen_suffixes: set[str] = set()
+    for idx, v in enumerate(payload.variants_spec, start=1):
+        suffix = _SKU_PLATFORM_RE.sub("-", v.sku_suffix.strip().upper()).strip("-") or f"V{idx}"
+        if suffix in seen_suffixes:
+            suffix = f"{suffix}-{idx}"
+        seen_suffixes.add(suffix)
+        computed_usd = (
+            v.retail_price_usd
+            if v.retail_price_usd is not None
+            else compute_sourcing_pricing(
+                v.cost_price_cny, payload.fx_rate_usd_cny, payload.target_margin_pct
+            ).target_price_usd
+        )
+        normalized_variants.append(
+            SourcingVariantSpec(
+                sku_suffix=suffix,
+                option_values={str(k): str(val) for k, val in v.option_values.items()},
+                cost_price_cny=v.cost_price_cny,
+                retail_price_usd=computed_usd,
+                image_url=v.image_url,
+                initial_stock=v.initial_stock,
+            )
+        )
+    options_spec = list(payload.options_spec)
+    if normalized_variants and not options_spec:
+        option_map: dict[str, list[str]] = {}
+        for variant in normalized_variants:
+            for opt_name, opt_val in variant.option_values.items():
+                values = option_map.setdefault(opt_name, [])
+                if opt_val not in values:
+                    values.append(opt_val)
+        options_spec = [
+            SourcingOptionSpec(name=name, values=vals)
+            for name, vals in option_map.items()
+            if vals
+        ]
     return PlannedSourcingDraft(
         source_platform=payload.source_platform,
         source_url=payload.source_url,
@@ -878,6 +966,8 @@ def plan_sourcing_draft(
             "source_description": (source.description or "")[:500],
             "cost_usd": str(pricing.cost_usd),
         },
+        options_spec=options_spec,
+        variants_spec=normalized_variants,
     )
 
 
@@ -998,13 +1088,15 @@ class SourcingService:
                         id, tenant_id, source_platform, source_url, raw_title, raw_price_cny,
                         fx_rate_usd_cny, target_margin_pct, optimized_title_en, bullet_points,
                         suggested_sku, suggested_category, suggested_hs_code, target_price_usd,
-                        moq_tiers, images, attributes, status, created_by_user_id
+                        moq_tiers, images, attributes, options_spec, variants_spec,
+                        status, created_by_user_id
                     ) VALUES (
                         :id, :tid, :platform, :src_url, :raw_title, :raw_price,
                         :fx, :margin, :title_en, CAST(:bullets AS jsonb),
                         :sku, :category, :hs, :target_price,
                         CAST(:tiers AS jsonb), CAST(:images AS jsonb),
-                        CAST(:attrs AS jsonb), 'draft', :actor
+                        CAST(:attrs AS jsonb), CAST(:opts AS jsonb), CAST(:vars AS jsonb),
+                        'draft', :actor
                     )
                     RETURNING *
                     """
@@ -1032,6 +1124,24 @@ class SourcingService:
                     ),
                     "images": json.dumps(planned.images, default=str),
                     "attrs": json.dumps(planned.attributes, default=str),
+                    "opts": json.dumps(
+                        [opt.model_dump() for opt in planned.options_spec], default=str
+                    ),
+                    "vars": json.dumps(
+                        [
+                            {
+                                **v.model_dump(mode="json"),
+                                "cost_price_cny": str(v.cost_price_cny),
+                                "retail_price_usd": (
+                                    str(v.retail_price_usd)
+                                    if v.retail_price_usd is not None
+                                    else None
+                                ),
+                            }
+                            for v in planned.variants_spec
+                        ],
+                        default=str,
+                    ),
                     "actor": actor_id,
                 },
             )
@@ -1071,6 +1181,16 @@ class SourcingService:
             for entry in _as_json_list(data.get("publish_history"))
             if isinstance(entry, Mapping)
         ]
+        options_spec = [
+            SourcingOptionSpec.model_validate(item)
+            for item in _as_json_list(data.get("options_spec"))
+            if isinstance(item, Mapping)
+        ]
+        variants_spec = [
+            SourcingVariantSpec.model_validate(item)
+            for item in _as_json_list(data.get("variants_spec"))
+            if isinstance(item, Mapping)
+        ]
         status = str(data["status"])
         raw_price = Decimal(str(data["raw_price_cny"]))
         fx_rate = Decimal(str(data["fx_rate_usd_cny"]))
@@ -1098,6 +1218,8 @@ class SourcingService:
             moq_tiers=tiers,
             images=images,
             attributes=_as_json_dict(data.get("attributes")),
+            options_spec=options_spec,
+            variants_spec=variants_spec,
             status=status,
             listing_state=draft_listing_state(status, history),
             imported_product_id=(
@@ -1301,16 +1423,71 @@ class SourcingService:
             product_id = await self._find_existing_product(
                 session, tenant_id, draft.suggested_sku
             )
-        try:
-            variant_id = await self._ensure_variant(
-                session, tenant_id, actor_id, draft, product_id
-            )
-        except AppError as exc:
-            if exc.code != "ERR_DUPLICATE_SKU":
-                raise
-            variant_id = await self._find_existing_variant(
-                session, tenant_id, draft.suggested_sku
-            )
+
+        variant_id: UUID | None = None
+        if draft.variants_spec:
+            for item in draft.variants_spec:
+                child_sku = f"{draft.suggested_sku}-{item.sku_suffix}"
+                retail_usd = item.retail_price_usd or draft.target_price_usd
+                try:
+                    created_var = await self.catalog.create_variant(
+                        session,
+                        tenant_id,
+                        actor_id,
+                        VariantCreate(
+                            product_id=product_id,
+                            sku=child_sku,
+                            attributes={
+                                "sourcing_draft_id": str(draft.id),
+                                "source_platform": draft.source_platform,
+                                "source_url": draft.source_url,
+                                "option_values": dict(item.option_values),
+                                "image_url": item.image_url,
+                                "images": draft.images,
+                            },
+                            cost_price_base=item.cost_price_cny.quantize(
+                                _COST_SCALE, rounding=ROUND_HALF_UP
+                            ),
+                            base_currency="CNY",
+                            min_margin_floor_pct=_DEFAULT_MIN_MARGIN_FLOOR_PCT,
+                            retail_price_usd=retail_usd,
+                            b2b_moq_tiers=[
+                                MoqTierInput(
+                                    min_qty=tier.min_qty, unit_price_usd=tier.unit_price_usd
+                                )
+                                for tier in draft.moq_tiers
+                            ],
+                            weight_grams=_weight_grams(draft.attributes),
+                            lead_time_days=_DEFAULT_LEAD_TIME_DAYS,
+                        ),
+                        role=UserRole.MANAGER,
+                    )
+                    vid = created_var.id
+                except AppError as exc:
+                    if exc.code != "ERR_DUPLICATE_SKU":
+                        raise
+                    vid = await self._find_existing_variant(session, tenant_id, child_sku)
+                if variant_id is None:
+                    variant_id = vid
+        if variant_id is None:
+            try:
+                variant_id = await self._ensure_variant(
+                    session, tenant_id, actor_id, draft, product_id
+                )
+            except AppError as exc:
+                if exc.code != "ERR_DUPLICATE_SKU":
+                    raise
+                variant_id = await self._find_existing_variant(
+                    session, tenant_id, draft.suggested_sku
+                )
+
+        await CatalogMediaService().attach_draft_assets_to_product(
+            session,
+            tenant_id,
+            sourcing_draft_id=draft_id,
+            product_id=product_id,
+            variant_id=variant_id,
+        )
 
         row = (
             await session.execute(
@@ -1388,6 +1565,8 @@ class SourcingService:
         channel_account_id: UUID,
         external_product_id: str,
         external_sku: str,
+        external_variant_id: str | None = None,
+        external_inventory_item_id: str | None = None,
         sync_inventory_enabled: bool,
     ) -> UUID:
         mapping_id = await session.scalar(
@@ -1395,14 +1574,23 @@ class SourcingService:
                 """
                 INSERT INTO platform_sku_mappings (
                     id, tenant_id, variant_id, channel_account_id, external_product_id,
-                    external_sku, bundle_multiplier, sync_inventory_enabled
+                    external_sku, external_variant_id, external_inventory_item_id,
+                    bundle_multiplier, sync_inventory_enabled
                 ) VALUES (
-                    :id, :tid, :vid, :caid, :epid, :esku, 1, :sync
+                    :id, :tid, :vid, :caid, :epid, :esku, :evid, :eiid, 1, :sync
                 )
                 ON CONFLICT (tenant_id, channel_account_id, external_sku)
                 DO UPDATE SET
                     variant_id = EXCLUDED.variant_id,
                     external_product_id = EXCLUDED.external_product_id,
+                    external_variant_id = COALESCE(
+                        EXCLUDED.external_variant_id,
+                        platform_sku_mappings.external_variant_id
+                    ),
+                    external_inventory_item_id = COALESCE(
+                        EXCLUDED.external_inventory_item_id,
+                        platform_sku_mappings.external_inventory_item_id
+                    ),
                     sync_inventory_enabled = EXCLUDED.sync_inventory_enabled
                 RETURNING id
                 """
@@ -1414,6 +1602,8 @@ class SourcingService:
                 "caid": channel_account_id,
                 "epid": external_product_id,
                 "esku": external_sku,
+                "evid": external_variant_id,
+                "eiid": external_inventory_item_id,
                 "sync": sync_inventory_enabled,
             },
         )
@@ -1427,55 +1617,128 @@ class SourcingService:
             )
         return UUID(str(mapping_id))
 
-    async def publish(
+    async def _load_product_variants(
+        self, session: AsyncSession, tenant_id: UUID, product_id: UUID
+    ) -> list[dict[str, Any]]:
+        rows = (
+            await session.execute(
+                text(
+                    """
+                    SELECT id, sku, retail_price_usd, attributes
+                    FROM product_variants
+                    WHERE tenant_id = :tid AND product_id = :pid
+                    ORDER BY created_at ASC, id ASC
+                    """
+                ),
+                {"tid": tenant_id, "pid": product_id},
+            )
+        ).all()
+        return [dict(row._mapping) for row in rows]
+
+    async def _load_media_blobs(
         self,
         session: AsyncSession,
         tenant_id: UUID,
-        actor_id: str,
-        draft_id: UUID,
-        payload: SourcingPublishRequest,
-        listing_publisher: MarketplaceListingPublisher | None = None,
-    ) -> list[SourcingPublishResult]:
-        """Publish a draft to channel accounts, locally or through a live marketplace push.
-
-        ``push_to_marketplace=False`` keeps the Wave-5 contract: only a local SKU mapping is
-        stored and the remote id is an explicit ``pending-listing:`` placeholder. With
-        ``push_to_marketplace=True`` the injected ``listing_publisher`` performs the real
-        marketplace call and its returned id is what gets persisted; without a publisher the
-        request fails closed rather than inventing a live listing.
-        """
-        draft = await self._load_draft(session, tenant_id, draft_id)
-        if draft.imported_variant_id is None or draft.imported_product_id is None:
-            imported = await self.import_to_catalog(session, tenant_id, actor_id, draft_id)
-            draft = imported.draft
-        variant_id = draft.imported_variant_id
-        if variant_id is None:
-            raise AppError(
-                slug="sourcing-variant-unavailable",
-                status_code=500,
-                code="ERR_SOURCING_VARIANT_UNAVAILABLE",
-                title="Sourcing Variant Unavailable",
-                detail=f"Draft '{draft_id}' is not linked to a catalog variant.",
+        *,
+        product_id: UUID | None,
+        sourcing_draft_id: UUID | None = None,
+    ) -> list[MarketplaceImageBlob]:
+        raw_blobs = await CatalogMediaService().load_asset_blobs(
+            session,
+            tenant_id,
+            product_id=product_id,
+            sourcing_draft_id=sourcing_draft_id,
+        )
+        return [
+            MarketplaceImageBlob(
+                filename=str(item["filename"]),
+                mime_type=str(item["mime_type"]),
+                data=bytes(item["data"]),
+                alt_text=str(item.get("alt_text") or ""),
             )
+            for item in raw_blobs
+        ]
 
+    async def _dispatch_to_channels(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        product_id: UUID,
+        primary_variant_id: UUID,
+        base_sku: str,
+        title: str,
+        description: str,
+        bullet_points: list[str],
+        category: str,
+        hs_code: str | None,
+        moq_tiers: list[SourcingMoqTier],
+        images: list[str],
+        options: list[SourcingOptionSpec],
+        variants: list[dict[str, Any]],
+        payload: SourcingPublishRequest,
+        listing_publisher: MarketplaceListingPublisher | None,
+        sourcing_draft_id: UUID | None = None,
+    ) -> list[SourcingPublishResult]:
+        image_blobs = await self._load_media_blobs(
+            session,
+            tenant_id,
+            product_id=product_id,
+            sourcing_draft_id=sourcing_draft_id,
+        )
+        sync_inventory_enabled = payload.stock_sync_ratio > 0
         results: list[SourcingPublishResult] = []
-        history: list[dict[str, Any]] = list(draft.publish_history)
         for channel_account_id in payload.channel_account_ids:
             channel_type = await self._channel_account(session, tenant_id, channel_account_id)
-            external_sku = build_external_sku(channel_type, draft.suggested_sku)
-            price_usd = (draft.target_price_usd * payload.price_multiplier).quantize(
-                _CENT, rounding=ROUND_HALF_UP
+            variant_payloads: list[MarketplaceVariantPayload] = []
+            for var_row in variants:
+                v_sku = str(var_row["sku"])
+                v_ext_sku = build_external_sku(channel_type, v_sku)
+                v_price = (
+                    Decimal(str(var_row["retail_price_usd"])) * payload.price_multiplier
+                ).quantize(_CENT, rounding=ROUND_HALF_UP)
+                v_attrs = _as_json_dict(var_row.get("attributes"))
+                raw_opt_vals = v_attrs.get("option_values")
+                option_values = (
+                    {str(k): str(v) for k, v in raw_opt_vals.items()}
+                    if isinstance(raw_opt_vals, Mapping)
+                    else {}
+                )
+                variant_payloads.append(
+                    MarketplaceVariantPayload(
+                        local_variant_id=UUID(str(var_row["id"])),
+                        local_sku=v_sku,
+                        external_sku=v_ext_sku,
+                        option_values=option_values,
+                        price_usd=v_price,
+                        quantity=payload.initial_stock_quantity,
+                        image_url=str(v_attrs["image_url"])
+                        if v_attrs.get("image_url")
+                        else None,
+                    )
+                )
+
+            primary_ext_sku = (
+                variant_payloads[0].external_sku
+                if variant_payloads
+                else build_external_sku(channel_type, base_sku)
             )
-            # Local SKU mapping is the default: no marketplace API is called, so the remote id
-            # is an explicit placeholder. Reusing the internal SKU would impersonate a live
-            # listing id.
-            external_product_id = pending_listing_product_id(external_sku)
+            primary_price_usd = (
+                variant_payloads[0].price_usd
+                if variant_payloads
+                else Decimal("0.01")
+            )
+            external_product_id = pending_listing_product_id(primary_ext_sku)
             listing_state: Literal["mapping_ready", "live_published"] = "mapping_ready"
             publish_mode: Literal["local_sku_mapping", "live_marketplace_api"] = (
                 "local_sku_mapping"
             )
             external_listing_confirmed = False
             remote_status: str | None = None
+            receipt_by_sku: dict[str, MarketplaceVariantReceipt] = {}
+            is_multi_variant = len(variant_payloads) > 1 or any(
+                bool(vp.option_values) for vp in variant_payloads
+            )
             if payload.push_to_marketplace:
                 if listing_publisher is None:
                     raise AppError(
@@ -1494,16 +1757,19 @@ class SourcingService:
                     MarketplaceListingPayload(
                         channel_account_id=channel_account_id,
                         channel_type=channel_type,
-                        external_sku=external_sku,
-                        title=draft.optimized_title_en,
-                        description=build_listing_description(draft),
-                        bullet_points=list(draft.bullet_points),
-                        price_usd=price_usd,
+                        external_sku=primary_ext_sku,
+                        title=title,
+                        description=description,
+                        bullet_points=bullet_points,
+                        price_usd=primary_price_usd,
                         quantity=payload.initial_stock_quantity,
-                        images=list(draft.images),
-                        category=draft.suggested_category,
-                        hs_code=draft.suggested_hs_code,
-                        moq_tiers=list(draft.moq_tiers),
+                        images=images,
+                        category=category,
+                        hs_code=hs_code,
+                        moq_tiers=moq_tiers,
+                        options=options if is_multi_variant else [],
+                        variants=variant_payloads if is_multi_variant else [],
+                        image_blobs=image_blobs,
                     ),
                 )
                 confirmed_product_id = (receipt.external_product_id or "").strip()
@@ -1514,7 +1780,7 @@ class SourcingService:
                         code="ERR_MARKETPLACE_PUBLISHER_RECEIPT_INVALID",
                         title="Marketplace Publisher Receipt Invalid",
                         detail=(
-                            f"The marketplace push for SKU '{external_sku}' returned no "
+                            f"The marketplace push for SKU '{primary_ext_sku}' returned no "
                             "external product id; nothing is recorded as a live listing."
                         ),
                     )
@@ -1523,47 +1789,129 @@ class SourcingService:
                 publish_mode = "live_marketplace_api"
                 external_listing_confirmed = True
                 remote_status = receipt.status
-            sync_inventory_enabled = payload.stock_sync_ratio > 0
-            mapping_id = await self._upsert_mapping(
-                session,
-                tenant_id=tenant_id,
-                variant_id=variant_id,
-                channel_account_id=channel_account_id,
-                external_product_id=external_product_id,
-                external_sku=external_sku,
-                sync_inventory_enabled=sync_inventory_enabled,
-            )
+                receipt_by_sku = {vr.external_sku: vr for vr in receipt.variant_receipts}
+
+            primary_mapping_id: UUID | None = None
+            if variant_payloads:
+                for vp in variant_payloads:
+                    vr = receipt_by_sku.get(vp.external_sku)
+                    mapped_id = await self._upsert_mapping(
+                        session,
+                        tenant_id=tenant_id,
+                        variant_id=vp.local_variant_id or primary_variant_id,
+                        channel_account_id=channel_account_id,
+                        external_product_id=external_product_id,
+                        external_sku=vp.external_sku,
+                        external_variant_id=vr.external_variant_id if vr else None,
+                        external_inventory_item_id=(
+                            vr.external_inventory_item_id if vr else None
+                        ),
+                        sync_inventory_enabled=sync_inventory_enabled,
+                    )
+                    if primary_mapping_id is None:
+                        primary_mapping_id = mapped_id
+            else:
+                primary_mapping_id = await self._upsert_mapping(
+                    session,
+                    tenant_id=tenant_id,
+                    variant_id=primary_variant_id,
+                    channel_account_id=channel_account_id,
+                    external_product_id=external_product_id,
+                    external_sku=primary_ext_sku,
+                    sync_inventory_enabled=sync_inventory_enabled,
+                )
+
             published_at = datetime.now(UTC)
-            entry: dict[str, Any] = {
-                "channel_account_id": str(channel_account_id),
-                "channel_type": channel_type,
-                "external_sku": external_sku,
-                "external_product_id": external_product_id,
-                "price_usd": str(price_usd),
-                "stock_sync_ratio": str(payload.stock_sync_ratio),
-                "published_at": published_at.isoformat(),
-                "listing_state": listing_state,
-                "external_listing_confirmed": external_listing_confirmed,
-                "publish_mode": publish_mode,
-            }
-            if remote_status is not None:
-                entry["remote_status"] = remote_status
-            history.append(entry)
             results.append(
                 SourcingPublishResult(
                     channel_account_id=channel_account_id,
                     channel_type=channel_type,
-                    external_sku=external_sku,
+                    external_sku=primary_ext_sku,
                     external_product_id=external_product_id,
-                    price_usd=price_usd,
+                    price_usd=primary_price_usd,
                     stock_sync_ratio=payload.stock_sync_ratio,
-                    mapping_id=mapping_id,
+                    mapping_id=primary_mapping_id,
                     published_at=published_at,
                     listing_state=listing_state,
                     external_listing_confirmed=external_listing_confirmed,
                     publish_mode=publish_mode,
+                    remote_status=remote_status,
                 )
             )
+        return results
+
+    async def publish(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        actor_id: str,
+        draft_id: UUID,
+        payload: SourcingPublishRequest,
+        listing_publisher: MarketplaceListingPublisher | None = None,
+    ) -> list[SourcingPublishResult]:
+        """Publish a draft to channel accounts, locally or through a live marketplace push."""
+        draft = await self._load_draft(session, tenant_id, draft_id)
+        if draft.imported_variant_id is None or draft.imported_product_id is None:
+            imported = await self.import_to_catalog(session, tenant_id, actor_id, draft_id)
+            draft = imported.draft
+        variant_id = draft.imported_variant_id
+        product_id = draft.imported_product_id
+        if variant_id is None or product_id is None:
+            raise AppError(
+                slug="sourcing-variant-unavailable",
+                status_code=500,
+                code="ERR_SOURCING_VARIANT_UNAVAILABLE",
+                title="Sourcing Variant Unavailable",
+                detail=f"Draft '{draft_id}' is not linked to a catalog variant.",
+            )
+
+        loaded_variants = await self._load_product_variants(session, tenant_id, product_id)
+        if not loaded_variants:
+            loaded_variants = [
+                {
+                    "id": variant_id,
+                    "sku": draft.suggested_sku,
+                    "retail_price_usd": draft.target_price_usd,
+                    "attributes": {},
+                }
+            ]
+        results = await self._dispatch_to_channels(
+            session,
+            tenant_id=tenant_id,
+            product_id=product_id,
+            primary_variant_id=variant_id,
+            base_sku=draft.suggested_sku,
+            title=draft.optimized_title_en,
+            description=build_listing_description(draft),
+            bullet_points=list(draft.bullet_points),
+            category=draft.suggested_category,
+            hs_code=draft.suggested_hs_code,
+            moq_tiers=list(draft.moq_tiers),
+            images=list(draft.images),
+            options=list(draft.options_spec),
+            variants=loaded_variants,
+            payload=payload,
+            listing_publisher=listing_publisher,
+            sourcing_draft_id=draft_id,
+        )
+
+        history: list[dict[str, Any]] = list(draft.publish_history)
+        for res in results:
+            entry: dict[str, Any] = {
+                "channel_account_id": str(res.channel_account_id),
+                "channel_type": res.channel_type,
+                "external_sku": res.external_sku,
+                "external_product_id": res.external_product_id,
+                "price_usd": str(res.price_usd),
+                "stock_sync_ratio": str(res.stock_sync_ratio),
+                "published_at": res.published_at.isoformat(),
+                "listing_state": res.listing_state,
+                "external_listing_confirmed": res.external_listing_confirmed,
+                "publish_mode": res.publish_mode,
+            }
+            if res.remote_status is not None:
+                entry["remote_status"] = res.remote_status
+            history.append(entry)
 
         await session.execute(
             text(
@@ -1610,14 +1958,124 @@ class SourcingService:
     ) -> SourcingDraftRead:
         return await self._load_draft(session, tenant_id, draft_id)
 
+    async def publish_master_product(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        actor_id: str,
+        product_id: UUID,
+        payload: SourcingPublishRequest,
+        listing_publisher: MarketplaceListingPublisher | None = None,
+    ) -> list[SourcingPublishResult]:
+        """Publish an existing master catalog product (and all its variants/media) directly."""
+        product_row = (
+            await session.execute(
+                text(
+                    """
+                    SELECT id, spu_code, category, hs_code, i18n_specs, ai_faq_facts
+                    FROM products
+                    WHERE tenant_id = :tid AND id = :pid
+                    """
+                ),
+                {"tid": tenant_id, "pid": product_id},
+            )
+        ).one_or_none()
+        if product_row is None:
+            raise AppError(
+                slug="product-not-found",
+                status_code=404,
+                code="ERR_PRODUCT_NOT_FOUND",
+                title="Product Not Found",
+                detail=f"Product '{product_id}' not found.",
+            )
+        variants = await self._load_product_variants(session, tenant_id, product_id)
+        if not variants:
+            raise AppError(
+                slug="product-variants-empty",
+                status_code=422,
+                code="ERR_PRODUCT_VARIANTS_EMPTY",
+                title="No Variants To Publish",
+                detail=f"Product '{product_id}' has no SKU variants to publish.",
+            )
+        specs = _as_json_dict(product_row.i18n_specs)
+        raw_en = specs.get("en")
+        en_spec: dict[str, Any] = dict(raw_en) if isinstance(raw_en, Mapping) else {}
+        title = str(en_spec.get("title") or product_row.spu_code).strip()
+        raw_bullets = (
+            en_spec.get("selling_points")
+            or _as_json_dict(product_row.ai_faq_facts).get("bullet_points")
+            or []
+        )
+        bullets = [str(b) for b in raw_bullets if str(b).strip()]
+        images = [str(u) for u in (en_spec.get("images") or []) if str(u).strip()]
+        desc_parts = [title]
+        if bullets:
+            desc_parts.extend(f"- {b}" for b in bullets)
+        if product_row.category:
+            desc_parts.append(f"- Category: {product_row.category}")
+        if product_row.hs_code:
+            desc_parts.append(f"- HS code: {product_row.hs_code}")
+
+        option_map: dict[str, list[str]] = {}
+        for var in variants:
+            attrs = _as_json_dict(var.get("attributes"))
+            opt_vals = attrs.get("option_values")
+            if isinstance(opt_vals, Mapping):
+                for key, val in opt_vals.items():
+                    vals = option_map.setdefault(str(key), [])
+                    if str(val) not in vals:
+                        vals.append(str(val))
+        options = [SourcingOptionSpec(name=k, values=v) for k, v in option_map.items() if v]
+
+        results = await self._dispatch_to_channels(
+            session,
+            tenant_id=tenant_id,
+            product_id=product_id,
+            primary_variant_id=UUID(str(variants[0]["id"])),
+            base_sku=str(product_row.spu_code),
+            title=title,
+            description="\n".join(desc_parts),
+            bullet_points=bullets,
+            category=str(product_row.category or "General Export"),
+            hs_code=str(product_row.hs_code) if product_row.hs_code else None,
+            moq_tiers=[],
+            images=images,
+            options=options,
+            variants=variants,
+            payload=payload,
+            listing_publisher=listing_publisher,
+            sourcing_draft_id=None,
+        )
+        live_confirmed = bool(results) and all(
+            res.listing_state == "live_published" for res in results
+        )
+        await record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_type="human_user",
+            actor_id=actor_id,
+            action="catalog.product.published",
+            resource_type="product",
+            resource_id=product_id,
+            after_state={
+                "spu_code": str(product_row.spu_code),
+                "channels": [str(r.channel_account_id) for r in results],
+                "listing_state": "live_published" if live_confirmed else "mapping_ready",
+            },
+        )
+        return results
+
 
 __all__ = [
     "DnsResolver",
     "ListingState",
     "MAX_SOURCE_FETCH_BYTES",
+    "MarketplaceImageBlob",
     "MarketplaceListingDispatchReceipt",
     "MarketplaceListingPayload",
     "MarketplaceListingPublisher",
+    "MarketplaceVariantPayload",
+    "MarketplaceVariantReceipt",
     "PENDING_LISTING_PREFIX",
     "PlannedSourcingDraft",
     "SourcingCollectRequest",
@@ -1625,12 +2083,14 @@ __all__ = [
     "SourcingDraftRead",
     "SourcingImportResult",
     "SourcingMoqTier",
+    "SourcingOptionSpec",
     "SourcingPageMetadata",
     "SourcingPricing",
     "SourcingPublishRequest",
     "SourcingPublishResult",
     "SourcingService",
     "SourcingSource",
+    "SourcingVariantSpec",
     "build_english_title",
     "build_external_sku",
     "build_listing_description",

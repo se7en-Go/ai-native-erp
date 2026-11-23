@@ -15,6 +15,8 @@ import type {
   AlibabaIntlConnectRequest,
   AmazonConnectRequest,
   EbayConnectRequest,
+  MediaAssetRead,
+  MediaUrlIngestRequest,
   SourcingCollectRequest,
   SourcingDeleteResult,
   SourcingDraftRead,
@@ -22,6 +24,7 @@ import type {
   SourcingMoqTier,
   SourcingPublishRequest,
   SourcingPublishResult,
+  SourcingVariantSpecOutput,
 } from "@/lib/api-client/types.gen";
 
 // ---------------------------------------------------------------------------
@@ -263,7 +266,10 @@ export function planSourcingDraft(
   const rawTitle = (request.raw_title ?? request.source_url ?? "").trim();
   const rawText = (request.raw_text ?? "").trim();
   const category = (request.category ?? "").trim() || SOURCING_DEFAULT_CATEGORY;
-  const priceCny = decimalInput(request.raw_price_cny, 18.6);
+  const priceCny = decimalInput(
+    request.raw_price_cny ?? request.variants_spec?.[0]?.cost_price_cny,
+    18.6,
+  );
   const fx = decimalInput(request.fx_rate_usd_cny, Number(SOURCING_DEFAULT_FX_RATE));
   const margin = decimalInput(request.target_margin_pct, Number(SOURCING_DEFAULT_MARGIN_PCT));
   const { cost_usd, target_price_usd } = costAndTargetPrice({
@@ -273,6 +279,24 @@ export function planSourcingDraft(
   });
   const moq_tiers = moqTiersFromTargetPrice(target_price_usd);
   const optimized_title_en = optimizedEnglishTitle(rawTitle || rawText, category);
+  const variants_spec: SourcingVariantSpecOutput[] = (request.variants_spec ?? []).map((v) => {
+    const vCost = decimalInput(v.cost_price_cny, priceCny);
+    const computedUsd = v.retail_price_usd
+      ? moneyString(decimalInput(v.retail_price_usd, Number(target_price_usd)))
+      : costAndTargetPrice({
+          raw_price_cny: vCost,
+          fx_rate_usd_cny: fx,
+          target_margin_pct: margin,
+        }).target_price_usd;
+    return {
+      sku_suffix: v.sku_suffix.trim().toUpperCase(),
+      option_values: v.option_values ?? {},
+      cost_price_cny: moneyString(vCost),
+      retail_price_usd: computedUsd,
+      image_url: v.image_url ?? null,
+      initial_stock: v.initial_stock ?? 100,
+    };
+  });
 
   return {
     id: options.id ?? "mock-sourcing-draft-new",
@@ -292,6 +316,8 @@ export function planSourcingDraft(
     suggested_hs_code: request.hs_code ?? "94054200",
     moq_tiers,
     images: request.images ?? [],
+    options_spec: request.options_spec ?? [],
+    variants_spec,
     attributes: {
       source_platform: platform,
       incoterm: "FOB Fuzhou",
@@ -507,6 +533,129 @@ export async function publishSourcingDraft(
     `/v1/catalog/sourcing/drafts/${encodeURIComponent(draftId)}/publish`,
     { method: "POST", body: JSON.stringify(body) },
   );
+}
+
+/** POST /v1/catalog/products/{product_id}/publish — 主档商品直接多平台一键刊登。 */
+export async function publishMasterProduct(
+  productId: string,
+  body: SourcingPublishRequest,
+): Promise<SourcingPublishResult[]> {
+  const pushToMarketplace = body.push_to_marketplace === true;
+  if (shouldUseMockApi()) {
+    const publishedAt = new Date().toISOString();
+    return body.channel_account_ids.map((accountId, index) => ({
+      channel_account_id: accountId,
+      channel_type: mockStoreChannelType(accountId),
+      external_sku: `MASTER-${index + 1}`,
+      external_product_id: pushToMarketplace
+        ? `ext-master-${productId}-${index + 1}`
+        : `pending-listing:MASTER-${index + 1}`,
+      price_usd: "19.90",
+      stock_sync_ratio: "1.00",
+      mapping_id: `mock-master-map-${index + 1}`,
+      published_at: publishedAt,
+      listing_state: pushToMarketplace ? "live_published" : "mapping_ready",
+      external_listing_confirmed: pushToMarketplace,
+      publish_mode: pushToMarketplace ? "live_marketplace_api" : "local_sku_mapping",
+    }));
+  }
+  return bffFetch<SourcingPublishResult[]>(
+    `/v1/catalog/products/${encodeURIComponent(productId)}/publish`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+/** POST /v1/catalog/media/upload — 本地图片直传统一 MinIO/R2 图床。 */
+export async function uploadCatalogMedia(
+  file: File,
+  opts: {
+    productId?: string;
+    variantId?: string;
+    sourcingDraftId?: string;
+    altText?: string;
+    sortOrder?: number;
+  } = {},
+): Promise<MediaAssetRead> {
+  if (shouldUseMockApi()) {
+    return {
+      id: `mock-media-${Date.now()}`,
+      tenant_id: "mock-tenant",
+      product_id: opts.productId ?? null,
+      variant_id: opts.variantId ?? null,
+      sourcing_draft_id: opts.sourcingDraftId ?? null,
+      storage_key: `mock/${file.name}`,
+      source_url: null,
+      sha256: "0".repeat(64),
+      mime_type: file.type || "image/png",
+      byte_size: file.size || 128,
+      sort_order: opts.sortOrder ?? 0,
+      alt_text: opts.altText ?? file.name,
+      content_path: "/api/bff/v1/catalog/media/mock/content",
+      presigned_url: null,
+      created_at: new Date().toISOString(),
+    };
+  }
+  const form = new FormData();
+  form.append("file", file);
+  if (opts.productId) form.append("product_id", opts.productId);
+  if (opts.variantId) form.append("variant_id", opts.variantId);
+  if (opts.sourcingDraftId) form.append("sourcing_draft_id", opts.sourcingDraftId);
+  if (opts.altText) form.append("alt_text", opts.altText);
+  if (opts.sortOrder !== undefined) form.append("sort_order", String(opts.sortOrder));
+
+  const res = await fetch("/api/bff/v1/catalog/media/upload", {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(errText || `Upload failed with HTTP ${res.status}`);
+  }
+  return (await res.json()) as MediaAssetRead;
+}
+
+/** POST /v1/catalog/media/ingest-urls — 将公网图片外链转存至自有 MinIO/R2 图床。 */
+export async function ingestCatalogMediaUrls(
+  body: MediaUrlIngestRequest,
+): Promise<MediaAssetRead[]> {
+  if (shouldUseMockApi()) {
+    return body.urls.map((url, idx) => ({
+      id: `mock-url-media-${idx + 1}`,
+      tenant_id: "mock-tenant",
+      product_id: body.product_id ?? null,
+      variant_id: body.variant_id ?? null,
+      sourcing_draft_id: body.sourcing_draft_id ?? null,
+      storage_key: `mock/url-${idx + 1}.jpg`,
+      source_url: url,
+      sha256: "1".repeat(64),
+      mime_type: "image/jpeg",
+      byte_size: 2048,
+      sort_order: idx,
+      alt_text: body.alt_text ?? "",
+      content_path: "/api/bff/v1/catalog/media/mock/content",
+      presigned_url: url,
+      created_at: new Date().toISOString(),
+    }));
+  }
+  return bffFetch<MediaAssetRead[]>("/v1/catalog/media/ingest-urls", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** GET /v1/catalog/media — 列出商品或采集草稿已挂载的图片资产。 */
+export async function listCatalogMedia(
+  opts: { productId?: string; sourcingDraftId?: string } = {},
+): Promise<MediaAssetRead[]> {
+  if (shouldUseMockApi()) return [];
+  const params = new URLSearchParams();
+  if (opts.productId) params.set("product_id", opts.productId);
+  if (opts.sourcingDraftId) params.set("sourcing_draft_id", opts.sourcingDraftId);
+  const qs = params.toString();
+  return bffFetch<MediaAssetRead[]>(`/v1/catalog/media${qs ? `?${qs}` : ""}`, {
+    method: "GET",
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -264,6 +264,15 @@ export type BodySubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPost =
     receipt_file?: string | null;
 };
 
+export type BodyUploadCatalogMediaApiV1CatalogMediaUploadPost = {
+    alt_text?: string;
+    file: string;
+    product_id?: string | null;
+    sort_order?: number;
+    sourcing_draft_id?: string | null;
+    variant_id?: string | null;
+};
+
 export type BodyUploadKbDocumentApiV1AiKbDocumentsPost = {
     file: string;
     language?: string;
@@ -1235,6 +1244,32 @@ export type MarketplaceOrderSyncResult = {
     recovered: number;
     scanned: number;
     updated: number;
+};
+
+export type MediaAssetRead = {
+    alt_text?: string;
+    byte_size: number;
+    content_path: string;
+    created_at: string;
+    id: string;
+    mime_type: string;
+    presigned_url?: string | null;
+    product_id?: string | null;
+    sha256: string;
+    sort_order?: number;
+    source_url?: string | null;
+    sourcing_draft_id?: string | null;
+    storage_key: string;
+    tenant_id: string;
+    variant_id?: string | null;
+};
+
+export type MediaUrlIngestRequest = {
+    alt_text?: string;
+    product_id?: string | null;
+    sourcing_draft_id?: string | null;
+    urls: Array<string>;
+    variant_id?: string | null;
 };
 
 export type MembershipItem = {
@@ -2533,8 +2568,11 @@ export type ShoplineConnectRequest = {
 export type SkuMappingCreate = {
     bundle_multiplier?: number;
     channel_account_id: string;
+    external_inventory_item_id?: string | null;
     external_product_id: string;
     external_sku: string;
+    external_variant_id?: string | null;
+    safety_stock?: number;
     sync_inventory_enabled?: boolean;
     variant_id: string;
 };
@@ -2543,9 +2581,16 @@ export type SkuMappingRead = {
     bundle_multiplier: number;
     channel_account_id: string;
     created_at: string;
+    external_inventory_item_id?: string | null;
     external_product_id: string;
     external_sku: string;
+    external_variant_id?: string | null;
     id: string;
+    last_inventory_synced_at?: string | null;
+    last_inventory_synced_qty?: number | null;
+    last_sync_error?: string | null;
+    last_sync_status?: string;
+    safety_stock?: number;
     sync_inventory_enabled: boolean;
     tenant_id: string;
     variant_id: string;
@@ -2554,6 +2599,7 @@ export type SkuMappingRead = {
 export type SkuMappingUpdate = {
     bundle_multiplier?: number | null;
     external_sku?: string | null;
+    safety_stock?: number | null;
     sync_inventory_enabled?: boolean | null;
 };
 
@@ -2630,12 +2676,14 @@ export type SourcingCollectRequest = {
     fx_rate_usd_cny?: number | string;
     hs_code?: string | null;
     images?: Array<string>;
+    options_spec?: Array<SourcingOptionSpec>;
     raw_price_cny?: number | string | null;
     raw_text?: string | null;
     raw_title?: string | null;
     source_platform?: '1688' | 'url' | 'manual';
     source_url?: string | null;
     target_margin_pct?: number | string;
+    variants_spec?: Array<SourcingVariantSpecInput>;
 };
 
 export type SourcingDeleteResult = {
@@ -2658,6 +2706,7 @@ export type SourcingDraftRead = {
     listing_state?: 'draft' | 'imported' | 'mapping_ready' | 'live_published';
     moq_tiers: Array<SourcingMoqTier>;
     optimized_title_en: string;
+    options_spec?: Array<SourcingOptionSpec>;
     publish_history?: Array<{
         [key: string]: unknown;
     }>;
@@ -2673,6 +2722,7 @@ export type SourcingDraftRead = {
     target_price_usd: string;
     tenant_id: string;
     updated_at: string;
+    variants_spec?: Array<SourcingVariantSpecOutput>;
 };
 
 export type SourcingImportResult = {
@@ -2687,6 +2737,11 @@ export type SourcingImportResult = {
 export type SourcingMoqTier = {
     min_qty: number;
     unit_price_usd: string;
+};
+
+export type SourcingOptionSpec = {
+    name: string;
+    values: Array<string>;
 };
 
 export type SourcingPublishRequest = {
@@ -2709,6 +2764,28 @@ export type SourcingPublishResult = {
     publish_mode?: 'local_sku_mapping' | 'live_marketplace_api';
     published_at: string;
     stock_sync_ratio: string;
+};
+
+export type SourcingVariantSpecInput = {
+    cost_price_cny: number | string;
+    image_url?: string | null;
+    initial_stock?: number;
+    option_values?: {
+        [key: string]: string;
+    };
+    retail_price_usd?: number | string | null;
+    sku_suffix: string;
+};
+
+export type SourcingVariantSpecOutput = {
+    cost_price_cny: string;
+    image_url?: string | null;
+    initial_stock?: number;
+    option_values?: {
+        [key: string]: string;
+    };
+    retail_price_usd?: string | null;
+    sku_suffix: string;
 };
 
 export type SplitCustomerRequest = {
@@ -2971,9 +3048,16 @@ export type VariantMappingWithLabelRead = {
     channel_account_id: string;
     channel_label?: string | null;
     created_at: string;
+    external_inventory_item_id?: string | null;
     external_product_id: string;
     external_sku: string;
+    external_variant_id?: string | null;
     id: string;
+    last_inventory_synced_at?: string | null;
+    last_inventory_synced_qty?: number | null;
+    last_sync_error?: string | null;
+    last_sync_status?: string;
+    safety_stock?: number;
     sync_inventory_enabled: boolean;
     tenant_id: string;
     variant_id: string;
@@ -5113,6 +5197,121 @@ export type UpdateSkuMappingApiV1CatalogMappingsMappingIdPutResponses = {
 
 export type UpdateSkuMappingApiV1CatalogMappingsMappingIdPutResponse = UpdateSkuMappingApiV1CatalogMappingsMappingIdPutResponses[keyof UpdateSkuMappingApiV1CatalogMappingsMappingIdPutResponses];
 
+export type ListCatalogMediaApiV1CatalogMediaGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        product_id?: string | null;
+        sourcing_draft_id?: string | null;
+    };
+    url: '/api/v1/catalog/media';
+};
+
+export type ListCatalogMediaApiV1CatalogMediaGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCatalogMediaApiV1CatalogMediaGetError = ListCatalogMediaApiV1CatalogMediaGetErrors[keyof ListCatalogMediaApiV1CatalogMediaGetErrors];
+
+export type ListCatalogMediaApiV1CatalogMediaGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<MediaAssetRead>;
+};
+
+export type ListCatalogMediaApiV1CatalogMediaGetResponse = ListCatalogMediaApiV1CatalogMediaGetResponses[keyof ListCatalogMediaApiV1CatalogMediaGetResponses];
+
+export type IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostData = {
+    body: MediaUrlIngestRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/media/ingest-urls';
+};
+
+export type IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostError = IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostErrors[keyof IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostErrors];
+
+export type IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: Array<MediaAssetRead>;
+};
+
+export type IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostResponse = IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostResponses[keyof IngestCatalogMediaUrlsApiV1CatalogMediaIngestUrlsPostResponses];
+
+export type UploadCatalogMediaApiV1CatalogMediaUploadPostData = {
+    body: BodyUploadCatalogMediaApiV1CatalogMediaUploadPost;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/media/upload';
+};
+
+export type UploadCatalogMediaApiV1CatalogMediaUploadPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadCatalogMediaApiV1CatalogMediaUploadPostError = UploadCatalogMediaApiV1CatalogMediaUploadPostErrors[keyof UploadCatalogMediaApiV1CatalogMediaUploadPostErrors];
+
+export type UploadCatalogMediaApiV1CatalogMediaUploadPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: MediaAssetRead;
+};
+
+export type UploadCatalogMediaApiV1CatalogMediaUploadPostResponse = UploadCatalogMediaApiV1CatalogMediaUploadPostResponses[keyof UploadCatalogMediaApiV1CatalogMediaUploadPostResponses];
+
+export type GetCatalogMediaContentApiV1CatalogMediaAssetIdContentGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        asset_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/media/{asset_id}/content';
+};
+
+export type GetCatalogMediaContentApiV1CatalogMediaAssetIdContentGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCatalogMediaContentApiV1CatalogMediaAssetIdContentGetError = GetCatalogMediaContentApiV1CatalogMediaAssetIdContentGetErrors[keyof GetCatalogMediaContentApiV1CatalogMediaAssetIdContentGetErrors];
+
+export type GetCatalogMediaContentApiV1CatalogMediaAssetIdContentGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type ListProductsApiV1CatalogProductsGetData = {
     body?: never;
     headers?: {
@@ -5172,6 +5371,36 @@ export type CreateProductApiV1CatalogProductsPostResponses = {
 };
 
 export type CreateProductApiV1CatalogProductsPostResponse = CreateProductApiV1CatalogProductsPostResponses[keyof CreateProductApiV1CatalogProductsPostResponses];
+
+export type PublishMasterProductApiV1CatalogProductsProductIdPublishPostData = {
+    body: SourcingPublishRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/products/{product_id}/publish';
+};
+
+export type PublishMasterProductApiV1CatalogProductsProductIdPublishPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PublishMasterProductApiV1CatalogProductsProductIdPublishPostError = PublishMasterProductApiV1CatalogProductsProductIdPublishPostErrors[keyof PublishMasterProductApiV1CatalogProductsProductIdPublishPostErrors];
+
+export type PublishMasterProductApiV1CatalogProductsProductIdPublishPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<SourcingPublishResult>;
+};
+
+export type PublishMasterProductApiV1CatalogProductsProductIdPublishPostResponse = PublishMasterProductApiV1CatalogProductsProductIdPublishPostResponses[keyof PublishMasterProductApiV1CatalogProductsProductIdPublishPostResponses];
 
 export type ListSkuMappingsApiV1CatalogSkuMappingsGetData = {
     body?: never;

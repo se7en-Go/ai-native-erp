@@ -6,13 +6,15 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import html
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 
 from erp_core.channels.ecommerce.base import (
@@ -98,6 +100,14 @@ def verify_shopline_webhook(raw_body: bytes, headers: Mapping[str, str], secret:
     return hmac.compare_digest(expected, signature.strip())
 
 
+class ShoplineListingReceipt(BaseModel):
+    external_product_id: str
+    external_sku: str
+    status: str = "active"
+    variant_receipts: list[dict[str, Any]] = Field(default_factory=list)
+    raw_response: dict[str, Any] = Field(default_factory=dict)
+
+
 class ShoplineAdapter(CommercePlatformAdapter):
     """SHOPLINE OpenAPI adapter (B2B purchase orders + leaky-bucket pacing)."""
 
@@ -107,6 +117,7 @@ class ShoplineAdapter(CommercePlatformAdapter):
         access_token: str,
         leaky_bucket: LeakyBucketLimiter | None = None,
         http_client: httpx.AsyncClient | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
         webhook_secret: str = "",
         rate_per_sec: float = 4.0,
         capacity: int = 40,
@@ -115,6 +126,7 @@ class ShoplineAdapter(CommercePlatformAdapter):
         self.access_token = access_token
         self.bucket = leaky_bucket or LeakyBucketLimiter()
         self._http_client = http_client
+        self._transport = transport
         self.webhook_secret = webhook_secret
         self.rate_per_sec = rate_per_sec
         self.capacity = capacity
@@ -136,7 +148,7 @@ class ShoplineAdapter(CommercePlatformAdapter):
                 method, url, params=params, json=json_body, headers=headers
             )
         else:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0, transport=self._transport) as client:
                 response = await client.request(
                     method, url, params=params, json=json_body, headers=headers
                 )
@@ -281,6 +293,131 @@ class ShoplineAdapter(CommercePlatformAdapter):
                 "tracking_url": tracking_url,
                 "notify_customer": notify_customer,
             },
+        )
+
+    async def publish_listing(
+        self,
+        *,
+        sku: str,
+        title: str,
+        description: str,
+        bullet_points: Sequence[str],
+        price_usd: Decimal,
+        quantity: int = 0,
+        images: Sequence[str] | None = None,
+        category: str = "",
+        hs_code: str | None = None,
+        moq_tiers: Sequence[Mapping[str, Any]] | None = None,
+        options: Sequence[Mapping[str, Any]] | None = None,
+        variants: Sequence[Mapping[str, Any]] | None = None,
+        image_blobs: Sequence[Mapping[str, Any]] | None = None,
+    ) -> ShoplineListingReceipt:
+        """Create a single- or multi-variant listing through SHOPLINE OpenAPI."""
+        del hs_code, moq_tiers, image_blobs
+        clean_sku = sku.strip()
+        clean_title = title.strip()
+        if not clean_sku or not clean_title:
+            raise AppError(
+                slug="shopline-listing-rejected",
+                status_code=422,
+                code="ERR_SHOPLINE_LISTING_REJECTED",
+                title="SHOPLINE Listing Rejected",
+                detail="SHOPLINE listing requires a non-empty SKU and title.",
+            )
+        norm_price = Decimal(str(price_usd)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        desc_parts = [
+            f"<p>{html.escape(line.strip())}</p>"
+            for line in description.splitlines()
+            if line.strip()
+        ]
+        if bullet_points:
+            items = "".join(
+                f"<li>{html.escape(b.strip())}</li>" for b in bullet_points if b.strip()
+            )
+            if items:
+                desc_parts.append(f"<ul>{items}</ul>")
+
+        variant_list = list(variants or ())
+        sl_variants: list[dict[str, Any]] = []
+        if variant_list:
+            for var in variant_list:
+                opt_vals = list((var.get("option_values") or {}).values())
+                v_entry: dict[str, Any] = {
+                    "sku": str(var.get("external_sku") or clean_sku),
+                    "price": str(
+                        Decimal(str(var.get("price_usd") or norm_price)).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "inventory_quantity": max(
+                        0,
+                        int(var["quantity"]) if var.get("quantity") is not None else quantity,
+                    ),
+                }
+                for idx, val in enumerate(opt_vals[:3], start=1):
+                    v_entry[f"option{idx}"] = str(val)
+                sl_variants.append(v_entry)
+        else:
+            sl_variants.append(
+                {
+                    "sku": clean_sku,
+                    "price": str(norm_price),
+                    "inventory_quantity": max(0, int(quantity)),
+                    "option1": "Default Title",
+                }
+            )
+        sl_options = [
+            {"name": str(opt["name"]), "values": [str(v) for v in opt.get("values") or ()]}
+            for opt in (options or ())
+            if opt.get("name")
+        ]
+        product_body: dict[str, Any] = {
+            "title": clean_title,
+            "body_html": "".join(desc_parts) or f"<p>{html.escape(clean_title)}</p>",
+            "product_type": category or "General",
+            "status": "active",
+            "variants": sl_variants,
+        }
+        if sl_options:
+            product_body["options"] = sl_options
+        img_list = [
+            {"src": url.strip()}
+            for url in (images or ())
+            if url and url.strip().startswith("https://")
+        ]
+        if img_list:
+            product_body["images"] = img_list[:15]
+
+        res = await self._request(
+            "POST", "/products/products.json", json_body={"product": product_body}
+        )
+        prod = res.get("product") if isinstance(res.get("product"), Mapping) else res
+        product_id = str((prod or {}).get("id") or "").strip()
+        if not product_id:
+            raise AppError(
+                slug="shopline-listing-rejected",
+                status_code=502,
+                code="ERR_SHOPLINE_LISTING_REJECTED",
+                title="SHOPLINE Listing Rejected",
+                detail=f"SHOPLINE returned no product id for '{clean_sku}'.",
+            )
+        variant_receipts = [
+            {
+                "external_sku": str(v.get("sku") or clean_sku),
+                "external_variant_id": str(v.get("id") or "") or None,
+                "external_inventory_item_id": (
+                    str(v.get("inventory_item_id") or "") or None
+                ),
+            }
+            for v in (prod or {}).get("variants") or []
+            if isinstance(v, Mapping)
+        ]
+        return ShoplineListingReceipt(
+            external_product_id=product_id,
+            external_sku=clean_sku,
+            status="active",
+            variant_receipts=variant_receipts,
+            raw_response=dict(res),
         )
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:

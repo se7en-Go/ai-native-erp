@@ -1082,8 +1082,8 @@ async def test_live_push_to_an_unsupported_channel_type_is_a_422(
             text(
                 "INSERT INTO channel_accounts (id, tenant_id, channel_type, "
                 "external_account_id, display_name, status, config) VALUES "
-                "(:id, :tid, 'woocommerce', 'qm-led.example.com', 'WooCommerce Store', "
-                "'active', '{}'::jsonb)"
+                "(:id, :tid, 'made_in_china_email', 'mic-qmled@example.com', "
+                "'Made-in-China Inquiry Email', 'active', '{}'::jsonb)"
             ),
             {"id": account_id, "tid": tenant},
         )
@@ -1559,12 +1559,16 @@ def test_reconciliation_registry_covers_the_marketplaces() -> None:
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.AMAZON_SP] == ("amazon_sp_api",)
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.EBAY] == ("ebay_api",)
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.ALIBABA_EMAIL] == ("alibaba_intl_app",)
-    # The listing dispatcher and the reconciler must agree on the primary credential types.
+    # The listing dispatcher covers all 8 live marketplaces whose keys match the reconciler.
     assert set(DISPATCHER_CREDENTIAL_TYPES.values()) == {
         "amazon_sp_api",
         "ebay_api",
         "alibaba_intl_app",
         "shopify_custom_app",
+        "woocommerce_keys",
+        "shopline_app",
+        "shoplazza_app",
+        "tiktok_shop_app",
     }
 
 

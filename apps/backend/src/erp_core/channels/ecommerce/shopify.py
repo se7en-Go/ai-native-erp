@@ -111,12 +111,34 @@ mutation PublishProductSet($synchronous: Boolean!, $productSet: ProductSetInput!
       title
       handle
       status
-      variants(first: 5) {
+      variants(first: 50) {
         nodes {
           id
           sku
           price
+          inventoryItem {
+            id
+          }
         }
+      }
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+"""
+
+STAGED_UPLOADS_CREATE_MUTATION = """
+mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
+  stagedUploadsCreate(input: $input) {
+    stagedTargets {
+      url
+      resourceUrl
+      parameters {
+        name
+        value
       }
     }
     userErrors {
@@ -135,6 +157,7 @@ class ShopifyListingReceipt(BaseModel):
     external_sku: str
     status: str = "ACTIVE"
     handle: str = ""
+    variant_receipts: list[dict[str, Any]] = Field(default_factory=list)
     raw_response: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -689,6 +712,158 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         )
         return verify_shopify_webhook_hmac(raw_body, signature, secret)
 
+    async def _upload_staged_images(
+        self,
+        blobs: Sequence[Mapping[str, Any]],
+        fallback_alt: str,
+    ) -> list[dict[str, str]]:
+        if not blobs:
+            return []
+        staged_input = [
+            {
+                "filename": str(blob.get("filename") or f"image-{idx + 1}.jpg"),
+                "mimeType": str(blob.get("mime_type") or "image/jpeg"),
+                "httpMethod": "POST",
+                "resource": "PRODUCT_IMAGE",
+                "fileSize": str(len(bytes(blob["data"]))),
+            }
+            for idx, blob in enumerate(blobs)
+            if blob.get("data")
+        ]
+        if not staged_input:
+            return []
+        data = await self._graphql(
+            STAGED_UPLOADS_CREATE_MUTATION, {"input": staged_input}
+        )
+        staged = data.get("stagedUploadsCreate") or {}
+        user_errors = staged.get("userErrors") or []
+        targets = staged.get("stagedTargets") or []
+        if user_errors or len(targets) != len(staged_input):
+            summary = "; ".join(
+                str(err.get("message") or err) for err in user_errors
+            ) or "Shopify stagedUploadsCreate returned incomplete targets."
+            raise AppError(
+                slug="shopify-media-upload-failed",
+                status_code=502,
+                code="ERR_SHOPIFY_MEDIA_UPLOAD",
+                title="Shopify Media Upload Failed",
+                detail=summary,
+            )
+
+        uploaded: list[dict[str, str]] = []
+        client = self._http_client
+        owned = client is None
+        if client is None:
+            client = httpx.AsyncClient(timeout=30.0, transport=self._transport)
+        try:
+            for blob, target in zip(blobs, targets, strict=True):
+                upload_url = str(target.get("url") or "")
+                resource_url = str(target.get("resourceUrl") or "")
+                if not upload_url or not resource_url:
+                    continue
+                params = {
+                    str(p["name"]): str(p["value"])
+                    for p in (target.get("parameters") or [])
+                    if p.get("name")
+                }
+                fname = str(blob.get("filename") or "image.jpg")
+                mime = str(blob.get("mime_type") or "image/jpeg")
+                resp = await client.post(
+                    upload_url,
+                    data=params,
+                    files={"file": (fname, bytes(blob["data"]), mime)},
+                )
+                resp.raise_for_status()
+                uploaded.append(
+                    {
+                        "originalSource": resource_url,
+                        "contentType": "IMAGE",
+                        "alt": str(blob.get("alt_text") or fallback_alt)[:255],
+                    }
+                )
+        finally:
+            if owned:
+                await client.aclose()
+        return uploaded
+
+    @staticmethod
+    def _build_product_options_and_variants(
+        *,
+        clean_sku: str,
+        normalized_price: Decimal,
+        options: Sequence[Mapping[str, Any]] | None,
+        variants: Sequence[Mapping[str, Any]] | None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        variant_rows = list(variants or ())
+        if not variant_rows:
+            return (
+                [{"name": "Title", "values": [{"name": "Default Title"}]}],
+                [
+                    {
+                        "optionValues": [{"optionName": "Title", "name": "Default Title"}],
+                        "sku": clean_sku,
+                        "price": str(normalized_price),
+                    }
+                ],
+            )
+
+        option_values_by_name: dict[str, list[str]] = {}
+        for opt in options or ():
+            name = str(opt.get("name") or "").strip()
+            if not name:
+                continue
+            vals = option_values_by_name.setdefault(name, [])
+            for raw_val in opt.get("values") or ():
+                val_str = str(raw_val).strip()
+                if val_str and val_str not in vals:
+                    vals.append(val_str)
+
+        built_variants: list[dict[str, Any]] = []
+        for idx, var in enumerate(variant_rows, start=1):
+            v_sku = str(var.get("external_sku") or clean_sku).strip()
+            v_price = Decimal(str(var.get("price_usd") or normalized_price)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            if v_price <= Decimal("0") or not v_sku:
+                raise AppError(
+                    slug="shopify-listing-rejected",
+                    status_code=422,
+                    code="ERR_SHOPIFY_LISTING_REJECTED",
+                    title="Shopify Listing Rejected",
+                    detail="Every Shopify variant requires a non-empty SKU and positive price.",
+                )
+            opt_map = var.get("option_values") or {}
+            opt_pairs: list[dict[str, str]] = []
+            if isinstance(opt_map, Mapping) and opt_map:
+                for k, val in opt_map.items():
+                    k_str = str(k).strip() or "Option"
+                    v_str = str(val).strip() or f"Option {idx}"
+                    vals = option_values_by_name.setdefault(k_str, [])
+                    if v_str not in vals:
+                        vals.append(v_str)
+                    opt_pairs.append({"optionName": k_str, "name": v_str})
+            else:
+                vals = option_values_by_name.setdefault("Variant", [])
+                v_str = str(var.get("local_sku") or v_sku or f"Option {idx}")
+                if v_str not in vals:
+                    vals.append(v_str)
+                opt_pairs.append({"optionName": "Variant", "name": v_str})
+            built_variants.append(
+                {
+                    "optionValues": opt_pairs,
+                    "sku": v_sku,
+                    "price": str(v_price),
+                }
+            )
+
+        if not option_values_by_name:
+            option_values_by_name["Title"] = ["Default Title"]
+        product_options = [
+            {"name": name, "values": [{"name": val} for val in vals]}
+            for name, vals in option_values_by_name.items()
+        ]
+        return product_options, built_variants
+
     async def publish_listing(
         self,
         *,
@@ -702,8 +877,11 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         category: str = "",
         hs_code: str | None = None,
         moq_tiers: Sequence[Mapping[str, Any]] | None = None,
+        options: Sequence[Mapping[str, Any]] | None = None,
+        variants: Sequence[Mapping[str, Any]] | None = None,
+        image_blobs: Sequence[Mapping[str, Any]] | None = None,
     ) -> ShopifyListingReceipt:
-        """Create or update an ``ACTIVE`` product via Shopify Admin GraphQL ``productSet``."""
+        """Create or update an ``ACTIVE`` multi-variant product via Shopify ``productSet``."""
         del hs_code
         clean_sku = sku.strip()
         clean_title = title.strip()
@@ -729,6 +907,12 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
                 ),
             )
 
+        product_options, variant_inputs = self._build_product_options_and_variants(
+            clean_sku=clean_sku,
+            normalized_price=normalized_price,
+            options=options,
+            variants=variants,
+        )
         product_input: dict[str, Any] = {
             "title": clean_title,
             "descriptionHtml": _format_shopify_description_html(
@@ -738,30 +922,22 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
                 moq_tiers=moq_tiers,
             ),
             "status": "ACTIVE",
-            "productOptions": [
-                {"name": "Title", "values": [{"name": "Default Title"}]},
-            ],
-            "variants": [
-                {
-                    "optionValues": [{"optionName": "Title", "name": "Default Title"}],
-                    "sku": clean_sku,
-                    "price": str(normalized_price),
-                }
-            ],
+            "productOptions": product_options,
+            "variants": variant_inputs,
         }
         clean_category = category.strip()
         if clean_category:
             product_input["productType"] = clean_category
 
-        valid_images = [
-            url.strip()
-            for url in (images or ())
-            if url and url.strip().startswith(("https://", "http://"))
-        ]
-        if valid_images:
-            product_input["files"] = [
-                {"originalSource": url, "contentType": "IMAGE"} for url in valid_images
-            ]
+        files: list[dict[str, str]] = []
+        if image_blobs:
+            files.extend(await self._upload_staged_images(image_blobs, clean_title))
+        for url in images or ():
+            clean_url = (url or "").strip()
+            if clean_url.startswith(("https://", "http://")):
+                files.append({"originalSource": clean_url, "contentType": "IMAGE"})
+        if files:
+            product_input["files"] = files[:20]
 
         data = await self._graphql(
             PRODUCT_SET_MUTATION,
@@ -784,6 +960,17 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             )
 
         variant_nodes = ((product.get("variants") or {}).get("nodes")) or []
+        variant_receipts = [
+            {
+                "external_sku": str(node.get("sku") or clean_sku),
+                "external_variant_id": str(node.get("id") or "") or None,
+                "external_inventory_item_id": (
+                    str((node.get("inventoryItem") or {}).get("id") or "") or None
+                ),
+            }
+            for node in variant_nodes
+            if isinstance(node, Mapping)
+        ]
         confirmed_sku = (
             str(variant_nodes[0].get("sku") or "").strip() if variant_nodes else ""
         ) or clean_sku
@@ -794,6 +981,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             external_sku=confirmed_sku,
             status=str(product.get("status") or "ACTIVE"),
             handle=str(product.get("handle") or ""),
+            variant_receipts=variant_receipts,
             raw_response=raw_payload,
         )
 

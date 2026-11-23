@@ -6,13 +6,14 @@ import hashlib
 import hmac
 import json
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from urllib.parse import urlencode
 
 import httpx
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +70,14 @@ def verify_tiktok_webhook_signature(
     return hmac.compare_digest(expected, received.strip())
 
 
+class TikTokListingReceipt(BaseModel):
+    external_product_id: str
+    external_sku: str
+    status: str = "ACTIVATE"
+    variant_receipts: list[dict[str, Any]] = Field(default_factory=list)
+    raw_response: dict[str, Any] = Field(default_factory=dict)
+
+
 class TikTokShopCoreAdapter(CommercePlatformAdapter):
     """TikTok Shop Core API adapter for seller BYOK custom apps."""
 
@@ -80,8 +89,11 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
         shop_cipher: str,
         app_mode: str = "seller_byok",
         http_client: httpx.AsyncClient | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
         base_url: str = TIKTOK_API_BASE,
         webhook_secret: str = "",
+        warehouse_id: str | None = None,
+        category_id: str = "601452",
     ) -> None:
         self.app_key = app_key
         self.app_secret = app_secret
@@ -89,8 +101,11 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
         self.shop_cipher = shop_cipher
         self.app_mode = app_mode
         self._http_client = http_client
+        self._transport = transport
         self.base_url = base_url.rstrip("/")
         self.webhook_secret = webhook_secret
+        self.warehouse_id = warehouse_id
+        self.default_category_id = category_id
 
     async def _signed_request(
         self,
@@ -117,7 +132,7 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
                 method, url, content=body_str or None, headers=headers
             )
         else:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0, transport=self._transport) as client:
                 response = await client.request(
                     method, url, content=body_str or None, headers=headers
                 )
@@ -287,6 +302,153 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
             "POST",
             f"/fulfillment/202309/packages/{fulfillment_order_id}/ship",
             body=payload,
+        )
+
+    async def _upload_image_blob(self, blob: Mapping[str, Any]) -> str | None:
+        raw = blob.get("data")
+        if not raw:
+            return None
+        path = "/product/202309/images/upload"
+        params = {
+            "app_key": self.app_key,
+            "shop_cipher": self.shop_cipher,
+            "timestamp": str(int(time.time())),
+        }
+        params["sign"] = sign_tiktok_request(self.app_secret, path, params, "")
+        url = f"{self.base_url}{path}?{urlencode(params)}"
+        headers = {"x-tts-access-token": self.access_token}
+        fname = str(blob.get("filename") or "product.jpg")
+        mime = str(blob.get("mime_type") or "image/jpeg")
+        files = {"data": (fname, bytes(raw), mime)}
+        data_fields = {"use_case": "MAIN_IMAGE"}
+        if self._http_client is not None:
+            resp = await self._http_client.post(url, data=data_fields, files=files, headers=headers)
+        else:
+            async with httpx.AsyncClient(timeout=20.0, transport=self._transport) as client:
+                resp = await client.post(url, data=data_fields, files=files, headers=headers)
+        resp.raise_for_status()
+        payload = resp.json()
+        if int(payload.get("code", 0)) != 0:
+            raise AppError(
+                slug="tiktok-media-upload-failed",
+                status_code=502,
+                code="ERR_TIKTOK_SHOP_API",
+                title="TikTok Image Upload Failed",
+                detail=json.dumps(payload)[:400],
+            )
+        uri = ((payload.get("data") or {}).get("uri")) or ""
+        return str(uri) if uri else None
+
+    async def publish_listing(
+        self,
+        *,
+        sku: str,
+        title: str,
+        description: str,
+        bullet_points: Sequence[str],
+        price_usd: Decimal,
+        quantity: int = 0,
+        images: Sequence[str] | None = None,
+        category: str = "",
+        hs_code: str | None = None,
+        moq_tiers: Sequence[Mapping[str, Any]] | None = None,
+        options: Sequence[Mapping[str, Any]] | None = None,
+        variants: Sequence[Mapping[str, Any]] | None = None,
+        image_blobs: Sequence[Mapping[str, Any]] | None = None,
+    ) -> TikTokListingReceipt:
+        """Create one single- or multi-SKU listing via TikTok Shop ``/product/202309/products``."""
+        del category, hs_code, moq_tiers, options
+        clean_sku = sku.strip()
+        clean_title = title.strip()
+        if not clean_sku or not clean_title:
+            raise AppError(
+                slug="tiktok-listing-rejected",
+                status_code=422,
+                code="ERR_TIKTOK_LISTING_REJECTED",
+                title="TikTok Listing Rejected",
+                detail="TikTok Shop listing requires a non-empty SKU and title.",
+            )
+        main_images: list[dict[str, str]] = []
+        for blob in image_blobs or ():
+            uri = await self._upload_image_blob(blob)
+            if uri:
+                main_images.append({"uri": uri})
+        for url in images or ():
+            clean_url = (url or "").strip()
+            if clean_url.startswith("https://"):
+                main_images.append({"uri": clean_url})
+
+        desc_lines = [description.strip(), *(f"• {b.strip()}" for b in bullet_points if b.strip())]
+        full_description = "\n".join(line for line in desc_lines if line) or clean_title
+        wh_id = self.warehouse_id or "default"
+
+        variant_list = list(variants or ())
+        skus_payload: list[dict[str, Any]] = []
+        if variant_list:
+            for var in variant_list:
+                v_sku = str(var.get("external_sku") or clean_sku).strip()
+                v_price = Decimal(str(var.get("price_usd") or price_usd)).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                raw_qty = var.get("quantity")
+                v_qty = max(0, int(raw_qty if raw_qty is not None else quantity))
+                attrs = [
+                    {"name": str(k), "value_name": str(v)}
+                    for k, v in (var.get("option_values") or {}).items()
+                ]
+                skus_payload.append(
+                    {
+                        "seller_sku": v_sku,
+                        "price": {"amount": str(v_price), "currency": "USD"},
+                        "inventory": [{"warehouse_id": wh_id, "quantity": v_qty}],
+                        **({"sales_attributes": attrs} if attrs else {}),
+                    }
+                )
+        else:
+            norm_price = Decimal(str(price_usd)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            skus_payload.append(
+                {
+                    "seller_sku": clean_sku,
+                    "price": {"amount": str(norm_price), "currency": "USD"},
+                    "inventory": [{"warehouse_id": wh_id, "quantity": max(0, int(quantity))}],
+                }
+            )
+
+        body: dict[str, Any] = {
+            "title": clean_title[:255],
+            "description": full_description[:10000],
+            "category_id": self.default_category_id,
+            "skus": skus_payload,
+            "package_weight": {"value": "0.5", "unit": "KILOGRAM"},
+        }
+        if main_images:
+            body["main_images"] = main_images[:9]
+
+        data = await self._signed_request("POST", "/product/202309/products", body=body)
+        product_id = str(data.get("product_id") or "").strip()
+        if not product_id:
+            raise AppError(
+                slug="tiktok-listing-rejected",
+                status_code=502,
+                code="ERR_TIKTOK_LISTING_REJECTED",
+                title="TikTok Listing Rejected",
+                detail=f"TikTok Shop returned no product_id for '{clean_sku}'.",
+            )
+        variant_receipts = [
+            {
+                "external_sku": str(item.get("seller_sku") or clean_sku),
+                "external_variant_id": str(item.get("id") or "") or None,
+                "external_inventory_item_id": wh_id,
+            }
+            for item in (data.get("skus") or [])
+            if isinstance(item, Mapping)
+        ]
+        return TikTokListingReceipt(
+            external_product_id=product_id,
+            external_sku=clean_sku,
+            status="ACTIVATE",
+            variant_receipts=variant_receipts,
+            raw_response=data,
         )
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:

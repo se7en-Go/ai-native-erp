@@ -802,8 +802,12 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
         category: str | None = None,
         hs_code: str | None = None,
         moq_tiers: Sequence[Mapping[str, Any]] = (),
+        options: Sequence[Mapping[str, Any]] | None = None,
+        variants: Sequence[Mapping[str, Any]] | None = None,
+        image_blobs: Sequence[Mapping[str, Any]] | None = None,
     ) -> AmazonListingReceipt:
         """Create/update one listing through Listings Items v2021-08-01 (``PUT``)."""
+        del options, variants, image_blobs
         payload: dict[str, Any] = {
             "productType": product_type,
             "requirements": "LISTING",

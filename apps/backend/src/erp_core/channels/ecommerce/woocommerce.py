@@ -6,16 +6,18 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import html
 import ipaddress
 import os
 import socket
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
 import httpx
+from pydantic import BaseModel, Field
 
 from erp_core.channels.ecommerce.base import (
     CommercePlatformAdapter,
@@ -202,6 +204,14 @@ def verify_woocommerce_webhook(raw_body: bytes, headers: Mapping[str, str], secr
     return hmac.compare_digest(expected, signature.strip())
 
 
+class WooListingReceipt(BaseModel):
+    external_product_id: str
+    external_sku: str
+    status: str = "publish"
+    variant_receipts: list[dict[str, Any]] = Field(default_factory=list)
+    raw_response: dict[str, Any] = Field(default_factory=dict)
+
+
 class WooCommerceAdapter(CommercePlatformAdapter):
     """WooCommerce REST v3 adapter mapping merchant meta keys to B2B fields."""
 
@@ -212,18 +222,20 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         consumer_secret: str,
         meta_field_map: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
         webhook_secret: str = "",
     ) -> None:
         self._allow_local = allow_local_store_hosts()
         # A real deployment gets a DNS re-check before every outbound request; a mock
-        # client injected by a unit test already owns the transport, so skip it.
-        self._resolve_dns = http_client is None
+        # client/transport injected by a test already owns transport, so skip it.
+        self._resolve_dns = http_client is None and transport is None
         self.store_url = normalize_store_url(store_url, allow_local=self._allow_local)
         self.consumer_key = consumer_key
         self.consumer_secret = consumer_secret
         self.meta_field_map = dict(meta_field_map or {})
         self.webhook_secret = webhook_secret
         self._http_client = http_client
+        self._transport = transport
 
     async def _request(
         self,
@@ -241,7 +253,7 @@ class WooCommerceAdapter(CommercePlatformAdapter):
                 method, url, params=params, json=json_body, auth=auth
             )
         else:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0, transport=self._transport) as client:
                 response = await client.request(
                     method, url, params=params, json=json_body, auth=auth
                 )
@@ -413,6 +425,177 @@ class WooCommerceAdapter(CommercePlatformAdapter):
             },
         )
         return result if isinstance(result, dict) else {}
+
+    async def publish_listing(
+        self,
+        *,
+        sku: str,
+        title: str,
+        description: str,
+        bullet_points: Sequence[str],
+        price_usd: Decimal,
+        quantity: int = 0,
+        images: Sequence[str] | None = None,
+        category: str = "",
+        hs_code: str | None = None,
+        moq_tiers: Sequence[Mapping[str, Any]] | None = None,
+        options: Sequence[Mapping[str, Any]] | None = None,
+        variants: Sequence[Mapping[str, Any]] | None = None,
+        image_blobs: Sequence[Mapping[str, Any]] | None = None,
+    ) -> WooListingReceipt:
+        """Create one ``simple`` or ``variable`` product (plus batch variations) via REST v3."""
+        del category, hs_code, moq_tiers, image_blobs
+        clean_sku = sku.strip()
+        clean_title = title.strip()
+        if not clean_sku or not clean_title:
+            raise AppError(
+                slug="woocommerce-listing-rejected",
+                status_code=422,
+                code="ERR_WOOCOMMERCE_LISTING_REJECTED",
+                title="WooCommerce Listing Rejected",
+                detail="WooCommerce listing requires a non-empty SKU and title.",
+            )
+        norm_price = Decimal(str(price_usd)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        desc_parts = [
+            f"<p>{html.escape(line.strip())}</p>"
+            for line in description.splitlines()
+            if line.strip()
+        ]
+        if bullet_points:
+            items = "".join(
+                f"<li>{html.escape(b.strip())}</li>" for b in bullet_points if b.strip()
+            )
+            if items:
+                desc_parts.append(f"<ul>{items}</ul>")
+        html_desc = "".join(desc_parts) or f"<p>{html.escape(clean_title)}</p>"
+        image_list = [
+            {"src": url.strip()}
+            for url in (images or ())
+            if url and url.strip().startswith("https://")
+        ]
+
+        variant_list = list(variants or ())
+        if not variant_list:
+            payload: dict[str, Any] = {
+                "name": clean_title,
+                "type": "simple",
+                "sku": clean_sku,
+                "regular_price": str(norm_price),
+                "description": html_desc,
+                "manage_stock": True,
+                "stock_quantity": max(0, int(quantity)),
+                "status": "publish",
+            }
+            if image_list:
+                payload["images"] = image_list[:10]
+            created = await self._request("POST", "/products", json_body=payload)
+            product_id = str((created or {}).get("id") or "").strip()
+            if not product_id:
+                raise AppError(
+                    slug="woocommerce-listing-rejected",
+                    status_code=502,
+                    code="ERR_WOOCOMMERCE_LISTING_REJECTED",
+                    title="WooCommerce Listing Rejected",
+                    detail=f"WooCommerce returned no product id for '{clean_sku}'.",
+                )
+            return WooListingReceipt(
+                external_product_id=product_id,
+                external_sku=clean_sku,
+                status=str(created.get("status") or "publish"),
+                variant_receipts=[
+                    {
+                        "external_sku": clean_sku,
+                        "external_variant_id": product_id,
+                        "external_inventory_item_id": None,
+                    }
+                ],
+                raw_response=dict(created),
+            )
+
+        option_map: dict[str, list[str]] = {}
+        for opt in options or ():
+            name = str(opt.get("name") or "").strip()
+            if name:
+                option_map[name] = [
+                    str(v).strip() for v in opt.get("values") or () if str(v).strip()
+                ]
+        for var in variant_list:
+            for k, val in (var.get("option_values") or {}).items():
+                vals = option_map.setdefault(str(k), [])
+                if str(val) not in vals:
+                    vals.append(str(val))
+        wc_attributes = [
+            {
+                "name": name,
+                "visible": True,
+                "variation": True,
+                "options": vals,
+            }
+            for name, vals in option_map.items()
+            if vals
+        ]
+        parent_payload: dict[str, Any] = {
+            "name": clean_title,
+            "type": "variable",
+            "sku": f"{clean_sku}-SPU",
+            "description": html_desc,
+            "status": "publish",
+            "attributes": wc_attributes,
+        }
+        if image_list:
+            parent_payload["images"] = image_list[:10]
+        created = await self._request("POST", "/products", json_body=parent_payload)
+        product_id = str((created or {}).get("id") or "").strip()
+        if not product_id:
+            raise AppError(
+                slug="woocommerce-listing-rejected",
+                status_code=502,
+                code="ERR_WOOCOMMERCE_LISTING_REJECTED",
+                title="WooCommerce Listing Rejected",
+                detail=f"WooCommerce returned no variable product id for '{clean_sku}'.",
+            )
+        create_variations = [
+            {
+                "sku": str(var.get("external_sku") or clean_sku),
+                "regular_price": str(
+                    Decimal(str(var.get("price_usd") or norm_price)).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                ),
+                "manage_stock": True,
+                "stock_quantity": max(
+                    0,
+                    int(var["quantity"]) if var.get("quantity") is not None else quantity,
+                ),
+                "attributes": [
+                    {"name": str(k), "option": str(val)}
+                    for k, val in (var.get("option_values") or {}).items()
+                ],
+            }
+            for var in variant_list
+        ]
+        batch_res = await self._request(
+            "POST",
+            f"/products/{product_id}/variations/batch",
+            json_body={"create": create_variations},
+        )
+        created_vars = (batch_res or {}).get("create") or []
+        variant_receipts = [
+            {
+                "external_sku": str(v.get("sku") or clean_sku),
+                "external_variant_id": str(v.get("id") or "") or None,
+                "external_inventory_item_id": None,
+            }
+            for v in created_vars
+            if isinstance(v, Mapping)
+        ]
+        return WooListingReceipt(
+            external_product_id=product_id,
+            external_sku=str(variant_list[0].get("external_sku") or clean_sku),
+            status=str(created.get("status") or "publish"),
+            variant_receipts=variant_receipts,
+            raw_response={"product": created, "variations": batch_res},
+        )
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
         return verify_woocommerce_webhook(raw_body, headers, secret or self.webhook_secret)
