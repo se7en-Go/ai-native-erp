@@ -3,8 +3,10 @@
 import React, { useMemo, useState } from "react";
 import {
   BadgeDollarSign,
+  Boxes,
   Building2,
   CheckCircle2,
+  Compass,
   Globe,
   Instagram,
   Mail,
@@ -15,8 +17,11 @@ import {
   Plus,
   Search,
   Send,
+  Shirt,
   ShoppingBag,
+  ShoppingCart,
   Store,
+  Truck,
 } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
@@ -24,6 +29,7 @@ import type {
   ChannelAccountApiItem,
   MarketplaceChannelKey,
 } from "@/lib/api-client/live-client";
+import type { GlobalMarketplaceChannelKey } from "@/lib/api-client/pack-f-sourcing";
 import type { ChannelType } from "@/lib/contracts";
 
 export type MarketplaceCategory = "all" | "messaging" | "email_web" | "commerce";
@@ -34,10 +40,37 @@ export type MarketplaceCategory = "all" | "messaging" | "email_web" | "commerce"
  */
 export type SourcingMarketplaceChannelKey = "alibaba_intl" | "amazon" | "ebay";
 
-/** 网格 / 抽屉 / 深链统一使用的渠道键集合（旧 11 个 + 新 3 个）。 */
+/**
+ * 本轮新增的 8 个全球电商渠道键（Shopee / Lazada / Temu / SHEIN /
+ * AliExpress / Ozon / Walmart / Mercado Libre）。
+ * 与后端 `ChannelType` 的 8 个同名枚举值一字不差，抽屉据此选接入端点。
+ */
+export const GLOBAL_MARKETPLACE_KEYS: GlobalMarketplaceChannelKey[] = [
+  "shopee",
+  "lazada",
+  "temu",
+  "shein",
+  "aliexpress",
+  "ozon",
+  "walmart",
+  "mercado_libre",
+];
+
+/** 是否属于本轮新增的 8 个全球电商渠道。 */
+export function isGlobalMarketplaceKey(
+  value: string | null | undefined,
+): value is GlobalMarketplaceChannelKey {
+  return (
+    typeof value === "string" &&
+    GLOBAL_MARKETPLACE_KEYS.includes(value as GlobalMarketplaceChannelKey)
+  );
+}
+
+/** 网格 / 抽屉 / 深链统一使用的渠道键集合（旧 11 个 + Pack F 3 个 + 全球电商 8 个）。 */
 export type ExtendedMarketplaceChannelKey =
   | MarketplaceChannelKey
-  | SourcingMarketplaceChannelKey;
+  | SourcingMarketplaceChannelKey
+  | GlobalMarketplaceChannelKey;
 
 export const SOURCING_MARKETPLACE_KEYS: SourcingMarketplaceChannelKey[] = [
   "alibaba_intl",
@@ -69,10 +102,13 @@ export function livechatEmbedSnippet(
  * 渠道「真实能力」三档（诚实标注，不夸大）：
  * - live_messaging：真的能收发实时消息（Webhook 验签 + 出站发送）。
  * - order_sync：订单 / 库存 / 商品数据双向同步，但不承载会话消息。
- * - credentials_only：只做凭证加密托管，不保证实时外发（当前 14 个渠道已全部脱离该档位）。
+ * - credentials_only：只做凭证加密托管，不保证实时外发（当前 22 个渠道已全部脱离该档位）。
  *
  * PR #44 之后，Alibaba.com IOP / Amazon SP-API / eBay Sell API 都具备真实的
  * 刊登推送与订单回拉适配器，因此这三个渠道从「仅凭证」升级为 `order_sync`。
+ * 本轮新增的 8 个全球电商渠道（Shopee / Lazada / Temu / SHEIN / AliExpress /
+ * Ozon / Walmart / Mercado Libre）同样带真实订单与库存同步适配器，因此
+ * 22 个渠道目前全部落在 `live_messaging` 或 `order_sync`，`credentials_only` 为空。
  */
 export type ChannelCapabilityTier =
   | "live_messaging"
@@ -87,10 +123,13 @@ export type ChannelMarketplaceItem = {
   descriptionEn: string;
   category: Exclude<MarketplaceCategory, "all">;
   icon: React.ComponentType<{ className?: string }>;
-  /** 40x40 品牌着色图标底，一眼区分 11 个渠道。 */
+  /** 40x40 品牌着色图标底，一眼区分 22 个渠道。 */
   tile: string;
   accent: string;
-  /** 计入「已接入 N 个」的账号类型（WhatsApp 含 Cloud + Coexistence）。 */
+  /**
+   * 计入「已接入 N 个」的账号类型（WhatsApp 含 Cloud + Coexistence）。
+   * 8 个全球电商渠道的枚举值已在 `@/lib/contracts` 的 `ChannelTypeSchema` 中就位。
+   */
   channelTypes: ChannelType[];
   /** owner/admin 专属（公司资产），业务员不可见。 */
   adminOnly: boolean;
@@ -111,8 +150,9 @@ export const CAPABILITY_BADGE_TONE: Record<ChannelCapabilityTier, string> = {
 };
 
 /**
- * 渠道应用市场清单：14 个渠道 = 即时通讯 4 + 邮件与官网 2 + 独立站与电商 8。
- * 顺序即产品优先级，与 Inbox 渠道筛选一一对应（末 3 个为 Pack F 外贸渠道）。
+ * 渠道应用市场清单：22 个渠道 = 即时通讯 4 + 邮件与官网 2 + 独立站与电商 16。
+ * 顺序即产品优先级，与 Inbox 渠道筛选一一对应：
+ * 第 12-14 个是 Pack F 外贸渠道，第 15-22 个是本轮 8 个全球电商渠道。
  */
 export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
   {
@@ -345,6 +385,150 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     capabilityBadgeZh: "Sell API 实时刊登与拉单",
     capabilityBadgeEn: "Sell API listing & order sync",
   },
+  {
+    key: "shopee",
+    titleZh: "Shopee",
+    titleEn: "Shopee",
+    descriptionZh:
+      "跨境直邮 / 全托管 / 轻出海（light_export）三种履约模式任选，Partner ID 与 Key 信封加密托管，订单与库存双向同步。",
+    descriptionEn:
+      "Pick cross-border, full-managed or light-export fulfillment; partner ID and key are envelope-encrypted and orders/stock sync both ways.",
+    category: "commerce",
+    icon: ShoppingCart,
+    tile: "bg-orange-50 text-orange-700 ring-orange-100",
+    accent: "bg-orange-500",
+    channelTypes: ["shopee"],
+    adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "Partner API 订单与库存同步",
+    capabilityBadgeEn: "Partner API order & stock sync",
+  },
+  {
+    key: "lazada",
+    titleZh: "Lazada",
+    titleEn: "Lazada",
+    descriptionZh:
+      "跨境自发货或全托管（full_managed）二选一，App Key/Secret 与 Access Token 信封加密，东南亚六站订单统一回拉。",
+    descriptionEn:
+      "Choose cross-border self-ship or full-managed; app key/secret and access token are envelope-encrypted and SEA orders pull back into one place.",
+    category: "commerce",
+    icon: Truck,
+    tile: "bg-pink-50 text-pink-700 ring-pink-100",
+    accent: "bg-pink-500",
+    channelTypes: ["lazada"],
+    adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "Open Platform 订单与库存同步",
+    capabilityBadgeEn: "Open Platform order & stock sync",
+  },
+  {
+    key: "temu",
+    titleZh: "Temu",
+    titleEn: "Temu",
+    descriptionZh:
+      "全托管 / 半托管（semi_managed）/ 本土（local）三种备货方式都能接，卖家自备应用密钥信封加密，订单自动进 ERP。",
+    descriptionEn:
+      "Full-managed, semi-managed or local stock all supported; seller BYOK credentials are envelope-encrypted and orders land in the ERP.",
+    category: "commerce",
+    icon: Boxes,
+    tile: "bg-red-50 text-red-600 ring-red-100",
+    accent: "bg-red-500",
+    channelTypes: ["temu"],
+    adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "Partner API 订单与库存同步",
+    capabilityBadgeEn: "Partner API order & stock sync",
+  },
+  {
+    key: "shein",
+    titleZh: "SHEIN",
+    titleEn: "SHEIN",
+    descriptionZh:
+      "自营（standard）与半托管（semi_managed）双模式，Open Key ID / Secret Key 信封加密托管，订单与库存实时对齐。",
+    descriptionEn:
+      "Self-operated or semi-managed both supported; Open Key ID / Secret Key are envelope-encrypted and orders/stock stay aligned.",
+    category: "commerce",
+    icon: Shirt,
+    tile: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-100",
+    accent: "bg-fuchsia-600",
+    channelTypes: ["shein"],
+    adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "Open API 订单与库存同步",
+    capabilityBadgeEn: "Open API order & stock sync",
+  },
+  {
+    key: "aliexpress",
+    titleZh: "AliExpress 速卖通",
+    titleEn: "AliExpress",
+    descriptionZh:
+      "自运营（standard）与托管（managed）两种履约方式，App Key/Secret 与 Access Token 信封加密，订单拉回自动建单。",
+    descriptionEn:
+      "Self-operated or managed fulfillment; app key/secret and access token are envelope-encrypted and orders are created automatically.",
+    category: "commerce",
+    icon: Compass,
+    tile: "bg-amber-50 text-amber-700 ring-amber-100",
+    accent: "bg-amber-500",
+    channelTypes: ["aliexpress"],
+    adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "Open API 订单与库存同步",
+    capabilityBadgeEn: "Open API order & stock sync",
+  },
+  {
+    key: "ozon",
+    titleZh: "Ozon",
+    titleEn: "Ozon",
+    descriptionZh:
+      "FBS（自发货）与 FBO（平台仓代发）双轨可选，Client ID / API Key 信封加密，俄语区订单与库存自动同步。",
+    descriptionEn:
+      "FBS self-ship or FBO platform-hosting; Client ID / API Key are envelope-encrypted and RU-region orders/stock sync automatically.",
+    category: "commerce",
+    icon: Globe,
+    tile: "bg-cyan-50 text-cyan-700 ring-cyan-100",
+    accent: "bg-cyan-600",
+    channelTypes: ["ozon"],
+    adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "Seller API 订单与库存同步",
+    capabilityBadgeEn: "Seller API order & stock sync",
+  },
+  {
+    key: "walmart",
+    titleZh: "Walmart 沃尔玛",
+    titleEn: "Walmart Marketplace",
+    descriptionZh:
+      "自发货（standard）或 WFS 平台仓（wfs）都支持，Client ID / Secret 信封加密，北美订单与库存双向同步。",
+    descriptionEn:
+      "Self-ship or WFS platform hosting; client ID / secret are envelope-encrypted and North-America orders/stock sync both ways.",
+    category: "commerce",
+    icon: Store,
+    tile: "bg-indigo-50 text-indigo-700 ring-indigo-100",
+    accent: "bg-indigo-500",
+    channelTypes: ["walmart"],
+    adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "Marketplace API 订单与库存同步",
+    capabilityBadgeEn: "Marketplace API order & stock sync",
+  },
+  {
+    key: "mercado_libre",
+    titleZh: "Mercado Libre 美客多",
+    titleEn: "Mercado Libre",
+    descriptionZh:
+      "自发货（standard）与全托管（full_managed）任选，Access / Refresh Token 信封加密，拉美站点订单自动回写 ERP。",
+    descriptionEn:
+      "Self-ship or full-managed fulfillment; access/refresh tokens are envelope-encrypted and LatAm orders are written back into the ERP.",
+    category: "commerce",
+    icon: BadgeDollarSign,
+    tile: "bg-yellow-50 text-yellow-700 ring-yellow-100",
+    accent: "bg-yellow-500",
+    channelTypes: ["mercado_libre"],
+    adminOnly: true,
+    capabilityTier: "order_sync",
+    capabilityBadgeZh: "REST API 订单与库存同步",
+    capabilityBadgeEn: "REST API order & stock sync",
+  },
 ];
 
 /** 业务员个人可绑定的 3 个渠道：Telegram、个人工作邮箱、WhatsApp 共存号。 */
@@ -358,7 +542,14 @@ const MARKETPLACE_BY_KEY = new Map<ExtendedMarketplaceChannelKey, ChannelMarketp
   CHANNEL_MARKETPLACE.map((item) => [item.key, item]),
 );
 
-/** URL `?connect=` 的白名单校验，避免非法参数打开空抽屉。 */
+/** URL `?connect=` 的白名单校验，避免非法参数打开空抽屉。
+ *
+ * 实现校验的是全量 22 个渠道键（含 Pack F 与 8 个全球电商渠道）；
+ * 返回的 `value is MarketplaceChannelKey` 断言仅为兼容既有调用方——
+ * `app/settings/channels/page.tsx` 的 `drawerKey` 状态仍标注旧键集，
+ * 而抽屉的 `channelKey` 入参已放宽到 `ExtendedMarketplaceChannelKey`，
+ * 所以 8 个新渠道的深链在运行时能正常打开对应抽屉。
+ */
 export function isMarketplaceChannelKey(value: string | null): value is MarketplaceChannelKey {
   if (!value) return false;
   return MARKETPLACE_BY_KEY.has(value as ExtendedMarketplaceChannelKey);
@@ -410,6 +601,22 @@ export function marketplaceKeyForChannelFilter(
       return "shoplazza";
     case "tiktok_shop":
       return "tiktok_shop";
+    case "shopee":
+      return "shopee";
+    case "lazada":
+      return "lazada";
+    case "temu":
+      return "temu";
+    case "shein":
+      return "shein";
+    case "aliexpress":
+      return "aliexpress";
+    case "ozon":
+      return "ozon";
+    case "walmart":
+      return "walmart";
+    case "mercado_libre":
+      return "mercado_libre";
     default:
       return null;
   }
@@ -444,7 +651,13 @@ const CATEGORY_COPY: Record<
 export type ChannelMarketplaceGridProps = {
   accounts: ChannelAccountApiItem[];
   isAdmin: boolean;
-  onOpen: (key: MarketplaceChannelKey) => void;
+  /**
+   * 点「快捷绑定」时上抛渠道键（旧 11 + Pack F 3 + 全球电商 8）。
+   * 用方法式签名（双变）：既接受 `ExtendedMarketplaceChannelKey` 处理器，
+   * 也接受既有 `(key: MarketplaceChannelKey) => void` 的调用方，
+   * 这样新增 8 个渠道时不必强制改动 `app/settings/channels/page.tsx`。
+   */
+  onOpen(key: ExtendedMarketplaceChannelKey): void;
 };
 
 /**
@@ -543,7 +756,8 @@ export function ChannelMarketplaceGrid({
         </label>
       </div>
 
-      {/* 14 张渠道卡 + 1 张引导卡：md 两列时引导卡横跨整行、xl 三列时正好 15 格，
+      {/* 22 张渠道卡 + 1 张引导卡：md 两列时 22 卡恰好填满 11 行、引导卡横跨整行；
+          xl 三列时 22 卡占 7 行余 1 格，引导卡横跨 2 格补齐最后一行，
           两种断点下都不留孤立空洞。 */}
       <div
         data-testid="marketplace-grid"
@@ -630,7 +844,7 @@ export function ChannelMarketplaceGrid({
                 <button
                   type="button"
                   data-testid={`open-connect-${item.key}`}
-                  onClick={() => onOpen(item.key as MarketplaceChannelKey)}
+                  onClick={() => onOpen(item.key)}
                   className={`erp-btn shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold ${
                     connected > 0
                       ? "border border-slate-300 bg-white text-slate-900 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
@@ -645,13 +859,14 @@ export function ChannelMarketplaceGrid({
           );
         })}
 
-        {/* 第 15 张纯静态引导卡：只在「全部分类 + 无搜索词」时出现，
+        {/* 第 23 张纯静态引导卡：只在「全部分类 + 无搜索词」时出现，
             不参与已接入计数，也不复用 marketplace-card-* testid。
-            14 个渠道 + 1 张引导卡 → 3 列网格完全齐平、2 列时引导卡横跨两列，不留空洞。 */}
+            22 个渠道 + 1 张引导卡 → md 两列时引导卡横跨整行，
+            xl 三列时横跨 2 格补齐最后一排，不留空洞。 */}
         {category === "all" && query.trim() === "" ? (
           <article
             data-testid="marketplace-custom-channel-card"
-            className="group flex min-w-0 flex-col rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/40 md:col-span-2 xl:col-span-1 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-blue-700 dark:hover:bg-blue-950/30"
+            className="group flex min-w-0 flex-col rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/40 md:col-span-2 xl:col-span-2 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-blue-700 dark:hover:bg-blue-950/30"
           >
             <div className="flex items-start gap-3">
               <span

@@ -9,9 +9,9 @@ Contract:
 
 * Channel credentials are read from the envelope-encrypted vault
   (``AAD = f"{tenant_id}:{channel_account_id}:{cred_type}"``) and never leave this module.
-* Only the three channels with a real publish implementation are supported
-  (``amazon_sp``, ``ebay``, ``alibaba_email``); anything else fails closed with
-  ``ERR_MARKETPLACE_LIVE_PUSH_UNSUPPORTED`` instead of faking a live listing.
+* Only channels with a real publish implementation are supported (the 16 live
+  marketplaces listed in :data:`SUPPORTED_CHANNEL_TYPES`); anything else fails closed
+  with ``ERR_MARKETPLACE_LIVE_PUSH_UNSUPPORTED`` instead of faking a live listing.
 * A remote rejection propagates the adapter's typed ``AppError`` unchanged, so the caller
   can never persist a ``live_published`` state for a listing the marketplace refused.
 """
@@ -32,13 +32,21 @@ from erp_core.catalog.sourcing_service import (
     MarketplaceVariantReceipt,
 )
 from erp_core.channels.ecommerce.alibaba_intl import AlibabaIntlAdapter
+from erp_core.channels.ecommerce.aliexpress import AliExpressAdapter
 from erp_core.channels.ecommerce.amazon_sp import AmazonSpApiAdapter
 from erp_core.channels.ecommerce.base import CommercePlatformAdapter, CredentialVaultHelper
 from erp_core.channels.ecommerce.ebay import EbayConnectorAdapter
+from erp_core.channels.ecommerce.lazada import LazadaAdapter
+from erp_core.channels.ecommerce.mercado_libre import MercadoLibreAdapter
+from erp_core.channels.ecommerce.ozon import OzonAdapter
+from erp_core.channels.ecommerce.shein import SheinAdapter
+from erp_core.channels.ecommerce.shopee import ShopeeAdapter
 from erp_core.channels.ecommerce.shopify import ShopifyGraphqlAdapter
 from erp_core.channels.ecommerce.shoplazza import ShoplazzaAdapter
 from erp_core.channels.ecommerce.shopline import ShoplineAdapter
+from erp_core.channels.ecommerce.temu import TemuAdapter
 from erp_core.channels.ecommerce.tiktok_shop import TikTokShopCoreAdapter
+from erp_core.channels.ecommerce.walmart import WalmartAdapter
 from erp_core.channels.ecommerce.woocommerce import WooCommerceAdapter
 from erp_core.shared.errors import AppError
 
@@ -52,6 +60,14 @@ WOOCOMMERCE_CHANNEL_TYPE = "woocommerce"
 SHOPLINE_CHANNEL_TYPE = "shopline"
 SHOPLAZZA_CHANNEL_TYPE = "shoplazza"
 TIKTOK_SHOP_CHANNEL_TYPE = "tiktok_shop"
+SHOPEE_CHANNEL_TYPE = "shopee"
+LAZADA_CHANNEL_TYPE = "lazada"
+TEMU_CHANNEL_TYPE = "temu"
+SHEIN_CHANNEL_TYPE = "shein"
+ALIEXPRESS_CHANNEL_TYPE = "aliexpress"
+OZON_CHANNEL_TYPE = "ozon"
+WALMART_CHANNEL_TYPE = "walmart"
+MERCADO_LIBRE_CHANNEL_TYPE = "mercado_libre"
 
 AMAZON_CREDENTIAL_TYPE = "amazon_sp_api"
 EBAY_CREDENTIAL_TYPE = "ebay_api"
@@ -62,9 +78,27 @@ WOOCOMMERCE_CREDENTIAL_TYPE = "woocommerce_keys"
 SHOPLINE_CREDENTIAL_TYPE = "shopline_app"
 SHOPLAZZA_CREDENTIAL_TYPE = "shoplazza_app"
 TIKTOK_SHOP_CREDENTIAL_TYPE = "tiktok_shop_app"
+SHOPEE_CREDENTIAL_TYPE = "shopee_app"
+LAZADA_CREDENTIAL_TYPE = "lazada_app"
+TEMU_CREDENTIAL_TYPE = "temu_app"
+SHEIN_CREDENTIAL_TYPE = "shein_app"
+ALIEXPRESS_CREDENTIAL_TYPE = "aliexpress_app"
+OZON_CREDENTIAL_TYPE = "ozon_app"
+WALMART_CREDENTIAL_TYPE = "walmart_app"
+MERCADO_LIBRE_CREDENTIAL_TYPE = "mercado_libre_app"
 
 DEFAULT_AMAZON_MARKETPLACE_ID = "ATVPDKIKX0DER"
 DEFAULT_EBAY_SITE_ID = "EBAY_US"
+
+#: Region/fulfilment defaults mirror each adapter's own constructor default, so a credential
+#: blob that omits them builds exactly the adapter the adapter class would build.
+DEFAULT_SHOPEE_REGION = "GLOBAL"
+DEFAULT_LAZADA_REGION = "SG"
+DEFAULT_TEMU_REGION = "US"
+DEFAULT_SHEIN_REGION = "US"
+DEFAULT_MERCADO_LIBRE_SITE_ID = "MLM"
+DEFAULT_FULFILLMENT_MODE = "standard"
+DEFAULT_OZON_FULFILLMENT_MODE = "fbs"
 
 #: Marketplace channels that can actually be pushed to a live API today.
 SUPPORTED_CHANNEL_TYPES: frozenset[str] = frozenset(
@@ -77,6 +111,14 @@ SUPPORTED_CHANNEL_TYPES: frozenset[str] = frozenset(
         SHOPLINE_CHANNEL_TYPE,
         SHOPLAZZA_CHANNEL_TYPE,
         TIKTOK_SHOP_CHANNEL_TYPE,
+        SHOPEE_CHANNEL_TYPE,
+        LAZADA_CHANNEL_TYPE,
+        TEMU_CHANNEL_TYPE,
+        SHEIN_CHANNEL_TYPE,
+        ALIEXPRESS_CHANNEL_TYPE,
+        OZON_CHANNEL_TYPE,
+        WALMART_CHANNEL_TYPE,
+        MERCADO_LIBRE_CHANNEL_TYPE,
     }
 )
 
@@ -90,6 +132,14 @@ CREDENTIAL_TYPES: dict[str, str] = {
     SHOPLINE_CHANNEL_TYPE: SHOPLINE_CREDENTIAL_TYPE,
     SHOPLAZZA_CHANNEL_TYPE: SHOPLAZZA_CREDENTIAL_TYPE,
     TIKTOK_SHOP_CHANNEL_TYPE: TIKTOK_SHOP_CREDENTIAL_TYPE,
+    SHOPEE_CHANNEL_TYPE: SHOPEE_CREDENTIAL_TYPE,
+    LAZADA_CHANNEL_TYPE: LAZADA_CREDENTIAL_TYPE,
+    TEMU_CHANNEL_TYPE: TEMU_CREDENTIAL_TYPE,
+    SHEIN_CHANNEL_TYPE: SHEIN_CREDENTIAL_TYPE,
+    ALIEXPRESS_CHANNEL_TYPE: ALIEXPRESS_CREDENTIAL_TYPE,
+    OZON_CHANNEL_TYPE: OZON_CREDENTIAL_TYPE,
+    WALMART_CHANNEL_TYPE: WALMART_CREDENTIAL_TYPE,
+    MERCADO_LIBRE_CHANNEL_TYPE: MERCADO_LIBRE_CREDENTIAL_TYPE,
 }
 
 #: Keys every decrypted credential blob must carry before an adapter is built.
@@ -107,6 +157,14 @@ REQUIRED_CREDENTIAL_KEYS: dict[str, tuple[str, ...]] = {
     SHOPLINE_CHANNEL_TYPE: ("store_domain", "access_token"),
     SHOPLAZZA_CHANNEL_TYPE: ("store_domain", "access_token"),
     TIKTOK_SHOP_CHANNEL_TYPE: ("app_key", "app_secret", "access_token", "shop_cipher"),
+    SHOPEE_CHANNEL_TYPE: ("shop_id", "partner_id", "partner_key", "access_token"),
+    LAZADA_CHANNEL_TYPE: ("seller_id", "app_key", "app_secret", "access_token"),
+    TEMU_CHANNEL_TYPE: ("mall_id", "app_key", "app_secret", "access_token"),
+    SHEIN_CHANNEL_TYPE: ("seller_id", "open_key_id", "secret_key"),
+    ALIEXPRESS_CHANNEL_TYPE: ("seller_id", "app_key", "app_secret", "access_token"),
+    OZON_CHANNEL_TYPE: ("client_id", "api_key"),
+    WALMART_CHANNEL_TYPE: ("seller_id", "client_id", "client_secret"),
+    MERCADO_LIBRE_CHANNEL_TYPE: ("seller_id", "access_token", "site_id"),
 }
 
 
@@ -258,6 +316,106 @@ def build_marketplace_adapter(
             warehouse_id=_text(credentials, "warehouse_id") or None,
             transport=transport,
         )
+    if normalized == SHOPEE_CHANNEL_TYPE:
+        return ShopeeAdapter(
+            shop_id=_text(credentials, "shop_id"),
+            partner_id=_text(credentials, "partner_id"),
+            partner_key=_text(credentials, "partner_key"),
+            access_token=_text(credentials, "access_token"),
+            region=_text(credentials, "region", DEFAULT_SHOPEE_REGION).upper(),
+            fulfillment_mode=_text(
+                credentials, "fulfillment_mode", DEFAULT_FULFILLMENT_MODE
+            ).lower(),
+            endpoint_url=_text(credentials, "endpoint_url") or None,
+            transport=transport,
+        )
+    if normalized == LAZADA_CHANNEL_TYPE:
+        return LazadaAdapter(
+            seller_id=_text(credentials, "seller_id"),
+            app_key=_text(credentials, "app_key"),
+            app_secret=_text(credentials, "app_secret"),
+            access_token=_text(credentials, "access_token"),
+            region=_text(credentials, "region", DEFAULT_LAZADA_REGION).upper(),
+            fulfillment_mode=_text(
+                credentials, "fulfillment_mode", DEFAULT_FULFILLMENT_MODE
+            ).lower(),
+            endpoint_url=_text(credentials, "endpoint_url") or None,
+            transport=transport,
+        )
+    if normalized == TEMU_CHANNEL_TYPE:
+        return TemuAdapter(
+            mall_id=_text(credentials, "mall_id"),
+            app_key=_text(credentials, "app_key"),
+            app_secret=_text(credentials, "app_secret"),
+            access_token=_text(credentials, "access_token"),
+            region=_text(credentials, "region", DEFAULT_TEMU_REGION).upper(),
+            fulfillment_mode=_text(
+                credentials, "fulfillment_mode", DEFAULT_FULFILLMENT_MODE
+            ).lower(),
+            endpoint_url=_text(credentials, "endpoint_url") or None,
+            transport=transport,
+        )
+    if normalized == SHEIN_CHANNEL_TYPE:
+        return SheinAdapter(
+            seller_id=_text(credentials, "seller_id"),
+            open_key_id=_text(credentials, "open_key_id"),
+            secret_key=_text(credentials, "secret_key"),
+            region=_text(credentials, "region", DEFAULT_SHEIN_REGION).upper(),
+            fulfillment_mode=_text(
+                credentials, "fulfillment_mode", DEFAULT_FULFILLMENT_MODE
+            ).lower(),
+            endpoint_url=_text(credentials, "endpoint_url") or None,
+            transport=transport,
+        )
+    if normalized == ALIEXPRESS_CHANNEL_TYPE:
+        return AliExpressAdapter(
+            seller_id=_text(credentials, "seller_id"),
+            app_key=_text(credentials, "app_key"),
+            app_secret=_text(credentials, "app_secret"),
+            access_token=_text(credentials, "access_token"),
+            fulfillment_mode=_text(
+                credentials, "fulfillment_mode", DEFAULT_FULFILLMENT_MODE
+            ).lower(),
+            endpoint_url=_text(credentials, "endpoint_url") or None,
+            transport=transport,
+        )
+    if normalized == OZON_CHANNEL_TYPE:
+        return OzonAdapter(
+            client_id=_text(credentials, "client_id"),
+            api_key=_text(credentials, "api_key"),
+            warehouse_id=_text(credentials, "warehouse_id"),
+            fulfillment_mode=_text(
+                credentials, "fulfillment_mode", DEFAULT_OZON_FULFILLMENT_MODE
+            ).lower(),
+            endpoint_url=_text(credentials, "endpoint_url") or None,
+            transport=transport,
+        )
+    if normalized == WALMART_CHANNEL_TYPE:
+        return WalmartAdapter(
+            seller_id=_text(credentials, "seller_id"),
+            client_id=_text(credentials, "client_id"),
+            client_secret=_text(credentials, "client_secret"),
+            access_token=_text(credentials, "access_token") or None,
+            fulfillment_mode=_text(
+                credentials, "fulfillment_mode", DEFAULT_FULFILLMENT_MODE
+            ).lower(),
+            endpoint_url=_text(credentials, "endpoint_url") or None,
+            transport=transport,
+        )
+    if normalized == MERCADO_LIBRE_CHANNEL_TYPE:
+        return MercadoLibreAdapter(
+            seller_id=_text(credentials, "seller_id"),
+            access_token=_text(credentials, "access_token"),
+            site_id=_text(
+                credentials, "site_id", DEFAULT_MERCADO_LIBRE_SITE_ID
+            ).upper(),
+            refresh_token=_text(credentials, "refresh_token"),
+            fulfillment_mode=_text(
+                credentials, "fulfillment_mode", DEFAULT_FULFILLMENT_MODE
+            ).lower(),
+            endpoint_url=_text(credentials, "endpoint_url") or None,
+            transport=transport,
+        )
     return AlibabaIntlAdapter(
         store_id=_text(credentials, "store_id"),
         app_key=_text(credentials, "app_key"),
@@ -289,6 +447,42 @@ async def load_channel_credentials(
                 SHOPIFY_FALLBACK_CREDENTIAL_TYPE,
             )
         raise
+
+
+def _coerce_variant_receipts(
+    raw_receipts: Any, *, fallback_sku: str
+) -> list[MarketplaceVariantReceipt]:
+    """Normalize a receipt's per-variant payload onto the catalog DTO.
+
+    The global marketplaces already emit ``MarketplaceVariantReceipt`` objects, while the
+    storefront connectors emit plain mappings; both must land in the same typed list so a
+    caller never depends on which family built the listing.
+    """
+    coerced: list[MarketplaceVariantReceipt] = []
+    for raw in raw_receipts or []:
+        if isinstance(raw, MarketplaceVariantReceipt):
+            coerced.append(raw)
+            continue
+        if not isinstance(raw, Mapping):
+            continue
+        coerced.append(
+            MarketplaceVariantReceipt(
+                external_sku=str(raw.get("external_sku") or fallback_sku),
+                external_variant_id=raw.get("external_variant_id"),
+                external_inventory_item_id=raw.get("external_inventory_item_id"),
+            )
+        )
+    return coerced
+
+
+def _normalize_payload_receipt(
+    receipt: MarketplaceListingDispatchReceipt,
+) -> MarketplaceListingDispatchReceipt:
+    """Return the marketplace receipt with its variant receipts coerced to the DTO."""
+    variant_receipts = _coerce_variant_receipts(
+        getattr(receipt, "variant_receipts", None), fallback_sku=receipt.external_sku
+    )
+    return receipt.model_copy(update={"variant_receipts": variant_receipts})
 
 
 class MarketplaceListingDispatcher:
@@ -355,101 +549,134 @@ class MarketplaceListingDispatcher:
         )
         if adapter is None:  # pragma: no cover - guarded by CREDENTIAL_TYPES above
             raise unsupported_channel_error(channel_type)
-        # `build_marketplace_adapter` returns the shared connector ABC (it also feeds the
-        # order reconciler), so narrow to the four classes that really implement publishing.
-        listing_adapter = cast(
-            AmazonSpApiAdapter
-            | EbayConnectorAdapter
-            | AlibabaIntlAdapter
-            | ShopifyGraphqlAdapter
-            | WooCommerceAdapter
-            | ShoplineAdapter
-            | ShoplazzaAdapter
-            | TikTokShopCoreAdapter,
+        # The eight global marketplaces implement the catalog-side
+        # ``publish_listing(payload)`` contract directly; the storefront connectors still take
+        # the legacy keyword form. Both narrowings stay explicit so mypy can prove the call.
+        if isinstance(
             adapter,
-        )
-
-        receipt = await listing_adapter.publish_listing(
-            sku=payload.external_sku,
-            title=payload.title,
-            description=payload.description,
-            bullet_points=payload.bullet_points,
-            price_usd=payload.price_usd,
-            quantity=payload.quantity,
-            images=payload.images,
-            category=payload.category,
-            hs_code=payload.hs_code,
-            moq_tiers=[
-                {
-                    "min_qty": tier.min_qty,
-                    "unit_price_usd": tier.unit_price_usd,
-                    "min_quantity": tier.min_qty,
-                    "unit_price": tier.unit_price_usd,
-                }
-                for tier in payload.moq_tiers
-            ],
-            options=[opt.model_dump() for opt in payload.options],
-            variants=[
-                {
-                    "local_sku": v.local_sku,
-                    "external_sku": v.external_sku,
-                    "option_values": dict(v.option_values),
-                    "price_usd": v.price_usd,
-                    "quantity": v.quantity,
-                    "image_url": v.image_url,
-                }
-                for v in payload.variants
-            ],
-            image_blobs=[
-                {
-                    "filename": b.filename,
-                    "mime_type": b.mime_type,
-                    "data": b.data,
-                    "alt_text": b.alt_text,
-                }
-                for b in payload.image_blobs
-            ],
-        )
+            (
+                ShopeeAdapter,
+                LazadaAdapter,
+                TemuAdapter,
+                SheinAdapter,
+                AliExpressAdapter,
+                OzonAdapter,
+                WalmartAdapter,
+                MercadoLibreAdapter,
+            ),
+        ):
+            payload_receipt = await adapter.publish_listing(payload)
+            dispatch_receipt = _normalize_payload_receipt(payload_receipt)
+        else:
+            # `build_marketplace_adapter` returns the shared connector ABC (it also feeds the
+            # order reconciler), so narrow to the eight legacy storefront marketplaces.
+            listing_adapter = cast(
+                AmazonSpApiAdapter
+                | EbayConnectorAdapter
+                | AlibabaIntlAdapter
+                | ShopifyGraphqlAdapter
+                | WooCommerceAdapter
+                | ShoplineAdapter
+                | ShoplazzaAdapter
+                | TikTokShopCoreAdapter,
+                adapter,
+            )
+            # The legacy storefront connectors return their own receipt models; normalize
+            # them onto the catalog DTO so the caller sees one shape for all 16 channels.
+            legacy_receipt = await listing_adapter.publish_listing(
+                sku=payload.external_sku,
+                title=payload.title,
+                description=payload.description,
+                bullet_points=payload.bullet_points,
+                price_usd=payload.price_usd,
+                quantity=payload.quantity,
+                images=payload.images,
+                category=payload.category,
+                hs_code=payload.hs_code,
+                moq_tiers=[
+                    {
+                        "min_qty": tier.min_qty,
+                        "unit_price_usd": tier.unit_price_usd,
+                        "min_quantity": tier.min_qty,
+                        "unit_price": tier.unit_price_usd,
+                    }
+                    for tier in payload.moq_tiers
+                ],
+                options=[opt.model_dump() for opt in payload.options],
+                variants=[
+                    {
+                        "local_sku": v.local_sku,
+                        "external_sku": v.external_sku,
+                        "option_values": dict(v.option_values),
+                        "price_usd": v.price_usd,
+                        "quantity": v.quantity,
+                        "image_url": v.image_url,
+                    }
+                    for v in payload.variants
+                ],
+                image_blobs=[
+                    {
+                        "filename": b.filename,
+                        "mime_type": b.mime_type,
+                        "data": b.data,
+                        "alt_text": b.alt_text,
+                    }
+                    for b in payload.image_blobs
+                ],
+            )
+            dispatch_receipt = MarketplaceListingDispatchReceipt(
+                external_product_id=legacy_receipt.external_product_id,
+                external_sku=legacy_receipt.external_sku,
+                status=legacy_receipt.status,
+                variant_receipts=_coerce_variant_receipts(
+                    getattr(legacy_receipt, "variant_receipts", None),
+                    fallback_sku=legacy_receipt.external_sku,
+                ),
+                raw_response=dict(legacy_receipt.raw_response),
+            )
         logger.info(
             "marketplace_listing_dispatched",
             tenant_id=str(tenant_id),
             channel_account_id=str(payload.channel_account_id),
             channel_type=channel_type,
             external_sku=payload.external_sku,
-            external_product_id=receipt.external_product_id,
-            status=receipt.status,
+            external_product_id=dispatch_receipt.external_product_id,
+            status=dispatch_receipt.status,
         )
-        raw_variant_receipts = getattr(receipt, "variant_receipts", None) or []
-        variant_receipts = [
-            MarketplaceVariantReceipt(
-                external_sku=str(vr.get("external_sku") or receipt.external_sku),
-                external_variant_id=vr.get("external_variant_id"),
-                external_inventory_item_id=vr.get("external_inventory_item_id"),
-            )
-            for vr in raw_variant_receipts
-            if isinstance(vr, Mapping)
-        ]
-        return MarketplaceListingDispatchReceipt(
-            external_product_id=receipt.external_product_id,
-            external_sku=receipt.external_sku,
-            status=receipt.status,
-            variant_receipts=variant_receipts,
-            raw_response=dict(receipt.raw_response),
-        )
+        return dispatch_receipt
 
 
 __all__ = [
     "ALIBABA_INTL_CHANNEL_TYPE",
     "ALIBABA_INTL_CREDENTIAL_TYPE",
+    "ALIEXPRESS_CHANNEL_TYPE",
+    "ALIEXPRESS_CREDENTIAL_TYPE",
     "AMAZON_CREDENTIAL_TYPE",
     "AMAZON_SP_CHANNEL_TYPE",
     "CREDENTIAL_TYPES",
     "DEFAULT_AMAZON_MARKETPLACE_ID",
     "DEFAULT_EBAY_SITE_ID",
+    "DEFAULT_FULFILLMENT_MODE",
+    "DEFAULT_LAZADA_REGION",
+    "DEFAULT_MERCADO_LIBRE_SITE_ID",
+    "DEFAULT_OZON_FULFILLMENT_MODE",
+    "DEFAULT_SHOPEE_REGION",
+    "DEFAULT_SHEIN_REGION",
+    "DEFAULT_TEMU_REGION",
     "EBAY_CHANNEL_TYPE",
     "EBAY_CREDENTIAL_TYPE",
+    "LAZADA_CHANNEL_TYPE",
+    "LAZADA_CREDENTIAL_TYPE",
     "MarketplaceListingDispatcher",
+    "MERCADO_LIBRE_CHANNEL_TYPE",
+    "MERCADO_LIBRE_CREDENTIAL_TYPE",
+    "OZON_CHANNEL_TYPE",
+    "OZON_CREDENTIAL_TYPE",
     "REQUIRED_CREDENTIAL_KEYS",
+    "SHEIN_CHANNEL_TYPE",
+    "SHEIN_CREDENTIAL_TYPE",
+    "SHOPEE_CHANNEL_TYPE",
+    "SHOPEE_CREDENTIAL_TYPE",
     "SHOPIFY_CHANNEL_TYPE",
     "SHOPIFY_CREDENTIAL_TYPE",
     "SHOPIFY_FALLBACK_CREDENTIAL_TYPE",
@@ -458,8 +685,12 @@ __all__ = [
     "SHOPLINE_CHANNEL_TYPE",
     "SHOPLINE_CREDENTIAL_TYPE",
     "SUPPORTED_CHANNEL_TYPES",
+    "TEMU_CHANNEL_TYPE",
+    "TEMU_CREDENTIAL_TYPE",
     "TIKTOK_SHOP_CHANNEL_TYPE",
     "TIKTOK_SHOP_CREDENTIAL_TYPE",
+    "WALMART_CHANNEL_TYPE",
+    "WALMART_CREDENTIAL_TYPE",
     "WOOCOMMERCE_CHANNEL_TYPE",
     "WOOCOMMERCE_CREDENTIAL_TYPE",
     "build_marketplace_adapter",

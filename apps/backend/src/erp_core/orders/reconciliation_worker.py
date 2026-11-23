@@ -1,4 +1,9 @@
-"""15-minute incremental reconciliation of storefront orders (missed webhooks/drift)."""
+"""15-minute incremental reconciliation of storefront + marketplace orders.
+
+Every channel in :data:`ECOMMERCE_CHANNELS` (the 16 live ecommerce integrations) is pulled
+on the same cadence so a missed webhook or a drifted order is repaired without human
+action; :func:`_instantiate_adapter` builds the real connector for each of them.
+"""
 
 from __future__ import annotations
 
@@ -37,6 +42,14 @@ ECOMMERCE_CHANNELS = (
     ChannelType.AMAZON_SP,
     ChannelType.EBAY,
     ChannelType.ALIBABA_EMAIL,
+    ChannelType.SHOPEE,
+    ChannelType.LAZADA,
+    ChannelType.TEMU,
+    ChannelType.SHEIN,
+    ChannelType.ALIEXPRESS,
+    ChannelType.OZON,
+    ChannelType.WALMART,
+    ChannelType.MERCADO_LIBRE,
 )
 CREDENTIAL_TYPES = {
     ChannelType.SHOPIFY: ("shopify_custom_app", "oauth_token"),
@@ -47,6 +60,14 @@ CREDENTIAL_TYPES = {
     ChannelType.AMAZON_SP: ("amazon_sp_api",),
     ChannelType.EBAY: ("ebay_api",),
     ChannelType.ALIBABA_EMAIL: ("alibaba_intl_app",),
+    ChannelType.SHOPEE: ("shopee_app",),
+    ChannelType.LAZADA: ("lazada_app",),
+    ChannelType.TEMU: ("temu_app",),
+    ChannelType.SHEIN: ("shein_app",),
+    ChannelType.ALIEXPRESS: ("aliexpress_app",),
+    ChannelType.OZON: ("ozon_app",),
+    ChannelType.WALMART: ("walmart_app",),
+    ChannelType.MERCADO_LIBRE: ("mercado_libre_app",),
 }
 REPLAY_WINDOW = timedelta(minutes=30)
 
@@ -240,9 +261,10 @@ async def _instantiate_adapter(
             shop_cipher=str(credentials.get("shop_cipher") or ""),
             app_mode=str(credentials.get("app_mode") or "seller_byok"),
         )
-    # Amazon SP-API / eBay Sell / Alibaba.com ICBU share one credential-to-adapter
-    # mapping with the live listing dispatcher, so the same vaulted secret can drive both
-    # publishing and order reconciliation.
+    # The eight global marketplaces (Shopee / Lazada / Temu / SHEIN / AliExpress / Ozon /
+    # Walmart / Mercado Libre) share one credential-to-adapter mapping with the live listing
+    # dispatcher — together with Amazon SP-API / eBay Sell / Alibaba.com ICBU — so the same
+    # vaulted secret drives both publishing and order reconciliation.
     marketplace_adapter = build_marketplace_adapter(
         channel_type.value, credentials, transport=transport
     )

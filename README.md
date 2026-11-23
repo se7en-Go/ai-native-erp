@@ -19,7 +19,7 @@
   - [2. 本地源码全栈开发](#2-本地源码全栈开发)
   - [3. 纯前端 Mock 开发模式](#3-纯前端-mock-开发模式)
   - [4. 加载多源浏览器一键采品插件](#4-加载多源浏览器一键采品插件)
-- [数据库迁移演进（0001 → 0017）](#数据库迁移演进0001--0017)
+- [数据库迁移演进（0001 → 0018）](#数据库迁移演进0001--0018)
 - [测试、OpenAPI 契约与 CI Gate 门禁](#测试openapi-契约与-ci-gate-门禁)
 - [工程文档、研究报告与合规材料](#工程文档研究报告与合规材料)
 
@@ -32,7 +32,7 @@ flowchart LR
   Web["Next.js 15 工作台 (apps/web)"] -->|"同源 Auth / SSE BFF"| API
   Ext["浏览器一键采品插件 (apps/collector-extension)"] -->|"X-Collector-Token + CORS"| API
   Widget["独立站 WebChat 挂件 (apps/widget)"] -->|"公开会话 Token + SSE"| API
-  Platforms["8 大电商平台 / 社媒消息 / 17TRACK / Stripe"] -->|"HMAC 验签 Webhook (<100ms)"| API
+  Platforms["16 大全球电商平台 / 社媒消息 / 17TRACK / Stripe"] -->|"HMAC 验签 Webhook (<100ms)"| API
 
   API["FastAPI 模块化单体 (apps/backend)"] -->|"事务级 set_config RLS"| PgBouncer["PgBouncer 事务池 (6432)"]
   PgBouncer --> PG["PostgreSQL 17 + pgvector (5432)"]
@@ -61,7 +61,8 @@ flowchart LR
 - **多源采品与浏览器插件（Phase 4）**：支持「工作台粘贴 1688/URL/中文文案」及「[浏览器一键采品插件](apps/collector-extension/)」直采 **1688（含 `window.__INIT_DATA` 规格/阶梯价/原图后缀清洗与 DOM 回退）、淘宝/天猫、拼多多、Alibaba 国际站与通用 OpenGraph / JSON-LD 页面**。
 - **采集授权码鉴权（`0017`）**：在 `/catalog?tab=sourcing` 生成租户级 `erp_col_` 采集授权码（明文仅展示一次，库内存 SHA-256 哈希，支持一键吊销与 `last_used_at` 审计）；插件通过 `POST /api/v1/catalog/sourcing/collect-from-extension` 直送多规格草稿，并发起受 `begin_nested()` 隔离的 SSRF 安全外链转存。
 - **AI 改写与 Decimal 阶梯定价**：确定性生成英文 SEO 标题、5 条海外卖点、目标 USD 零售价、3 档 B2B MOQ 阶梯价及规范化 SKU。
-- **统一图床与多规格实店刊登（Phase 1）**：支持本地 PNG/JPEG 上传或外链转存至 MinIO/S3；草稿支持任意 `options_spec` + `variants_spec` 矩阵一键入主档并同步推送至 **8 大电商/外贸平台**，写回真实 `platform_sku_mappings`（如 Shopify `gid://shopify/Product/...`、`ProductVariant` 与 `InventoryItem`）。
+- **全球电商渠道接入（`0018`）**：`/settings/channels` 渠道应用市场扩到 **22 张卡片**（即时消息 6 + 订单同步 16），Shopee（含全托管 / 轻出海）、Lazada（含全托管）、Temu（全托管 / 半托管 / 本土）、SHEIN（自营 / 半托管）、AliExpress（自运营 / 托管）、Ozon（FBS / FBO）、Walmart（自发货 / WFS）与 Mercado Libre（自发货 / 全托管）各自按履约模式一键接入；Partner Key / App Secret / Access Token 全部信封加密托管，提交后表单不再回显任何密钥。
+- **统一图床与多规格实店刊登（Phase 1）**：支持本地 PNG/JPEG 上传或外链转存至 MinIO/S3；草稿支持任意 `options_spec` + `variants_spec` 矩阵一键入主档并同步推送至 **16 大全球电商 / 外贸平台**，写回真实 `platform_sku_mappings`（如 Shopify `gid://shopify/Product/...`、`ProductVariant` 与 `InventoryItem`）。
 
 ### 2. 多平台订单、WMS 与实时库存防超卖同步（Phase 2）
 - **实时同步 Outbox（`0015`）**：WMS 中 5 类库存台账变更（采购入库、盘点调整、订单预占、释放预占、发货扣减）均在同一数据库事务内写入 `inventory_sync_jobs`（带 `pending` 映射部分唯一索引防重复入队）。
@@ -72,7 +73,7 @@ flowchart LR
 
 ### 3. 业财一体、全平台经营分析与 1688 智能补货闭环（Phase 3）
 - **业财精算内核**：B2B PI/订单与 B2C 订单统一落账，支持 AR 应收收款、AP 应付账款、多币种汇率与 **CVP 净贡献毛利快照**（全部 `Decimal` `ROUND_HALF_UP` + PostgreSQL `NUMERIC`）。
-- **8 渠道销量 / 净毛利 / ROAS 分析（`0016`）**：所有 8 个电商适配器均把退货金额（`refunded_amount`）与平台佣金（`platform_commission_base`）归一化写入订单元数据；`/dashboard` 与 `/finance` 均内嵌 `7D / 30D / 90D` 全渠道 GMV、退款率、佣金、广告投放、净贡献毛利与 ROAS 分布看板。
+- **16 渠道销量 / 净毛利 / ROAS 分析（`0016`）**：所有 16 个电商适配器均把退货金额（`refunded_amount`）与平台佣金（`platform_commission_base`）归一化写入订单元数据；`/dashboard` 与 `/finance` 均内嵌 `7D / 30D / 90D` 全渠道 GMV、退款率、佣金、广告投放、净贡献毛利与 ROAS 分布看板。
 - **SKU 动销预警 & 1688 一键补货**：按 30 天日均销量与当前可用库存自动计算可售天数（`days_of_cover`）和缺货风险等级，回链至选品草稿的 **1688 原采购链接**，在 `/wms` 一键生成附带 1688 货源 URL 的采购草稿/PO。
 
 ### 4. 全渠道聚合收件箱与客户身份图谱
@@ -94,7 +95,7 @@ flowchart LR
 
 | 类别 | 已实现适配器 / 集成 | 核心能力 |
 | :--- | :--- | :--- |
-| **8 大电商 / B2B 平台** | Shopify (`shopify`)、TikTok Shop (`tiktok_shop`)、Amazon SP-API (`amazon_sp`)、eBay (`ebay`)、Alibaba 国际站 (`alibaba_email`)、WooCommerce (`woocommerce`)、SHOPLINE (`shopline`)、Shoplazza (`shoplazza`) | 多规格商品刊登、平台 SKU 映射、库存 `push_inventory_level` 同步、订单同步（含退款与佣金归一化）、OAuth/凭据加密托管 |
+| **16 大全球电商 / 外贸平台** | Shopify (`shopify`)、TikTok Shop (`tiktok_shop`)、Amazon SP-API (`amazon_sp`)、eBay (`ebay`)、Alibaba 国际站 (`alibaba_email`)、WooCommerce (`woocommerce`)、SHOPLINE (`shopline`)、Shoplazza (`shoplazza`)、Shopee (`shopee`，含全托管 / 轻出海)、Lazada (`lazada`，含全托管)、Temu (`temu`，全托管 / 半托管 / 本土)、SHEIN (`shein`，自营 / 半托管)、AliExpress (`aliexpress`，自运营 / 托管)、Ozon (`ozon`，FBS / FBO)、Walmart (`walmart`，自发货 / WFS)、Mercado Libre (`mercado_libre`，自发货 / 全托管) | 多规格商品刊登、平台 SKU 映射、库存 `push_inventory_level` 同步、订单同步（含退款与佣金归一化）、OAuth/凭据加密托管、各平台履约模式（全托管 / 半托管 / FBS / FBO / WFS）登记 |
 | **选品源站（插件 + 服务端）** | 1688（`1688`）、淘宝/天猫（`taobao`）、拼多多（`pdd`）、Alibaba 国际站（`alibaba`）、通用商品页（`url`） | `__INIT_DATA` / JSON-LD / OpenGraph / DOM 结构化抓取、图床转存 |
 | **即时通讯与询盘** | WhatsApp Cloud / Coexistence、Facebook Messenger、Instagram DM、Telegram Bot、IMAP/SMTP & Resend 邮件、Made-in-China 邮件、独立站 WebChat | Webhook 验签接入、Redis Streams 异步消费、多模态消息与实时 SSE 推送 |
 | **物流、支付与大模型** | 17TRACK（`cacheLevel=0`）、Stripe、OpenAI / Anthropic / DeepSeek / Gemini | 实时轨迹 Webhook、SaaS 订阅计量扣费、AI 多模型 BYOK 路由 |
@@ -107,7 +108,7 @@ flowchart LR
 
 | 路径 | 职责 |
 | :--- | :--- |
-| [`apps/backend`](apps/backend/) | FastAPI 模块化单体、Taskiq 后台任务、19 个 Alembic 迁移脚本、种子脚本与 PG17 集成测试 |
+| [`apps/backend`](apps/backend/) | FastAPI 模块化单体、Taskiq 后台任务、20 个 Alembic 迁移脚本、种子脚本与 PG17 集成测试 |
 | [`apps/web`](apps/web/) | Next.js 15 工作台（26 个页面路由 + Auth/SSE BFF）、生成式 OpenAPI TypeScript SDK 与 Vitest 单测 |
 | [`apps/widget`](apps/widget/) | Vite 打包独立站 WebChat IIFE 挂件（`< 35 KiB` gzip）及 Shopify Theme App Extension Embed Block |
 | [`apps/collector-extension`](apps/collector-extension/) | Chrome Manifest V3 多源商品采集扩展（1688/淘宝/拼多多/Alibaba/通用页）与 `node:test` 单测 |
@@ -125,10 +126,10 @@ flowchart LR
 
 - `shared`：配置、数据库会话（`tenant_session` / `system_session`）、AES-256-GCM 信封加密、`Decimal` 工具与异常模型
 - `tenancy` & `identity`：租户/成员/RBAC、JWT/Cookie 认证、不可变 `audit_events` 审计日志
-- `channels`：消息通道网关（WhatsApp/Meta/Telegram/Email/WebChat）、Webhook 原始落库与 Redis Streams、`ecommerce/` 8 平台适配器、刊登与库存同步分发器
+- `channels`：消息通道网关（WhatsApp/Meta/Telegram/Email/WebChat）、Webhook 原始落库与 Redis Streams、`ecommerce/` 16 平台适配器、刊登与库存同步分发器
 - `catalog`：SPU/SKU 主档、多规格矩阵、`platform_sku_mappings`、MinIO/S3 图床服务、1688 选品与 `erp_col_` 采集授权码服务
 - `orders` & `supply_chain`：B2B/B2C 统一订单、17TRACK 物流、供应商、采购订单（PO）、WMS 仓库库存台账与 Outbox 入队
-- `finance` & `billing`：AR/AP 收付款、CVP 净贡献毛利快照、8 渠道销量/毛利/ROAS 分析、Stripe 计量与套餐配额
+- `finance` & `billing`：AR/AP 收付款、CVP 净贡献毛利快照、16 渠道销量/毛利/ROAS 分析、Stripe 计量与套餐配额
 - `crm`：线索池、客户管理、商机看板与跟进记录
 - `ai_engine`：pgvector 租户隔离 RAG 检索与入库、BYOK 模型路由、`ErpToolRegistry`、L0/L1/L2 提案生成器与沙盒执行、数字员工工作台
 - `growth` & `social`：合规线索采集/富化与营销活动、社媒排期发布与跨渠道成交归因
@@ -141,7 +142,7 @@ flowchart LR
 | **全渠道沟通与 CRM** | `/inbox`（聚合收件箱 + AI 提案卡片）、`/b2b/quotes`（B2B 快速报价 / PI）、`/crm/leads`、`/crm/customers`、`/crm/opportunities`、`/crm/followups` |
 | **商品、选品与履约** | `/catalog`（主档 SKU 库 & `?tab=sourcing` 1688 采集/授权码/图床/多平台刊登）、`/orders`（订单与 17TRACK 物流）、`/wms`（WMS 台账、全平台库存同步与 1688 一键补货）、`/supply-chain/suppliers`、`/supply-chain/purchase-orders` |
 | **财务、增长与社媒** | `/finance`（AR/AP 核销与渠道毛利分析）、`/analytics`（经营分析视图）、`/growth/campaigns`、`/growth/collect`、`/social` |
-| **AI 与渠道设置** | `/ai/capabilities`、`/ai/employees`、`/ai/proposals`、`/ai/studio`、`/settings/channels`（8 电商 + 消息通道 OAuth/密钥接入手册） |
+| **AI 与渠道设置** | `/ai/capabilities`、`/ai/employees`、`/ai/proposals`、`/ai/studio`、`/settings/channels`（16 电商 + 消息通道 OAuth/密钥接入手册） |
 
 ---
 
@@ -225,18 +226,19 @@ NEXT_PUBLIC_USE_MOCK_API=true pnpm --filter web dev
 
 ---
 
-## 数据库迁移演进（0001 → 0017）
+## 数据库迁移演进（0001 → 0018）
 
-| 迁移版本（共 19 个脚本） | 覆盖能力 |
+| 迁移版本（共 20 个脚本） | 覆盖能力 |
 | :--- | :--- |
 | `0001` | 多租户基座、RBAC 成员、`FORCE RLS` 策略、不可变审计日志分区与认证辅助函数 |
 | `0002` – `0003c` | 全渠道账号与加密凭据、聚合收件箱、Webhook 原始事件表、17TRACK 与渠道路由解析、双模 ERP 与 CVP |
 | `0004` – `0011` | pgvector RAG 知识库与 AI 提案/计量计费、CRM、供应链、Growth 获客、Social 社媒矩阵、多仓库 WMS 台账 |
 | `0012` – `0013` | AI 自动回复草稿、1688 选品草稿表、AP 应付台账、财务与幂等性安全加固 |
 | `0014` | **Phase 1**：`product_media_assets` 统一图床、草稿/变体 `options_spec` & `variants_spec`、`platform_sku_mappings` 实店刊登字段 |
-| `0015` | **Phase 2**：`inventory_sync_jobs` 8 平台库存实时同步 Outbox（防重待处理索引 + `dead_letter` 状态机） |
+| `0015` | **Phase 2**：`inventory_sync_jobs` 多平台库存实时同步 Outbox（防重待处理索引 + `dead_letter` 状态机） |
 | `0016` | **Phase 3**：`channel_daily_metrics`（按平台/店铺/SKU/日期统计曝光、点击、广告花费与独立访客，支撑 ROAS 核算） |
 | `0017` | **Phase 4**：`collector_api_tokens` 作用域采集授权码表与 `resolve_collector_token` 窄哈希查找函数 |
+| `0018_marketplace_channels` | **全球电商扩容**：把 SHEIN / AliExpress / Ozon 纳入 `channel_routing_directory`、`channel_accounts`、`conversations`、`messages` 与 `raw_webhook_events` 的渠道白名单，并重建 `resolve_tenant_by_channel_external_id` / `accept_raw_webhook_event` / `register_channel_routing` 三个 `SECURITY DEFINER` 函数的编译期白名单（`17track` 物流伪通道保持放行） |
 
 ---
 
@@ -271,7 +273,7 @@ git diff --exit-code apps/web/src/lib/api-client/
 
 pnpm --filter web lint       # 禁止 Next.js 引入数据库驱动 / ORM
 pnpm --filter web typecheck
-pnpm --filter web test       # Vitest 50 suites (371 tests)
+pnpm --filter web test       # Vitest 51 suites (409 tests)
 pnpm --filter web build
 ```
 

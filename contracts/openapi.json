@@ -768,6 +768,59 @@
         "title": "AiProposalRead",
         "type": "object"
       },
+      "AliExpressConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "app_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "App Key",
+            "type": "string"
+          },
+          "app_secret": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "App Secret",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fulfillment_mode": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "managed"
+            ],
+            "title": "Fulfillment Mode",
+            "type": "string"
+          },
+          "seller_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Seller Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "seller_id",
+          "app_key",
+          "app_secret",
+          "access_token"
+        ],
+        "title": "AliExpressConnectRequest",
+        "type": "object"
+      },
       "AlibabaIntlConnectRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2999,7 +3052,10 @@
           "temu",
           "walmart",
           "shopee",
-          "lazada"
+          "lazada",
+          "shein",
+          "aliexpress",
+          "ozon"
         ],
         "title": "ChannelType",
         "type": "string"
@@ -6646,6 +6702,66 @@
         "title": "KbSearchRequest",
         "type": "object"
       },
+      "LazadaConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "app_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "App Key",
+            "type": "string"
+          },
+          "app_secret": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "App Secret",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fulfillment_mode": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "full_managed"
+            ],
+            "title": "Fulfillment Mode",
+            "type": "string"
+          },
+          "region": {
+            "default": "SG",
+            "maxLength": 32,
+            "minLength": 2,
+            "title": "Region",
+            "type": "string"
+          },
+          "seller_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Seller Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "seller_id",
+          "app_key",
+          "app_secret",
+          "access_token"
+        ],
+        "title": "LazadaConnectRequest",
+        "type": "object"
+      },
       "LeadCollectionJobCreate": {
         "description": "Create a collection job.\n\nTwo shapes are accepted and they stay fully backwards compatible:\n\n* legacy \u2014 `source_provider` pinned, e.g. `overpass_osm` + `target_region`; the\n  job stays `pending` until `POST /jobs/{id}/run` (unchanged behaviour);\n* batch \u2014 `cities`/`city` (one or many), `keywords`/`keyword`, and\n  `provider_mode`; the recipe is request-scoped, so it executes immediately.",
         "properties": {
@@ -7928,6 +8044,58 @@
         "title": "MentionRead",
         "type": "object"
       },
+      "MercadoLibreConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fulfillment_mode": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "full_managed"
+            ],
+            "title": "Fulfillment Mode",
+            "type": "string"
+          },
+          "refresh_token": {
+            "default": "",
+            "maxLength": 4096,
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "seller_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Seller Id",
+            "type": "string"
+          },
+          "site_id": {
+            "default": "MLM",
+            "maxLength": 8,
+            "minLength": 3,
+            "title": "Site Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "seller_id",
+          "access_token"
+        ],
+        "title": "MercadoLibreConnectRequest",
+        "type": "object"
+      },
       "MergeCustomersRequest": {
         "properties": {
           "reason": {
@@ -9159,6 +9327,51 @@
           "won_conversion_pct"
         ],
         "title": "OverviewRead",
+        "type": "object"
+      },
+      "OzonConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Api Key",
+            "type": "string"
+          },
+          "client_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Client Id",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fulfillment_mode": {
+            "default": "fbs",
+            "enum": [
+              "fbs",
+              "fbo"
+            ],
+            "title": "Fulfillment Mode",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Warehouse Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "client_id",
+          "api_key"
+        ],
+        "title": "OzonConnectRequest",
         "type": "object"
       },
       "PaginatedResponse_AccountRead_": {
@@ -14293,6 +14506,59 @@
         "title": "SendRealCampaignResponse",
         "type": "object"
       },
+      "SheinConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fulfillment_mode": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "semi_managed"
+            ],
+            "title": "Fulfillment Mode",
+            "type": "string"
+          },
+          "open_key_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Open Key Id",
+            "type": "string"
+          },
+          "region": {
+            "default": "US",
+            "maxLength": 32,
+            "minLength": 2,
+            "title": "Region",
+            "type": "string"
+          },
+          "secret_key": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Secret Key",
+            "type": "string"
+          },
+          "seller_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Seller Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "seller_id",
+          "open_key_id",
+          "secret_key"
+        ],
+        "title": "SheinConnectRequest",
+        "type": "object"
+      },
       "ShipOrderRequest": {
         "properties": {
           "actual_shipping_cost_base": {
@@ -14500,6 +14766,67 @@
           "created_at"
         ],
         "title": "ShipmentRead",
+        "type": "object"
+      },
+      "ShopeeConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fulfillment_mode": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "full_managed",
+              "light_export"
+            ],
+            "title": "Fulfillment Mode",
+            "type": "string"
+          },
+          "partner_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Partner Id",
+            "type": "string"
+          },
+          "partner_key": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Partner Key",
+            "type": "string"
+          },
+          "region": {
+            "default": "GLOBAL",
+            "maxLength": 32,
+            "minLength": 2,
+            "title": "Region",
+            "type": "string"
+          },
+          "shop_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Shop Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "shop_id",
+          "partner_id",
+          "partner_key",
+          "access_token"
+        ],
+        "title": "ShopeeConnectRequest",
         "type": "object"
       },
       "ShopifyConnectResponse": {
@@ -16952,6 +17279,67 @@
         "title": "TelegramConnectRequest",
         "type": "object"
       },
+      "TemuConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "app_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "App Key",
+            "type": "string"
+          },
+          "app_secret": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "App Secret",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fulfillment_mode": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "semi_managed",
+              "local"
+            ],
+            "title": "Fulfillment Mode",
+            "type": "string"
+          },
+          "mall_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Mall Id",
+            "type": "string"
+          },
+          "region": {
+            "default": "US",
+            "maxLength": 32,
+            "minLength": 2,
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "mall_id",
+          "app_key",
+          "app_secret",
+          "access_token"
+        ],
+        "title": "TemuConnectRequest",
+        "type": "object"
+      },
       "TenantMembershipOption": {
         "properties": {
           "is_active": {
@@ -17999,6 +18387,64 @@
           "domain"
         ],
         "title": "VerifyEmailDnsRequest",
+        "type": "object"
+      },
+      "WalmartConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Token"
+          },
+          "client_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Client Id",
+            "type": "string"
+          },
+          "client_secret": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Client Secret",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "fulfillment_mode": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "wfs"
+            ],
+            "title": "Fulfillment Mode",
+            "type": "string"
+          },
+          "seller_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Seller Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "seller_id",
+          "client_id",
+          "client_secret"
+        ],
+        "title": "WalmartConnectRequest",
         "type": "object"
       },
       "WarehouseCreateRequest": {
@@ -24863,6 +25309,65 @@
         ]
       }
     },
+    "/api/v1/channels/aliexpress/connect": {
+      "post": {
+        "operationId": "connect_aliexpress_api_v1_channels_aliexpress_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliExpressConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Aliexpress",
+        "tags": [
+          "marketplace-connect"
+        ]
+      }
+    },
     "/api/v1/channels/amazon/connect": {
       "post": {
         "operationId": "connect_amazon_api_v1_channels_amazon_connect_post",
@@ -25305,6 +25810,65 @@
         ]
       }
     },
+    "/api/v1/channels/lazada/connect": {
+      "post": {
+        "operationId": "connect_lazada_api_v1_channels_lazada_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LazadaConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Lazada",
+        "tags": [
+          "marketplace-connect"
+        ]
+      }
+    },
     "/api/v1/channels/marketplace/{channel_account_id}/sync-orders": {
       "post": {
         "description": "Pull a marketplace's order feed on demand and ingest missing/drifted orders.\n\nUsed to repair a missed webhook without waiting for the 15-minute cron: the same\n``reconcile_channel_account_orders`` worker is reused so ingestion stays idempotent and\nfully audited.",
@@ -25377,6 +25941,65 @@
         ]
       }
     },
+    "/api/v1/channels/mercado-libre/connect": {
+      "post": {
+        "operationId": "connect_mercado_libre_api_v1_channels_mercado_libre_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MercadoLibreConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Mercado Libre",
+        "tags": [
+          "marketplace-connect"
+        ]
+      }
+    },
     "/api/v1/channels/messenger/connect": {
       "post": {
         "operationId": "connect_messenger_api_v1_channels_messenger_connect_post",
@@ -25433,6 +26056,183 @@
         "summary": "Connect Messenger",
         "tags": [
           "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/ozon/connect": {
+      "post": {
+        "operationId": "connect_ozon_api_v1_channels_ozon_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OzonConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Ozon",
+        "tags": [
+          "marketplace-connect"
+        ]
+      }
+    },
+    "/api/v1/channels/shein/connect": {
+      "post": {
+        "operationId": "connect_shein_api_v1_channels_shein_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SheinConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Shein",
+        "tags": [
+          "marketplace-connect"
+        ]
+      }
+    },
+    "/api/v1/channels/shopee/connect": {
+      "post": {
+        "operationId": "connect_shopee_api_v1_channels_shopee_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopeeConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Shopee",
+        "tags": [
+          "marketplace-connect"
         ]
       }
     },
@@ -25564,6 +26364,124 @@
         "summary": "Connect Telegram",
         "tags": [
           "channels"
+        ]
+      }
+    },
+    "/api/v1/channels/temu/connect": {
+      "post": {
+        "operationId": "connect_temu_api_v1_channels_temu_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemuConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Temu",
+        "tags": [
+          "marketplace-connect"
+        ]
+      }
+    },
+    "/api/v1/channels/walmart/connect": {
+      "post": {
+        "operationId": "connect_walmart_api_v1_channels_walmart_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WalmartConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplaceConnectionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Walmart",
+        "tags": [
+          "marketplace-connect"
         ]
       }
     },
@@ -33700,6 +34618,216 @@
         ]
       }
     },
+    "/api/v1/webhooks/aliexpress": {
+      "post": {
+        "operationId": "receive_aliexpress_webhook_api_v1_webhooks_aliexpress_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Aliexpress Webhook Api V1 Webhooks Aliexpress Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Aliexpress Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/lazada": {
+      "post": {
+        "operationId": "receive_lazada_webhook_api_v1_webhooks_lazada_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Lazada Webhook Api V1 Webhooks Lazada Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Lazada Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/mercado-libre": {
+      "post": {
+        "operationId": "receive_mercado_libre_webhook_api_v1_webhooks_mercado_libre_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Mercado Libre Webhook Api V1 Webhooks Mercado Libre Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Mercado Libre Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/ozon": {
+      "post": {
+        "operationId": "receive_ozon_webhook_api_v1_webhooks_ozon_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Ozon Webhook Api V1 Webhooks Ozon Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Ozon Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/shein": {
+      "post": {
+        "operationId": "receive_shein_webhook_api_v1_webhooks_shein_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Shein Webhook Api V1 Webhooks Shein Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Shein Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/shopee": {
+      "post": {
+        "operationId": "receive_shopee_webhook_api_v1_webhooks_shopee_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Shopee Webhook Api V1 Webhooks Shopee Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Shopee Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
     "/api/v1/webhooks/shopify": {
       "post": {
         "operationId": "receive_shopify_webhook_api_v1_webhooks_shopify_post",
@@ -33862,6 +34990,41 @@
         ]
       }
     },
+    "/api/v1/webhooks/temu": {
+      "post": {
+        "operationId": "receive_temu_webhook_api_v1_webhooks_temu_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Temu Webhook Api V1 Webhooks Temu Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Temu Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
     "/api/v1/webhooks/tiktok": {
       "post": {
         "operationId": "receive_tiktok_webhook_api_v1_webhooks_tiktok_post",
@@ -33892,6 +35055,41 @@
           }
         },
         "summary": "Receive Tiktok Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/walmart": {
+      "post": {
+        "operationId": "receive_walmart_webhook_api_v1_webhooks_walmart_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Walmart Webhook Api V1 Webhooks Walmart Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Walmart Webhook",
         "tags": [
           "connectors"
         ]

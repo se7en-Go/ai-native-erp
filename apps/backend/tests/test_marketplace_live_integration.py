@@ -1550,6 +1550,14 @@ def test_reconciliation_registry_covers_the_marketplaces() -> None:
         ChannelType.AMAZON_SP,
         ChannelType.EBAY,
         ChannelType.ALIBABA_EMAIL,
+        ChannelType.SHOPEE,
+        ChannelType.LAZADA,
+        ChannelType.TEMU,
+        ChannelType.SHEIN,
+        ChannelType.ALIEXPRESS,
+        ChannelType.OZON,
+        ChannelType.WALMART,
+        ChannelType.MERCADO_LIBRE,
     ):
         assert channel in ECOMMERCE_CHANNELS
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.SHOPIFY] == (
@@ -1559,7 +1567,7 @@ def test_reconciliation_registry_covers_the_marketplaces() -> None:
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.AMAZON_SP] == ("amazon_sp_api",)
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.EBAY] == ("ebay_api",)
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.ALIBABA_EMAIL] == ("alibaba_intl_app",)
-    # The listing dispatcher covers all 8 live marketplaces whose keys match the reconciler.
+    # The listing dispatcher covers all 16 live marketplaces whose keys match the reconciler.
     assert set(DISPATCHER_CREDENTIAL_TYPES.values()) == {
         "amazon_sp_api",
         "ebay_api",
@@ -1569,6 +1577,14 @@ def test_reconciliation_registry_covers_the_marketplaces() -> None:
         "shopline_app",
         "shoplazza_app",
         "tiktok_shop_app",
+        "shopee_app",
+        "lazada_app",
+        "temu_app",
+        "shein_app",
+        "aliexpress_app",
+        "ozon_app",
+        "walmart_app",
+        "mercado_libre_app",
     }
 
 

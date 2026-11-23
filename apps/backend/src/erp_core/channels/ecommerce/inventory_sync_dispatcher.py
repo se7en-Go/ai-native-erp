@@ -1,4 +1,17 @@
-"""Transactional outbox dispatcher and reconciliation for 8-platform inventory sync."""
+"""Transactional outbox dispatcher and reconciliation for 16-platform inventory sync.
+
+Every supported channel (Shopify, WooCommerce, Shopline, Shoplazza, TikTok Shop,
+Amazon SP-API, eBay, Alibaba.com, Shopee, Lazada, Temu, SHEIN, AliExpress, Ozon, Walmart
+and Mercado Libre) is pushed through the single
+:func:`~erp_core.channels.ecommerce.listing_dispatcher.build_marketplace_adapter`
+factory, so a channel registered there is dispatched here with no second registry.
+
+The push contract is uniform: every adapter implements
+``push_inventory_level(external_sku=..., quantity=..., ...)`` with the same keyword
+set, so the optional ``location_id``/``warehouse_id`` location hints are always passed
+and each adapter uses the ones its API needs (TikTok Shop / Ozon warehouses, Shopify /
+WooCommerce locations) and ignores the rest.
+"""
 
 from __future__ import annotations
 
@@ -96,6 +109,18 @@ def _row_to_job_read(row: Any) -> InventorySyncJobRead:
     )
 
 
+def _config_text(config: Mapping[str, Any], *keys: str) -> str | None:
+    """First non-empty string among ``keys`` in a channel account's ``config`` JSON."""
+    for key in keys:
+        value = config.get(key)
+        if value in (None, ""):
+            continue
+        rendered = str(value).strip()
+        if rendered:
+            return rendered
+    return None
+
+
 def _extract_sync_error(exc: Exception) -> tuple[str, str]:
     if isinstance(exc, AppError):
         return exc.code, (exc.detail or exc.title)[:500]
@@ -105,7 +130,7 @@ def _extract_sync_error(exc: Exception) -> tuple[str, str]:
 
 
 class InventorySyncDispatcher:
-    """Dispatches transactional ``inventory_sync_jobs`` across all 8 marketplaces."""
+    """Dispatches transactional ``inventory_sync_jobs`` across all 16 marketplaces."""
 
     def __init__(
         self,
@@ -159,18 +184,28 @@ class InventorySyncDispatcher:
                 detail=f"Channel '{channel_type}' adapter has no inventory push implementation.",
             )
         account_config: Mapping[str, Any] = row.account_config or {}
+        # Location hints are optional and channel-specific: ``location_id`` is what the
+        # Shopify/WooCommerce-style location APIs need, while ``warehouse_id`` is what
+        # TikTok Shop, Ozon and the other warehouse-based marketplaces need. Each adapter
+        # takes the full keyword set and ignores whatever its own API does not model.
+        # Only marketplace-side ids are read here; ``channel_accounts.config.warehouse_id``
+        # is the *ERP* warehouse UUID and must never be sent to a marketplace.
+        location_id = _config_text(account_config, "location_id", "marketplace_location_id")
+        warehouse_id = _config_text(
+            account_config,
+            "tiktok_warehouse_id",
+            "ozon_warehouse_id",
+            "marketplace_warehouse_id",
+            "warehouse_external_id",
+        )
         result: dict[str, Any] = await adapter.push_inventory_level(
             external_sku=str(row.external_sku),
             quantity=int(row.requested_qty),
             external_product_id=row.external_product_id,
             external_variant_id=row.external_variant_id,
             external_inventory_item_id=row.external_inventory_item_id,
-            location_id=(
-                str(account_config.get("location_id") or "").strip() or None
-            ),
-            warehouse_id=(
-                str(account_config.get("tiktok_warehouse_id") or "").strip() or None
-            ),
+            location_id=location_id,
+            warehouse_id=warehouse_id,
         )
         return result
 

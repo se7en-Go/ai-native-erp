@@ -13,20 +13,28 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.channels.ecommerce.aliexpress import verify_aliexpress_webhook
 from erp_core.channels.ecommerce.base import (
     CredentialVaultHelper,
     register_channel_routing,
     resolve_routing_tenant,
 )
+from erp_core.channels.ecommerce.lazada import verify_lazada_webhook
+from erp_core.channels.ecommerce.mercado_libre import verify_mercado_libre_webhook
+from erp_core.channels.ecommerce.ozon import verify_ozon_webhook
+from erp_core.channels.ecommerce.shein import verify_shein_webhook
+from erp_core.channels.ecommerce.shopee import verify_shopee_webhook
 from erp_core.channels.ecommerce.shoplazza import (
     verify_shoplazza_oauth_hmac,
     verify_shoplazza_webhook,
 )
 from erp_core.channels.ecommerce.shopline import verify_shopline_webhook
+from erp_core.channels.ecommerce.temu import verify_temu_webhook
 from erp_core.channels.ecommerce.tiktok_shop import (
     enforce_custom_app_shop_limit,
     verify_tiktok_webhook_signature,
 )
+from erp_core.channels.ecommerce.walmart import verify_walmart_webhook
 from erp_core.channels.ecommerce.woocommerce import (
     build_wc_authorize_url,
     verify_woocommerce_webhook,
@@ -45,31 +53,83 @@ CREDENTIAL_TYPES = {
     "shopline": "shopline_app",
     "shoplazza": "shoplazza_app",
     "tiktok_shop": "tiktok_shop_app",
+    "shopee": "shopee_app",
+    "lazada": "lazada_app",
+    "temu": "temu_app",
+    "shein": "shein_app",
+    "aliexpress": "aliexpress_app",
+    "ozon": "ozon_app",
+    "walmart": "walmart_app",
+    "mercado_libre": "mercado_libre_app",
 }
 SECRET_ENV = {
     "woocommerce": "WOOCOMMERCE_WEBHOOK_SECRET",
     "shopline": "SHOPLINE_WEBHOOK_SECRET",
     "shoplazza": "SHOPLAZZA_CLIENT_SECRET",
     "tiktok_shop": "TIKTOK_SHOP_APP_SECRET",
+    "shopee": "SHOPEE_PARTNER_KEY",
+    "lazada": "LAZADA_APP_SECRET",
+    "temu": "TEMU_APP_SECRET",
+    "shein": "SHEIN_SECRET_KEY",
+    "aliexpress": "ALIEXPRESS_APP_SECRET",
+    "ozon": "OZON_API_KEY",
+    "walmart": "WALMART_CLIENT_SECRET",
+    "mercado_libre": "MERCADO_LIBRE_WEBHOOK_SECRET",
 }
 DEDUP_HEADERS = {
     "woocommerce": "X-WC-Webhook-Delivery-ID",
     "shopline": "X-Shopline-Event-Id",
     "shoplazza": "X-Shoplazza-Deduplication-ID",
     "tiktok_shop": "X-Tts-Event-Id",
+    "shopee": "X-Shopee-Event-Id",
+    "lazada": "X-Lazada-Event-Id",
+    "temu": "X-Temu-Event-Id",
+    "shein": "X-Shein-Event-Id",
+    "aliexpress": "X-AliExpress-Event-Id",
+    "ozon": "X-Ozon-Event-Id",
+    "walmart": "X-Walmart-Event-Id",
+    "mercado_libre": "X-Meli-Event-Id",
 }
 TOPIC_HEADERS = {
     "woocommerce": "X-WC-Webhook-Topic",
     "shopline": "X-Shopline-Topic",
     "shoplazza": "X-Shoplazza-Topic",
     "tiktok_shop": "X-Tts-Topic",
+    "shopee": "X-Shopee-Topic",
+    "lazada": "X-Lazada-Topic",
+    "temu": "X-Temu-Topic",
+    "shein": "X-Shein-Topic",
+    "aliexpress": "X-AliExpress-Topic",
+    "ozon": "X-Ozon-Topic",
+    "walmart": "X-Walmart-Topic",
+    "mercado_libre": "X-Meli-Topic",
 }
 DOMAIN_HEADERS = {
     "woocommerce": "X-WC-Webhook-Source",
     "shopline": "X-Shopline-Shop-Domain",
     "shoplazza": "X-Shoplazza-Shop-Domain",
     "tiktok_shop": "X-Tts-Shop-Domain",
+    "shopee": "X-Shopee-Shop-Id",
+    "lazada": "X-Lazada-Seller-Id",
+    "temu": "X-Temu-Mall-Id",
+    "shein": "X-Shein-Seller-Id",
+    "aliexpress": "X-AliExpress-Seller-Id",
+    "ozon": "X-Ozon-Client-Id",
+    "walmart": "X-Walmart-Seller-Id",
+    "mercado_libre": "X-Meli-Seller-Id",
 }
+
+#: Credential-blob keys that may carry a platform's inbound webhook secret, in
+#: precedence order. Marketplace BYOK apps reuse their signing key for push HMACs.
+WEBHOOK_SECRET_KEYS: tuple[str, ...] = (
+    "webhook_secret",
+    "client_secret",
+    "app_secret",
+    "partner_key",
+    "secret_key",
+    "api_key",
+    "access_token",
+)
 
 
 def _session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -95,18 +155,48 @@ async def _webhook_secret(request: Request, platform: str, domain: str) -> str:
                 )
         except AppError:
             data = {}
-        for key in ("webhook_secret", "client_secret", "app_secret"):
+        for key in WEBHOOK_SECRET_KEYS:
             if data.get(key):
                 return str(data[key])
     return os.getenv(SECRET_ENV[platform], "")
 
 
-def _verify(platform: str, raw: bytes, headers: dict[str, str], secret: str) -> bool:
+def _callback_url(request: Request) -> str:
+    """Absolute push URL a marketplace signed its delivery against (query stripped)."""
+    return f"{str(request.base_url).rstrip('/')}{request.url.path}"
+
+
+def _verify(
+    platform: str,
+    raw: bytes,
+    headers: dict[str, str],
+    secret: str,
+    *,
+    callback_url: str = "",
+) -> bool:
     if platform == "woocommerce":
         return verify_woocommerce_webhook(raw, headers, secret)
     if platform == "shopline":
         return verify_shopline_webhook(raw, headers, secret)
-    return verify_shoplazza_webhook(raw, headers, secret)
+    if platform == "shoplazza":
+        return verify_shoplazza_webhook(raw, headers, secret)
+    if platform == "shopee":
+        return verify_shopee_webhook(raw, headers, secret, callback_url=callback_url or None)
+    if platform == "lazada":
+        return verify_lazada_webhook(raw, headers, secret)
+    if platform == "temu":
+        return verify_temu_webhook(raw, headers, secret)
+    if platform == "shein":
+        return verify_shein_webhook(raw, headers, secret)
+    if platform == "aliexpress":
+        return verify_aliexpress_webhook(raw, headers, secret)
+    if platform == "ozon":
+        return verify_ozon_webhook(raw, headers, secret)
+    if platform == "walmart":
+        return verify_walmart_webhook(raw, headers, secret)
+    if platform == "mercado_libre":
+        return verify_mercado_libre_webhook(raw, headers, secret)
+    return False
 
 
 async def receive_signed_storefront_webhook(
@@ -116,7 +206,9 @@ async def receive_signed_storefront_webhook(
     headers = {key.lower(): value for key, value in request.headers.items()}
     domain = _header(headers, DOMAIN_HEADERS[platform]).strip().lower()
     secret = await _webhook_secret(request, platform, domain)
-    if not secret or not _verify(platform, raw, headers, secret):
+    if not secret or not _verify(
+        platform, raw, headers, secret, callback_url=_callback_url(request)
+    ):
         raise AppError(
             slug="invalid-webhook-signature",
             status_code=401,
@@ -471,4 +563,53 @@ async def receive_shoplazza_webhook(request: Request) -> dict[str, int | str | b
     return await receive_signed_storefront_webhook(request, "shoplazza")
 
 
-__all__ = ["router", "receive_signed_storefront_webhook"]
+@router.post("/webhooks/shopee")
+async def receive_shopee_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "shopee")
+
+
+@router.post("/webhooks/lazada")
+async def receive_lazada_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "lazada")
+
+
+@router.post("/webhooks/temu")
+async def receive_temu_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "temu")
+
+
+@router.post("/webhooks/shein")
+async def receive_shein_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "shein")
+
+
+@router.post("/webhooks/aliexpress")
+async def receive_aliexpress_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "aliexpress")
+
+
+@router.post("/webhooks/ozon")
+async def receive_ozon_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "ozon")
+
+
+@router.post("/webhooks/walmart")
+async def receive_walmart_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "walmart")
+
+
+@router.post("/webhooks/mercado-libre")
+async def receive_mercado_libre_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "mercado_libre")
+
+
+__all__ = [
+    "CREDENTIAL_TYPES",
+    "DEDUP_HEADERS",
+    "DOMAIN_HEADERS",
+    "SECRET_ENV",
+    "TOPIC_HEADERS",
+    "WEBHOOK_SECRET_KEYS",
+    "receive_signed_storefront_webhook",
+    "router",
+]

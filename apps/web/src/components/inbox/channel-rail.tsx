@@ -4,11 +4,14 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BadgeDollarSign,
+  Boxes,
   Building2,
   Camera,
   ChevronLeft,
   ChevronRight,
+  Compass,
   Globe,
+  HandCoins,
   Layers,
   Mail,
   MessageCircle,
@@ -16,9 +19,14 @@ import {
   Package,
   Send,
   Settings,
+  Shirt,
   ShoppingBag,
+  ShoppingCart,
+  Snowflake,
   Store,
+  Truck,
   Video,
+  Warehouse,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { marketplaceKeyForChannelFilter } from "@/components/channels/channel-marketplace";
@@ -38,13 +46,26 @@ export type ChannelFilterKey =
   | "tiktok_shop"
   | "alibaba_email"
   | "amazon_sp"
-  | "ebay";
+  | "ebay"
+  | "shopee"
+  | "lazada"
+  | "temu"
+  | "shein"
+  | "aliexpress"
+  | "ozon"
+  | "walmart"
+  | "mercado_libre";
 
 const CHANNEL_RAIL_ITEMS: Array<{
   key: ChannelFilterKey;
   zh: string;
   en: string;
   icon: React.ComponentType<{ className?: string }>;
+  /**
+   * 未读徽标的配色（仅 8 个全球电商渠道显式声明）。
+   * 旧渠道不传该字段，因此仍走原有白色徽标样式，视觉与既有单测均不受影响。
+   */
+  unreadTone?: string;
 }> = [
   {
     key: "all",
@@ -135,6 +156,62 @@ const CHANNEL_RAIL_ITEMS: Array<{
     zh: "eBay",
     en: "eBay",
     icon: BadgeDollarSign,
+  },
+  {
+    key: "shopee",
+    zh: "Shopee",
+    en: "Shopee",
+    icon: ShoppingCart,
+    unreadTone: "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300",
+  },
+  {
+    key: "lazada",
+    zh: "Lazada",
+    en: "Lazada",
+    icon: Truck,
+    unreadTone: "bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-300",
+  },
+  {
+    key: "temu",
+    zh: "Temu",
+    en: "Temu",
+    icon: Boxes,
+    unreadTone: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300",
+  },
+  {
+    key: "shein",
+    zh: "SHEIN",
+    en: "SHEIN",
+    icon: Shirt,
+    unreadTone: "bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-300",
+  },
+  {
+    key: "aliexpress",
+    zh: "速卖通",
+    en: "AliExpress",
+    icon: Compass,
+    unreadTone: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
+  },
+  {
+    key: "ozon",
+    zh: "Ozon",
+    en: "Ozon",
+    icon: Snowflake,
+    unreadTone: "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300",
+  },
+  {
+    key: "walmart",
+    zh: "沃尔玛",
+    en: "Walmart",
+    icon: Warehouse,
+    unreadTone: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300",
+  },
+  {
+    key: "mercado_libre",
+    zh: "美客多",
+    en: "Mercado Libre",
+    icon: HandCoins,
+    unreadTone: "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300",
   },
 ];
 
@@ -299,7 +376,8 @@ export function ChannelRail({
                       className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
                         active
                           ? "bg-white/20 text-white"
-                          : "bg-white text-blue-600 dark:bg-gray-900 dark:text-blue-300"
+                          : (item.unreadTone ??
+                            "bg-white text-blue-600 dark:bg-gray-900 dark:text-blue-300")
                       }`}
                     >
                       {unread}
@@ -376,7 +454,11 @@ export function ChannelRail({
                 <span className="truncate">{bi(item.zh, item.en)}</span>
               </span>
               {unread > 0 && (
-                <span className="shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                <span
+                  className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                    item.unreadTone ?? "bg-rose-500 text-white"
+                  }`}
+                >
                   {unread}
                 </span>
               )}
