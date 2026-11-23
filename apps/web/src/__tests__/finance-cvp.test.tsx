@@ -274,4 +274,69 @@ describe("Task 5.6 Orders 17TRACK + Inventory Ledger & Finance CVP Margin", () =
       expect(screen.getByText("reserve:ord-b2b-1:var-1")).toBeInTheDocument();
     });
   });
+
+  it("locks same-currency receivable FX rate to 1.0000 instead of hardcoded 7.12", async () => {
+    let submittedFx: FormDataEntryValue | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const { url, method } = normalizeFetchInput(input, init);
+      if (url.includes("/ai/proposals")) {
+        return new Response(
+          JSON.stringify({ items: [], total: 0, limit: 1, offset: 0, has_more: false }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.includes("/finance/receivables/rp-usd/payments") && method === "POST") {
+        if (init?.body instanceof FormData) {
+          submittedFx = init.body.get("actual_fx_rate");
+        }
+        return new Response(JSON.stringify({ id: "pay-usd-1" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/finance/overview")) {
+        return new Response(
+          JSON.stringify({
+            summary: {
+              total_gross_revenue_base: "17240.00",
+              total_net_margin_base: "7170.00",
+              avg_margin_pct: "41.59",
+              base_currency: "USD",
+            },
+            receivables: [
+              {
+                id: "rp-usd",
+                order_id: "ord-usd-1",
+                order_no: "ORD-USD-1001",
+                order_mode: "b2b_wholesale",
+                milestone_label: "b2b_30_deposit",
+                due_amount: "5172.00",
+                paid_amount: "0.00",
+                currency: "USD",
+                status: "open",
+                shipment_blocked_70_unpaid: true,
+                pending_payment_id: null,
+                pending_tx_ref: null,
+              },
+            ],
+            cvp_snapshots: [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    wrap(<FinancePage />, "owner");
+
+    const fxInput = (await screen.findByLabelText("Actual FX rate")) as HTMLInputElement;
+    expect(fxInput.value).toBe("1.0000");
+    expect(fxInput.readOnly).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /Record/i }));
+    await waitFor(() => {
+      expect(submittedFx).toBe("1.0000");
+    });
+  });
 });

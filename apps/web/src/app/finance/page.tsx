@@ -614,6 +614,7 @@ export default function FinancePage() {
         <PaymentMilestoneTable
           receivables={financeQuery.data?.receivables ?? []}
           cvpSnapshots={financeQuery.data?.cvp_snapshots ?? []}
+          baseCurrency={summary?.base_currency}
           role={principal?.role}
         />
 

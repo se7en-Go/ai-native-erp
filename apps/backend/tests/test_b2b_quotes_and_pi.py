@@ -574,7 +574,10 @@ async def test_b2b_30_70_milestones_settlement_and_cvp_margin_recompute() -> Non
     try:
         async with tenant_session(rt_factory, tenant_id) as session:
             await session.execute(
-                text("INSERT INTO tenants (id, name, slug) VALUES (:id, :name, :slug)"),
+                text(
+                    "INSERT INTO tenants (id, name, slug, base_currency) "
+                    "VALUES (:id, :name, :slug, 'CNY')"
+                ),
                 {"id": tenant_id, "name": "Milestone Co", "slug": f"ms-{tenant_id.hex[:8]}"},
             )
             await session.execute(

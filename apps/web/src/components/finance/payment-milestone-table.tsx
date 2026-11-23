@@ -71,10 +71,12 @@ const STATUS_DOT: Record<ReceivableMilestoneItem["status"], string> = {
 export function PaymentMilestoneTable({
   receivables,
   cvpSnapshots,
+  baseCurrency,
   role,
 }: {
   receivables: ReceivableMilestoneItem[];
   cvpSnapshots: OrderProfitSnapshotItem[];
+  baseCurrency?: string;
   role: UserRole | undefined;
 }) {
   const queryClient = useQueryClient();
@@ -85,6 +87,25 @@ export function PaymentMilestoneTable({
   const [fxRates, setFxRates] = useState<Record<string, string>>({});
   const [slips, setSlips] = useState<Record<string, File | null>>({});
 
+  const snapshotBaseByOrder = new Map(
+    cvpSnapshots.map((snap) => [snap.order_id, snap.base_currency.trim().toUpperCase()])
+  );
+  const fallbackBaseCurrency = (
+    baseCurrency ??
+    cvpSnapshots[0]?.base_currency ??
+    ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const isSameCurrency = (rp: ReceivableMilestoneItem): boolean => {
+    const targetBase = snapshotBaseByOrder.get(rp.order_id) || fallbackBaseCurrency;
+    return Boolean(targetBase && rp.currency.trim().toUpperCase() === targetBase);
+  };
+
+  const defaultFxRateFor = (rp: ReceivableMilestoneItem): string =>
+    isSameCurrency(rp) ? "1.0000" : "7.12";
+
   const uploadPaymentMutation = useMutation({
     mutationFn: async (rp: ReceivableMilestoneItem) => {
       const form = new FormData();
@@ -92,7 +113,10 @@ export function PaymentMilestoneTable({
       form.append("external_tx_ref", txRefs[rp.id] || `TT-${rp.order_no}`);
       form.append("amount_received", rp.due_amount);
       form.append("currency", rp.currency);
-      form.append("actual_fx_rate", fxRates[rp.id] || "7.12");
+      const effectiveFx = isSameCurrency(rp)
+        ? "1.0000"
+        : fxRates[rp.id] || defaultFxRateFor(rp);
+      form.append("actual_fx_rate", effectiveFx);
       form.append("gateway_fee", "35.00");
       if (slips[rp.id]) {
         form.append("receipt_file", slips[rp.id]!);
@@ -233,13 +257,32 @@ export function PaymentMilestoneTable({
                             />
                             <input
                               type="text"
-                              value={fxRates[rp.id] ?? "7.12"}
-                              onChange={(e) =>
-                                setFxRates((prev) => ({ ...prev, [rp.id]: e.target.value }))
+                              value={
+                                isSameCurrency(rp)
+                                  ? "1.0000"
+                                  : (fxRates[rp.id] ?? defaultFxRateFor(rp))
                               }
+                              readOnly={isSameCurrency(rp)}
+                              title={
+                                isSameCurrency(rp)
+                                  ? bi(
+                                      `同币种结算（${rp.currency} → ${rp.currency}），汇率固定为 1.0000`,
+                                      `Same-currency settlement (${rp.currency} -> ${rp.currency}), FX fixed at 1.0000`
+                                    )
+                                  : undefined
+                              }
+                              onChange={(e) => {
+                                if (!isSameCurrency(rp)) {
+                                  setFxRates((prev) => ({ ...prev, [rp.id]: e.target.value }));
+                                }
+                              }}
                               placeholder={bi("汇率", "FX")}
                               aria-label={bi("实际汇率", "Actual FX rate")}
-                              className="h-8 w-16 rounded-lg border border-slate-300 bg-white px-2 text-[12px] tabular-nums text-slate-800 shadow-xs outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
+                              className={`h-8 w-16 rounded-lg border px-2 text-[12px] tabular-nums shadow-xs outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${
+                                isSameCurrency(rp)
+                                  ? "border-slate-200 bg-slate-100 text-slate-500"
+                                  : "border-slate-300 bg-white text-slate-800"
+                              }`}
                             />
                             <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[12px] font-medium text-slate-600 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50">
                               <Upload className="h-3 w-3" />
