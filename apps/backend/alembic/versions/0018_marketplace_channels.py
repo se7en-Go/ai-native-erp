@@ -263,14 +263,22 @@ def _apply_allowlists(
         _set_allowlist(table, constraint, channels)
     _set_allowlist(_WEBHOOK_TABLE, _WEBHOOK_CONSTRAINT, webhook_channels)
 
-    for function, sql in (
+    for _function, sql in (
         (_RESOLVE_FUNCTION, _resolve_tenant_sql(channels)),
         (_ACCEPT_FUNCTION, _accept_raw_webhook_sql(webhook_channels)),
         (_REGISTER_FUNCTION, _register_channel_routing_sql(channels)),
     ):
         op.execute(sql)
+
+    # Carry over the privilege surface installed by `0002` and `0003c` verbatim.
+    # Runtime resolves tenants and registers routing, but webhook ingress
+    # (`accept_raw_webhook_event`) must stay broker-only: `0002` revoked it from
+    # `app_runtime` on purpose, because a runtime-executable version would let the
+    # application role forge receipts for any tenant before the RLS context is set.
+    for function in (_RESOLVE_FUNCTION, _REGISTER_FUNCTION):
         op.execute(f"REVOKE ALL ON FUNCTION {function} FROM PUBLIC")
         op.execute(f"GRANT EXECUTE ON FUNCTION {function} TO app_runtime")
+    op.execute(f"REVOKE ALL ON FUNCTION {_ACCEPT_FUNCTION} FROM PUBLIC, app_runtime")
 
 
 def upgrade() -> None:
