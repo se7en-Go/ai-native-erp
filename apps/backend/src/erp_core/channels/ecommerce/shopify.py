@@ -68,7 +68,7 @@ query SyncOrders($first: Int!, $query: String, $after: String) {
         __typename
         ... on PurchasingCompany {
           company { id name externalId }
-          location { id name externalId shippingAddress { countryCodeV2 } }
+          location { id name externalId shippingAddress { countryCode } }
         }
       }
       lineItems(first: 100) {
@@ -448,7 +448,8 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             company = purchasing["company"]
             location = purchasing.get("location") or {}
             country = (
-                (location.get("shippingAddress") or {}).get("countryCodeV2")
+                (location.get("shippingAddress") or {}).get("countryCode")
+                or (location.get("shippingAddress") or {}).get("countryCodeV2")
                 or shipping_address.get("countryCodeV2")
                 or "US"
             )
