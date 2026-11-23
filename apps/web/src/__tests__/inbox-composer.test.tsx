@@ -276,4 +276,78 @@ describe("Task 5.2 4-Column Inbox & Composer", () => {
       (screen.getByTestId("inbox-channel-settings-link") as HTMLAnchorElement).getAttribute("href")
     ).toBe("/settings/channels");
   });
+
+  it("translates vertical mouse wheel and arrow button clicks into horizontal scroll on compact channel rail", () => {
+    wrap(
+      <ChannelRail
+        variant="compact"
+        selectedChannel="all"
+        onSelectChannel={vi.fn()}
+        unreadByChannel={{}}
+      />,
+      "zh"
+    );
+
+    const scroller = screen.getByTestId("inbox-channel-rail-scroll") as HTMLDivElement;
+    let currentScrollLeft = 0;
+    Object.defineProperties(scroller, {
+      clientWidth: { value: 400, configurable: true },
+      scrollWidth: { value: 1200, configurable: true },
+      scrollLeft: {
+        get: () => currentScrollLeft,
+        set: (val: number) => {
+          currentScrollLeft = Math.max(0, Math.min(800, val));
+        },
+        configurable: true,
+      },
+    });
+    scroller.scrollBy = ((optionsOrX?: ScrollToOptions | number) => {
+      const delta = typeof optionsOrX === "number" ? optionsOrX : (optionsOrX?.left ?? 0);
+      scroller.scrollLeft = scroller.scrollLeft + delta;
+      fireEvent.scroll(scroller);
+    }) as typeof scroller.scrollBy;
+
+    // Trigger resize so overflow buttons recompute
+    fireEvent(window, new Event("resize"));
+
+    // Right scroll arrow should be visible; left arrow hidden at scrollLeft=0
+    const rightBtn = screen.getByTestId("inbox-channel-rail-scroll-right");
+    expect(rightBtn).toBeInTheDocument();
+    expect(screen.queryByTestId("inbox-channel-rail-scroll-left")).not.toBeInTheDocument();
+
+    // Vertical mouse wheel scrolls horizontally and prevents vertical scroll hijack
+    const wheelDown = new WheelEvent("wheel", {
+      deltaY: 120,
+      deltaX: 0,
+      bubbles: true,
+      cancelable: true,
+    });
+    scroller.dispatchEvent(wheelDown);
+    expect(wheelDown.defaultPrevented).toBe(true);
+    expect(scroller.scrollLeft).toBe(120);
+
+    // Native trackpad horizontal swipe (|deltaX| >= |deltaY|) should NOT be hijacked
+    const trackpadSwipe = new WheelEvent("wheel", {
+      deltaX: 90,
+      deltaY: 12,
+      bubbles: true,
+      cancelable: true,
+    });
+    scroller.dispatchEvent(trackpadSwipe);
+    expect(trackpadSwipe.defaultPrevented).toBe(false);
+    expect(scroller.scrollLeft).toBe(120);
+
+    // Trigger scroll event so left arrow appears
+    fireEvent.scroll(scroller);
+    const leftBtn = screen.getByTestId("inbox-channel-rail-scroll-left");
+    expect(leftBtn).toBeInTheDocument();
+
+    // Clicking right arrow advances further right; clicking left scrolls back
+    fireEvent.click(rightBtn);
+    expect(scroller.scrollLeft).toBeGreaterThan(120);
+    const afterRight = scroller.scrollLeft;
+
+    fireEvent.click(leftBtn);
+    expect(scroller.scrollLeft).toBeLessThan(afterRight);
+  });
 });
