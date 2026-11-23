@@ -1854,6 +1854,14 @@ async def _seed_workspace_demo_data(
         ("web_livechat", str(params["site"])),
     ):
         aid = row_id("webchat" if channel == "web_livechat" else channel)
+        cfg: dict[str, object] = {"warehouse_id": str(params["warehouse"])}
+        if channel == "web_livechat":
+            cfg["allowed_origins"] = [
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:3001",
+            ]
         await session.execute(
             text("""
             INSERT INTO channel_accounts (id, tenant_id, channel_type,
@@ -1866,7 +1874,7 @@ async def _seed_workspace_demo_data(
                 "tid": tid,
                 "kind": channel,
                 "external": external,
-                "config": json.dumps({"warehouse_id": str(params["warehouse"])}),
+                "config": json.dumps(cfg),
             },
         )
         await register_channel_routing(

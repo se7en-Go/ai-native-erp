@@ -121,6 +121,7 @@ def build_shopify_oauth_install_url(
     state: str,
     scopes: str = (
         "read_orders,write_orders,read_products,read_inventory,write_fulfillments,"
+        "read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,"
         "read_customers,read_companies"
     ),
     client_id: str | None = None,

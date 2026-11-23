@@ -1485,10 +1485,12 @@ async def test_web_livechat_connect_normalizes_domain_and_requires_admin(
         assert personal_row.external_account_id == personal_domain
         assert personal_row.channel_type == "web_livechat"
         assert personal_row.config["site_domain"] == personal_domain
+        assert f"http://{personal_domain}" in personal_row.config["allowed_origins"]
         assert personal_row.owner_user_id == agent_id
         assert personal_row.visibility_scope == "personal"
         assert company_row.external_account_id == company_domain
         assert company_row.config["site_domain"] == company_domain
+        assert f"https://{company_domain}" in company_row.config["allowed_origins"]
         assert company_row.owner_user_id is None
         assert company_row.visibility_scope == "shared"
         assert await resolve_routing_tenant(session, "web_livechat", company_domain) == (

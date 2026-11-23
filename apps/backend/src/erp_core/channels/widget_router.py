@@ -7,6 +7,7 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
@@ -244,6 +245,16 @@ def _decode_widget_token(authorization: str | None = Header(default=None)) -> Wi
     )
 
 
+def _allowed_origins_for_config(cfg: Mapping[str, Any] | None) -> list[str]:
+    """Return explicit allowed_origins or fail-closed scheme+domain defaults from site_domain."""
+    if cfg and cfg.get("allowed_origins"):
+        return [str(o) for o in cfg["allowed_origins"]]
+    site_domain = str((cfg or {}).get("site_domain") or "").strip().lower()
+    if site_domain:
+        return [f"https://{site_domain}", f"http://{site_domain}"]
+    return []
+
+
 def _enforce_origin(origin: str | None, allowed_origins: list[str]) -> dict[str, str]:
     if not origin:
         return {}
@@ -408,7 +419,7 @@ async def create_or_resume_widget_session(
             )
 
         cfg = acct["config"] or {}
-        cors_headers = _enforce_origin(origin, list(cfg.get("allowed_origins") or []))
+        cors_headers = _enforce_origin(origin, _allowed_origins_for_config(cfg))
         for k, v in cors_headers.items():
             response.headers[k] = v
 
@@ -567,7 +578,7 @@ async def _validate_account_cors(
             {"tid": tenant_id, "aid": account_id},
         )
     ).scalar_one_or_none()
-    allowed = list((cfg or {}).get("allowed_origins") or [])
+    allowed = _allowed_origins_for_config(cfg)
     for k, v in _enforce_origin(origin, allowed).items():
         response.headers[k] = v
 

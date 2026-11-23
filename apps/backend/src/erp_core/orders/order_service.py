@@ -754,9 +754,23 @@ class OrderService:
         if tracking_adapter is not None and payload.tracking_provider == TrackingProvider(
             "17track"
         ):
-            await tracking_adapter.register_tracking(
-                shipment.tracking_number, shipment.carrier_code
-            )
+            try:
+                await tracking_adapter.register_tracking(
+                    shipment.tracking_number, shipment.carrier_code
+                )
+            except ValueError as exc:
+                if "TRACK17_API_KEY" not in str(exc):
+                    raise
+                raise AppError(
+                    slug="tracking-provider-not-configured",
+                    status_code=422,
+                    code="ERR_TRACKING_PROVIDER_NOT_CONFIGURED",
+                    title="17TRACK API Key Not Configured",
+                    detail=(
+                        "TRACK17_API_KEY is not configured. Configure TRACK17_API_KEY or set "
+                        "tracking_provider='manual'."
+                    ),
+                ) from exc
 
         prev_status = order.fulfillment_status.value
         order.fulfillment_status = FulfillmentStatus.SHIPPED

@@ -244,3 +244,90 @@ async def test_web_livechat_cors_session_prechat_optin_and_hmac_identify(
             )
         await redis.aclose()
         await runtime_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_widget_falls_back_to_site_domain_when_allowed_origins_empty(
+    monkeypatch,
+) -> None:
+    from erp_core.channels.settings_router import _derive_livechat_allowed_origins
+
+    monkeypatch.setenv("JWT_SECRET", "widget-test-jwt-secret-key-2026")
+    monkeypatch.setenv("JWT_ALGORITHM", "HS256")
+    assert _derive_livechat_allowed_origins(
+        "https://shop.example.com:8443/chat", "shop.example.com"
+    ) == [
+        "https://shop.example.com:8443",
+        "https://shop.example.com",
+        "http://shop.example.com",
+    ]
+
+    runtime_engine = create_async_engine(os.environ["DATABASE_RUNTIME_URL"], future=True)
+    session_factory = async_sessionmaker(
+        runtime_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    redis = aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+    tenant_id = uuid.uuid4()
+    account_id = uuid.uuid4()
+    site_domain = f"shop-{uuid.uuid4().hex[:8]}.example.com"
+
+    app = FastAPI()
+    app.state.session_factory = session_factory
+    app.state.redis = redis
+    app.include_router(widget_router)
+
+    try:
+        async with tenant_session(session_factory, tenant_id) as sess:
+            await sess.execute(
+                text("INSERT INTO tenants (id, slug, name) VALUES (:id, :slug, 'Fallback Store')"),
+                {"id": tenant_id, "slug": f"fb-{tenant_id.hex[:8]}"},
+            )
+            await sess.execute(
+                text(
+                    "INSERT INTO channel_accounts "
+                    "(id, tenant_id, channel_type, external_account_id, display_name, status, "
+                    "rate_limit_profile, config) VALUES ("
+                    ":id, :tid, 'web_livechat', :skey, 'Fallback Chat', 'active', "
+                    "'{\"mps\": 100}'::jsonb, CAST(:cfg AS jsonb))"
+                ),
+                {
+                    "id": account_id,
+                    "tid": tenant_id,
+                    "skey": site_domain,
+                    "cfg": json.dumps({"site_domain": site_domain}),
+                },
+            )
+            await sess.execute(
+                text(
+                    "SELECT register_channel_routing("
+                    "'web_livechat', :skey, CAST(:tid AS uuid), CAST(:aid AS uuid), true)"
+                ),
+                {"skey": site_domain, "tid": tenant_id, "aid": account_id},
+            )
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            ok_resp = await client.post(
+                "/api/v1/widget/session",
+                json={"site_key": site_domain},
+                headers={"Origin": f"https://{site_domain}"},
+            )
+            assert ok_resp.status_code == 200, ok_resp.text
+            assert ok_resp.headers["access-control-allow-origin"] == f"https://{site_domain}"
+
+            bad_resp = await client.post(
+                "/api/v1/widget/session",
+                json={"site_key": site_domain},
+                headers={"Origin": "https://untrusted.example.com"},
+            )
+            assert bad_resp.status_code == 403
+    finally:
+        async with tenant_session(session_factory, tenant_id) as conn:
+            await conn.execute(
+                text(
+                    "SELECT register_channel_routing("
+                    "'web_livechat', :skey, CAST(:tid AS uuid), CAST(:aid AS uuid), false)"
+                ),
+                {"skey": site_domain, "tid": tenant_id, "aid": account_id},
+            )
+        await redis.aclose()
+        await runtime_engine.dispose()
