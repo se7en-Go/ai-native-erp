@@ -28,6 +28,7 @@ from erp_core.channels.ecommerce.base import (
     NormalizedLineItem,
     NormalizedOrder,
     NormalizedProduct,
+    attach_financial_metadata,
 )
 from erp_core.shared.enums import FulfillmentStatus, OrderMode, PaymentStatus
 from erp_core.shared.errors import AppError
@@ -639,6 +640,10 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
             _lookup(order, "platform_commission", "commission_amount"),
             what="platform_commission",
         )
+        refunded = _money(
+            _lookup(order, "refund_amount", "refunded_amount"),
+            what="refund_amount",
+        )
 
         country = _country_code(
             _first_str(order, "buyer_country", "country_code", "country")
@@ -659,6 +664,11 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
             "alibaba_trade_status": status,
             "alibaba_store_id": self.store_id,
         }
+        attach_financial_metadata(
+            metadata,
+            refunded_amount=refunded,
+            platform_commission_base=commission,
+        )
         order_number = _first_str(order, "order_no", "trade_no")
         if order_number:
             metadata["alibaba_order_no"] = order_number

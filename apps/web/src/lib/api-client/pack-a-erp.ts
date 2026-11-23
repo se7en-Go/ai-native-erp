@@ -12,6 +12,9 @@ import { bffFetch } from "@/lib/api";
 import type {
   CatalogCsvImportRequest,
   CatalogCsvImportResponse,
+  ChannelAnalyticsOverviewRead,
+  ChannelDailyMetricRead,
+  ChannelDailyMetricUpsert,
   InventorySyncDispatchSummary,
   InventorySyncJobRead,
   LowStockCreatePoRequest,
@@ -21,6 +24,7 @@ import type {
   ProductCreate,
   ProductRead,
   PurchaseOrderRead,
+  SkuVelocityResponse,
   VariantCreate,
   VariantRead,
   WarehouseCreateRequest,
@@ -365,6 +369,63 @@ export function retryInventorySyncJob(jobId: string): Promise<InventorySyncJobRe
 }
 
 // ---------------------------------------------------------------------------
+// Phase 3: Multi-platform sales, margin, ROAS & SKU velocity analytics
+// ---------------------------------------------------------------------------
+
+export type AnalyticsWindow = "7d" | "30d" | "90d";
+
+/** GET `/v1/finance/channel-analytics/overview?window=...` */
+export function fetchChannelAnalyticsOverview(
+  window: AnalyticsWindow = "30d"
+): Promise<ChannelAnalyticsOverviewRead> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve({ ...mockChannelAnalyticsOverview, window });
+  }
+  return bffFetch<ChannelAnalyticsOverviewRead>(
+    `/v1/finance/channel-analytics/overview?window=${encodeURIComponent(window)}`
+  );
+}
+
+/** GET `/v1/finance/channel-analytics/sku-velocity?window=...&limit=...` */
+export function fetchSkuVelocity(
+  window: AnalyticsWindow = "30d",
+  limit = 50
+): Promise<SkuVelocityResponse> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve({ ...mockSkuVelocity, window });
+  }
+  return bffFetch<SkuVelocityResponse>(
+    `/v1/finance/channel-analytics/sku-velocity?window=${encodeURIComponent(window)}&limit=${limit}`
+  );
+}
+
+/** POST `/v1/finance/channel-analytics/daily-metrics` */
+export function upsertChannelDailyMetric(
+  payload: ChannelDailyMetricUpsert
+): Promise<ChannelDailyMetricRead> {
+  if (shouldUseMockApi()) {
+    return Promise.resolve({
+      id: mockId("metric"),
+      tenant_id: "22222222-2222-2222-2222-222222222222",
+      channel_account_id: payload.channel_account_id,
+      variant_id: payload.variant_id ?? null,
+      metric_date: payload.metric_date,
+      impressions: payload.impressions ?? 0,
+      clicks: payload.clicks ?? 0,
+      ad_spend_base: String(payload.ad_spend_base ?? "0.00"),
+      external_sessions: payload.external_sessions ?? 0,
+      source: payload.source ?? "manual",
+      created_at: MOCK_NOW,
+      updated_at: MOCK_NOW,
+    });
+  }
+  return bffFetch<ChannelDailyMetricRead>("/v1/finance/channel-analytics/daily-metrics", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Mock fallbacks (only with NEXT_PUBLIC_USE_MOCK_API=true)
 // ---------------------------------------------------------------------------
 
@@ -428,6 +489,7 @@ const mockLowStock: LowStockItemRead[] = [
     available_qty: 28,
     safety_stock_qty: 120,
     suggested_reorder_qty: 212,
+    sourcing_url: "https://detail.1688.com/offer/777000111222.html",
   },
   {
     variant_id: "var-2",
@@ -440,8 +502,147 @@ const mockLowStock: LowStockItemRead[] = [
     available_qty: 50,
     safety_stock_qty: 80,
     suggested_reorder_qty: 110,
+    sourcing_url: null,
   },
 ];
+
+const mockChannelAnalyticsOverview: ChannelAnalyticsOverviewRead = {
+  window: "30d",
+  base_currency: "CNY",
+  totals: {
+    channel_key: "all",
+    channel_account_id: null,
+    channel_type: "all",
+    channel_label: "All Channels",
+    order_count: 18,
+    units_sold: 142,
+    gmv_base: "46800.00",
+    refunded_amount_base: "920.00",
+    refund_rate_pct: "1.97",
+    cogs_base: "21500.00",
+    platform_commission_base: "3120.00",
+    ad_spend_base: "4800.00",
+    net_margin_base: "16460.00",
+    margin_pct: "35.17",
+    roas: "9.75",
+  },
+  channels: [
+    {
+      channel_key: "ca-shopify-1",
+      channel_account_id: "ca-shopify-1",
+      channel_type: "shopify",
+      channel_label: "Shopify US Sandbox",
+      order_count: 10,
+      units_sold: 76,
+      gmv_base: "26400.00",
+      refunded_amount_base: "420.00",
+      refund_rate_pct: "1.59",
+      cogs_base: "11800.00",
+      platform_commission_base: "1320.00",
+      ad_spend_base: "2400.00",
+      net_margin_base: "10460.00",
+      margin_pct: "39.62",
+      roas: "11.00",
+    },
+    {
+      channel_key: "ca-tiktok-1",
+      channel_account_id: "ca-tiktok-1",
+      channel_type: "tiktok_shop",
+      channel_label: "TikTok Shop US",
+      order_count: 8,
+      units_sold: 66,
+      gmv_base: "20400.00",
+      refunded_amount_base: "500.00",
+      refund_rate_pct: "2.45",
+      cogs_base: "9700.00",
+      platform_commission_base: "1800.00",
+      ad_spend_base: "2400.00",
+      net_margin_base: "6000.00",
+      margin_pct: "29.41",
+      roas: "8.50",
+    },
+  ],
+  daily_trend: [
+    {
+      metric_date: "2026-11-22",
+      order_count: 9,
+      units_sold: 70,
+      gmv_base: "23400.00",
+      net_margin_base: "8200.00",
+      ad_spend_base: "2400.00",
+    },
+    {
+      metric_date: "2026-11-23",
+      order_count: 9,
+      units_sold: 72,
+      gmv_base: "23400.00",
+      net_margin_base: "8260.00",
+      ad_spend_base: "2400.00",
+    },
+  ],
+};
+
+const mockSkuVelocity: SkuVelocityResponse = {
+  window: "30d",
+  base_currency: "CNY",
+  total: 2,
+  items: [
+    {
+      variant_id: "var-1",
+      product_id: "prod-1",
+      sku: "LED-COB-24V-5M",
+      product_name: "COB LED Strip 24V 5m 4000K",
+      total_units_sold: 90,
+      avg_daily_units: "3.00",
+      available_qty: 28,
+      days_of_cover: "9.3",
+      lead_time_days: 12,
+      stockout_risk: "critical",
+      recommended_reorder_qty: 50,
+      cost_price_base: "45.50",
+      sourcing_url: "https://detail.1688.com/offer/777000111222.html",
+      sourcing_draft_id: "draft-1",
+      channel_breakdown: [
+        {
+          channel_type: "shopify",
+          channel_label: "Shopify US Sandbox",
+          units_sold: 52,
+          revenue_base: "15600.00",
+        },
+        {
+          channel_type: "tiktok_shop",
+          channel_label: "TikTok Shop US",
+          units_sold: 38,
+          revenue_base: "11400.00",
+        },
+      ],
+    },
+    {
+      variant_id: "var-2",
+      product_id: "prod-2",
+      sku: "LED-PANEL-60-40W",
+      product_name: "LED Panel Light 60x60 40W 5000K",
+      total_units_sold: 30,
+      avg_daily_units: "1.00",
+      available_qty: 50,
+      days_of_cover: "50.0",
+      lead_time_days: 7,
+      stockout_risk: "healthy",
+      recommended_reorder_qty: 0,
+      cost_price_base: "68.00",
+      sourcing_url: null,
+      sourcing_draft_id: null,
+      channel_breakdown: [
+        {
+          channel_type: "shopify",
+          channel_label: "Shopify US Sandbox",
+          units_sold: 30,
+          revenue_base: "10800.00",
+        },
+      ],
+    },
+  ],
+};
 
 function mockId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}`;

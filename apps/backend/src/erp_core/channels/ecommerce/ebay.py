@@ -30,6 +30,7 @@ from erp_core.channels.ecommerce.base import (
     NormalizedLineItem,
     NormalizedOrder,
     NormalizedProduct,
+    attach_financial_metadata,
 )
 from erp_core.shared.enums import FulfillmentStatus, IdentityType, OrderMode, PaymentStatus
 from erp_core.shared.errors import AppError
@@ -461,6 +462,35 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
             phone_e164 = str(phone).strip() or None
         country = str(address_payload.get("countryCode") or "").strip() or None
 
+        payment_summary = order.get("paymentSummary")
+        payment_map = payment_summary if isinstance(payment_summary, Mapping) else {}
+        refund_rows = payment_map.get("refunds") or []
+        refunded_val = sum(
+            (
+                self._money(r, "amount")
+                for r in refund_rows
+                if isinstance(r, Mapping) and isinstance(r.get("amount"), Mapping)
+            ),
+            start=Decimal("0.00"),
+        )
+        commission_val = (
+            self._money(order, "totalMarketplaceFee")
+            if isinstance(order.get("totalMarketplaceFee"), Mapping)
+            else self._money(pricing_summary, "fee")
+        )
+        ebay_metadata: dict[str, Any] = {
+            "ebay_order_id": external_order_id,
+            "ebay_seller_id": order.get("sellerId"),
+            "ebay_site_id": self.site_id,
+            "ebay_fulfillment_status": order.get("orderFulfillmentStatus"),
+            "ebay_cancel_state": cancel_state or None,
+            "ebay_order_payment_status": order.get("orderPaymentStatus"),
+        }
+        attach_financial_metadata(
+            ebay_metadata,
+            refunded_amount=refunded_val,
+            platform_commission_base=commission_val,
+        )
         return NormalizedOrder(
             external_order_id=external_order_id,
             external_order_number=external_order_id,
@@ -471,6 +501,9 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
             shipping_charged=shipping,
             tax_collected=tax,
             total_amount=total,
+            platform_commission_base=commission_val.quantize(
+                MONEY_SCALE, rounding=ROUND_HALF_UP
+            ),
             fulfillment_status=fulfillment_status,
             payment_status=payment_status,
             customer=NormalizedCustomer(
@@ -484,14 +517,7 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
                 country_code=country,
             ),
             line_items=line_items,
-            channel_metadata={
-                "ebay_order_id": external_order_id,
-                "ebay_seller_id": order.get("sellerId"),
-                "ebay_site_id": self.site_id,
-                "ebay_fulfillment_status": order.get("orderFulfillmentStatus"),
-                "ebay_cancel_state": cancel_state or None,
-                "ebay_order_payment_status": order.get("orderPaymentStatus"),
-            },
+            channel_metadata=ebay_metadata,
             updated_at=self._parse_datetime(
                 order.get("lastModifiedDate") or order.get("creationDate")
             ),

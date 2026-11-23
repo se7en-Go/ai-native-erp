@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { ChannelAnalyticsCard } from "@/components/finance/channel-analytics-card";
 import { useAuthSession } from "@/components/providers";
 import {
   DashboardActivityRow,
@@ -429,6 +430,8 @@ export default function DashboardPage() {
                 </div>
               )}
             </DashboardCard>
+
+            <ChannelAnalyticsCard enabled={showFinancials} />
 
             {/* 21st.dev Recent Activity — Real AI Patrol Alerts + Trade To-dos */}
             <DashboardCard

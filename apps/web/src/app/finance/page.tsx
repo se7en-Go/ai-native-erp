@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { ChannelAnalyticsCard } from "@/components/finance/channel-analytics-card";
 import { useAuthSession } from "@/components/providers";
 import { PaymentMilestoneTable } from "@/components/finance/payment-milestone-table";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
@@ -610,6 +611,8 @@ export default function FinancePage() {
             {financeQuery.error.message}
           </div>
         )}
+
+        <ChannelAnalyticsCard enabled={Boolean(principal && principal.role !== "agent")} />
 
         <PaymentMilestoneTable
           receivables={financeQuery.data?.receivables ?? []}

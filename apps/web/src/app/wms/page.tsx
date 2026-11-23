@@ -9,10 +9,12 @@ import {
   ArrowDownUp,
   Boxes,
   CheckCircle2,
+  ExternalLink,
   PackageCheck,
   Plus,
   RefreshCw,
   ShoppingCart,
+  TrendingUp,
   Warehouse,
   X,
 } from "lucide-react";
@@ -25,12 +27,14 @@ import type {
   CreateStocktake,
   InventorySyncDispatchSummary,
   LowStockItemRead,
+  SkuVelocityItem,
   WarehouseCreateRequest,
 } from "@/lib/api-client/types.gen";
 import {
   createPoFromLowStock,
   createWmsWarehouse,
   fetchLowStockAlerts,
+  fetchSkuVelocity,
   listInventorySyncLogs,
   retryInventorySyncJob,
   triggerInventorySyncNow,
@@ -113,6 +117,10 @@ export default function WmsPage() {
     queryKey: ["wms", "low-stock"],
     queryFn: () => fetchLowStockAlerts(),
   });
+  const velocityQuery = useQuery({
+    queryKey: ["wms", "sku-velocity"],
+    queryFn: () => fetchSkuVelocity("30d", 50),
+  });
   const syncLogsQuery = useQuery({
     queryKey: ["wms", "sync-logs"],
     queryFn: () => listInventorySyncLogs({ limit: 30, offset: 0 }),
@@ -160,6 +168,7 @@ export default function WmsPage() {
   const movements = movementsQuery.data?.items ?? [];
   const stock = stockQuery.data?.items ?? [];
   const lowStockItems = lowStockQuery.data?.items ?? [];
+  const velocityItems = velocityQuery.data?.items ?? [];
   const syncJobs = syncLogsQuery.data?.items ?? [];
   const suppliers = suppliersQuery.data?.items ?? [];
 
@@ -194,13 +203,35 @@ export default function WmsPage() {
   });
 
   /** 打开补货弹窗时预填建议补货量与供应商首个可选项。 */
-  const openReplenishment = (item: LowStockItemRead) => {
+  const openReplenishment = (item: LowStockItemRead, defaultCost?: string | null) => {
     const preferred = suppliers.find((supplier) => supplier.status === "active") ?? suppliers[0];
     setPoSupplierId(preferred?.id ?? "");
-    setPoQuantity(String(item.suggested_reorder_qty));
-    setPoUnitCost("");
+    setPoQuantity(String(Math.max(1, item.suggested_reorder_qty)));
+    setPoUnitCost(defaultCost ?? "");
     setCreatedPo(null);
     setPoItem(item);
+  };
+
+  const openVelocityReplenishment = (item: SkuVelocityItem) => {
+    const defaultWh =
+      warehousesQuery.data?.default_warehouse_id ?? warehousesQuery.data?.items?.[0]?.id ?? "";
+    const whName = bi("默认仓库", "Default warehouse");
+    openReplenishment(
+      {
+        variant_id: item.variant_id,
+        sku: item.sku,
+        product_name: item.product_name,
+        warehouse_id: defaultWh,
+        warehouse_name: whName,
+        on_hand_qty: item.available_qty,
+        reserved_qty: 0,
+        available_qty: item.available_qty,
+        safety_stock_qty: item.lead_time_days,
+        suggested_reorder_qty: Math.max(1, item.recommended_reorder_qty || item.lead_time_days * 14),
+        sourcing_url: item.sourcing_url ?? null,
+      },
+      item.cost_price_base ?? null
+    );
   };
 
   const summary = useMemo(() => {
@@ -355,7 +386,20 @@ export default function WmsPage() {
                 <tr key={`${item.warehouse_id}-${item.variant_id}`}>
                   <td className="py-2">
                     <div className="font-mono text-[12px] font-semibold text-gray-900 dark:text-gray-100">{item.sku}</div>
-                    <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{item.product_name}</div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                      <span>{item.product_name}</span>
+                      {item.sourcing_url && (
+                        <a
+                          href={item.sourcing_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-0.5 text-orange-600 hover:underline dark:text-orange-400"
+                        >
+                          <span>1688</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
                   </td>
                   <td className="py-2 text-gray-600 dark:text-gray-400">{item.warehouse_name}</td>
                   <td className="py-2 text-right">
@@ -393,6 +437,137 @@ export default function WmsPage() {
                     {lowStockQuery.isLoading
                       ? bi("正在检查安全库存…", "Checking safety stock…")
                       : bi("全部 SKU 均高于安全库存阈值。", "Every SKU is above its safety stock.")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+
+        <section
+          data-testid="wms-sku-velocity-card"
+          className="erp-card overflow-hidden rounded-[20px]"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/50 px-3.5 py-2.5">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+              <h2 className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100">
+                {bi(
+                  "SKU 跨平台动销、可售天数预警 & 1688 一键补货",
+                  "Cross-channel SKU velocity, days-of-cover & 1688 replenishment"
+                )}
+              </h2>
+            </div>
+            <span className="text-[11.5px] font-medium text-gray-500 dark:text-gray-400">
+              {bi(
+                "近 30 天全平台合并日均销量 ÷ 可用库存 = 可售天数；自动关联 1688 选品链接",
+                "30d cross-channel daily sales vs available stock; auto-linked 1688 sourcing URLs"
+              )}
+            </span>
+          </div>
+
+          <table data-testid="wms-sku-velocity-table" className="erp-table">
+            <thead>
+              <tr>
+                <th>{bi("SKU 与货源", "SKU & 1688 source")}</th>
+                <th>{bi("平台销量构成", "Channel split")}</th>
+                <th className="text-right">{bi("30 天销量 / 日均", "30d / daily")}</th>
+                <th className="text-right">{bi("可用 / 可售天数", "Avail / cover")}</th>
+                <th>{bi("断货风险", "Risk")}</th>
+                <th className="text-right">{bi("建议补货", "Reorder")}</th>
+                {canAdjust && <th className="text-right">{bi("操作", "Action")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {velocityItems.map((item) => {
+                const riskTone =
+                  item.stockout_risk === "out_of_stock" || item.stockout_risk === "critical"
+                    ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                    : item.stockout_risk === "warning"
+                      ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
+                return (
+                  <tr key={item.variant_id} data-testid={`velocity-row-${item.variant_id}`}>
+                    <td className="py-2">
+                      <div className="font-mono text-[12px] font-semibold text-gray-900 dark:text-gray-100">
+                        {item.sku}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                        <span>{item.product_name}</span>
+                        {item.sourcing_url && (
+                          <a
+                            href={item.sourcing_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            data-testid={`velocity-1688-link-${item.variant_id}`}
+                            className="inline-flex items-center gap-0.5 font-semibold text-orange-600 hover:underline dark:text-orange-400"
+                          >
+                            <span>1688</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {item.channel_breakdown.map((ch, idx) => (
+                          <span
+                            key={`${ch.channel_type}-${idx}`}
+                            className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10.5px] font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                          >
+                            {ch.channel_label}: {ch.units_sold}
+                          </span>
+                        ))}
+                        {item.channel_breakdown.length === 0 && (
+                          <span className="text-[11px] text-gray-400">—</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-2 text-right font-mono text-[12px] tabular-nums">
+                      {item.total_units_sold} / {item.avg_daily_units}
+                    </td>
+                    <td className="py-2 text-right font-mono text-[12px] tabular-nums">
+                      {item.available_qty} /{" "}
+                      {item.days_of_cover !== null && item.days_of_cover !== undefined
+                        ? `${item.days_of_cover}d`
+                        : "∞"}
+                    </td>
+                    <td className="py-2">
+                      <span
+                        data-testid={`velocity-risk-${item.variant_id}`}
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${riskTone}`}
+                      >
+                        {item.stockout_risk}
+                      </span>
+                    </td>
+                    <td className="py-2 text-right font-mono text-[12px] font-semibold tabular-nums">
+                      {item.recommended_reorder_qty}
+                    </td>
+                    {canAdjust && (
+                      <td className="py-2 text-right">
+                        <button
+                          type="button"
+                          data-testid={`velocity-create-po-${item.variant_id}`}
+                          onClick={() => openVelocityReplenishment(item)}
+                          className="erp-btn erp-btn-secondary rounded-xl py-1 text-[11.5px]"
+                        >
+                          <ShoppingCart className="h-3 w-3" />
+                          <span>{bi("1688 一键补货", "1688 Restock")}</span>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+              {velocityItems.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={canAdjust ? 7 : 6}
+                    className="py-4 text-center text-[12px] font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    {velocityQuery.isLoading
+                      ? bi("正在计算跨平台动销速度…", "Calculating SKU velocity…")
+                      : bi("暂无 SKU 动销记录。", "No SKU velocity data yet.")}
                   </td>
                 </tr>
               )}

@@ -51,6 +51,23 @@ def _quantize_fx_rate(value: Decimal) -> Decimal:
     return value.quantize(FX_RATE_SCALE, rounding=ROUND_HALF_UP)
 
 
+def attach_financial_metadata(
+    metadata: dict[str, Any],
+    *,
+    refunded_amount: Decimal | None = None,
+    platform_commission_base: Decimal | None = None,
+) -> None:
+    """Persist exact 2dp Decimal strings into ``channel_metadata`` when non-negative/present."""
+    if refunded_amount is not None and refunded_amount > Decimal("0"):
+        metadata["refunded_amount"] = str(
+            refunded_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        )
+    if platform_commission_base is not None and platform_commission_base > Decimal("0"):
+        metadata["platform_commission_base"] = str(
+            platform_commission_base.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        )
+
+
 def _units_per_usd(currency_code: str, usd_base_rates: Mapping[str, Decimal]) -> Decimal:
     """Return how many `currency_code` units one USD buys."""
     if currency_code == "USD":
@@ -563,6 +580,11 @@ class EcommerceOrderSyncService:
             "order_currency": order_dto.currency.strip().upper(),
             "base_currency": base_currency,
         }
+        if order_dto.platform_commission_base > Decimal("0"):
+            attach_financial_metadata(
+                channel_metadata,
+                platform_commission_base=order_dto.platform_commission_base,
+            )
 
         order_items: list[OrderItemInternal] = []
         for line in order_dto.line_items:

@@ -32,6 +32,7 @@ from erp_core.channels.ecommerce.base import (
     NormalizedLineItem,
     NormalizedOrder,
     NormalizedProduct,
+    attach_financial_metadata,
 )
 from erp_core.shared.enums import FulfillmentStatus, IdentityType, OrderMode, PaymentStatus
 from erp_core.shared.errors import AppError
@@ -533,6 +534,16 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
             "amazon_is_business_order": bool(raw.get("IsBusinessOrder")),
             "amazon_seller_order_id": str(raw.get("SellerOrderId") or ""),
         }
+        refunded_val = self._money(raw.get("RefundedAmount"))
+        commission_val = self._money(raw.get("PlatformCommission")) + sum(
+            (self._money(item.get("CommissionFee")) for item in raw_items),
+            start=Decimal("0.00"),
+        )
+        attach_financial_metadata(
+            metadata,
+            refunded_amount=refunded_val,
+            platform_commission_base=commission_val,
+        )
         return NormalizedOrder(
             external_order_id=order_id,
             external_order_number=str(raw.get("SellerOrderId") or order_id),
@@ -547,6 +558,9 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
             discount_amount=discount,
             tax_collected=tax,
             total_amount=total,
+            platform_commission_base=commission_val.quantize(
+                _MONEY_SCALE, rounding=ROUND_HALF_UP
+            ),
             fulfillment_status=ORDER_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED),
             payment_status=self._payment_status(status, payment_method),
             customer=NormalizedCustomer(

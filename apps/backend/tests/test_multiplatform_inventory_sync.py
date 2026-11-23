@@ -760,11 +760,12 @@ async def test_inventory_sync_backoff_dead_letter_retry_and_tenant_rls(
         broker_session_factory=mig_factory,
         runtime_session_factory=rt_factory,
         dispatcher=ok_dispatcher,
+        tenant_ids=[tid_a, tid_b],
     )
     assert cron_res["enqueued"] >= 1
     assert cron_res["succeeded"] >= 1
 
     drain_res = await drain_inventory_sync_all_tenants(
-        mig_factory, rt_factory, dispatcher=ok_dispatcher
+        mig_factory, rt_factory, dispatcher=ok_dispatcher, tenant_ids=[tid_a, tid_b]
     )
     assert drain_res["dispatched"] == 0

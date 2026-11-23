@@ -184,7 +184,8 @@ async def list_low_stock(
                ib.on_hand_qty,
                ib.reserved_qty,
                (ib.on_hand_qty - ib.reserved_qty) AS available_qty,
-               {_SAFETY_STOCK_EXPR} AS safety_stock_qty
+               {_SAFETY_STOCK_EXPR} AS safety_stock_qty,
+               sd.source_url AS sourcing_url
         FROM inventory_balances ib
         JOIN product_variants pv
             ON pv.tenant_id = ib.tenant_id AND pv.id = ib.variant_id
@@ -192,6 +193,15 @@ async def list_low_stock(
             ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
         LEFT JOIN warehouses w
             ON w.tenant_id = ib.tenant_id AND w.id = ib.warehouse_id
+        LEFT JOIN LATERAL (
+            SELECT source_url
+            FROM sourcing_drafts
+            WHERE tenant_id = ib.tenant_id
+              AND imported_product_id = p.id
+              AND source_url IS NOT NULL
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 1
+        ) sd ON true
         WHERE ib.tenant_id = :tid
           AND (ib.on_hand_qty - ib.reserved_qty) < {_SAFETY_STOCK_EXPR}
         ORDER BY available_qty ASC, pv.sku, ib.warehouse_id
@@ -216,6 +226,7 @@ async def list_low_stock(
                 available_qty=available,
                 safety_stock_qty=safety_stock,
                 suggested_reorder_qty=max(safety_stock * 2 - available, safety_stock),
+                sourcing_url=row["sourcing_url"],
             )
         )
     return LowStockListRead(items=items, total=len(items))
@@ -255,20 +266,48 @@ async def _replenishment_warehouse(
     return UUID(str(known))
 
 
+async def _linked_sourcing_url(
+    session: AsyncSession, tenant_id: UUID, variant_id: UUID
+) -> str | None:
+    url = await session.scalar(
+        sa.text(
+            """
+            SELECT sd.source_url
+            FROM product_variants pv
+            JOIN sourcing_drafts sd
+              ON sd.tenant_id = pv.tenant_id
+             AND sd.imported_product_id = pv.product_id
+            WHERE pv.tenant_id = :tid
+              AND pv.id = :vid
+              AND sd.source_url IS NOT NULL
+            ORDER BY sd.updated_at DESC, sd.created_at DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": tenant_id, "vid": variant_id},
+    )
+    return str(url).strip() if url else None
+
+
 async def create_purchase_order_from_low_stock(
     session: AsyncSession,
     tenant_id: UUID,
     user_id: UUID,
     payload: LowStockCreatePoRequest,
 ) -> PurchaseOrderRead:
-    """One-click low-stock restock: a single-line draft purchase order."""
+    """One-click low-stock restock: a single-line draft purchase order with 1688 link."""
     warehouse_id = await _replenishment_warehouse(session, tenant_id, payload.variant_id)
+    sourcing_url = await _linked_sourcing_url(session, tenant_id, payload.variant_id)
+    notes = (payload.notes or "").strip() or None
+    if sourcing_url and (not notes or sourcing_url not in notes):
+        suffix = f"1688 Sourcing URL: {sourcing_url}"
+        notes = f"{notes}\n{suffix}"[:5000] if notes else suffix[:5000]
     request = PurchaseOrderCreate(
         supplier_id=payload.supplier_id,
         warehouse_id=warehouse_id,
         currency=payload.currency,
         status="draft",
-        notes=payload.notes,
+        notes=notes,
         items=[
             PurchaseOrderItemInput(
                 variant_id=payload.variant_id,

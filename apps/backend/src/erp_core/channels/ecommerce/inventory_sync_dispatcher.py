@@ -682,19 +682,23 @@ async def drain_inventory_sync_all_tenants(
     *,
     limit_per_tenant: int = 50,
     dispatcher: InventorySyncDispatcher | None = None,
+    tenant_ids: Sequence[UUID] | None = None,
 ) -> dict[str, int]:
-    """Drain due inventory outbox jobs across all active tenants."""
-    async with system_session(broker_session_factory) as sys_session:
-        tenant_rows = (
-            await sys_session.execute(
-                text("SELECT id FROM tenants WHERE is_active ORDER BY created_at ASC")
-            )
-        ).scalars().all()
+    """Drain due inventory outbox jobs across active (or specified) tenants."""
+    if tenant_ids is not None:
+        resolved_tids = [UUID(str(t)) for t in tenant_ids]
+    else:
+        async with system_session(broker_session_factory) as sys_session:
+            raw_rows = (
+                await sys_session.execute(
+                    text("SELECT id FROM tenants WHERE is_active ORDER BY created_at ASC")
+                )
+            ).scalars().all()
+        resolved_tids = [UUID(str(t)) for t in raw_rows]
 
     syncer = dispatcher or InventorySyncDispatcher()
     totals = {"tenants": 0, "dispatched": 0, "succeeded": 0, "failed": 0, "dead_letter": 0}
-    for tid_val in tenant_rows:
-        tid = UUID(str(tid_val))
+    for tid in resolved_tids:
         totals["tenants"] += 1
         try:
             async with tenant_session(runtime_session_factory, tid) as session:
@@ -715,6 +719,7 @@ async def reconcile_inventory_sync_cron(
     broker_session_factory: async_sessionmaker[AsyncSession] | None = None,
     runtime_session_factory: async_sessionmaker[AsyncSession] | None = None,
     dispatcher: InventorySyncDispatcher | None = None,
+    tenant_ids: Sequence[UUID] | None = None,
 ) -> dict[str, int]:
     """30-minute drift sweep: detect mismatched channel quantities and push corrections."""
     owned_engines: list[Any] = []
@@ -734,15 +739,18 @@ async def reconcile_inventory_sync_cron(
     syncer = dispatcher or InventorySyncDispatcher()
     totals = {"tenants": 0, "enqueued": 0, "succeeded": 0, "failed": 0, "dead_letter": 0}
     try:
-        async with system_session(b_factory) as sys_session:
-            tenant_rows = (
-                await sys_session.execute(
-                    text("SELECT id FROM tenants WHERE is_active ORDER BY created_at ASC")
-                )
-            ).scalars().all()
+        if tenant_ids is not None:
+            resolved_tids = [UUID(str(t)) for t in tenant_ids]
+        else:
+            async with system_session(b_factory) as sys_session:
+                raw_rows = (
+                    await sys_session.execute(
+                        text("SELECT id FROM tenants WHERE is_active ORDER BY created_at ASC")
+                    )
+                ).scalars().all()
+            resolved_tids = [UUID(str(t)) for t in raw_rows]
 
-        for tid_val in tenant_rows:
-            tid = UUID(str(tid_val))
+        for tid in resolved_tids:
             totals["tenants"] += 1
             try:
                 async with tenant_session(r_factory, tid) as session:
