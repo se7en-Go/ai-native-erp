@@ -41,7 +41,7 @@ test.describe("Hybrid B2B Flow: Made-in-China Inquiry -> L1 CRM/Quote -> 1-Click
     const quoteDraft = page.locator('[data-testid^="proposal-card-"]').filter({
       has: page.getByText("quote_draft", { exact: true }),
     });
-    const approveBtn = quoteDraft.getByRole("button", { name: "Approve", exact: true });
+    const approveBtn = quoteDraft.getByRole("button", { name: /^(批准|Approve)$/ });
     await expect(approveBtn).toBeVisible({ timeout: 15_000 });
     const [approval] = await Promise.all([
       page.waitForResponse((res) =>
