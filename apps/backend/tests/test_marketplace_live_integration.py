@@ -860,6 +860,216 @@ async def test_live_push_with_missing_credentials_is_rejected_before_any_call(
         assert await _mapping_row(session, tenant, account_id, external_sku) is None
 
 
+async def test_live_push_to_shopify_persists_live_published_and_shopify_product_gid(
+    runtime_session_factory: Factory,
+    workspace: dict[str, Any],
+) -> None:
+    tenant = workspace["tenant"]
+    actor = str(workspace["owner_id"])
+    shop_domain = "qzled-erp-sandbox.myshopify.com"
+    client_id = "shopify-live-client-id"
+    client_secret = "shpss_live_client_secret"
+    refreshed_token = "shpat_refreshed_live_token"
+    expected_product_id = "gid://shopify/Product/990012345"
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if request.url.path == "/admin/oauth/access_token":
+            return httpx.Response(
+                200,
+                json={"access_token": refreshed_token, "expires_in": 86399},
+            )
+        if request.url.path == "/admin/api/2026-01/graphql.json":
+            assert request.headers["x-shopify-access-token"] == refreshed_token
+            gql_body = json.loads(request.content)
+            assert gql_body["variables"]["synchronous"] is True
+            product_input = gql_body["variables"]["productSet"]
+            assert product_input["status"] == "ACTIVE"
+            assert product_input["productType"] == "LED Lighting"
+            assert len(product_input["files"]) == 2
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "productSet": {
+                            "product": {
+                                "id": expected_product_id,
+                                "title": product_input["title"],
+                                "handle": "solar-led-flood-light-100w",
+                                "status": "ACTIVE",
+                                "variants": {
+                                    "nodes": [
+                                        {
+                                            "id": "gid://shopify/ProductVariant/990012346",
+                                            "sku": product_input["variants"][0]["sku"],
+                                            "price": product_input["variants"][0]["price"],
+                                        }
+                                    ]
+                                },
+                            },
+                            "userErrors": [],
+                        }
+                    }
+                },
+            )
+        return httpx.Response(404, json={"unexpected": str(request.url)})
+
+    async with tenant_session(runtime_session_factory, tenant) as session:
+        account_id = uuid4()
+        await session.execute(
+            text(
+                "INSERT INTO channel_accounts (id, tenant_id, channel_type, "
+                "external_account_id, display_name, status, config) VALUES "
+                "(:id, :tid, 'shopify', :ext, 'QZLED Shopify Sandbox', 'active', '{}'::jsonb)"
+            ),
+            {"id": account_id, "tid": tenant, "ext": shop_domain},
+        )
+        await CredentialVaultHelper().save_secret_json(
+            session,
+            tenant,
+            account_id,
+            "shopify_custom_app",
+            {
+                "shop_domain": shop_domain,
+                "auth_mode": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "access_token": "",
+            },
+        )
+        draft = await _collect_draft(session, tenant, actor)
+        external_sku = build_external_sku("shopify", draft.suggested_sku)
+
+        results = await SourcingService().publish(
+            session,
+            tenant,
+            actor,
+            draft.id,
+            SourcingPublishRequest(
+                channel_account_ids=[account_id],
+                push_to_marketplace=True,
+                initial_stock_quantity=77,
+            ),
+            listing_publisher=MarketplaceListingDispatcher(
+                transport=httpx.MockTransport(handler)
+            ),
+        )
+
+        assert len(results) == 1
+        result = results[0]
+        assert result.channel_type == "shopify"
+        assert result.external_sku == external_sku
+        assert result.external_product_id == expected_product_id
+        assert result.listing_state == "live_published"
+        assert result.external_listing_confirmed is True
+        assert result.publish_mode == "live_marketplace_api"
+
+        mapping = await _mapping_row(session, tenant, account_id, external_sku)
+        assert mapping is not None
+        assert mapping.external_product_id == expected_product_id
+
+        draft_read = await SourcingService().get_draft(session, tenant, draft.id)
+        assert draft_read.listing_state == "live_published"
+        assert draft_read.status == "published"
+
+        # Client-credentials refresh must have persisted the fresh token back to the vault.
+        refreshed_creds, _ = await CredentialVaultHelper().load_secret_json(
+            session, tenant, account_id, "shopify_custom_app"
+        )
+        assert refreshed_creds["access_token"] == refreshed_token
+
+    graphql_calls = [req for req in calls if req.url.path.endswith("/graphql.json")]
+    assert len(graphql_calls) == 1
+    sent_product = json.loads(graphql_calls[0].content)["variables"]["productSet"]
+    assert sent_product["variants"][0]["sku"] == external_sku
+    assert sent_product["variants"][0]["price"] == "10.42"
+    assert "<ul>" in sent_product["descriptionHtml"]
+
+
+async def test_shopify_live_push_rejection_rolls_back_without_mapping(
+    runtime_session_factory: Factory,
+    workspace: dict[str, Any],
+) -> None:
+    tenant = workspace["tenant"]
+    actor = str(workspace["owner_id"])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/admin/api/2026-01/graphql.json":
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "productSet": {
+                            "product": None,
+                            "userErrors": [
+                                {
+                                    "field": ["productSet", "variants", "sku"],
+                                    "message": "SKU has already been taken.",
+                                }
+                            ],
+                        }
+                    }
+                },
+            )
+        return httpx.Response(404)
+
+    async with tenant_session(runtime_session_factory, tenant) as session:
+        account_id = uuid4()
+        await session.execute(
+            text(
+                "INSERT INTO channel_accounts (id, tenant_id, channel_type, "
+                "external_account_id, display_name, status, config) VALUES "
+                "(:id, :tid, 'shopify', 'qzled-erp-sandbox.myshopify.com', "
+                "'QZLED Shopify Sandbox', 'active', '{}'::jsonb)"
+            ),
+            {"id": account_id, "tid": tenant},
+        )
+        await CredentialVaultHelper().save_secret_json(
+            session,
+            tenant,
+            account_id,
+            "oauth_token",
+            {
+                "shop_domain": "qzled-erp-sandbox.myshopify.com",
+                "auth_mode": "oauth",
+                "access_token": "shpat_static_oauth_token",
+            },
+        )
+        draft = await _collect_draft(session, tenant, actor)
+        external_sku = build_external_sku("shopify", draft.suggested_sku)
+
+        with pytest.raises(AppError) as excinfo:
+            await SourcingService().publish(
+                session,
+                tenant,
+                actor,
+                draft.id,
+                SourcingPublishRequest(
+                    channel_account_ids=[account_id], push_to_marketplace=True
+                ),
+                listing_publisher=MarketplaceListingDispatcher(
+                    transport=httpx.MockTransport(handler)
+                ),
+            )
+        assert excinfo.value.status_code == 422
+        assert excinfo.value.code == "ERR_SHOPIFY_LISTING_REJECTED"
+        assert await _mapping_row(session, tenant, account_id, external_sku) is None
+        read = await SourcingService().get_draft(session, tenant, draft.id)
+        assert read.listing_state == "imported"
+        unpublished = (
+            await session.execute(
+                text(
+                    "SELECT count(*) FROM audit_events "
+                    "WHERE action = 'catalog.sourcing_draft.published' "
+                    "AND resource_id = :did"
+                ),
+                {"did": draft.id},
+            )
+        ).scalar()
+        assert unpublished == 0
+
+
 async def test_live_push_to_an_unsupported_channel_type_is_a_422(
     runtime_session_factory: Factory,
     workspace: dict[str, Any],
@@ -872,7 +1082,7 @@ async def test_live_push_to_an_unsupported_channel_type_is_a_422(
             text(
                 "INSERT INTO channel_accounts (id, tenant_id, channel_type, "
                 "external_account_id, display_name, status, config) VALUES "
-                "(:id, :tid, 'shopify', 'qm-led.myshopify.com', 'Shopify Store', "
+                "(:id, :tid, 'woocommerce', 'qm-led.example.com', 'WooCommerce Store', "
                 "'active', '{}'::jsonb)"
             ),
             {"id": account_id, "tid": tenant},
@@ -1342,14 +1552,19 @@ def test_reconciliation_registry_covers_the_marketplaces() -> None:
         ChannelType.ALIBABA_EMAIL,
     ):
         assert channel in ECOMMERCE_CHANNELS
+    assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.SHOPIFY] == (
+        "shopify_custom_app",
+        "oauth_token",
+    )
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.AMAZON_SP] == ("amazon_sp_api",)
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.EBAY] == ("ebay_api",)
     assert RECONCILIATION_CREDENTIAL_TYPES[ChannelType.ALIBABA_EMAIL] == ("alibaba_intl_app",)
-    # The listing dispatcher and the reconciler must agree on the credential types.
+    # The listing dispatcher and the reconciler must agree on the primary credential types.
     assert set(DISPATCHER_CREDENTIAL_TYPES.values()) == {
         "amazon_sp_api",
         "ebay_api",
         "alibaba_intl_app",
+        "shopify_custom_app",
     }
 
 

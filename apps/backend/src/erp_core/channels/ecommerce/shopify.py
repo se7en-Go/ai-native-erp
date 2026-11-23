@@ -6,17 +6,19 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import html
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Protocol
 from urllib.parse import urlencode
 from uuid import UUID
 
 import httpx
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -100,6 +102,89 @@ mutation CreateFulfillment($fulfillment: FulfillmentInput!) {
   }
 }
 """
+
+PRODUCT_SET_MUTATION = """
+mutation PublishProductSet($synchronous: Boolean!, $productSet: ProductSetInput!) {
+  productSet(synchronous: $synchronous, input: $productSet) {
+    product {
+      id
+      title
+      handle
+      status
+      variants(first: 5) {
+        nodes {
+          id
+          sku
+          price
+        }
+      }
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+"""
+
+
+class ShopifyListingReceipt(BaseModel):
+    """Receipt returned after Shopify Admin GraphQL ``productSet`` confirms a listing."""
+
+    external_product_id: str
+    external_sku: str
+    status: str = "ACTIVE"
+    handle: str = ""
+    raw_response: dict[str, Any] = Field(default_factory=dict)
+
+
+def _format_shopify_description_html(
+    *,
+    title: str,
+    description: str,
+    bullet_points: Sequence[str],
+    moq_tiers: Sequence[Mapping[str, Any]] | None = None,
+) -> str:
+    """Render escaped semantic HTML for Shopify's ``ProductSetInput.descriptionHtml``."""
+    blocks: list[str] = []
+    bullets_block: list[str] = []
+    description_lines = [line.strip() for line in description.splitlines() if line.strip()]
+    for line in description_lines:
+        if line.startswith("- ") or line.startswith("* "):
+            bullets_block.append(f"<li>{html.escape(line[2:].strip())}</li>")
+        else:
+            if bullets_block:
+                blocks.append(f"<ul>{''.join(bullets_block)}</ul>")
+                bullets_block.clear()
+            blocks.append(f"<p>{html.escape(line)}</p>")
+    if bullets_block:
+        blocks.append(f"<ul>{''.join(bullets_block)}</ul>")
+
+    if not blocks:
+        blocks.append(f"<p>{html.escape(title)}</p>")
+
+    normalized_desc = description.casefold()
+    extra_bullets = [
+        item.strip()
+        for item in bullet_points
+        if item.strip() and item.strip().casefold() not in normalized_desc
+    ]
+    if extra_bullets:
+        items = "".join(f"<li>{html.escape(item)}</li>" for item in extra_bullets)
+        blocks.append(f"<ul>{items}</ul>")
+
+    tier_items: list[str] = []
+    for tier in moq_tiers or ():
+        qty = tier.get("min_qty") or tier.get("min_quantity")
+        unit_price = tier.get("unit_price_usd") or tier.get("unit_price")
+        if qty is not None and unit_price is not None:
+            tier_items.append(
+                f"<li>MOQ {html.escape(str(qty))}+: ${html.escape(str(unit_price))} USD</li>"
+            )
+    if tier_items and "moq" not in normalized_desc:
+        blocks.append(f"<ul>{''.join(tier_items)}</ul>")
+
+    return "".join(blocks)
 
 
 def validate_shop_domain(shop: str) -> str:
@@ -275,6 +360,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         client_secret: str | None = None,
         expires_at: datetime | None = None,
         http_client: httpx.AsyncClient | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
         tenant_id: UUID | None = None,
         channel_account_id: UUID | None = None,
         vault: CredentialVaultHelper | None = None,
@@ -288,6 +374,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         self.client_secret = client_secret
         self.expires_at = expires_at
         self._http_client = http_client
+        self._transport = transport
         self._tenant_id = tenant_id
         self._channel_account_id = channel_account_id
         self._vault = vault
@@ -301,6 +388,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         channel_account_id: UUID,
         crypto: EnvelopeCryptoService | None = None,
         http_client: httpx.AsyncClient | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> ShopifyGraphqlAdapter:
         vault = CredentialVaultHelper(crypto)
         try:
@@ -320,6 +408,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             client_secret=data.get("client_secret"),
             expires_at=expires_at,
             http_client=http_client,
+            transport=transport,
             tenant_id=tenant_id,
             channel_account_id=channel_account_id,
             vault=vault,
@@ -331,7 +420,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
     ) -> httpx.Response:
         if self._http_client is not None:
             return await self._http_client.post(url, json=payload, headers=headers)
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=20.0, transport=self._transport) as client:
             return await client.post(url, json=payload, headers=headers)
 
     async def _ensure_valid_access_token(self) -> None:
@@ -599,6 +688,114 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             headers.get("X-Shopify-Hmac-SHA256") or headers.get("x-shopify-hmac-sha256") or ""
         )
         return verify_shopify_webhook_hmac(raw_body, signature, secret)
+
+    async def publish_listing(
+        self,
+        *,
+        sku: str,
+        title: str,
+        description: str,
+        bullet_points: Sequence[str],
+        price_usd: Decimal,
+        quantity: int = 0,
+        images: Sequence[str] | None = None,
+        category: str = "",
+        hs_code: str | None = None,
+        moq_tiers: Sequence[Mapping[str, Any]] | None = None,
+    ) -> ShopifyListingReceipt:
+        """Create or update an ``ACTIVE`` product via Shopify Admin GraphQL ``productSet``."""
+        del hs_code
+        clean_sku = sku.strip()
+        clean_title = title.strip()
+        if not clean_sku or not clean_title:
+            raise AppError(
+                slug="shopify-listing-rejected",
+                status_code=422,
+                code="ERR_SHOPIFY_LISTING_REJECTED",
+                title="Shopify Listing Rejected",
+                detail="Shopify productSet requires both a non-empty SKU and title.",
+            )
+        normalized_price = Decimal(str(price_usd)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        if normalized_price <= Decimal("0") or quantity < 0:
+            raise AppError(
+                slug="shopify-listing-rejected",
+                status_code=422,
+                code="ERR_SHOPIFY_LISTING_REJECTED",
+                title="Shopify Listing Rejected",
+                detail=(
+                    "Shopify productSet requires a positive USD price and non-negative quantity."
+                ),
+            )
+
+        product_input: dict[str, Any] = {
+            "title": clean_title,
+            "descriptionHtml": _format_shopify_description_html(
+                title=clean_title,
+                description=description,
+                bullet_points=bullet_points,
+                moq_tiers=moq_tiers,
+            ),
+            "status": "ACTIVE",
+            "productOptions": [
+                {"name": "Title", "values": [{"name": "Default Title"}]},
+            ],
+            "variants": [
+                {
+                    "optionValues": [{"optionName": "Title", "name": "Default Title"}],
+                    "sku": clean_sku,
+                    "price": str(normalized_price),
+                }
+            ],
+        }
+        clean_category = category.strip()
+        if clean_category:
+            product_input["productType"] = clean_category
+
+        valid_images = [
+            url.strip()
+            for url in (images or ())
+            if url and url.strip().startswith(("https://", "http://"))
+        ]
+        if valid_images:
+            product_input["files"] = [
+                {"originalSource": url, "contentType": "IMAGE"} for url in valid_images
+            ]
+
+        data = await self._graphql(
+            PRODUCT_SET_MUTATION,
+            {"synchronous": True, "productSet": product_input},
+        )
+        product_set = data.get("productSet") or {}
+        user_errors = product_set.get("userErrors") or []
+        product = product_set.get("product") or {}
+        product_id = str(product.get("id") or "").strip()
+        if user_errors or not product_id:
+            error_summary = "; ".join(
+                str(err.get("message") or err).strip() for err in user_errors
+            ) or "Shopify productSet did not return a confirmed product id."
+            raise AppError(
+                slug="shopify-listing-rejected",
+                status_code=422,
+                code="ERR_SHOPIFY_LISTING_REJECTED",
+                title="Shopify Listing Rejected",
+                detail=f"Shopify rejected listing '{clean_sku}': {error_summary}",
+            )
+
+        variant_nodes = ((product.get("variants") or {}).get("nodes")) or []
+        confirmed_sku = (
+            str(variant_nodes[0].get("sku") or "").strip() if variant_nodes else ""
+        ) or clean_sku
+        raw_payload = dict(product_set)
+        raw_payload["requested_quantity"] = quantity
+        return ShopifyListingReceipt(
+            external_product_id=product_id,
+            external_sku=confirmed_sku,
+            status=str(product.get("status") or "ACTIVE"),
+            handle=str(product.get("handle") or ""),
+            raw_response=raw_payload,
+        )
 
 
 GDPR_TOPICS = frozenset({"customers/data_request", "customers/redact", "shop/redact"})

@@ -1550,8 +1550,8 @@ function SourcingDraftCard({
             />
             <span className="min-w-0">
               {bi(
-                "同时通过官方 API 实时上架到 Amazon / eBay / Alibaba",
-                "Push live listing via official API (Amazon / eBay / Alibaba)"
+                "同时通过官方 API 实时上架到 Shopify / Amazon / eBay / Alibaba",
+                "Push live listing via official API (Shopify / Amazon / eBay / Alibaba)"
               )}
               <span className="mt-0.5 block text-[10.5px] font-normal text-slate-500 dark:text-slate-400">
                 {bi(

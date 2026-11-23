@@ -449,7 +449,7 @@ export async function importSourcingDraftToCatalog(
 
 /** POST /v1/catalog/sourcing/drafts/{draft_id}/publish — 多平台一键刊登。
  *
- * `push_to_marketplace: true` 走真实平台 API（Amazon SP-API / eBay Sell API / Alibaba IOP）；
+ * `push_to_marketplace: true` 走真实平台 API（Shopify Admin GraphQL / Amazon SP-API / eBay Sell API / Alibaba IOP）；
  * 缺省 `false` 只写本地 SKU 映射，与既有「不夸大」口径一致。
  */
 export async function publishSourcingDraft(
