@@ -77,6 +77,50 @@ def _assert_settlement_allowed(rp: ReceivablePayable, amount: Decimal) -> Decima
     return outstanding
 
 
+def validate_same_currency_fx_rate(
+    *,
+    payment_currency: str,
+    base_currency: str | None,
+    actual_fx_rate: Decimal,
+) -> Decimal:
+    """Enforce that same-currency settlements use an exact 1.000000 FX rate."""
+    normalized_fx = Decimal(actual_fx_rate).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+    if (
+        base_currency
+        and payment_currency.strip().upper() == base_currency.strip().upper()
+        and normalized_fx != Decimal("1.000000")
+    ):
+        ccy = payment_currency.strip().upper()
+        raise AppError(
+            slug="invalid-same-currency-fx",
+            status_code=422,
+            code="ERR_INVALID_SAME_CURRENCY_FX",
+            title="Invalid Same-Currency FX Rate",
+            detail=(
+                f"Same-currency payment ({ccy} -> {ccy}) must use actual_fx_rate = 1.000000, "
+                f"got {normalized_fx}."
+            ),
+        )
+    return normalized_fx
+
+
+async def _assert_valid_payment_fx_rate(
+    session: AsyncSession,
+    tenant_id: UUID,
+    payment_currency: str,
+    actual_fx_rate: Decimal,
+) -> Decimal:
+    base_currency = await session.scalar(
+        text("SELECT base_currency FROM tenants WHERE id = :tid"),
+        {"tid": tenant_id},
+    )
+    return validate_same_currency_fx_rate(
+        payment_currency=payment_currency,
+        base_currency=str(base_currency) if base_currency else None,
+        actual_fx_rate=actual_fx_rate,
+    )
+
+
 async def _assert_unique_external_tx_ref(
     session: AsyncSession, tenant_id: UUID, external_tx_ref: str | None
 ) -> str | None:
@@ -234,6 +278,9 @@ class PaymentService:
 
         ref = await _assert_unique_external_tx_ref(session, tenant_id, external_tx_ref)
         _assert_settlement_allowed(receivable, _money(amount_received))
+        validated_fx = await _assert_valid_payment_fx_rate(
+            session, tenant_id, currency, Decimal(actual_fx_rate)
+        )
 
         record = PaymentRecord(
             tenant_id=tenant_id,
@@ -242,7 +289,7 @@ class PaymentService:
             external_tx_ref=ref,
             amount_received=_money(amount_received),
             currency=currency.upper(),
-            actual_fx_rate=Decimal(actual_fx_rate),
+            actual_fx_rate=validated_fx,
             gateway_fee=_money(gateway_fee),
             verified_by_user_id=verified_by_user_id,
             paid_at=func.now(),
@@ -549,6 +596,9 @@ class PaymentService:
 
         amt = payload.amount_received.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         ref = await _assert_unique_external_tx_ref(session, tenant_id, payload.external_tx_ref)
+        validated_fx = await _assert_valid_payment_fx_rate(
+            session, tenant_id, payload.currency, payload.actual_fx_rate
+        )
         pr = PaymentRecord(
             tenant_id=tenant_id,
             rp_id=rp.id,
@@ -556,9 +606,7 @@ class PaymentService:
             external_tx_ref=ref,
             amount_received=amt,
             currency=payload.currency.upper(),
-            actual_fx_rate=payload.actual_fx_rate.quantize(
-                Decimal("0.000001"), rounding=ROUND_HALF_UP
-            ),
+            actual_fx_rate=validated_fx,
             gateway_fee=payload.gateway_fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
             receipt_r2_key=payload.receipt_r2_key,
             verified_by_user_id=principal.user_id,
@@ -588,6 +636,9 @@ class PaymentService:
         self._check_payment_currency(payload.currency, rp.currency)
         ref = await _assert_unique_external_tx_ref(session, tenant_id, payload.external_tx_ref)
         _assert_settlement_allowed(rp, _money(payload.amount_received))
+        validated_fx = await _assert_valid_payment_fx_rate(
+            session, tenant_id, payload.currency, payload.actual_fx_rate
+        )
         pr = PaymentRecord(
             tenant_id=tenant_id,
             rp_id=rp.id,
@@ -597,9 +648,7 @@ class PaymentService:
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             ),
             currency=payload.currency.upper(),
-            actual_fx_rate=payload.actual_fx_rate.quantize(
-                Decimal("0.000001"), rounding=ROUND_HALF_UP
-            ),
+            actual_fx_rate=validated_fx,
             gateway_fee=payload.gateway_fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
             receipt_r2_key=payload.receipt_r2_key,
             verified_by_user_id=None,
