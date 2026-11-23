@@ -201,6 +201,15 @@ _RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "payment_reconciliation",
         re.compile(r"\bpayment\s+(?:reconcil\w*|receipt)\b|付款核销|核销", re.I),
     ),
+    (
+        "order_confirmation",
+        re.compile(
+            r"\b(?:confirm|finalize|lock\s+in|place|book)\s+(?:the\s+|my\s+|this\s+)?order\b"
+            r"|\border\s+confirmation\b"
+            r"|确认下单|立即下单|帮我下单|直接下单|锁单|确认订单",
+            re.I,
+        ),
+    ),
 )
 
 #: Redline flags whose explicit negation removes the risk ("no refund needed").
@@ -556,10 +565,16 @@ def evidence_summary_lines(evidence: Sequence[dict[str, Any]]) -> list[str]:
             continue
         if tool_name == "get_live_sku_pricing_and_stock":
             tier = data.get("applied_moq_tier")
-            tier_text = f", MOQ tier {tier} pcs" if isinstance(tier, int) else ""
+            qty = data.get("qty_requested")
+            if isinstance(tier, int) and tier == qty:
+                qty_text = f" (MOQ tier {tier} pcs)"
+            elif isinstance(tier, int):
+                qty_text = f", MOQ tier {tier} pcs for {qty} pcs"
+            else:
+                qty_text = f" for {qty} pcs"
             lines.append(
                 f"SKU {data.get('sku')}: {data.get('applied_unit_price_usd')} USD/pc"
-                f"{tier_text} for {data.get('qty_requested')} pcs, "
+                f"{qty_text}, "
                 f"{data.get('available_qty')} pcs available, "
                 f"lead time {data.get('lead_time_days')} days ({data.get('incoterm')})"
             )
@@ -604,7 +619,7 @@ _PRICE_FIELDS = frozenset(
     }
 )
 
-_PRICE_SYMBOLS = r"US\$|USD|EUR|CNY|RMB|GBP|JPY|AUD|CAD|HKD|[$¥€£]"
+_PRICE_SYMBOLS = r"US\$|USD|EUR|CNY|RMB|GBP|JPY|AUD|CAD|HKD|美金|美元|人民币|[$¥€£]"
 
 #: Price-shaped mentions in a drafted reply (currency prefixed, suffixed, or per-unit).
 _PRICE_MENTION_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -687,6 +702,32 @@ def _extract_price_mentions(text_value: str) -> set[Decimal]:
         if amount is not None:
             mentions.add(amount.normalize())
     return mentions
+
+
+def detect_below_floor_price(
+    message_text: str,
+    evidence: Sequence[dict[str, Any]],
+) -> bool:
+    """True when the buyer proposes a unit/target price below ERP's verified applicable price."""
+    buyer_prices = _extract_price_mentions(message_text)
+    if not buyer_prices:
+        return False
+    applicable_prices: list[Decimal] = []
+    for item in evidence:
+        if str(item.get("tool_name", "")) != "get_live_sku_pricing_and_stock":
+            continue
+        data = item.get("data")
+        if not isinstance(data, dict):
+            continue
+        for field in ("applied_unit_price_usd", "retail_price_usd"):
+            amount = _as_decimal(data.get(field))
+            if amount is not None and amount > 0:
+                applicable_prices.append(amount)
+                break
+    if not applicable_prices:
+        return False
+    lowest_erp_price = min(applicable_prices)
+    return any(proposed < lowest_erp_price for proposed in buyer_prices)
 
 
 def _collect_allowed_numbers(
@@ -778,8 +819,7 @@ def build_grounded_reply(
         parts = [greeting]
         if evidence_lines:
             parts.append(
-                "Acabo de verificar stock y precio en tiempo real:\n"
-                + "\n".join(evidence_lines)
+                "Acabo de verificar stock y precio en tiempo real:\n" + "\n".join(evidence_lines)
             )
         if knowledge_lines:
             parts.append("\n".join(knowledge_lines))
@@ -797,8 +837,7 @@ def build_grounded_reply(
     parts = [greeting]
     if evidence_lines:
         parts.append(
-            "Yes, we have this ready — here are the current details:\n"
-            + "\n".join(evidence_lines)
+            "Here are the latest verified details from our system:\n" + "\n".join(evidence_lines)
         )
     if knowledge_lines:
         parts.append("\n".join(knowledge_lines))
@@ -823,28 +862,28 @@ def build_risk_hold_reply(*, language: str, customer_name: str) -> str:
     if language == "zh":
         return (
             f"您好 {name}，\n\n"
-            "感谢您的来信。您的信息涉及退款、赔付、价格调整或付款/银行账户变更，"
+            "感谢您的来信。您的信息涉及退款、赔付、价格调整、订单确认或付款/银行账户变更，"
             "按照公司政策须由人工专员复核确认后才能答复。我们的外贸销售团队会尽快与您"
-            "确认具体处理方式。本消息不构成任何价格或赔付承诺。\n\n"
+            "确认具体处理方式。本消息不构成任何价格、订单或赔付承诺。\n\n"
             "顺祝商祺，\n外贸销售团队"
         )
     if language == "es":
         return (
             f"Hola {name},\n\n"
             "Gracias por su mensaje. Su solicitud implica reembolsos, compensaciones, ajustes "
-            "de precio o cambios de pago/cuenta bancaria, por lo que un especialista humano "
-            "debe revisarla y aprobarla antes de cualquier respuesta. Nuestro equipo de ventas "
-            "de exportacion le confirmara el procedimiento. Este mensaje no constituye ninguna "
-            "promesa de precio ni compensacion.\n\n"
+            "de precio, confirmaciones de pedido o cambios de pago/cuenta bancaria, por lo que "
+            "un especialista humano debe revisarla y aprobarla antes de cualquier respuesta. "
+            "Nuestro equipo de ventas de exportacion le confirmara el procedimiento. Este "
+            "mensaje no constituye ninguna promesa de precio, pedido ni compensacion.\n\n"
             "Saludos cordiales,\nEquipo de Ventas de Exportacion"
         )
     return (
         f"Hello {name},\n\n"
         "Thank you for your message. Because it involves refunds, compensation, price "
-        "adjustments or payment/bank-account changes, company policy requires a human "
-        "specialist to review and approve it before any commitment is made. A member of our "
-        "export sales team will confirm the exact handling with you shortly. This message "
-        "confirms no figures, prices or compensation.\n\n"
+        "adjustments, order confirmation, or payment/bank-account changes, company policy "
+        "requires a human specialist to review and approve it before any commitment is made. "
+        "A member of our export sales team will confirm the exact handling with you shortly. "
+        "This message confirms no figures, prices, orders, or compensation.\n\n"
         "Best regards,\nExport Sales Team"
     )
 
@@ -1874,6 +1913,10 @@ class AutoReplyService:
         evidence = await self._collect_tool_evidence(
             session, principal.tenant_id, conversation.customer_id, message_text
         )
+        if detect_below_floor_price(message_text, evidence) and (
+            "below_floor_price" not in risk_flags
+        ):
+            risk_flags.append("below_floor_price")
         customer = await self._customer_summary(
             session, principal.tenant_id, conversation.customer_id
         )
@@ -2521,6 +2564,7 @@ __all__ = [
     "compute_confidence",
     "decide_auto_reply",
     "default_profile",
+    "detect_below_floor_price",
     "detect_reply_language",
     "detect_risk_flags",
     "evidence_summary_lines",
