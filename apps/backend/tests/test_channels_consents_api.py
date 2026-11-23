@@ -7,9 +7,14 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from erp_core.channels.settings_router import list_channel_consents
+from erp_core.channels.settings_router import (
+    ChannelConsentRead,
+    ChannelSuppressionRead,
+    list_channel_consents,
+    list_channel_suppressions,
+)
 from erp_core.shared.db import tenant_session
-from erp_core.shared.enums import UserRole
+from erp_core.shared.enums import ChannelType, UserRole
 from erp_core.shared.pagination import PaginationParams
 from erp_core.tenancy.dependencies import CurrentPrincipal
 from erp_core.tenancy.security import hash_password
@@ -152,3 +157,92 @@ async def test_consents_service_returns_paginated_rows_for_a_direct_session(
         )
     assert page.total == 2
     assert [item.customer_name for item in page.items]
+
+
+@pytest.mark.asyncio
+async def test_consents_and_suppressions_coerce_canonical_whatsapp_family(
+    async_client: AsyncClient,
+    runtime_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """ConsentAndSuppressionService stores canonical 'whatsapp'; endpoints must still return 200."""
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    assert (
+        ChannelConsentRead.model_validate(
+            {
+                "id": uuid4(),
+                "customer_name": "Lukas",
+                "channel_type": "whatsapp",
+                "consent_status": "opted_out",
+                "proof_source": "inbound_stop_keyword",
+                "recorded_at": now,
+            }
+        ).channel_type
+        == ChannelType.WHATSAPP_CLOUD
+    )
+    assert (
+        ChannelSuppressionRead.model_validate(
+            {
+                "id": uuid4(),
+                "channel_type": "whatsapp",
+                "normalized_address": "+491701234567",
+                "reason": "inbound_stop_keyword",
+                "created_at": now,
+            }
+        ).channel_type
+        == ChannelType.WHATSAPP_CLOUD
+    )
+
+    tenant_id, slug, email, password, owner_user_id = await _seed_consent_workspace(
+        runtime_session_factory
+    )
+    async with tenant_session(runtime_session_factory, tenant_id) as session:
+        await session.execute(
+            text(
+                "UPDATE consent_records SET channel_type = 'whatsapp' "
+                "WHERE tenant_id = :tid AND channel_type = 'whatsapp_cloud'"
+            ),
+            {"tid": tenant_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO suppression_list (id, tenant_id, channel_type, normalized_address, "
+                "reason, created_at) VALUES (:id, :tid, 'whatsapp', '+491701234567', "
+                "'inbound_stop_keyword', now())"
+            ),
+            {"id": uuid4(), "tid": tenant_id},
+        )
+
+    login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password, "tenant_slug": slug},
+    )
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    consents = await async_client.get("/api/v1/channels/consents", headers=headers)
+    assert consents.status_code == 200, consents.text
+    assert {item["channel_type"] for item in consents.json()["items"]} == {
+        "whatsapp_cloud",
+        "email",
+    }
+
+    suppressions = await async_client.get("/api/v1/channels/suppressions", headers=headers)
+    assert suppressions.status_code == 200, suppressions.text
+    assert suppressions.json()["items"][0]["channel_type"] == "whatsapp_cloud"
+
+    principal = CurrentPrincipal(
+        user_id=owner_user_id,
+        tenant_id=tenant_id,
+        role=UserRole.OWNER,
+        email=email,
+    )
+    async with tenant_session(runtime_session_factory, tenant_id) as session:
+        direct = await list_channel_suppressions(
+            session=session,
+            principal=principal,
+            page=PaginationParams(limit=10, offset=0),
+        )
+        assert direct.total == 1
+        assert direct.items[0].channel_type == ChannelType.WHATSAPP_CLOUD

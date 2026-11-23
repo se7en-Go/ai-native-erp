@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, EmailStr, Field, SecretStr
+from pydantic import BaseModel, EmailStr, Field, SecretStr, field_validator
 from sqlalchemy import and_, func, literal_column, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,6 +75,13 @@ class DisconnectChannelResponse(BaseModel):
     status: ChannelStatus = ChannelStatus.DISCONNECTED
 
 
+def _coerce_channel_family(value: Any) -> Any:
+    """Map normalized storage family tokens (e.g. 'whatsapp') back to ChannelType."""
+    if isinstance(value, str) and value.strip().lower() == "whatsapp":
+        return ChannelType.WHATSAPP_CLOUD
+    return value
+
+
 class ChannelDlqRead(BaseModel):
     id: UUID
     channel_type: ChannelType
@@ -82,6 +89,11 @@ class ChannelDlqRead(BaseModel):
     error_message: str
     retry_count: int
     created_at: datetime
+
+    @field_validator("channel_type", mode="before")
+    @classmethod
+    def _coerce_channel(cls, value: Any) -> Any:
+        return _coerce_channel_family(value)
 
 
 class ChannelConsentRead(BaseModel):
@@ -92,6 +104,11 @@ class ChannelConsentRead(BaseModel):
     proof_source: str
     recorded_at: datetime
 
+    @field_validator("channel_type", mode="before")
+    @classmethod
+    def _coerce_channel(cls, value: Any) -> Any:
+        return _coerce_channel_family(value)
+
 
 class ChannelSuppressionRead(BaseModel):
     id: UUID
@@ -99,6 +116,11 @@ class ChannelSuppressionRead(BaseModel):
     normalized_address: str
     reason: str
     created_at: datetime
+
+    @field_validator("channel_type", mode="before")
+    @classmethod
+    def _coerce_channel(cls, value: Any) -> Any:
+        return _coerce_channel_family(value)
 
 
 class EmailConnectRequest(BaseModel):
