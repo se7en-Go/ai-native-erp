@@ -167,6 +167,11 @@ export interface PlatformSkuMappingApiItem {
   external_sku: string;
   bundle_multiplier: number;
   sync_inventory_enabled: boolean;
+  safety_stock?: number;
+  last_inventory_synced_qty?: number | null;
+  last_inventory_synced_at?: string | null;
+  last_sync_status?: string;
+  last_sync_error?: string | null;
 }
 
 export interface B2bOpportunityApiItem {
@@ -666,6 +671,11 @@ export function mapVariantMapping(
     external_sku: m.external_sku,
     bundle_multiplier: m.bundle_multiplier,
     sync_inventory_enabled: m.sync_inventory_enabled,
+    safety_stock: m.safety_stock,
+    last_inventory_synced_qty: m.last_inventory_synced_qty ?? null,
+    last_inventory_synced_at: m.last_inventory_synced_at ?? null,
+    last_sync_status: m.last_sync_status,
+    last_sync_error: m.last_sync_error ?? null,
   };
 }
 
@@ -1038,6 +1048,7 @@ export async function updateSkuMapping(
     external_sku?: string;
     bundle_multiplier?: number;
     sync_inventory_enabled?: boolean;
+    safety_stock?: number;
   },
 ) {
   return unwrap(
@@ -1048,6 +1059,7 @@ export async function updateSkuMapping(
         external_sku: body.external_sku ?? null,
         bundle_multiplier: body.bundle_multiplier ?? null,
         sync_inventory_enabled: body.sync_inventory_enabled ?? null,
+        safety_stock: body.safety_stock ?? null,
       },
     }),
   );

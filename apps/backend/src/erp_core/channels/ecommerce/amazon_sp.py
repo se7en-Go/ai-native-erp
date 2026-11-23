@@ -862,7 +862,9 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
                 parts.append(text[:200])
         return " | ".join(parts)[:500] or "no issue details returned."
 
-    async def push_inventory_level(self, *, external_sku: str, quantity: int) -> dict[str, Any]:
+    async def push_inventory_level(
+        self, *, external_sku: str, quantity: int, **_extra: Any
+    ) -> dict[str, Any]:
         """Patch ``fulfillment_availability`` for one SKU through Listings Items ``PATCH``."""
         normalized_quantity = max(0, int(quantity))
         patch: list[dict[str, Any]] = [

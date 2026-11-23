@@ -451,6 +451,101 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
             raw_response=data,
         )
 
+    async def push_inventory_level(
+        self,
+        *,
+        external_sku: str,
+        quantity: int,
+        external_product_id: str | None = None,
+        external_variant_id: str | None = None,
+        warehouse_id: str | None = None,
+        **_extra: Any,
+    ) -> dict[str, Any]:
+        """Update stock for one TikTok Shop SKU via inventory update endpoint."""
+        clean_sku = external_sku.strip()
+        if not clean_sku:
+            raise AppError(
+                slug="tiktok-inventory-sync-failed",
+                status_code=422,
+                code="ERR_TIKTOK_INVENTORY_SYNC",
+                title="TikTok Shop Inventory Sync Failed",
+                detail="TikTok Shop inventory sync requires a non-empty external_sku.",
+            )
+        norm_qty = max(0, int(quantity))
+        wh_id = (warehouse_id or "").strip() or (self.warehouse_id or "").strip() or None
+        if not wh_id:
+            wh_data = await self._signed_request("GET", "/logistics/202309/warehouses")
+            wh_rows = wh_data.get("warehouses") or wh_data.get("warehouse_list") or []
+            if wh_rows and isinstance(wh_rows[0], Mapping) and wh_rows[0].get("id"):
+                wh_id = str(wh_rows[0]["id"]).strip()
+                self.warehouse_id = wh_id
+        if not wh_id:
+            raise AppError(
+                slug="tiktok-inventory-sync-failed",
+                status_code=502,
+                code="ERR_TIKTOK_INVENTORY_SYNC",
+                title="TikTok Shop Inventory Sync Failed",
+                detail=(
+                    "No TikTok Shop warehouse_id configured or returned by "
+                    "/logistics/202309/warehouses."
+                ),
+            )
+
+        prod_id = (external_product_id or "").strip() or None
+        sku_id = (external_variant_id or "").strip() or None
+        if not prod_id or not sku_id:
+            search_data = await self._signed_request(
+                "POST",
+                "/product/202309/products/search",
+                query={"page_size": "20"},
+                body={"seller_skus": [clean_sku], "page_size": 20},
+            )
+            for prod in search_data.get("products") or []:
+                if not isinstance(prod, Mapping):
+                    continue
+                if prod_id and str(prod.get("id") or "") != prod_id:
+                    continue
+                for s in prod.get("skus") or []:
+                    if (
+                        isinstance(s, Mapping)
+                        and str(s.get("seller_sku") or "").strip() == clean_sku
+                    ):
+                        prod_id = prod_id or str(prod.get("id") or "").strip() or None
+                        sku_id = sku_id or str(s.get("id") or "").strip() or None
+                        break
+                if prod_id and sku_id:
+                    break
+        if not prod_id:
+            raise AppError(
+                slug="tiktok-inventory-sync-failed",
+                status_code=502,
+                code="ERR_TIKTOK_INVENTORY_SYNC",
+                title="TikTok Shop Inventory Sync Failed",
+                detail=f"Could not resolve TikTok product_id for SKU '{clean_sku}'.",
+            )
+        target_sku_id = sku_id or clean_sku
+        data = await self._signed_request(
+            "POST",
+            f"/product/202309/products/{prod_id}/inventory/update",
+            body={
+                "skus": [
+                    {
+                        "id": target_sku_id,
+                        "inventory": [{"warehouse_id": wh_id, "quantity": norm_qty}],
+                    }
+                ]
+            },
+        )
+        return {
+            "channel": "tiktok_shop",
+            "external_sku": clean_sku,
+            "quantity": norm_qty,
+            "product_id": prod_id,
+            "variant_id": target_sku_id,
+            "warehouse_id": wh_id,
+            "raw": data,
+        }
+
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
         return verify_tiktok_webhook_signature(
             raw_body, headers, app_key=self.app_key, app_secret=secret or self.app_secret

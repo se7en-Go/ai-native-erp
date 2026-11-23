@@ -898,7 +898,7 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
         )
 
     async def push_inventory_level(
-        self, *, external_sku: str, quantity: int
+        self, *, external_sku: str, quantity: int, **_extra: Any
     ) -> dict[str, Any]:
         payload = await self._call_iop(
             "POST",

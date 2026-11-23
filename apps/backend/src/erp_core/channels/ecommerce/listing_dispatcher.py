@@ -267,6 +267,30 @@ def build_marketplace_adapter(
     )
 
 
+async def load_channel_credentials(
+    vault: CredentialVaultHelper,
+    session: AsyncSession,
+    tenant_id: UUID,
+    channel_account_id: UUID,
+    channel_type: str,
+    primary_credential_type: str,
+) -> tuple[Mapping[str, Any], Any]:
+    """Load channel credentials from envelope vault, supporting Shopify legacy fallback."""
+    try:
+        return await vault.load_secret_json(
+            session, tenant_id, channel_account_id, primary_credential_type
+        )
+    except AppError as exc:
+        if channel_type == SHOPIFY_CHANNEL_TYPE and exc.code == "ERR_CREDENTIAL_NOT_FOUND":
+            return await vault.load_secret_json(
+                session,
+                tenant_id,
+                channel_account_id,
+                SHOPIFY_FALLBACK_CREDENTIAL_TYPE,
+            )
+        raise
+
+
 class MarketplaceListingDispatcher:
     """Push one sourcing draft listing to a live marketplace API.
 
@@ -292,22 +316,14 @@ class MarketplaceListingDispatcher:
         channel_type: str,
         primary_credential_type: str,
     ) -> tuple[Mapping[str, Any], Any]:
-        try:
-            return await self._vault.load_secret_json(
-                session, tenant_id, channel_account_id, primary_credential_type
-            )
-        except AppError as exc:
-            if (
-                channel_type == SHOPIFY_CHANNEL_TYPE
-                and exc.code == "ERR_CREDENTIAL_NOT_FOUND"
-            ):
-                return await self._vault.load_secret_json(
-                    session,
-                    tenant_id,
-                    channel_account_id,
-                    SHOPIFY_FALLBACK_CREDENTIAL_TYPE,
-                )
-            raise
+        return await load_channel_credentials(
+            self._vault,
+            session,
+            tenant_id,
+            channel_account_id,
+            channel_type,
+            primary_credential_type,
+        )
 
     async def publish_listing(
         self,
@@ -447,5 +463,6 @@ __all__ = [
     "WOOCOMMERCE_CHANNEL_TYPE",
     "WOOCOMMERCE_CREDENTIAL_TYPE",
     "build_marketplace_adapter",
+    "load_channel_credentials",
     "unsupported_channel_error",
 ]

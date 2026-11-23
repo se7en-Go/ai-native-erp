@@ -32,8 +32,107 @@ class InsufficientStockError(AppError):
         self.available = available
 
 
+def compute_sellable_channel_qty(
+    available_qty: int,
+    *,
+    safety_stock: int = 0,
+    bundle_multiplier: int = 1,
+) -> int:
+    """Compute channel-sellable units/bundles from ERP available stock."""
+    net = max(0, int(available_qty) - max(0, int(safety_stock)))
+    return net // max(1, int(bundle_multiplier))
+
+
 class InventoryLedgerService:
     """Deadlock-free, idempotent atomic inventory ledger & balance engine."""
+
+    @staticmethod
+    async def _enqueue_sync_jobs_for_variant(
+        session: AsyncSession,
+        tenant_id: UUID,
+        variant_id: UUID,
+        *,
+        trigger_source: str,
+    ) -> int:
+        """Coalesce pending outbox sync jobs for every mapped active channel of ``variant_id``."""
+        total_available = int(
+            (
+                await session.execute(
+                    text(
+                        """
+                        SELECT GREATEST(0, COALESCE(SUM(on_hand_qty - reserved_qty), 0))
+                        FROM inventory_balances
+                        WHERE tenant_id = :tid AND variant_id = :vid
+                        """
+                    ),
+                    {"tid": tenant_id, "vid": variant_id},
+                )
+            ).scalar_one()
+        )
+        mappings = (
+            await session.execute(
+                text(
+                    """
+                    SELECT psm.id AS mapping_id,
+                           psm.channel_account_id,
+                           ca.channel_type,
+                           psm.external_sku,
+                           psm.safety_stock,
+                           psm.bundle_multiplier
+                    FROM platform_sku_mappings psm
+                    JOIN channel_accounts ca
+                      ON ca.id = psm.channel_account_id AND ca.tenant_id = psm.tenant_id
+                    WHERE psm.tenant_id = :tid
+                      AND psm.variant_id = :vid
+                      AND psm.sync_inventory_enabled = true
+                      AND ca.status = 'active'
+                    """
+                ),
+                {"tid": tenant_id, "vid": variant_id},
+            )
+        ).all()
+        enqueued = 0
+        for row in mappings:
+            sellable_qty = compute_sellable_channel_qty(
+                total_available,
+                safety_stock=int(row.safety_stock or 0),
+                bundle_multiplier=int(row.bundle_multiplier or 1),
+            )
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO inventory_sync_jobs (
+                        tenant_id, variant_id, mapping_id, channel_account_id,
+                        channel_type, external_sku, requested_qty, status,
+                        attempts, next_retry_at, trigger_source
+                    ) VALUES (
+                        :tid, :vid, :mid, :caid,
+                        :ctype, :ext_sku, :qty, 'pending',
+                        0, now(), :tsrc
+                    )
+                    ON CONFLICT (tenant_id, mapping_id) WHERE status = 'pending'
+                    DO UPDATE SET
+                        requested_qty = EXCLUDED.requested_qty,
+                        external_sku = EXCLUDED.external_sku,
+                        channel_type = EXCLUDED.channel_type,
+                        trigger_source = EXCLUDED.trigger_source,
+                        next_retry_at = now(),
+                        updated_at = now()
+                    """
+                ),
+                {
+                    "tid": tenant_id,
+                    "vid": variant_id,
+                    "mid": row.mapping_id,
+                    "caid": row.channel_account_id,
+                    "ctype": str(row.channel_type),
+                    "ext_sku": str(row.external_sku),
+                    "qty": sellable_qty,
+                    "tsrc": trigger_source,
+                },
+            )
+            enqueued += 1
+        return enqueued
 
     @staticmethod
     def _normalize_sorted_items(items: list[tuple[UUID, int]]) -> list[tuple[UUID, int]]:
@@ -100,6 +199,9 @@ class InventoryLedgerService:
                     """
                 ),
                 {"tid": tenant_id, "wid": warehouse_id, "vid": variant_id, "qty": qty},
+            )
+            await self._enqueue_sync_jobs_for_variant(
+                session, tenant_id, variant_id, trigger_source="inbound_stock"
             )
             return int(ledger_id)
 
@@ -168,6 +270,9 @@ class InventoryLedgerService:
                     title="Invalid stocktake quantity",
                     detail="The count would use reserved units or exceed inventory limits.",
                 )
+            await self._enqueue_sync_jobs_for_variant(
+                session, tenant_id, variant_id, trigger_source="stocktake_adjust"
+            )
             return int(ledger_id)
 
     async def reserve_for_order(
@@ -258,6 +363,9 @@ class InventoryLedgerService:
                     )
 
                 ledger_ids.append(int(ledger_id))
+                await self._enqueue_sync_jobs_for_variant(
+                    session, tenant_id, variant_id, trigger_source="order_reserve"
+                )
 
         return ledger_ids
 
@@ -340,6 +448,9 @@ class InventoryLedgerService:
                     {"tid": tenant_id, "wid": warehouse_id, "vid": variant_id, "qty": qty},
                 )
                 ledger_ids.append(int(ledger_id))
+                await self._enqueue_sync_jobs_for_variant(
+                    session, tenant_id, variant_id, trigger_source="order_release"
+                )
 
         return ledger_ids
 
@@ -425,6 +536,9 @@ class InventoryLedgerService:
                     {"tid": tenant_id, "wid": warehouse_id, "vid": variant_id, "qty": qty},
                 )
                 ledger_ids.append(int(ledger_id))
+                await self._enqueue_sync_jobs_for_variant(
+                    session, tenant_id, variant_id, trigger_source="order_shipped"
+                )
 
         return ledger_ids
 

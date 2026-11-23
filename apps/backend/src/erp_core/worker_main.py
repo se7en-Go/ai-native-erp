@@ -30,6 +30,10 @@ import erp_core.social.models  # noqa: F401
 # The worker writes order rows outside FastAPI, so its mapping needs every table the
 # ORM foreign keys reference, exactly like api_main registers them.
 import erp_core.tenancy.models  # noqa: F401
+from erp_core.channels.ecommerce.inventory_sync_dispatcher import (
+    drain_inventory_sync_all_tenants,
+    reconcile_inventory_sync_cron,
+)
 from erp_core.channels.ecommerce.shopify import process_shopify_webhook
 from erp_core.channels.ingress_worker import (
     register_channel_worker_tasks,
@@ -65,6 +69,7 @@ COMMERCE_TRACKING_CHANNELS: tuple[str, ...] = (
 )
 COMMERCE_DRAIN_INTERVAL_SECONDS = 2.0
 ECOMMERCE_RECONCILE_INTERVAL_SECONDS = 15 * 60.0
+INVENTORY_SYNC_RECONCILE_INTERVAL_SECONDS = 30 * 60.0
 STALLED_SHIPMENT_MONITOR_INTERVAL_SECONDS = 60 * 60.0
 SOCIAL_DISPATCH_INTERVAL_SECONDS = 60.0
 
@@ -74,6 +79,7 @@ schedule_source = ListRedisScheduleSource(url=_settings.REDIS_URL)
 scheduler = TaskiqScheduler(broker=broker, sources=[schedule_source, LabelScheduleSource(broker)])
 broker.task(schedule=[{"cron": "0 * * * *"}])(monitor_stalled_shipments_cron)
 broker.task(schedule=[{"cron": "*/15 * * * *"}])(reconcile_ecommerce_orders_cron)
+broker.task(schedule=[{"cron": "*/30 * * * *"}])(reconcile_inventory_sync_cron)
 # Due scheduled social posts are dispatched every minute: `scheduled_at` is minute-granular.
 broker.task(schedule=[{"cron": "* * * * *"}])(dispatch_due_social_posts_cron)
 broker.task(process_17track_webhook)
@@ -204,18 +210,22 @@ async def _run_commerce_and_tracking_loop(
     broker_session_factory: SessionFactory,
     redis: Redis,
     *,
+    runtime_session_factory: SessionFactory | None = None,
     drain_interval: float = COMMERCE_DRAIN_INTERVAL_SECONDS,
     reconcile_interval: float = ECOMMERCE_RECONCILE_INTERVAL_SECONDS,
+    inventory_reconcile_interval: float = INVENTORY_SYNC_RECONCILE_INTERVAL_SECONDS,
     stalled_interval: float = STALLED_SHIPMENT_MONITOR_INTERVAL_SECONDS,
     social_interval: float = SOCIAL_DISPATCH_INTERVAL_SECONDS,
     periodic_crons: bool | None = None,
 ) -> None:
-    """Drain commerce/tracking streams and run the periodic commerce crons."""
+    """Drain commerce/tracking streams, push inventory outbox, and run periodic crons."""
     loop = asyncio.get_running_loop()
     crons = _periodic_crons_enabled() if periodic_crons is None else periodic_crons
     next_reconcile = loop.time() + reconcile_interval
+    next_inventory_reconcile = loop.time() + inventory_reconcile_interval
     next_stalled = loop.time() + stalled_interval
     next_social = loop.time() + social_interval
+    rt_factory = runtime_session_factory or _session_factory
     logger.info("commerce/tracking worker loop starting (periodic_crons=%s)", crons)
     while not stop.is_set():
         try:
@@ -226,6 +236,14 @@ async def _run_commerce_and_tracking_loop(
         except Exception:
             # Redis/DB hiccups must never kill the loop: retry on the next tick.
             logger.exception("commerce/tracking drain pass crashed; retrying")
+        try:
+            inv_totals = await drain_inventory_sync_all_tenants(
+                broker_session_factory, rt_factory
+            )
+            if inv_totals.get("dispatched"):
+                logger.info("inventory outbox drained %s", inv_totals)
+        except Exception:
+            logger.exception("inventory outbox drain pass crashed; retrying")
         if crons:
             now = loop.time()
             if now >= next_reconcile:
@@ -235,6 +253,13 @@ async def _run_commerce_and_tracking_loop(
                 except Exception:
                     logger.exception("ecommerce order reconcile cron failed")
                 next_reconcile = now + reconcile_interval
+            if now >= next_inventory_reconcile:
+                try:
+                    inv_reconciled = await reconcile_inventory_sync_cron()
+                    logger.info("inventory sync reconcile: %s", inv_reconciled)
+                except Exception:
+                    logger.exception("inventory sync reconcile cron failed")
+                next_inventory_reconcile = now + inventory_reconcile_interval
             if now >= next_stalled:
                 try:
                     alerts = await monitor_stalled_shipments_cron()

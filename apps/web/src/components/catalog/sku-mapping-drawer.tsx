@@ -41,6 +41,11 @@ export interface PlatformSkuMappingItem {
   external_sku: string;
   bundle_multiplier: number;
   sync_inventory_enabled: boolean;
+  safety_stock?: number;
+  last_inventory_synced_qty?: number | null;
+  last_inventory_synced_at?: string | null;
+  last_sync_status?: string;
+  last_sync_error?: string | null;
 }
 
 export function SkuMappingDrawer({
@@ -63,15 +68,19 @@ export function SkuMappingDrawer({
 
   const [tiers, setTiers] = useState<MoqTier[]>([]);
   const [multipliers, setMultipliers] = useState<Record<string, number>>({});
+  const [safetyStocks, setSafetyStocks] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (detailQuery.data) {
       setTiers(detailQuery.data.variant.b2b_moq_tiers ?? []);
       const nextMult: Record<string, number> = {};
+      const nextSafety: Record<string, number> = {};
       for (const m of detailQuery.data.mappings) {
         nextMult[m.id] = m.bundle_multiplier;
+        nextSafety[m.id] = m.safety_stock ?? 0;
       }
       setMultipliers(nextMult);
+      setSafetyStocks(nextSafety);
     }
   }, [detailQuery.data]);
 
@@ -91,6 +100,7 @@ export function SkuMappingDrawer({
         external_sku: mapping.external_sku,
         bundle_multiplier: multipliers[mapping.id] ?? mapping.bundle_multiplier,
         sync_inventory_enabled: mapping.sync_inventory_enabled,
+        safety_stock: safetyStocks[mapping.id] ?? mapping.safety_stock ?? 0,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
@@ -250,8 +260,32 @@ export function SkuMappingDrawer({
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 font-medium text-slate-800">
                   <span>{mapping.channel_label ?? mapping.channel_account_id}</span>
-                  <Badge>{mapping.external_sku}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge>{mapping.external_sku}</Badge>
+                    <span
+                      data-testid={`mapping-sync-status-${mapping.id}`}
+                      className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                        mapping.last_sync_status === "succeeded"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : mapping.last_sync_status === "failed" ||
+                              mapping.last_sync_status === "dead_letter"
+                            ? "bg-rose-50 text-rose-700"
+                            : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {mapping.last_sync_status ?? "idle"}
+                      {mapping.last_inventory_synced_qty !== null &&
+                      mapping.last_inventory_synced_qty !== undefined
+                        ? ` · ${mapping.last_inventory_synced_qty}`
+                        : ""}
+                    </span>
+                  </div>
                 </div>
+                {mapping.last_sync_error && (
+                  <p className="rounded-lg bg-rose-50 px-2 py-1 text-[11px] text-rose-700">
+                    {mapping.last_sync_error}
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <label
                     className="text-[12px] text-slate-600"
@@ -269,6 +303,26 @@ export function SkuMappingDrawer({
                       setMultipliers((prev) => ({
                         ...prev,
                         [mapping.id]: Math.max(1, Number(e.target.value) || 1),
+                      }))
+                    }
+                    className="erp-input w-20 py-1 tabular-nums"
+                  />
+                  <label
+                    className="text-[12px] text-slate-600"
+                    htmlFor={`safety-stock-input-${mapping.id}`}
+                  >
+                    {bi("渠道安全库存", "Safety stock")}
+                  </label>
+                  <input
+                    id={`safety-stock-input-${mapping.id}`}
+                    type="number"
+                    min={0}
+                    data-testid={`safety-stock-input-${mapping.id}`}
+                    value={safetyStocks[mapping.id] ?? mapping.safety_stock ?? 0}
+                    onChange={(e) =>
+                      setSafetyStocks((prev) => ({
+                        ...prev,
+                        [mapping.id]: Math.max(0, Number(e.target.value) || 0),
                       }))
                     }
                     className="erp-input w-20 py-1 tabular-nums"

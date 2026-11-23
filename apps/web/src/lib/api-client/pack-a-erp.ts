@@ -12,9 +12,12 @@ import { bffFetch } from "@/lib/api";
 import type {
   CatalogCsvImportRequest,
   CatalogCsvImportResponse,
+  InventorySyncDispatchSummary,
+  InventorySyncJobRead,
   LowStockCreatePoRequest,
   LowStockItemRead,
   LowStockListRead,
+  PaginatedResponseInventorySyncJobRead,
   ProductCreate,
   ProductRead,
   PurchaseOrderRead,
@@ -272,10 +275,145 @@ export function createWmsWarehouse(payload: WarehouseCreateRequest): Promise<Wms
 }
 
 // ---------------------------------------------------------------------------
+// Phase 2: Multi-platform real-time inventory sync
+// ---------------------------------------------------------------------------
+
+/** GET `/v1/orders/inventory/sync-logs` — paginated channel inventory sync jobs. */
+export function listInventorySyncLogs(options?: {
+  variantId?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<PaginatedResponseInventorySyncJobRead> {
+  const limit = options?.limit ?? 50;
+  const offset = options?.offset ?? 0;
+  if (shouldUseMockApi()) {
+    let filtered = mockSyncJobs;
+    if (options?.variantId) {
+      filtered = filtered.filter((j) => j.variant_id === options.variantId);
+    }
+    if (options?.status) {
+      filtered = filtered.filter((j) => j.status === options.status);
+    }
+    const items = filtered.slice(offset, offset + limit).map((j) => ({ ...j }));
+    return Promise.resolve({
+      items,
+      total: filtered.length,
+      limit,
+      offset,
+      has_more: offset + items.length < filtered.length,
+    });
+  }
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (options?.variantId) params.set("variant_id", options.variantId);
+  if (options?.status) params.set("status", options.status);
+  return bffFetch<PaginatedResponseInventorySyncJobRead>(
+    `/v1/orders/inventory/sync-logs?${params.toString()}`
+  );
+}
+
+/** POST `/v1/orders/inventory/sync-now` — push sellable qty to all mapped stores now. */
+export function triggerInventorySyncNow(options?: {
+  variantId?: string;
+  channelAccountId?: string;
+}): Promise<InventorySyncDispatchSummary> {
+  if (shouldUseMockApi()) {
+    const items = mockSyncJobs.map((j) => ({
+      ...j,
+      status: "succeeded",
+      synced_qty: j.requested_qty,
+      error_code: null,
+      error_detail: null,
+    }));
+    return Promise.resolve({
+      enqueued: items.length,
+      dispatched: items.length,
+      succeeded: items.length,
+      failed: 0,
+      dead_letter: 0,
+      jobs: items,
+    });
+  }
+  return bffFetch<InventorySyncDispatchSummary>("/v1/orders/inventory/sync-now", {
+    method: "POST",
+    body: JSON.stringify({
+      variant_id: options?.variantId ?? null,
+      channel_account_id: options?.channelAccountId ?? null,
+    }),
+  });
+}
+
+/** POST `/v1/orders/inventory/sync-jobs/{jobId}/retry` — retry one failed/dead-letter job. */
+export function retryInventorySyncJob(jobId: string): Promise<InventorySyncJobRead> {
+  if (shouldUseMockApi()) {
+    const found = mockSyncJobs.find((j) => j.id === jobId) ?? mockSyncJobs[0];
+    return Promise.resolve({
+      ...found,
+      status: "succeeded",
+      synced_qty: found.requested_qty,
+      error_code: null,
+      error_detail: null,
+    });
+  }
+  return bffFetch<InventorySyncJobRead>(
+    `/v1/orders/inventory/sync-jobs/${encodeURIComponent(jobId)}/retry`,
+    { method: "POST" }
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Mock fallbacks (only with NEXT_PUBLIC_USE_MOCK_API=true)
 // ---------------------------------------------------------------------------
 
 const MOCK_NOW = "2026-01-05T09:15:00.000Z";
+
+const mockSyncJobs: InventorySyncJobRead[] = [
+  {
+    id: "sync-job-shopify-1",
+    tenant_id: "22222222-2222-2222-2222-222222222222",
+    variant_id: "var-1",
+    mapping_id: "map-shopify-1",
+    channel_account_id: "ca-shopify-1",
+    channel_type: "shopify",
+    channel_label: "Shopify US Sandbox",
+    internal_sku: "LED-COB-24V-5M",
+    external_sku: "SHOP-LED-COB-5M",
+    requested_qty: 28,
+    synced_qty: 28,
+    status: "succeeded",
+    attempts: 1,
+    next_retry_at: MOCK_NOW,
+    error_code: null,
+    error_detail: null,
+    trigger_source: "order_reserve",
+    created_at: MOCK_NOW,
+    updated_at: MOCK_NOW,
+  },
+  {
+    id: "sync-job-tiktok-1",
+    tenant_id: "22222222-2222-2222-2222-222222222222",
+    variant_id: "var-1",
+    mapping_id: "map-tiktok-1",
+    channel_account_id: "ca-tiktok-1",
+    channel_type: "tiktok_shop",
+    channel_label: "TikTok Shop US",
+    internal_sku: "LED-COB-24V-5M",
+    external_sku: "TT-LED-COB-5M",
+    requested_qty: 28,
+    synced_qty: null,
+    status: "dead_letter",
+    attempts: 3,
+    next_retry_at: MOCK_NOW,
+    error_code: "HTTP_429",
+    error_detail: "TikTok rate limit exceeded during burst push",
+    trigger_source: "order_reserve",
+    created_at: MOCK_NOW,
+    updated_at: MOCK_NOW,
+  },
+];
 
 /** Two real safety-stock breaches so the replenishment flow is demoable offline. */
 const mockLowStock: LowStockItemRead[] = [

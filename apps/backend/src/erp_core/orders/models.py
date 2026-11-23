@@ -184,3 +184,45 @@ class InventoryLedger(Base):
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
     )
+
+
+class InventorySyncJob(Base):
+    __tablename__ = "inventory_sync_jobs"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    variant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("product_variants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mapping_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("platform_sku_mappings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    channel_account_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("channel_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    channel_type: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    external_sku: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    requested_qty: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
+    synced_qty: Mapped[int | None] = mapped_column(sa.Integer(), nullable=True)
+    status: Mapped[str] = mapped_column(sa.Text(), nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
+    next_retry_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+    error_code: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    trigger_source: Mapped[str] = mapped_column(sa.Text(), nullable=False, default="manual")
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
