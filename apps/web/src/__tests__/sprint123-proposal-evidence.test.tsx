@@ -141,4 +141,65 @@ describe("Track 2 · Verified ERP evidence on the proposal review card", () => {
     expect(onApprove).toHaveBeenCalledWith("prop-201");
     expect(screen.getByTestId("proposal-reject-toggle-prop-201")).toBeTruthy();
   });
+
+  it("renders readable reply preview, Chinese risk pills, collapsible JSON, and localized 批准 button", () => {
+    const onEditApprove = vi.fn();
+    const replyProposal: AiProposalItem = {
+      id: "prop-tg-1",
+      capability: "cs_support",
+      proposal_type: "reply_draft",
+      conversation_id: "conv-tg",
+      proposed_payload: {
+        body_text: "Hello seven,\n\nA specialist will review your request shortly.",
+        risk_flags: ["order_confirmation", "below_floor_price"],
+        channel_type: "telegram",
+        customer_name: "seven",
+        reasoning_summary: "Risk guardrail matched order_confirmation, below_floor_price.",
+        kb_citations: [{ doc_id: "d1", chunk_id: "c1", doc_title: "COB 24V Warranty" }],
+      },
+      citations: [],
+      confidence_score: 0.35,
+      status: "pending",
+      created_at: "2026-11-23T01:40:00Z",
+    };
+
+    wrap(
+      <ProposalReviewCard
+        proposal={replyProposal}
+        canReview
+        onApprove={vi.fn()}
+        onEditApprove={onEditApprove}
+        onReject={vi.fn()}
+      />,
+      "zh"
+    );
+
+    // Localized primary button label
+    expect(screen.getByTestId("proposal-approve-prop-tg-1").textContent).toContain("批准");
+
+    // Readable message body and risk flags instead of raw JSON dump
+    const bodyPreview = screen.getByTestId("proposal-body-preview-prop-tg-1");
+    expect(bodyPreview.textContent).toContain("A specialist will review your request shortly.");
+    const riskBanner = screen.getByTestId("proposal-risk-flags-prop-tg-1");
+    expect(riskBanner.textContent).toContain("要求确认下单");
+    expect(riskBanner.textContent).toContain("低于底价");
+
+    // Raw JSON is tucked inside a collapsible <details>
+    const rawDetails = screen.getByTestId("proposal-raw-json-prop-tg-1");
+    expect(rawDetails.tagName.toLowerCase()).toBe("details");
+    expect(rawDetails.hasAttribute("open")).toBe(false);
+
+    // Clicking 编辑后批准 opens plain-text body editor and preserves other payload fields on submit
+    fireEvent.click(screen.getByTestId("proposal-edit-toggle-prop-tg-1"));
+    const bodyEditor = screen.getByTestId("proposal-body-editor-prop-tg-1") as HTMLTextAreaElement;
+    fireEvent.change(bodyEditor, {
+      target: { value: "Hi seven, our 500 pcs FOB price is $12.00/pc." },
+    });
+    fireEvent.click(screen.getByTestId("proposal-edit-submit-prop-tg-1"));
+
+    expect(onEditApprove).toHaveBeenCalledWith("prop-tg-1", {
+      ...replyProposal.proposed_payload,
+      body_text: "Hi seven, our 500 pcs FOB price is $12.00/pc.",
+    });
+  });
 });
