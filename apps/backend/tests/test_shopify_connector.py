@@ -30,6 +30,7 @@ from erp_core.channels.ecommerce.base import (
     resolve_routing_tenant,
 )
 from erp_core.channels.ecommerce.shopify import (
+    ORDERS_GRAPHQL_QUERY,
     SHOPIFY_API_PATH,
     ShopifyGraphqlAdapter,
     process_shopify_webhook_event,
@@ -70,7 +71,7 @@ def _order_node() -> dict[str, object]:
             },
             "location": {
                 "id": "gid://shopify/CompanyLocation/902",
-                "shippingAddress": {"countryCodeV2": "SE"},
+                "shippingAddress": {"countryCode": "SE"},
             },
         },
         "lineItems": {
@@ -397,6 +398,18 @@ async def test_shopify_graphql_b2b_bundle_token_refresh_and_gdpr(
                 )
         finally:
             await admin_engine.dispose()
+
+
+def test_shopify_orders_query_uses_company_address_country_code() -> None:
+    """Shopify CompanyAddress exposes `countryCode`, whereas MailingAddress uses `countryCodeV2`."""
+    assert "location { id name externalId shippingAddress { countryCode } }" in ORDERS_GRAPHQL_QUERY
+    assert (
+        "location { id name externalId shippingAddress { countryCodeV2 } }"
+        not in ORDERS_GRAPHQL_QUERY
+    )
+    normalized = ShopifyGraphqlAdapter._normalize_order_node(_order_node())
+    assert normalized.b2b_company is not None
+    assert normalized.b2b_company.country_code == "SE"
 
 
 def _admin_url() -> str:
