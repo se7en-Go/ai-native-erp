@@ -597,5 +597,61 @@ class WooCommerceAdapter(CommercePlatformAdapter):
             raw_response={"product": created, "variations": batch_res},
         )
 
+    async def push_inventory_level(
+        self,
+        *,
+        external_sku: str,
+        quantity: int,
+        external_product_id: str | None = None,
+        external_variant_id: str | None = None,
+        **_extra: Any,
+    ) -> dict[str, Any]:
+        """Update WooCommerce product or variation ``stock_quantity`` via REST v3."""
+        clean_sku = external_sku.strip()
+        if not clean_sku:
+            raise AppError(
+                slug="woocommerce-inventory-sync-failed",
+                status_code=422,
+                code="ERR_WOOCOMMERCE_INVENTORY_SYNC",
+                title="WooCommerce Inventory Sync Failed",
+                detail="WooCommerce inventory sync requires a non-empty external_sku.",
+            )
+        norm_qty = max(0, int(quantity))
+        pid = (external_product_id or "").strip() or None
+        vid = (external_variant_id or "").strip() or None
+        if not pid:
+            found = await self._request("GET", "/products", params={"sku": clean_sku})
+            if isinstance(found, list) and found and isinstance(found[0], Mapping):
+                row = found[0]
+                parent_id = str(row.get("parent_id") or "").strip()
+                row_id = str(row.get("id") or "").strip()
+                if parent_id and parent_id != "0":
+                    pid = parent_id
+                    vid = vid or row_id
+                else:
+                    pid = row_id
+        if not pid:
+            raise AppError(
+                slug="woocommerce-inventory-sync-failed",
+                status_code=502,
+                code="ERR_WOOCOMMERCE_INVENTORY_SYNC",
+                title="WooCommerce Inventory Sync Failed",
+                detail=f"Could not resolve WooCommerce product id for SKU '{clean_sku}'.",
+            )
+        path = f"/products/{pid}/variations/{vid}" if vid and vid != pid else f"/products/{pid}"
+        res = await self._request(
+            "PUT",
+            path,
+            json_body={"manage_stock": True, "stock_quantity": norm_qty},
+        )
+        return {
+            "channel": "woocommerce",
+            "external_sku": clean_sku,
+            "quantity": norm_qty,
+            "product_id": pid,
+            "variant_id": vid,
+            "raw": res if isinstance(res, dict) else {},
+        }
+
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
         return verify_woocommerce_webhook(raw_body, headers, secret or self.webhook_secret)

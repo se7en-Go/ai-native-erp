@@ -39,6 +39,7 @@ from erp_core.channels.adapters.messenger import messenger_router
 from erp_core.channels.adapters.telegram import telegram_router
 from erp_core.channels.adapters.whatsapp import whatsapp_router
 from erp_core.channels.ecommerce.connectors_router import router as connectors_router
+from erp_core.channels.ecommerce.inventory_sync_router import router as inventory_sync_router
 from erp_core.channels.ecommerce.listing_dispatcher import MarketplaceListingDispatcher
 from erp_core.channels.ecommerce.marketplace_connect_router import (
     router as marketplace_connect_router,
@@ -166,6 +167,7 @@ def create_app() -> FastAPI:
     app.include_router(supply_router, prefix="/api/v1")
     app.include_router(wms_router, prefix="/api/v1")
     app.include_router(executive_router, prefix="/api/v1")
+    app.include_router(inventory_sync_router)
     app.include_router(orders_router, prefix="/api/v1")
     app.include_router(finance_router, prefix="/api/v1")
     app.include_router(finance_ap_router)

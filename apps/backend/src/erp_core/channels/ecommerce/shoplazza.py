@@ -371,5 +371,57 @@ class ShoplazzaAdapter(CommercePlatformAdapter):
             raw_response=dict(res),
         )
 
+    async def push_inventory_level(
+        self,
+        *,
+        external_sku: str,
+        quantity: int,
+        external_product_id: str | None = None,
+        external_variant_id: str | None = None,
+        **_extra: Any,
+    ) -> dict[str, Any]:
+        """Update Shoplazza variant ``inventory_quantity`` via OpenAPI."""
+        clean_sku = external_sku.strip()
+        if not clean_sku:
+            raise AppError(
+                slug="shoplazza-inventory-sync-failed",
+                status_code=422,
+                code="ERR_SHOPLAZZA_INVENTORY_SYNC",
+                title="Shoplazza Inventory Sync Failed",
+                detail="Shoplazza inventory sync requires a non-empty external_sku.",
+            )
+        norm_qty = max(0, int(quantity))
+        pid = (external_product_id or "").strip() or None
+        vid = (external_variant_id or "").strip() or None
+        if pid and not vid:
+            prod_res = await self._request("GET", f"/products/{pid}")
+            prod = (
+                prod_res.get("product")
+                if isinstance(prod_res.get("product"), Mapping)
+                else prod_res
+            )
+            for var in (prod or {}).get("variants") or []:
+                if isinstance(var, Mapping) and str(var.get("sku") or "").strip() == clean_sku:
+                    vid = str(var.get("id") or "").strip() or None
+                    break
+        if not pid:
+            raise AppError(
+                slug="shoplazza-inventory-sync-failed",
+                status_code=502,
+                code="ERR_SHOPLAZZA_INVENTORY_SYNC",
+                title="Shoplazza Inventory Sync Failed",
+                detail=f"Shoplazza inventory sync requires product id for SKU '{clean_sku}'.",
+            )
+        path = f"/products/{pid}/variants/{vid}" if vid else f"/products/{pid}"
+        res = await self._request("PUT", path, json_body={"inventory_quantity": norm_qty})
+        return {
+            "channel": "shoplazza",
+            "external_sku": clean_sku,
+            "quantity": norm_qty,
+            "product_id": pid,
+            "variant_id": vid,
+            "raw": res,
+        }
+
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
         return verify_shoplazza_webhook(raw_body, headers, secret or self.webhook_secret)

@@ -420,5 +420,70 @@ class ShoplineAdapter(CommercePlatformAdapter):
             raw_response=dict(res),
         )
 
+    async def push_inventory_level(
+        self,
+        *,
+        external_sku: str,
+        quantity: int,
+        external_product_id: str | None = None,
+        external_variant_id: str | None = None,
+        external_inventory_item_id: str | None = None,
+        location_id: str | None = None,
+        **_extra: Any,
+    ) -> dict[str, Any]:
+        """Set SHOPLINE inventory level via ``/inventory_levels/set.json``."""
+        del external_variant_id
+        clean_sku = external_sku.strip()
+        if not clean_sku:
+            raise AppError(
+                slug="shopline-inventory-sync-failed",
+                status_code=422,
+                code="ERR_SHOPLINE_INVENTORY_SYNC",
+                title="SHOPLINE Inventory Sync Failed",
+                detail="SHOPLINE inventory sync requires a non-empty external_sku.",
+            )
+        norm_qty = max(0, int(quantity))
+        item_id = (external_inventory_item_id or "").strip() or None
+        if not item_id and external_product_id:
+            prod_res = await self._request("GET", f"/products/{external_product_id.strip()}.json")
+            prod = (
+                prod_res.get("product")
+                if isinstance(prod_res.get("product"), Mapping)
+                else prod_res
+            )
+            for var in (prod or {}).get("variants") or []:
+                if isinstance(var, Mapping) and str(var.get("sku") or "").strip() == clean_sku:
+                    item_id = str(var.get("inventory_item_id") or "").strip() or None
+                    break
+        if not item_id:
+            raise AppError(
+                slug="shopline-inventory-sync-failed",
+                status_code=502,
+                code="ERR_SHOPLINE_INVENTORY_SYNC",
+                title="SHOPLINE Inventory Sync Failed",
+                detail=f"Could not resolve SHOPLINE inventory_item_id for SKU '{clean_sku}'.",
+            )
+        loc_id = (location_id or "").strip() or None
+        if not loc_id:
+            loc_res = await self._request("GET", "/locations.json")
+            locs = loc_res.get("locations") or []
+            if locs and isinstance(locs[0], Mapping) and locs[0].get("id"):
+                loc_id = str(locs[0]["id"]).strip()
+        body: dict[str, Any] = {
+            "inventory_item_id": item_id,
+            "available": norm_qty,
+        }
+        if loc_id:
+            body["location_id"] = loc_id
+        res = await self._request("POST", "/inventory_levels/set.json", json_body=body)
+        return {
+            "channel": "shopline",
+            "external_sku": clean_sku,
+            "quantity": norm_qty,
+            "external_inventory_item_id": item_id,
+            "location_id": loc_id,
+            "raw": res,
+        }
+
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
         return verify_shopline_webhook(raw_body, headers, secret or self.webhook_secret)

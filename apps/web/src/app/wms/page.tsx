@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   PackageCheck,
   Plus,
+  RefreshCw,
   ShoppingCart,
   Warehouse,
   X,
@@ -20,11 +21,19 @@ import { AppShell } from "@/components/app-shell";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { useAuthSession } from "@/components/providers";
-import type { CreateStocktake, LowStockItemRead, WarehouseCreateRequest } from "@/lib/api-client/types.gen";
+import type {
+  CreateStocktake,
+  InventorySyncDispatchSummary,
+  LowStockItemRead,
+  WarehouseCreateRequest,
+} from "@/lib/api-client/types.gen";
 import {
   createPoFromLowStock,
   createWmsWarehouse,
   fetchLowStockAlerts,
+  listInventorySyncLogs,
+  retryInventorySyncJob,
+  triggerInventorySyncNow,
 } from "@/lib/api-client/pack-a-erp";
 import { fetchPendingProposalsCount } from "@/lib/data-source";
 import {
@@ -79,6 +88,7 @@ export default function WmsPage() {
   const [createdPo, setCreatedPo] = useState<{ po_no: string; total_amount: string; currency: string } | null>(
     null
   );
+  const [syncSummary, setSyncSummary] = useState<InventorySyncDispatchSummary | null>(null);
 
   const canAdjust = OPERATOR_ROLES.has(principal?.role ?? "");
 
@@ -102,6 +112,10 @@ export default function WmsPage() {
   const lowStockQuery = useQuery({
     queryKey: ["wms", "low-stock"],
     queryFn: () => fetchLowStockAlerts(),
+  });
+  const syncLogsQuery = useQuery({
+    queryKey: ["wms", "sync-logs"],
+    queryFn: () => listInventorySyncLogs({ limit: 30, offset: 0 }),
   });
   const suppliersQuery = useQuery({
     queryKey: ["supply-chain", "suppliers", "picker"],
@@ -128,9 +142,25 @@ export default function WmsPage() {
     },
   });
 
+  const syncNowMutation = useMutation({
+    mutationFn: () => triggerInventorySyncNow(),
+    onSuccess: (res) => {
+      setSyncSummary(res);
+      void queryClient.invalidateQueries({ queryKey: ["wms", "sync-logs"] });
+    },
+  });
+
+  const retrySyncMutation = useMutation({
+    mutationFn: (jobId: string) => retryInventorySyncJob(jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["wms", "sync-logs"] });
+    },
+  });
+
   const movements = movementsQuery.data?.items ?? [];
   const stock = stockQuery.data?.items ?? [];
   const lowStockItems = lowStockQuery.data?.items ?? [];
+  const syncJobs = syncLogsQuery.data?.items ?? [];
   const suppliers = suppliersQuery.data?.items ?? [];
 
   const createWarehouseMutation = useMutation({
@@ -363,6 +393,157 @@ export default function WmsPage() {
                     {lowStockQuery.isLoading
                       ? bi("正在检查安全库存…", "Checking safety stock…")
                       : bi("全部 SKU 均高于安全库存阈值。", "Every SKU is above its safety stock.")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+
+        <section
+          data-testid="wms-inventory-sync-card"
+          className="erp-card overflow-hidden rounded-[20px]"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/50 px-3.5 py-2.5">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-blue-600" />
+              <h2 className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100">
+                {bi("全平台实时库存同步", "Multi-platform real-time inventory sync")}
+              </h2>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">
+                {syncJobs.length} {bi("条日志", "jobs")}
+              </span>
+            </div>
+            {canAdjust && (
+              <button
+                type="button"
+                data-testid="wms-sync-now-btn"
+                disabled={syncNowMutation.isPending}
+                onClick={() => syncNowMutation.mutate()}
+                className="erp-btn rounded-xl bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${syncNowMutation.isPending ? "animate-spin" : ""}`}
+                />
+                <span>
+                  {syncNowMutation.isPending
+                    ? bi("正在同步…", "Syncing…")
+                    : bi("一键同步全平台库存", "Sync all channels now")}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {syncSummary && (
+            <div
+              data-testid="wms-sync-summary-banner"
+              className="flex flex-wrap items-center gap-2 border-b border-blue-200 bg-blue-50/80 px-3.5 py-2 text-[12px] font-medium text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200"
+            >
+              <span>
+                {bi(
+                  `本次已触发 ${syncSummary.enqueued ?? 0} 个渠道映射：成功 ${syncSummary.succeeded ?? 0}，重试中 ${syncSummary.failed ?? 0}，死信 ${syncSummary.dead_letter ?? 0}`,
+                  `Triggered ${syncSummary.enqueued ?? 0} mappings: ${syncSummary.succeeded ?? 0} succeeded, ${syncSummary.failed ?? 0} retrying, ${syncSummary.dead_letter ?? 0} dead-letter`
+                )}
+              </span>
+            </div>
+          )}
+
+          {syncNowMutation.isError && (
+            <p
+              role="alert"
+              className="border-b border-rose-200 bg-rose-50 px-3.5 py-2 text-[12px] text-rose-700"
+            >
+              {syncNowMutation.error.message}
+            </p>
+          )}
+
+          <table data-testid="wms-sync-logs-table" className="erp-table">
+            <thead>
+              <tr>
+                <th>{bi("渠道与店铺", "Channel")}</th>
+                <th>{bi("平台 SKU / 主档 SKU", "External / master SKU")}</th>
+                <th className="text-right">{bi("目标 / 已同步", "Target / synced")}</th>
+                <th>{bi("状态与触发源", "Status")}</th>
+                <th>{bi("错误明细", "Error")}</th>
+                {canAdjust && <th className="text-right">{bi("操作", "Action")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {syncJobs.map((job) => {
+                const canRetry =
+                  canAdjust && (job.status === "failed" || job.status === "dead_letter");
+                const statusTone =
+                  job.status === "succeeded"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    : job.status === "failed" || job.status === "dead_letter"
+                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                      : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300";
+                return (
+                  <tr key={job.id} data-testid={`sync-job-row-${job.id}`}>
+                    <td className="py-2">
+                      <div className="text-[12px] font-semibold text-gray-900 dark:text-gray-100">
+                        {job.channel_label ?? job.channel_type}
+                      </div>
+                      <div className="font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                        {job.channel_type}
+                      </div>
+                    </td>
+                    <td className="py-2">
+                      <div className="font-mono text-[12px] font-semibold text-gray-900 dark:text-gray-100">
+                        {job.external_sku}
+                      </div>
+                      {job.internal_sku && (
+                        <div className="font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                          {job.internal_sku}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 text-right font-mono text-[12px] tabular-nums">
+                      {job.requested_qty} / {job.synced_qty ?? "—"}
+                    </td>
+                    <td className="py-2">
+                      <span
+                        data-testid={`sync-job-status-${job.id}`}
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone}`}
+                      >
+                        {job.status}
+                      </span>
+                      <div className="mt-0.5 text-[10.5px] text-gray-400">
+                        {job.trigger_source} · #{job.attempts}
+                      </div>
+                    </td>
+                    <td className="max-w-xs py-2 text-[11px] text-rose-700 dark:text-rose-300">
+                      {job.error_code ? `${job.error_code}: ${job.error_detail ?? ""}` : "—"}
+                    </td>
+                    {canAdjust && (
+                      <td className="py-2 text-right">
+                        {canRetry ? (
+                          <button
+                            type="button"
+                            data-testid={`retry-sync-job-${job.id}`}
+                            disabled={retrySyncMutation.isPending}
+                            onClick={() => retrySyncMutation.mutate(job.id)}
+                            className="erp-btn erp-btn-secondary rounded-xl py-1 text-[11.5px]"
+                          >
+                            {bi("重试推送", "Retry")}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-gray-400">—</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+              {syncJobs.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={canAdjust ? 6 : 5}
+                    className="py-4 text-center text-[12px] font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    {syncLogsQuery.isLoading
+                      ? bi("加载库存同步日志…", "Loading inventory sync logs…")
+                      : bi("暂无多平台库存同步记录；库存变动或点击上方按钮将自动触发。", "No channel sync jobs yet; stock changes or Sync Now will populate this log.")}
                   </td>
                 </tr>
               )}

@@ -866,7 +866,9 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
             raw_response=publish_payload,
         )
 
-    async def push_inventory_level(self, *, external_sku: str, quantity: int) -> dict[str, Any]:
+    async def push_inventory_level(
+        self, *, external_sku: str, quantity: int, **_extra: Any
+    ) -> dict[str, Any]:
         """Bulk-push one SKU's sellable quantity so eBay never oversells ERP stock."""
         cleaned_sku = external_sku.strip()
         if not cleaned_sku:

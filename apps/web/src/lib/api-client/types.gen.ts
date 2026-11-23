@@ -1034,6 +1034,48 @@ export type InventoryLedgerRead = {
     variant_id: string;
 };
 
+/**
+ * Counters + job details returned by manual or cron inventory dispatches.
+ */
+export type InventorySyncDispatchSummary = {
+    dead_letter?: number;
+    dispatched?: number;
+    enqueued?: number;
+    failed?: number;
+    jobs?: Array<InventorySyncJobRead>;
+    succeeded?: number;
+};
+
+/**
+ * Serialized status row for one cross-channel inventory sync job.
+ */
+export type InventorySyncJobRead = {
+    attempts: number;
+    channel_account_id: string;
+    channel_label?: string | null;
+    channel_type: string;
+    created_at: string;
+    error_code?: string | null;
+    error_detail?: string | null;
+    external_sku: string;
+    id: string;
+    internal_sku?: string | null;
+    mapping_id: string;
+    next_retry_at: string;
+    requested_qty: number;
+    status: string;
+    synced_qty?: number | null;
+    tenant_id: string;
+    trigger_source: string;
+    updated_at: string;
+    variant_id: string;
+};
+
+export type InventorySyncNowRequest = {
+    channel_account_id?: string | null;
+    variant_id?: string | null;
+};
+
 export type InviteMemberRequest = {
     email: string;
     full_name: string;
@@ -1643,6 +1685,14 @@ export type PaginatedResponseInventoryBalanceItemRead = {
 export type PaginatedResponseInventoryLedgerRead = {
     has_more: boolean;
     items: Array<InventoryLedgerRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseInventorySyncJobRead = {
+    has_more: boolean;
+    items: Array<InventorySyncJobRead>;
     limit: number;
     offset: number;
     total: number;
@@ -8085,6 +8135,100 @@ export type ListInventoryLedgerApiV1OrdersInventoryLedgerGetResponses = {
 };
 
 export type ListInventoryLedgerApiV1OrdersInventoryLedgerGetResponse = ListInventoryLedgerApiV1OrdersInventoryLedgerGetResponses[keyof ListInventoryLedgerApiV1OrdersInventoryLedgerGetResponses];
+
+export type RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/inventory/sync-jobs/{job_id}/retry';
+};
+
+export type RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostError = RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostErrors[keyof RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostErrors];
+
+export type RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: InventorySyncJobRead;
+};
+
+export type RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostResponse = RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostResponses[keyof RetryInventorySyncJobApiV1OrdersInventorySyncJobsJobIdRetryPostResponses];
+
+export type ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        variant_id?: string | null;
+        status?: string | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/orders/inventory/sync-logs';
+};
+
+export type ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetError = ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetErrors[keyof ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetErrors];
+
+export type ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseInventorySyncJobRead;
+};
+
+export type ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetResponse = ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetResponses[keyof ListInventorySyncLogsApiV1OrdersInventorySyncLogsGetResponses];
+
+export type TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostData = {
+    body?: InventorySyncNowRequest | null;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        variant_id?: string | null;
+        channel_account_id?: string | null;
+    };
+    url: '/api/v1/orders/inventory/sync-now';
+};
+
+export type TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostError = TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostErrors[keyof TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostErrors];
+
+export type TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: InventorySyncDispatchSummary;
+};
+
+export type TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostResponse = TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostResponses[keyof TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostResponses];
 
 export type ListWarehousesApiV1OrdersWarehousesGetData = {
     body?: never;

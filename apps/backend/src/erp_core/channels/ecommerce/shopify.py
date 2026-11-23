@@ -149,6 +149,50 @@ mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
 }
 """
 
+LOCATIONS_QUERY = """
+query PrimaryLocations {
+  locations(first: 1) {
+    nodes {
+      id
+      name
+    }
+  }
+}
+"""
+
+VARIANT_BY_SKU_QUERY = """
+query VariantBySku($query: String!) {
+  productVariants(first: 1, query: $query) {
+    nodes {
+      id
+      sku
+      inventoryItem {
+        id
+      }
+    }
+  }
+}
+"""
+
+INVENTORY_SET_QUANTITIES_MUTATION = """
+mutation InventorySetQuantities($input: InventorySetQuantitiesInput!) {
+  inventorySetQuantities(input: $input) {
+    inventoryAdjustmentGroup {
+      reason
+      changes {
+        name
+        delta
+        quantityAfterChange
+      }
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+"""
+
 
 class ShopifyListingReceipt(BaseModel):
     """Receipt returned after Shopify Admin GraphQL ``productSet`` confirms a listing."""
@@ -228,7 +272,8 @@ def build_shopify_oauth_install_url(
     redirect_uri: str,
     state: str,
     scopes: str = (
-        "read_orders,write_orders,read_products,read_inventory,write_fulfillments,"
+        "read_orders,write_orders,read_products,write_products,"
+        "read_inventory,write_inventory,read_locations,write_fulfillments,"
         "read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,"
         "read_customers,read_companies"
     ),
@@ -402,6 +447,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         self._channel_account_id = channel_account_id
         self._vault = vault
         self._session = session
+        self._default_location_id: str | None = None
 
     @classmethod
     async def from_channel_account(
@@ -984,6 +1030,103 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             variant_receipts=variant_receipts,
             raw_response=raw_payload,
         )
+
+    async def push_inventory_level(
+        self,
+        *,
+        external_sku: str,
+        quantity: int,
+        external_product_id: str | None = None,
+        external_variant_id: str | None = None,
+        external_inventory_item_id: str | None = None,
+        location_id: str | None = None,
+        **_extra: Any,
+    ) -> dict[str, Any]:
+        """Set available inventory quantity for one SKU via ``inventorySetQuantities``."""
+        del external_product_id, external_variant_id
+        clean_sku = external_sku.strip()
+        if not clean_sku:
+            raise AppError(
+                slug="shopify-inventory-sync-failed",
+                status_code=422,
+                code="ERR_SHOPIFY_INVENTORY_SYNC",
+                title="Shopify Inventory Sync Failed",
+                detail="Shopify inventory sync requires a non-empty external_sku.",
+            )
+        norm_qty = max(0, int(quantity))
+
+        loc_id = (location_id or "").strip() or self._default_location_id
+        if not loc_id:
+            loc_data = await self._graphql(LOCATIONS_QUERY, {})
+            loc_nodes = ((loc_data.get("locations") or {}).get("nodes")) or []
+            if not loc_nodes or not loc_nodes[0].get("id"):
+                raise AppError(
+                    slug="shopify-inventory-sync-failed",
+                    status_code=502,
+                    code="ERR_SHOPIFY_INVENTORY_SYNC",
+                    title="Shopify Inventory Sync Failed",
+                    detail=f"No Shopify fulfillment location found for store '{self.shop_domain}'.",
+                )
+            loc_id = str(loc_nodes[0]["id"])
+            self._default_location_id = loc_id
+
+        item_id = (external_inventory_item_id or "").strip() or None
+        if not item_id:
+            var_data = await self._graphql(
+                VARIANT_BY_SKU_QUERY, {"query": f"sku:{clean_sku}"}
+            )
+            var_nodes = ((var_data.get("productVariants") or {}).get("nodes")) or []
+            if var_nodes:
+                item_id = str(
+                    ((var_nodes[0].get("inventoryItem") or {}).get("id")) or ""
+                ).strip() or None
+        if not item_id:
+            raise AppError(
+                slug="shopify-inventory-sync-failed",
+                status_code=502,
+                code="ERR_SHOPIFY_INVENTORY_SYNC",
+                title="Shopify Inventory Sync Failed",
+                detail=(
+                    f"Could not resolve Shopify inventoryItemId for external SKU '{clean_sku}'."
+                ),
+            )
+
+        data = await self._graphql(
+            INVENTORY_SET_QUANTITIES_MUTATION,
+            {
+                "input": {
+                    "reason": "correction",
+                    "name": "available",
+                    "ignoreCompareQuantity": True,
+                    "quantities": [
+                        {
+                            "inventoryItemId": item_id,
+                            "locationId": loc_id,
+                            "quantity": norm_qty,
+                        }
+                    ],
+                }
+            },
+        )
+        result = data.get("inventorySetQuantities") or {}
+        user_errors = result.get("userErrors") or []
+        if user_errors:
+            summary = "; ".join(str(err.get("message") or err) for err in user_errors)
+            raise AppError(
+                slug="shopify-inventory-sync-failed",
+                status_code=502,
+                code="ERR_SHOPIFY_INVENTORY_SYNC",
+                title="Shopify Inventory Sync Failed",
+                detail=f"Shopify rejected inventory update for '{clean_sku}': {summary}",
+            )
+        return {
+            "channel": "shopify",
+            "external_sku": clean_sku,
+            "quantity": norm_qty,
+            "external_inventory_item_id": item_id,
+            "location_id": loc_id,
+            "raw": result,
+        }
 
 
 GDPR_TOPICS = frozenset({"customers/data_request", "customers/redact", "shop/redact"})
