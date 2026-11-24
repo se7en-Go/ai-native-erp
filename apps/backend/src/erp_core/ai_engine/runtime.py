@@ -459,7 +459,7 @@ class PolicyRuntime:
 
         if (
             action in _HARD_ACTIONS
-            or _HARD_TEXT.search(query)
+            or (_HARD_TEXT.search(query) and capability != AiCapability.BIZ_ANALYTICS)
             or capability == AiCapability.FINANCE_RECON
         ):
             result.autonomy_applied = _L0
@@ -506,7 +506,7 @@ class PolicyRuntime:
                 requested_terms if isinstance(requested_terms, list) else []
             )
         decision = self.compliance_filter.check_outbound(channel, "", channel_metadata=metadata)
-        if decision.allowed and conversation:
+        if decision.allowed and conversation and capability != AiCapability.BIZ_ANALYTICS:
             decision = await self.compliance_filter.check_context(
                 session, tenant_id, conversation, metadata
             )

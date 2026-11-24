@@ -611,6 +611,55 @@ async def test_assistant_chat_natural_language_analytics_and_roles(
         assert bad_window.json()["reason"] == "ERR_INVALID_ANALYTICS_WINDOW"
         assert bad_window.json()["reply_text"] == ""
 
+        # 5b. Exact FloatingCopilot chip prompts containing "退款率" / "refund rate"
+        # must execute read-only BI analytics instead of tripping `_HARD_TEXT`.
+        chip_zh = await client.post(
+            f"{_ROOT}/assistant/chat",
+            json={
+                "capability": "biz_analytics",
+                "message": "查看近30天全平台 GMV、退款率、佣金、净毛利与 ROAS",
+                "context": {"mode": "analytics", "window": "30d"},
+            },
+        )
+        assert chip_zh.status_code == 200, chip_zh.text
+        chip_zh_body = chip_zh.json()
+        assert chip_zh_body["l0_locked"] is False
+        assert chip_zh_body["should_abstain"] is False
+        assert chip_zh_body["numeric_guard_passed"] is True
+        assert chip_zh_body["reply_text"]
+        assert (
+            chip_zh_body["tool_calls"][0]["tool_name"]
+            == "get_live_channel_sales_analytics"
+        )
+        assert Decimal(chip_zh_body["tool_calls"][0]["data"]["totals"]["gmv_base"]) == Decimal(
+            "1050.00"
+        )
+
+        chip_en = await client.post(
+            f"{_ROOT}/assistant/chat",
+            json={
+                "capability": "biz_analytics",
+                "message": (
+                    "Show 30d multi-platform GMV, refund rate, commission, "
+                    "net margin, and ROAS"
+                ),
+                "context": {"mode": "analytics", "window": "30d"},
+            },
+        )
+        assert chip_en.status_code == 200, chip_en.text
+        chip_en_body = chip_en.json()
+        assert chip_en_body["l0_locked"] is False
+        assert chip_en_body["tool_calls"][0]["data"]["totals"]["gmv_base"] == "1050.00"
+
+        # 5c. Non-analytics refund requests remain fail-closed behind manual approval.
+        refund_guard = await client.post(
+            f"{_ROOT}/assistant/chat",
+            json={"capability": "cs_support", "message": "请给我退款"},
+        )
+        assert refund_guard.status_code == 200, refund_guard.text
+        assert refund_guard.json()["l0_locked"] is True
+        assert refund_guard.json()["reason"] == "manual_action_required"
+
         # 6. OWNER / MANAGER / FINANCE may read commercial analytics; AGENT may not.
         for role in (UserRole.MANAGER, UserRole.FINANCE):
             holder[0] = CurrentPrincipal(
