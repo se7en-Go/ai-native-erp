@@ -113,6 +113,7 @@ class IdentityType(StrEnum):
     TIKTOK_BUYER_ID = "tiktok_buyer_id"
     AMAZON_BUYER_EMAIL = "amazon_buyer_email"
     WEB_VISITOR_ID = "web_visitor_id"
+    MARKETPLACE_BUYER_ID = "marketplace_buyer_id"
 
 
 class ConfidenceLevel(StrEnum):

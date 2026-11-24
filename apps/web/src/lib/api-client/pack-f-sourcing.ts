@@ -28,9 +28,13 @@ import type {
   OzonConnectRequest,
   SheinConnectRequest,
   ShopeeConnectRequest,
+  SourcingAiRewriteRequest,
+  SourcingAiRewriteResponse,
   SourcingCollectRequest,
+  SourcingCopyRewriteOutput,
   SourcingDeleteResult,
   SourcingDraftRead,
+  SourcingDraftUpdateRequest,
   SourcingImportResult,
   SourcingMoqTier,
   SourcingPublishRequest,
@@ -579,6 +583,11 @@ export function planSourcingDraft(
       carton_qty: 50,
       raw_text_excerpt: rawText.slice(0, 240),
     },
+    // 多语种文案deck与平台类目属性：新草稿一开始就是空对象（不再是 undefined），
+    // 这样 `Object.entries(draft.localized_copies ?? {})` 与
+    // `draft.marketplace_category_attrs[channel]` 在 UI 侧永远可安全展开。
+    localized_copies: {},
+    marketplace_category_attrs: {},
     status: "draft",
     imported_product_id: null,
     imported_variant_id: null,
@@ -1219,5 +1228,245 @@ export async function revokeCollectorToken(tokenId: string): Promise<CollectorTo
   return bffFetch<CollectorTokenRead>(
     `/v1/catalog/sourcing/collector-tokens/${encodeURIComponent(tokenId)}`,
     { method: "DELETE" },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AI 多语种改写 & 草稿编辑（对齐后端 `erp_core/catalog/sourcing_copy_protocol.py`）
+//
+// 后端把「平台 → 默认语言」和「12 种受支持语言」写死在
+// `DEFAULT_LANGUAGE_BY_CHANNEL` / `SUPPORTED_REWRITE_LANGUAGES` 里，前端这份常量
+// 是同一个契约的镜像 —— 换语言、换平台都不需要再问后端。
+// 改写结果永远带回 `rewrite_mode`（`llm` 或 `deterministic_fallback`），
+// UI 必须照实展示，绝不能在回退时声称调用过 LLM。
+// ---------------------------------------------------------------------------
+
+/** 下拉选项：`value` 是契约里的枚举值，`zh` / `en` 是双语（en 尽量用母语自称）。 */
+export interface RewriteSelectOption {
+  value: string;
+  zh: string;
+  en: string;
+}
+
+/** 12 种受支持语言，顺序与后端 `SUPPORTED_REWRITE_LANGUAGES` 一致。 */
+export const REWRITE_LANGUAGE_OPTIONS: ReadonlyArray<RewriteSelectOption> = [
+  { value: "en", zh: "英语", en: "English" },
+  { value: "zh", zh: "中文", en: "中文" },
+  { value: "es", zh: "西班牙语", en: "Español" },
+  { value: "pt", zh: "葡萄牙语", en: "Português" },
+  { value: "ru", zh: "俄语", en: "Русский" },
+  { value: "th", zh: "泰语", en: "ไทย" },
+  { value: "vi", zh: "越南语", en: "Tiếng Việt" },
+  { value: "id", zh: "印尼语", en: "Bahasa Indonesia" },
+  { value: "ms", zh: "马来语", en: "Bahasa Melayu" },
+  { value: "fr", zh: "法语", en: "Français" },
+  { value: "de", zh: "德语", en: "Deutsch" },
+  { value: "ja", zh: "日语", en: "日本語" },
+];
+
+/** 4 种语气档位，与后端 `SourcingRewriteTone` 一致。 */
+export const REWRITE_TONE_OPTIONS: ReadonlyArray<RewriteSelectOption> = [
+  { value: "conversion", zh: "转化优先", en: "Conversion" },
+  { value: "seo", zh: "搜索优化", en: "SEO" },
+  { value: "b2b_wholesale", zh: "B2B 批发报价", en: "B2B wholesale" },
+  { value: "social_viral", zh: "社媒爆款", en: "Social viral" },
+];
+
+/** 16 个刊登平台各自的默认目标语言（东南亚 / 俄罗斯 / 拉美本地化）。 */
+export const DEFAULT_REWRITE_LANGUAGE_BY_CHANNEL: Readonly<
+  Record<(typeof SOURCING_PUBLISHABLE_CHANNEL_TYPES)[number], string>
+> = {
+  shopify: "en",
+  amazon_sp: "en",
+  ebay: "en",
+  walmart: "en",
+  woocommerce: "en",
+  shopline: "en",
+  shoplazza: "en",
+  alibaba_email: "en",
+  tiktok_shop: "en",
+  temu: "en",
+  shein: "en",
+  aliexpress: "en",
+  shopee: "th",
+  lazada: "ms",
+  ozon: "ru",
+  mercado_libre: "es",
+};
+
+export function rewriteLanguageOption(code: string): RewriteSelectOption | undefined {
+  const normalized = code.trim().toLowerCase();
+  return REWRITE_LANGUAGE_OPTIONS.find((option) => option.value === normalized);
+}
+
+export function rewriteToneOption(tone: string): RewriteSelectOption | undefined {
+  const normalized = tone.trim().toLowerCase();
+  return REWRITE_TONE_OPTIONS.find((option) => option.value === normalized);
+}
+
+/** 平台 → 默认语言；未知平台回退 `en`（绝不抛错，UI 永远能选中一项）。 */
+export function defaultRewriteLanguageForChannel(channel: string): string {
+  const normalized = channel.trim().toLowerCase();
+  return (
+    DEFAULT_REWRITE_LANGUAGE_BY_CHANNEL[
+      normalized as keyof typeof DEFAULT_REWRITE_LANGUAGE_BY_CHANNEL
+    ] ?? "en"
+  );
+}
+
+/** 语言小标签（`th` → `TH`），用于 `shopee:th · Shopee (TH)` 这类芯片文案。 */
+export function rewriteLanguageShortLabel(code: string): string {
+  return code.trim().toUpperCase() || "EN";
+}
+
+const MOCK_REWRITE_BULLET_FALLBACK: ReadonlyArray<string> = [
+  "Factory-direct supply with export-grade QC before shipment.",
+  "OEM logo, packaging and plug-type customisation supported.",
+  "Volume ladder pricing quoted per MOQ tier.",
+  "7-day sample lead time, 18-day bulk production lead time.",
+  "FOB Fuzhou with DDP door-to-door shipping available.",
+];
+
+/**
+ * Mock 模式的「确定性本地规则」改写：真的按平台 / 语言 / 语气生成一版文案，
+ * 但永远诚实地标 `deterministic_fallback` + `0 credits`。
+ */
+function mockDeterministicRewrite(
+  draft: SourcingDraftRead,
+  body: SourcingAiRewriteRequest,
+): SourcingCopyRewriteOutput {
+  const channel = (body.target_channel ?? "shopify").trim().toLowerCase() || "shopify";
+  const language =
+    (body.target_language ?? defaultRewriteLanguageForChannel(channel)).trim().toLowerCase() ||
+    "en";
+  const tone = body.tone ?? "conversion";
+  const languageLabel = rewriteLanguageOption(language)?.en ?? rewriteLanguageShortLabel(language);
+  const title = `${draft.optimized_title_en} | ${sourcingStoreLabel(channel)} ${languageLabel}`.slice(
+    0,
+    190,
+  );
+  const bullets = [...draft.bullet_points];
+  while (bullets.length < 5) {
+    bullets.push(MOCK_REWRITE_BULLET_FALLBACK[bullets.length % MOCK_REWRITE_BULLET_FALLBACK.length]);
+  }
+  const bullet_points = bullets.slice(0, 5) as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
+  return {
+    title,
+    bullet_points,
+    description: `${title}. ${bullet_points.join(" ")}`,
+    target_channel: channel,
+    target_language: language,
+    tone,
+    model_used: "deterministic-rule-v1",
+    rewrite_mode: "deterministic_fallback",
+    credits_consumed: "0.0000",
+    fallback_reason: "mock_demo_mode",
+    seo_keywords: [draft.suggested_category, sourcingStoreLabel(channel), language],
+    generated_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * POST /v1/catalog/sourcing/drafts/{draft_id}/ai-rewrite
+ *
+ * 把一个草稿改写成「某个平台 + 某种语言 + 某种语气」的刊登文案，并把结果写进
+ * `localized_copies["<channel>:<language>"]`。`apply_to_draft` 为真时同时覆盖
+ * 草稿的英文标题与 5 条卖点。
+ */
+export async function aiRewriteSourcingDraft(
+  draftId: string,
+  body: SourcingAiRewriteRequest,
+): Promise<SourcingAiRewriteResponse> {
+  if (shouldUseMockApi()) {
+    const draft = mockDrafts.find((item) => item.id === draftId);
+    if (!draft) {
+      throw new Error(`Sourcing draft ${draftId} is not in the mock sourcing box.`);
+    }
+    const rewrite = mockDeterministicRewrite(draft, body);
+    const copyKey = `${rewrite.target_channel}:${rewrite.target_language}`;
+    const applyToDraft = body.apply_to_draft !== false;
+    const updated: SourcingDraftRead = {
+      ...draft,
+      optimized_title_en: applyToDraft ? rewrite.title : draft.optimized_title_en,
+      bullet_points: applyToDraft ? [...rewrite.bullet_points] : draft.bullet_points,
+      localized_copies: {
+        ...(draft.localized_copies ?? {}),
+        [copyKey]: { ...rewrite, optimized_description: rewrite.description },
+      },
+      marketplace_category_attrs: draft.marketplace_category_attrs ?? {},
+      updated_at: rewrite.generated_at,
+    };
+    mockDrafts = mockDrafts.map((item) => (item.id === draft.id ? updated : item));
+    return { draft: updated, rewrite };
+  }
+  return bffFetch<SourcingAiRewriteResponse>(
+    `/v1/catalog/sourcing/drafts/${encodeURIComponent(draftId)}/ai-rewrite`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+/**
+ * PATCH /v1/catalog/sourcing/drafts/{draft_id}
+ *
+ * 部分更新：只有显式给出的字段会被应用。`marketplace_category_attrs` 按渠道合并
+ * （后端是浅合并，所以前端只需要送当前渠道那一份）。
+ */
+export async function updateSourcingDraft(
+  draftId: string,
+  body: SourcingDraftUpdateRequest,
+): Promise<SourcingDraftRead> {
+  if (shouldUseMockApi()) {
+    const draft = mockDrafts.find((item) => item.id === draftId);
+    if (!draft) {
+      throw new Error(`Sourcing draft ${draftId} is not in the mock sourcing box.`);
+    }
+    const updated: SourcingDraftRead = { ...draft };
+    if (body.optimized_title_en != null) {
+      const title = body.optimized_title_en.trim();
+      if (title) updated.optimized_title_en = title.slice(0, 200);
+    }
+    if (body.bullet_points != null) {
+      const bullets = body.bullet_points
+        .map((item) => String(item).trim())
+        .filter(Boolean)
+        .slice(0, 5);
+      if (bullets.length > 0) updated.bullet_points = bullets;
+    }
+    if (body.target_price_usd != null) {
+      updated.target_price_usd = moneyString(
+        decimalInput(body.target_price_usd, Number(draft.target_price_usd)),
+      );
+    }
+    if (body.suggested_category != null) {
+      updated.suggested_category = body.suggested_category.trim() || draft.suggested_category;
+    }
+    if (body.suggested_hs_code != null) {
+      updated.suggested_hs_code = body.suggested_hs_code.trim() || null;
+    }
+    if (body.localized_copies != null) {
+      updated.localized_copies = {
+        ...(draft.localized_copies ?? {}),
+        ...body.localized_copies,
+      };
+    }
+    if (body.marketplace_category_attrs != null) {
+      updated.marketplace_category_attrs = {
+        ...(draft.marketplace_category_attrs ?? {}),
+        ...body.marketplace_category_attrs,
+      };
+    }
+    updated.updated_at = new Date().toISOString();
+    mockDrafts = mockDrafts.map((item) => (item.id === draft.id ? updated : item));
+    return updated;
+  }
+  return bffFetch<SourcingDraftRead>(
+    `/v1/catalog/sourcing/drafts/${encodeURIComponent(draftId)}`,
+    { method: "PATCH", body: JSON.stringify(body) },
   );
 }

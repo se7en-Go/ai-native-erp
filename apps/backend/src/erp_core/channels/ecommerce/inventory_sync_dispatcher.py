@@ -726,7 +726,16 @@ async def drain_inventory_sync_all_tenants(
         async with system_session(broker_session_factory) as sys_session:
             raw_rows = (
                 await sys_session.execute(
-                    text("SELECT id FROM tenants WHERE is_active ORDER BY created_at ASC")
+                    text(
+                        """
+                        SELECT DISTINCT j.tenant_id
+                        FROM inventory_sync_jobs j
+                        JOIN tenants t ON t.id = j.tenant_id
+                        WHERE t.is_active
+                          AND j.status IN ('pending', 'failed')
+                          AND j.next_retry_at <= now()
+                        """
+                    )
                 )
             ).scalars().all()
         resolved_tids = [UUID(str(t)) for t in raw_rows]

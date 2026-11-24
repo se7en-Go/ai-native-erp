@@ -1885,7 +1885,14 @@ function mapCitations(values: Array<Record<string, unknown>> = []): AiProposalIt
 export type AssistantChatResult = Pick<AssistantChatResponse,
   "reply_text" | "should_abstain" | "degraded_to_l0"> & {
     citations: AiProposalItem["citations"];
-    tool_calls: Array<{ tool_call_id?: string; tool_name?: string }>;
+    // `data` is the deterministic SQL tool payload (e.g. the channel analytics
+    // rollup from `get_live_channel_sales_analytics`); absent when a turn is
+    // trace-only, so the key set stays { tool_call_id, tool_name } in that case.
+    tool_calls: Array<{
+      tool_call_id?: string;
+      tool_name?: string;
+      data?: Record<string, unknown>;
+    }>;
 };
 
 /**
@@ -1981,9 +1988,12 @@ export async function assistantChat(body: AssistantChatRequest): Promise<Assista
   return {
     ...data,
     citations: mapCitations(data.citations),
-    tool_calls: (data.tool_calls ?? []).map(({ tool_call_id, tool_name }) => ({
+    tool_calls: (data.tool_calls ?? []).map(({ tool_call_id, tool_name, ...rest }) => ({
       tool_call_id: asString(tool_call_id) || undefined,
       tool_name: asString(tool_name) || undefined,
+      ...(rest.data && typeof rest.data === "object"
+        ? { data: rest.data as Record<string, unknown> }
+        : {}),
     })),
   };
 }

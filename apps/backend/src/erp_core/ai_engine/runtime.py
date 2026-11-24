@@ -72,6 +72,36 @@ _LIVE = re.compile(
 _ARCHIVE = re.compile(r"\b(?:old|legacy|archived?|historical)\b.*\b(?:price|pricing)\b", re.I)
 _AFTER_SALES = re.compile(r"\b(?:damaged|defective|broken|reship|replacement)\b|破损|补发", re.I)
 _REDACTED = "[PRICE_REDACTED_USE_LIVE_ERP_TOOL]"
+_CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_ANALYTICS_WINDOW_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\b7\s*d\b|\b7\s*days?\b|\b7\s*-\s*day\b|近\s*7|7\s*天|7\s*日", re.I), "7d"),
+    (
+        re.compile(
+            r"\b90\s*d\b|\b90\s*days?\b|\b90\s*-\s*day\b|近\s*90|90\s*天|90\s*日|季度|quarter",
+            re.I,
+        ),
+        "90d",
+    ),
+)
+#: Natural-language platform mentions mapped onto `channel_accounts.channel_type` values.
+_ANALYTICS_CHANNEL_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("shopify", ("shopify",)),
+    ("shopee", ("shopee", "虾皮")),
+    ("temu", ("temu",)),
+    ("tiktok_shop", ("tiktok", "tik tok", "tiktok shop", "抖音")),
+    ("amazon_sp", ("amazon", "亚马逊")),
+    ("ebay", ("ebay",)),
+    ("alibaba_email", ("alibaba", "阿里国际站")),
+    ("aliexpress", ("aliexpress", "速卖通")),
+    ("woocommerce", ("woocommerce", "woo commerce")),
+    ("shopline", ("shopline",)),
+    ("shoplazza", ("shoplazza",)),
+    ("lazada", ("lazada", "来赞达")),
+    ("shein", ("shein", "希音")),
+    ("ozon", ("ozon",)),
+    ("walmart", ("walmart", "沃尔玛")),
+    ("mercado_libre", ("mercado libre", "mercado_libre", "美客多")),
+)
 
 
 class CapabilityExecutionResult(BaseModel):
@@ -136,6 +166,114 @@ async def load_ai_policy(
     raw = await session.scalar(text(query + (" FOR UPDATE" if lock else "")), {"tid": tenant_id})
     policy = json.loads(raw) if raw is not None else None
     return policy if isinstance(policy, dict) else None
+
+
+def _analytics_window(input_payload: dict[str, Any], query: str) -> str:
+    """Resolve the analytics window: explicit override first, then natural-language hints."""
+    explicit = input_payload.get("window")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip().lower()
+    for pattern, window in _ANALYTICS_WINDOW_HINTS:
+        if pattern.search(query):
+            return window
+    return "30d"
+
+
+def _analytics_channel_types(
+    input_payload: dict[str, Any],
+    query: str,
+) -> list[str] | None:
+    """Resolve channel filters: explicit override first, then mentioned platforms."""
+    explicit = input_payload.get("channel_types")
+    if isinstance(explicit, list):
+        requested = [str(value).strip().lower() for value in explicit if str(value).strip()]
+        if requested:
+            return requested
+    lowered = query.lower()
+    detected = [
+        channel_type
+        for channel_type, aliases in _ANALYTICS_CHANNEL_ALIASES
+        if any(alias in lowered for alias in aliases)
+    ]
+    return detected or None
+
+
+def _analytics_claims(
+    tool_call_id: str,
+    totals: dict[str, Any],
+    channels: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build guard claims that each resolve to exactly one trusted analytics row."""
+    rows: list[dict[str, Any]] = [
+        {
+            "source_tool_call_id": tool_call_id,
+            "window": totals.get("window"),
+            "channel_type": totals.get("channel_type"),
+            "order_count": totals.get("order_count"),
+            "gmv_base": totals.get("gmv_base"),
+            "refunded_amount_base": totals.get("refunded_amount_base"),
+            "refund_rate_pct": totals.get("refund_rate_pct"),
+            "net_margin_base": totals.get("net_margin_base"),
+            "margin_pct": totals.get("margin_pct"),
+            "roas": totals.get("roas"),
+        },
+        *(
+            {
+                "source_tool_call_id": tool_call_id,
+                "channel_type": row.get("channel_type"),
+                "channel_label": row.get("channel_label"),
+                "gmv_base": row.get("gmv_base"),
+                "refund_rate_pct": row.get("refund_rate_pct"),
+                "margin_pct": row.get("margin_pct"),
+                "roas": row.get("roas"),
+            }
+            for row in channels[:5]
+        ),
+    ]
+    return [{key: value for key, value in row.items() if value is not None} for row in rows]
+
+
+def _analytics_reply(
+    query: str,
+    tool_call_id: str,
+    totals: dict[str, Any],
+    channels: list[dict[str, Any]],
+) -> str:
+    """Compose a concise bilingual summary citing only exact tool values."""
+    top = channels[:3]
+    roas_label = "未投放广告" if _CJK.search(query) else "no ad spend"
+    if _CJK.search(query):
+        lines = [
+            f"渠道销售分析（{totals.get('window')}）：GMV {totals.get('gmv_base')}，"
+            f"退款额 {totals.get('refunded_amount_base')}"
+            f"（退款率 {totals.get('refund_rate_pct')}%），"
+            f"广告花费 {totals.get('ad_spend_base')}，"
+            f"净毛利 {totals.get('net_margin_base')}（毛利率 {totals.get('margin_pct')}%），"
+            f"ROAS {totals.get('roas') or roas_label}，订单数 {totals.get('order_count')}。",
+        ]
+        lines.extend(
+            f"{row.get('channel_label')}（{row.get('channel_type')}）："
+            f"GMV {row.get('gmv_base')}，毛利率 {row.get('margin_pct')}%，"
+            f"ROAS {row.get('roas') or roas_label}，订单数 {row.get('order_count')}。"
+            for row in top
+        )
+        lines.append(f"数据来源 source_tool_call_id: {tool_call_id}")
+        return "\n".join(lines)
+    lines = [
+        f"Channel sales analytics for {totals.get('window')}: GMV {totals.get('gmv_base')}, "
+        f"refunds {totals.get('refunded_amount_base')} "
+        f"({totals.get('refund_rate_pct')}%), ad spend {totals.get('ad_spend_base')}, "
+        f"net margin {totals.get('net_margin_base')} ({totals.get('margin_pct')}%), "
+        f"ROAS {totals.get('roas') or roas_label}, orders {totals.get('order_count')}.",
+    ]
+    lines.extend(
+        f"{row.get('channel_label')} ({row.get('channel_type')}): "
+        f"GMV {row.get('gmv_base')}, margin {row.get('margin_pct')}%, "
+        f"ROAS {row.get('roas') or roas_label}, orders {row.get('order_count')}."
+        for row in top
+    )
+    lines.append(f"Source source_tool_call_id: {tool_call_id}")
+    return "\n".join(lines)
 
 
 class PolicyRuntime:
@@ -426,17 +564,47 @@ class PolicyRuntime:
             return result
 
         if capability == AiCapability.BIZ_ANALYTICS:
-            tool = await self.tool_registry.query_readonly_analytics_sql(
+            raw_sql = str(input_payload.get("sql", "")).strip()
+            if raw_sql:
+                tool = await self.tool_registry.query_readonly_analytics_sql(
+                    session,
+                    tenant_id,
+                    raw_sql,
+                )
+                self._trace(result, tool)
+                if not tool.ok:
+                    return await abstain(tool.error_code or "analytics_unavailable")
+                result.reply_text = "Read-only ERP analytics report generated."
+                result.tool_calls[-1]["data"] = tool.data
+                # Internal typed report, not a generated outbound numeric claim.
+                result.auto_executed = result.autonomy_applied == _L2
+                return result
+
+            window = _analytics_window(input_payload, query)
+            channel_types = _analytics_channel_types(input_payload, query)
+            tool = await self.tool_registry.get_live_channel_sales_analytics(
                 session,
                 tenant_id,
-                str(input_payload.get("sql", "")),
+                window=window,
+                channel_types=channel_types,
             )
             self._trace(result, tool)
             if not tool.ok:
                 return await abstain(tool.error_code or "analytics_unavailable")
-            result.reply_text = "Read-only ERP analytics report generated."
+            totals: dict[str, Any] = dict(tool.data.get("totals") or {})
+            channels: list[dict[str, Any]] = [
+                row for row in tool.data.get("channels") or [] if isinstance(row, dict)
+            ]
+            # `totals` always exists (a zero-order tenant still yields a zeroed row), so
+            # provenance is verified even for an empty analytics window.
+            verified = self.numeric_guard.verify(
+                "",
+                [tool],
+                _analytics_claims(tool.tool_call_id, totals, channels),
+            )
+            result.numeric_guard_passed = verified.passed
+            result.reply_text = _analytics_reply(query, tool.tool_call_id, totals, channels)
             result.tool_calls[-1]["data"] = tool.data
-            # Internal typed report, not a generated outbound numeric claim.
             result.auto_executed = result.autonomy_applied == _L2
             return result
 

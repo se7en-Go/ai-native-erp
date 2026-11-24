@@ -17,10 +17,13 @@ from erp_core.catalog.collector_token_service import (
     CollectorTokenService,
 )
 from erp_core.catalog.media_service import CatalogMediaService
+from erp_core.catalog.sourcing_copy_protocol import SourcingAiRewriteRequest, SourcingCopyRewriter
 from erp_core.catalog.sourcing_service import (
+    SourcingAiRewriteResponse,
     SourcingCollectRequest,
     SourcingDeleteResult,
     SourcingDraftRead,
+    SourcingDraftUpdateRequest,
     SourcingImportResult,
     SourcingPublishRequest,
     SourcingPublishResult,
@@ -194,6 +197,48 @@ async def delete_sourcing_draft(
     async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
         return await _service.delete_draft(
             session, principal.tenant_id, str(principal.user_id), draft_id
+        )
+
+
+@router.patch("/drafts/{draft_id}", response_model=SourcingDraftRead)
+async def update_sourcing_draft(
+    request: Request,
+    draft_id: UUID,
+    payload: SourcingDraftUpdateRequest,
+    principal: WriterPrincipal,
+) -> SourcingDraftRead:
+    """Patch a sourcing draft's copy, price and per-marketplace category attributes."""
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await _service.update_draft(
+            session, principal.tenant_id, str(principal.user_id), draft_id, payload
+        )
+
+
+@router.post("/drafts/{draft_id}/ai-rewrite", response_model=SourcingAiRewriteResponse)
+async def rewrite_sourcing_draft_copy(
+    request: Request,
+    draft_id: UUID,
+    payload: SourcingAiRewriteRequest,
+    principal: WriterPrincipal,
+) -> SourcingAiRewriteResponse:
+    """Rewrite a draft into a localized, platform-shaped listing copy deck.
+
+    The LLM rewriter is injected by the composition root
+    (``app.state.sourcing_copy_rewriter``); when it is absent the catalog-side deterministic
+    localized copywriter runs, so the endpoint is always usable and always honest about
+    which mode produced the copy. ``erp_core.catalog`` never imports the AI engine.
+    """
+    copy_rewriter: SourcingCopyRewriter | None = getattr(
+        request.app.state, "sourcing_copy_rewriter", None
+    )
+    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
+        return await _service.ai_rewrite_draft(
+            session,
+            principal.tenant_id,
+            str(principal.user_id),
+            draft_id,
+            payload,
+            copy_rewriter=copy_rewriter,
         )
 
 

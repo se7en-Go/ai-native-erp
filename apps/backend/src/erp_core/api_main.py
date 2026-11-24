@@ -30,6 +30,7 @@ from erp_core.ai_engine.runtime import PolicyRuntime
 from erp_core.ai_engine.sandbox import router as sandbox_router
 from erp_core.ai_engine.semantic_cache import SemanticCacheService
 from erp_core.ai_engine.social_caption import AiEngineCaptionProvider
+from erp_core.ai_engine.sourcing_copy import AiEngineSourcingCopyRewriter
 from erp_core.ai_engine.workforce_router import workforce_router
 from erp_core.billing.router import router as billing_router
 from erp_core.catalog.router import router as catalog_router
@@ -102,6 +103,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         llm_router=app.state.ai_runtime.llm_router,
         wallet_service=app.state.ai_runtime.wallet_service,
         tool_registry=app.state.ai_runtime.tool_registry,
+    )
+    # Sourcing copy rewriting is injected through the catalog module's
+    # SourcingCopyRewriter protocol for the same import-linter reason: erp_core.catalog
+    # must never import erp_core.ai_engine (`catalog_isolated`,
+    # `domain_modules_never_import_ai_engine`).
+    app.state.sourcing_copy_rewriter = AiEngineSourcingCopyRewriter(
+        llm_router=app.state.ai_runtime.llm_router,
+        wallet_service=app.state.ai_runtime.wallet_service,
     )
     app.state.storage = storage
     app.state.crypto_service = crypto_service

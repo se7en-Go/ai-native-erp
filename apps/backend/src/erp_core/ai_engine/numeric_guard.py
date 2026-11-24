@@ -49,6 +49,19 @@ _KINDS = {
     "outstanding_amount",
     "variance_amount",
     "received_amount",
+    "order_count",
+    "gmv_base",
+    "refunded_amount_base",
+    "refund_rate_pct",
+    "cogs_base",
+    "platform_commission_base",
+    "ad_spend_base",
+    "net_margin_base",
+    "margin_pct",
+    "roas",
+    "impressions",
+    "clicks",
+    "external_sessions",
 }
 _IDENTIFIERS = {
     "sku",
@@ -66,6 +79,9 @@ _IDENTIFIERS = {
     "carrier_code",
     "sub_status",
     "last_event_at",
+    "channel_type",
+    "channel_label",
+    "window",
 }
 
 
@@ -136,6 +152,14 @@ def _trusted_rows(result: ToolResult) -> list[dict[str, Any]]:
             ]
         case "match_open_receivables":
             return [data, *data.get("candidates", [])]
+        case "get_live_channel_sales_analytics":
+            # Totals first, then each per-channel row: window / channel_type / channel_label
+            # keep a claim attributable to exactly one trusted row.
+            return [
+                row
+                for row in (data.get("totals", {}), *data.get("channels", []))
+                if isinstance(row, dict)
+            ]
         case _:
             return []
 

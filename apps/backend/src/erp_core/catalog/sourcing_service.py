@@ -37,6 +37,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from erp_core.catalog.media_service import CatalogMediaService
 from erp_core.catalog.schemas import MoqTierInput, ProductCreate, VariantCreate
 from erp_core.catalog.service import CatalogService
+from erp_core.catalog.sourcing_copy_protocol import (
+    SUPPORTED_REWRITE_LANGUAGES,
+    SourcingAiRewriteRequest,
+    SourcingCopyRewriteInput,
+    SourcingCopyRewriteOutput,
+    SourcingCopyRewriter,
+    build_deterministic_localized_copy,
+)
 from erp_core.shared.enums import UserRole
 from erp_core.shared.errors import AppError
 from erp_core.tenancy.audit import record_audit_event
@@ -210,6 +218,80 @@ def _as_json_dict(value: Any) -> dict[str, Any]:
         return parsed if isinstance(parsed, dict) else {}
     if isinstance(value, Mapping):
         return {str(key): item for key, item in value.items()}
+    return {}
+
+
+def _as_nested_json_dict(value: Any) -> dict[str, dict[str, Any]]:
+    """JSONB dict-of-dicts round-trip; non-object entries are dropped, never guessed."""
+    nested: dict[str, dict[str, Any]] = {}
+    for key, item in _as_json_dict(value).items():
+        if isinstance(item, Mapping):
+            nested[str(key)] = {str(inner): val for inner, val in item.items()}
+        elif isinstance(item, str):
+            parsed = _as_json_dict(item)
+            if parsed:
+                nested[str(key)] = parsed
+    return nested
+
+
+def _validated_nested_dict(
+    raw: Mapping[str, Any], *, field: str
+) -> dict[str, dict[str, Any]]:
+    """Validate a client-supplied JSON object-of-objects before it reaches JSONB."""
+    validated: dict[str, dict[str, Any]] = {}
+    for key, value in raw.items():
+        if not isinstance(value, Mapping):
+            raise _sourcing_error(
+                "sourcing-draft-update-invalid",
+                "ERR_SOURCING_DRAFT_UPDATE_INVALID",
+                f"{field}['{key}'] must be a JSON object, got {type(value).__name__}.",
+            )
+        validated[str(key)] = {str(inner): item for inner, item in value.items()}
+    return validated
+
+
+def _generated_at(value: Any) -> datetime:
+    """Parse a localized-copy ``generated_at``; unreadable values sort oldest."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return datetime.min.replace(tzinfo=UTC)
+    else:
+        return datetime.min.replace(tzinfo=UTC)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _localized_copy_for_channel(
+    localized_copies: Mapping[str, Mapping[str, Any]], channel_type: str
+) -> dict[str, Any] | None:
+    """Newest ``"<channel_type>:<locale>"`` copy deck for one channel, if any."""
+    prefix = f"{channel_type.strip().lower()}:"
+    newest: tuple[datetime, dict[str, Any]] | None = None
+    for key, entry in localized_copies.items():
+        if not isinstance(entry, Mapping):
+            continue
+        if not str(key).strip().lower().startswith(prefix):
+            continue
+        candidate = (
+            _generated_at(entry.get("generated_at")),
+            {str(k): v for k, v in entry.items()},
+        )
+        if newest is None or candidate[0] >= newest[0]:
+            newest = candidate
+    return newest[1] if newest is not None else None
+
+
+def _channel_category_attributes(
+    marketplace_category_attrs: Mapping[str, Mapping[str, Any]], channel_type: str
+) -> dict[str, Any]:
+    """Case-insensitive per-channel category attributes (``Shopee`` == ``shopee``)."""
+    normalized = channel_type.strip().lower()
+    for key, value in marketplace_category_attrs.items():
+        if str(key).strip().lower() == normalized and isinstance(value, Mapping):
+            return {str(inner): item for inner, item in value.items()}
     return {}
 
 
@@ -448,6 +530,9 @@ class MarketplaceListingPayload(BaseModel):
     options: list[SourcingOptionSpec] = Field(default_factory=list)
     variants: list[MarketplaceVariantPayload] = Field(default_factory=list)
     image_blobs: list[MarketplaceImageBlob] = Field(default_factory=list)
+    #: Per-marketplace category payload (``category_id`` / ``primary_category`` / …).
+    #: Empty keeps every dispatcher on its historic ``category`` behavior.
+    category_attributes: dict[str, Any] = Field(default_factory=dict)
 
 
 class MarketplaceListingDispatchReceipt(BaseModel):
@@ -486,6 +571,8 @@ class SourcingCollectRequest(BaseModel):
     hs_code: str | None = Field(default=None, max_length=32)
     options_spec: list[SourcingOptionSpec] = Field(default_factory=list, max_length=5)
     variants_spec: list[SourcingVariantSpec] = Field(default_factory=list, max_length=50)
+    #: ``channel_type`` -> marketplace category attributes captured at collect time.
+    marketplace_category_attrs: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class SourcingPageMetadata(BaseModel):
@@ -539,6 +626,8 @@ class PlannedSourcingDraft(BaseModel):
     attributes: dict[str, Any]
     options_spec: list[SourcingOptionSpec] = Field(default_factory=list)
     variants_spec: list[SourcingVariantSpec] = Field(default_factory=list)
+    localized_copies: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    marketplace_category_attrs: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class SourcingDraftRead(BaseModel):
@@ -562,6 +651,10 @@ class SourcingDraftRead(BaseModel):
     attributes: dict[str, Any]
     options_spec: list[SourcingOptionSpec] = Field(default_factory=list)
     variants_spec: list[SourcingVariantSpec] = Field(default_factory=list)
+    #: ``"<channel_type>:<language>"`` -> localized copy deck (title/bullets/description).
+    localized_copies: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: ``"<channel_type>"`` -> marketplace category attributes used at publish time.
+    marketplace_category_attrs: dict[str, dict[str, Any]] = Field(default_factory=dict)
     status: str
     imported_product_id: UUID | None = None
     imported_variant_id: UUID | None = None
@@ -615,6 +708,25 @@ class SourcingPublishResult(BaseModel):
 class SourcingDeleteResult(BaseModel):
     deleted: bool
     draft_id: UUID
+
+
+class SourcingDraftUpdateRequest(BaseModel):
+    """Partial draft edit: only the fields that are not ``None`` are applied."""
+
+    optimized_title_en: str | None = Field(default=None, min_length=1, max_length=200)
+    bullet_points: list[str] | None = Field(default=None, min_length=1, max_length=10)
+    target_price_usd: Decimal | None = Field(default=None, gt=Decimal("0"))
+    suggested_category: str | None = Field(default=None, min_length=1, max_length=128)
+    suggested_hs_code: str | None = Field(default=None, max_length=32)
+    localized_copies: dict[str, dict[str, Any]] | None = None
+    marketplace_category_attrs: dict[str, dict[str, Any]] | None = None
+
+
+class SourcingAiRewriteResponse(BaseModel):
+    """The persisted draft plus the exact copy deck a rewrite produced."""
+
+    draft: SourcingDraftRead
+    rewrite: SourcingCopyRewriteOutput
 
 
 # --------------------------------------------------------------------------------------
@@ -968,6 +1080,8 @@ def plan_sourcing_draft(
         },
         options_spec=options_spec,
         variants_spec=normalized_variants,
+        localized_copies={},
+        marketplace_category_attrs=_as_nested_json_dict(payload.marketplace_category_attrs),
     )
 
 
@@ -1096,6 +1210,7 @@ class SourcingService:
                         fx_rate_usd_cny, target_margin_pct, optimized_title_en, bullet_points,
                         suggested_sku, suggested_category, suggested_hs_code, target_price_usd,
                         moq_tiers, images, attributes, options_spec, variants_spec,
+                        localized_copies, marketplace_category_attrs,
                         status, created_by_user_id
                     ) VALUES (
                         :id, :tid, :platform, :src_url, :raw_title, :raw_price,
@@ -1103,6 +1218,7 @@ class SourcingService:
                         :sku, :category, :hs, :target_price,
                         CAST(:tiers AS jsonb), CAST(:images AS jsonb),
                         CAST(:attrs AS jsonb), CAST(:opts AS jsonb), CAST(:vars AS jsonb),
+                        CAST(:localized AS jsonb), CAST(:marketplace_attrs AS jsonb),
                         'draft', :actor
                     )
                     RETURNING *
@@ -1148,6 +1264,10 @@ class SourcingService:
                             for v in planned.variants_spec
                         ],
                         default=str,
+                    ),
+                    "localized": json.dumps(planned.localized_copies, default=str),
+                    "marketplace_attrs": json.dumps(
+                        planned.marketplace_category_attrs, default=str
                     ),
                     "actor": actor_id,
                 },
@@ -1198,6 +1318,8 @@ class SourcingService:
             for item in _as_json_list(data.get("variants_spec"))
             if isinstance(item, Mapping)
         ]
+        local_copies = _as_nested_json_dict(data.get("localized_copies"))
+        marketplace_attrs = _as_nested_json_dict(data.get("marketplace_category_attrs"))
         status = str(data["status"])
         raw_price = Decimal(str(data["raw_price_cny"]))
         fx_rate = Decimal(str(data["fx_rate_usd_cny"]))
@@ -1227,6 +1349,8 @@ class SourcingService:
             attributes=_as_json_dict(data.get("attributes")),
             options_spec=options_spec,
             variants_spec=variants_spec,
+            localized_copies=local_copies,
+            marketplace_category_attrs=marketplace_attrs,
             status=status,
             listing_state=draft_listing_state(status, history),
             imported_product_id=(
@@ -1300,6 +1424,243 @@ class SourcingService:
             resource_id=draft_id,
         )
         return SourcingDeleteResult(deleted=True, draft_id=draft_id)
+
+    # -- edit / AI rewrite -----------------------------------------------------------
+
+    async def update_draft(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        actor_id: str,
+        draft_id: UUID,
+        payload: SourcingDraftUpdateRequest,
+    ) -> SourcingDraftRead:
+        """Apply a partial draft edit; omitted fields keep their persisted value."""
+        draft = await self._load_draft(session, tenant_id, draft_id)
+
+        title = draft.optimized_title_en
+        if payload.optimized_title_en is not None:
+            title = payload.optimized_title_en.strip()[:200] or draft.optimized_title_en
+
+        bullets = list(draft.bullet_points)
+        if payload.bullet_points is not None:
+            bullets = [item.strip() for item in payload.bullet_points if item.strip()][:5]
+            if not bullets:
+                raise _sourcing_error(
+                    "sourcing-draft-update-invalid",
+                    "ERR_SOURCING_DRAFT_UPDATE_INVALID",
+                    "bullet_points must retain at least one non-empty bullet.",
+                )
+
+        price = draft.target_price_usd
+        if payload.target_price_usd is not None:
+            price = _decimal_param("target_price_usd", payload.target_price_usd)
+
+        category = draft.suggested_category
+        if payload.suggested_category is not None:
+            category = payload.suggested_category.strip() or draft.suggested_category
+
+        hs_code = draft.suggested_hs_code
+        if payload.suggested_hs_code is not None:
+            hs_code = payload.suggested_hs_code.strip() or None
+
+        localized_copies = dict(draft.localized_copies)
+        if payload.localized_copies is not None:
+            localized_copies.update(
+                _validated_nested_dict(payload.localized_copies, field="localized_copies")
+            )
+        marketplace_attrs = dict(draft.marketplace_category_attrs)
+        if payload.marketplace_category_attrs is not None:
+            marketplace_attrs.update(
+                _validated_nested_dict(
+                    payload.marketplace_category_attrs, field="marketplace_category_attrs"
+                )
+            )
+
+        row = (
+            await session.execute(
+                text(
+                    """
+                    UPDATE sourcing_drafts
+                    SET optimized_title_en = :title,
+                        bullet_points = CAST(:bullets AS jsonb),
+                        target_price_usd = :price,
+                        suggested_category = :category,
+                        suggested_hs_code = :hs,
+                        localized_copies = CAST(:localized AS jsonb),
+                        marketplace_category_attrs = CAST(:marketplace_attrs AS jsonb),
+                        updated_at = now()
+                    WHERE tenant_id = :tid AND id = :did
+                    RETURNING *
+                    """
+                ),
+                {
+                    "title": title,
+                    "bullets": json.dumps(bullets, default=str),
+                    "price": price,
+                    "category": category,
+                    "hs": hs_code,
+                    "localized": json.dumps(localized_copies, default=str),
+                    "marketplace_attrs": json.dumps(marketplace_attrs, default=str),
+                    "tid": tenant_id,
+                    "did": draft_id,
+                },
+            )
+        ).one()
+        updated = self.draft_from_mapping(row._mapping)
+
+        after_state: dict[str, Any] = {}
+        if payload.optimized_title_en is not None:
+            after_state["optimized_title_en"] = updated.optimized_title_en
+        if payload.bullet_points is not None:
+            after_state["bullet_points"] = updated.bullet_points
+        if payload.target_price_usd is not None:
+            after_state["target_price_usd"] = str(updated.target_price_usd)
+        if payload.suggested_category is not None:
+            after_state["suggested_category"] = updated.suggested_category
+        if payload.suggested_hs_code is not None:
+            after_state["suggested_hs_code"] = updated.suggested_hs_code
+        if payload.localized_copies is not None:
+            after_state["localized_copy_keys"] = sorted(updated.localized_copies)
+        if payload.marketplace_category_attrs is not None:
+            after_state["marketplace_category_keys"] = sorted(
+                updated.marketplace_category_attrs
+            )
+        await record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_type="human_user",
+            actor_id=actor_id,
+            action="catalog.sourcing_draft.updated",
+            resource_type="sourcing_draft",
+            resource_id=draft_id,
+            before_state={
+                "optimized_title_en": draft.optimized_title_en,
+                "target_price_usd": str(draft.target_price_usd),
+            },
+            after_state=after_state or {"unchanged": True},
+        )
+        return updated
+
+    async def ai_rewrite_draft(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        actor_id: str,
+        draft_id: UUID,
+        payload: SourcingAiRewriteRequest,
+        *,
+        copy_rewriter: SourcingCopyRewriter | None = None,
+    ) -> SourcingAiRewriteResponse:
+        """Rewrite one draft into a platform/localized listing and persist the copy deck.
+
+        With no injected rewriter the deterministic localized copywriter runs: real copy,
+        honest ``deterministic_fallback`` provenance and exactly zero credits.
+        """
+        language = payload.target_language.strip().lower()
+        if language not in SUPPORTED_REWRITE_LANGUAGES:
+            raise _sourcing_error(
+                "unsupported-rewrite-language",
+                "ERR_UNSUPPORTED_REWRITE_LANGUAGE",
+                (
+                    f"Target language '{payload.target_language}' is not supported; choose "
+                    f"one of {', '.join(sorted(SUPPORTED_REWRITE_LANGUAGES))}."
+                ),
+            )
+        channel = payload.target_channel.strip().lower() or "shopify"
+        draft = await self._load_draft(session, tenant_id, draft_id)
+        rewrite_input = SourcingCopyRewriteInput(
+            draft_id=draft.id,
+            raw_title=draft.raw_title,
+            source_description=str(draft.attributes.get("source_description") or "") or None,
+            category=draft.suggested_category,
+            hs_code=draft.suggested_hs_code,
+            target_price_usd=draft.target_price_usd,
+            moq_tiers=[
+                {"min_qty": tier.min_qty, "unit_price_usd": str(tier.unit_price_usd)}
+                for tier in draft.moq_tiers
+            ],
+            existing_bullets=list(draft.bullet_points),
+            target_channel=channel,
+            target_language=language,
+            tone=payload.tone,
+            keywords=list(payload.keywords),
+        )
+        if copy_rewriter is not None:
+            output = await copy_rewriter.rewrite_copy(session, tenant_id, rewrite_input)
+        else:
+            output = build_deterministic_localized_copy(
+                rewrite_input, reason="ai_rewriter_not_configured"
+            )
+
+        output_channel = (output.target_channel or channel).strip().lower()
+        output_language = (output.target_language or language).strip().lower()
+        copy_key = f"{output_channel}:{output_language}"
+        entry: dict[str, Any] = output.model_dump(mode="json")
+        # Publish reads the localized description from the same deck entry.
+        entry["optimized_description"] = output.description
+        localized_copies = dict(draft.localized_copies)
+        localized_copies[copy_key] = entry
+
+        title = draft.optimized_title_en
+        bullets = list(draft.bullet_points)
+        attributes = dict(draft.attributes)
+        if payload.apply_to_draft:
+            title = (output.title or draft.optimized_title_en).strip()[:200] or (
+                draft.optimized_title_en
+            )
+            cleaned_bullets = [item.strip() for item in output.bullet_points if item.strip()]
+            if cleaned_bullets:
+                bullets = cleaned_bullets[:5]
+            if not str(attributes.get("source_description") or "").strip():
+                attributes["source_description"] = (
+                    rewrite_input.source_description or build_listing_description(draft)
+                )[:500]
+
+        row = (
+            await session.execute(
+                text(
+                    """
+                    UPDATE sourcing_drafts
+                    SET optimized_title_en = :title,
+                        bullet_points = CAST(:bullets AS jsonb),
+                        attributes = CAST(:attrs AS jsonb),
+                        localized_copies = CAST(:localized AS jsonb),
+                        updated_at = now()
+                    WHERE tenant_id = :tid AND id = :did
+                    RETURNING *
+                    """
+                ),
+                {
+                    "title": title,
+                    "bullets": json.dumps(bullets, default=str),
+                    "attrs": json.dumps(attributes, default=str),
+                    "localized": json.dumps(localized_copies, default=str),
+                    "tid": tenant_id,
+                    "did": draft_id,
+                },
+            )
+        ).one()
+        updated = self.draft_from_mapping(row._mapping)
+        await record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_type="human_user",
+            actor_id=actor_id,
+            action="catalog.sourcing_draft.ai_rewritten",
+            resource_type="sourcing_draft",
+            resource_id=draft_id,
+            after_state={
+                "rewrite_mode": output.rewrite_mode,
+                "model_used": output.model_used,
+                "credits_consumed": str(output.credits_consumed),
+                "target_channel": output_channel,
+                "target_language": output_language,
+                "copy_key": copy_key,
+                "applied_to_draft": payload.apply_to_draft,
+            },
+        )
+        return SourcingAiRewriteResponse(draft=updated, rewrite=output)
 
     # -- import ----------------------------------------------------------------------
 
@@ -1686,6 +2047,8 @@ class SourcingService:
         payload: SourcingPublishRequest,
         listing_publisher: MarketplaceListingPublisher | None,
         sourcing_draft_id: UUID | None = None,
+        localized_copies: Mapping[str, Mapping[str, Any]] | None = None,
+        marketplace_category_attrs: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> list[SourcingPublishResult]:
         image_blobs = await self._load_media_blobs(
             session,
@@ -1693,10 +2056,38 @@ class SourcingService:
             product_id=product_id,
             sourcing_draft_id=sourcing_draft_id,
         )
+        copies = localized_copies or {}
+        category_attrs_by_channel = marketplace_category_attrs or {}
         sync_inventory_enabled = payload.stock_sync_ratio > 0
         results: list[SourcingPublishResult] = []
         for channel_account_id in payload.channel_account_ids:
             channel_type = await self._channel_account(session, tenant_id, channel_account_id)
+            # Per-channel localized copy: the newest "<channel_type>:<locale>" deck wins.
+            localized = _localized_copy_for_channel(copies, channel_type)
+            channel_title = title
+            channel_description = description
+            channel_bullets = list(bullet_points)
+            if localized is not None:
+                localized_title = str(localized.get("title") or "").strip()
+                if localized_title:
+                    channel_title = localized_title
+                localized_description = str(
+                    localized.get("description") or localized.get("optimized_description") or ""
+                ).strip()
+                if localized_description:
+                    channel_description = localized_description
+                raw_bullets = localized.get("bullet_points")
+                if isinstance(raw_bullets, Sequence) and not isinstance(
+                    raw_bullets, (str, bytes, bytearray)
+                ):
+                    cleaned_bullets = [
+                        str(item).strip() for item in raw_bullets if str(item).strip()
+                    ]
+                    if cleaned_bullets:
+                        channel_bullets = cleaned_bullets[:5]
+            channel_category_attributes = _channel_category_attributes(
+                category_attrs_by_channel, channel_type
+            )
             variant_payloads: list[MarketplaceVariantPayload] = []
             for var_row in variants:
                 v_sku = str(var_row["sku"])
@@ -1765,9 +2156,9 @@ class SourcingService:
                         channel_account_id=channel_account_id,
                         channel_type=channel_type,
                         external_sku=primary_ext_sku,
-                        title=title,
-                        description=description,
-                        bullet_points=bullet_points,
+                        title=channel_title,
+                        description=channel_description,
+                        bullet_points=channel_bullets,
                         price_usd=primary_price_usd,
                         quantity=payload.initial_stock_quantity,
                         images=images,
@@ -1777,6 +2168,7 @@ class SourcingService:
                         options=options if is_multi_variant else [],
                         variants=variant_payloads if is_multi_variant else [],
                         image_blobs=image_blobs,
+                        category_attributes=channel_category_attributes,
                     ),
                 )
                 confirmed_product_id = (receipt.external_product_id or "").strip()
@@ -1900,6 +2292,8 @@ class SourcingService:
             payload=payload,
             listing_publisher=listing_publisher,
             sourcing_draft_id=draft_id,
+            localized_copies=draft.localized_copies,
+            marketplace_category_attrs=draft.marketplace_category_attrs,
         )
 
         history: list[dict[str, Any]] = list(draft.publish_history)
@@ -2088,6 +2482,8 @@ __all__ = [
     "SourcingCollectRequest",
     "SourcingDeleteResult",
     "SourcingDraftRead",
+    "SourcingDraftUpdateRequest",
+    "SourcingAiRewriteResponse",
     "SourcingImportResult",
     "SourcingMoqTier",
     "SourcingOptionSpec",

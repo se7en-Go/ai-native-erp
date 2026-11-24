@@ -10,6 +10,7 @@ import {
   Languages,
   Loader2,
   Lock,
+  MessageSquare,
   PanelRight,
   Pin,
   StickyNote,
@@ -59,6 +60,36 @@ export interface InboxMessage {
   source_timestamp: string;
   /** Pack B：图片 / PDF / 表格附件（缺省即纯文本消息）。 */
   attachments?: InboxAttachment[];
+}
+
+/**
+ * 12 个「买家站内私信 IM」渠道：Shopee / Lazada / Temu / SHEIN / AliExpress /
+ * Ozon / Walmart / Mercado Libre / TikTok Shop / eBay / Amazon SP-API /
+ * Alibaba 国际站。
+ *
+ * 取值与后端 `MARKETPLACE_IM_CHANNELS`
+ * （`apps/backend/src/erp_core/channels/adapters/marketplace_im.py`）以及
+ * `ChannelTypeSchema` 一字不差，前端据此在会话头部标注「回复走平台买家 IM」。
+ * 注意：`amazon` 的渠道键叫 `amazon_sp`，`alibaba_intl` 的渠道键叫 `alibaba_email`。
+ */
+export const MARKETPLACE_IM_CHANNEL_TYPES = new Set([
+  "shopee",
+  "lazada",
+  "temu",
+  "shein",
+  "aliexpress",
+  "ozon",
+  "walmart",
+  "mercado_libre",
+  "tiktok_shop",
+  "ebay",
+  "amazon_sp",
+  "alibaba_email",
+]);
+
+/** 该渠道是否属于「买家站内私信 IM」渠道（决定是否渲染 IM 徽标与输入框提示）。 */
+export function isMarketplaceImChannel(channelType: string | null | undefined): boolean {
+  return typeof channelType === "string" && MARKETPLACE_IM_CHANNEL_TYPES.has(channelType);
 }
 
 function isImageAttachment(attachment: InboxAttachment): boolean {
@@ -163,6 +194,21 @@ export function MessageThread({
           {conversation.channel_type && (
             <span className="rounded-md bg-white px-1.5 py-0.5 text-[10.5px] font-medium text-gray-600 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700">
               {conversation.channel_type}
+            </span>
+          )}
+          {/* 买家站内私信 IM：让客服一眼看清「回复会直接通过平台买家消息 API 送达」。 */}
+          {isMarketplaceImChannel(conversation.channel_type) && (
+            <span
+              data-testid="marketplace-im-channel-badge"
+              data-marketplace-im-channel={conversation.channel_type}
+              title={bi(
+                "该平台不支持外部邮箱 / 短信回访，回复一律通过平台买家站内私信 API 送达。",
+                "Replies are delivered through this marketplace's buyer messaging API, not email or SMS."
+              )}
+              className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10.5px] font-semibold text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300"
+            >
+              <MessageSquare className="h-2.5 w-2.5 shrink-0" />
+              <span>{bi("站内私信 IM", "Marketplace Buyer IM")}</span>
             </span>
           )}
           {conversationTags.length > 0 && (

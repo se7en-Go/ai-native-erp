@@ -46,7 +46,27 @@ _ANALYTICS_COLUMNS = {
             "lead_time_days",
         }
     ),
+    "vw_tenant_channel_sales_analytics": frozenset(
+        {
+            "tenant_id",
+            "channel_account_id",
+            "channel_type",
+            "channel_label",
+            "metric_date",
+            "order_count",
+            "gmv_base",
+            "refunded_amount_base",
+            "cogs_base",
+            "platform_commission_base",
+            "ad_spend_base",
+            "net_margin_base",
+            "impressions",
+            "clicks",
+            "external_sessions",
+        }
+    ),
 }
+_ANALYTICS_WINDOW_DAYS: dict[str, int] = {"7d": 7, "30d": 30, "90d": 90}
 _NAME = r"[a-z][a-z0-9_]{0,62}"
 _SELECT = re.compile(
     rf"select\s+(.+?)\s+from\s+({_NAME})(?:\s+group\s+by\s+(.+))?", re.ASCII | re.I
@@ -223,6 +243,66 @@ def validate_readonly_analytics_sql(raw_sql: str) -> tuple[bool, str, str | None
         "",
         sql + " ORDER BY " + ", ".join(str(i + 1) for i in range(len(projections))) + " LIMIT 100",
     )
+
+
+def _analytics_kpis(
+    *,
+    channel_key: str,
+    channel_account_id: UUID | None,
+    channel_type: str,
+    channel_label: str,
+    order_count: int,
+    gmv_base: Decimal,
+    refunded_amount_base: Decimal,
+    cogs_base: Decimal,
+    platform_commission_base: Decimal,
+    ad_spend_base: Decimal,
+    net_margin_base: Decimal,
+    impressions: int,
+    clicks: int,
+    external_sessions: int,
+) -> dict[str, Any]:
+    """Finalize one channel (or overall) KPI bucket as Decimal-exact serialized values."""
+    gmv_q = gmv_base.quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
+    refunded_q = refunded_amount_base.quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
+    ad_q = ad_spend_base.quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
+    net_q = net_margin_base.quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
+    refund_rate = (
+        ((refunded_q / gmv_q) * Decimal("100")).quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
+        if gmv_q > Decimal("0")
+        else Decimal("0.00")
+    )
+    margin_pct = (
+        ((net_q / gmv_q) * Decimal("100")).quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
+        if gmv_q > Decimal("0")
+        else Decimal("0.00")
+    )
+    roas = (
+        (gmv_q / ad_q).quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
+        if ad_q > Decimal("0")
+        else None
+    )
+    return {
+        "channel_key": channel_key,
+        "channel_account_id": str(channel_account_id) if channel_account_id else None,
+        "channel_type": channel_type,
+        "channel_label": channel_label,
+        "order_count": int(order_count),
+        "gmv_base": str(gmv_q),
+        "refunded_amount_base": str(refunded_q),
+        "refund_rate_pct": str(refund_rate),
+        "cogs_base": str(cogs_base.quantize(_MONEY_Q, rounding=ROUND_HALF_UP)),
+        "platform_commission_base": str(
+            platform_commission_base.quantize(_MONEY_Q, rounding=ROUND_HALF_UP)
+        ),
+        "ad_spend_base": str(ad_q),
+        "net_margin_base": str(net_q),
+        "margin_pct": str(margin_pct),
+        "roas": str(roas) if roas is not None else None,
+        "impressions": int(impressions),
+        "clicks": int(clicks),
+        "external_sessions": int(external_sessions),
+    }
 
 
 class ErpToolRegistry:
@@ -784,6 +864,145 @@ class ErpToolRegistry:
                 "tenant_id": str(tenant_id),
                 "row_count": len(serialized_rows),
                 "rows": serialized_rows,
+            },
+        )
+        result.data["source_tool_call_id"] = result.tool_call_id
+        _extract_tool_tokens(result.data, result.numeric_tokens)
+        return result
+
+    async def get_live_channel_sales_analytics(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        *,
+        window: str = "30d",
+        channel_types: list[str] | None = None,
+    ) -> ToolResult:
+        """Aggregate `vw_tenant_channel_sales_analytics` into Decimal-exact channel KPIs.
+
+        Reads only the RLS-protected analytics view (security_invoker, so the FORCE RLS
+        policies of `orders` / `order_profit_snapshots` / `channel_daily_metrics` decide
+        visibility), then finalizes GMV, refund rate, COGS, commission, ad spend, net
+        contribution margin, margin %, ROAS, and traffic counters with Decimal arithmetic.
+        """
+        tool_name = "get_live_channel_sales_analytics"
+        norm_window = str(window).strip().lower()
+        days = _ANALYTICS_WINDOW_DAYS.get(norm_window)
+        if days is None:
+            return self._failure(
+                tool_name,
+                "ERR_INVALID_ANALYTICS_WINDOW",
+                "Window must be one of: 7d, 30d, 90d.",
+            )
+        normalized_ctypes = sorted(
+            {
+                str(channel_type).strip().lower()
+                for channel_type in channel_types or []
+                if str(channel_type).strip()
+            }
+        )
+        rows = (
+            (
+                await session.execute(
+                    text("""
+                    SELECT
+                        channel_account_id,
+                        channel_type,
+                        channel_label,
+                        COALESCE(SUM(order_count), 0) AS order_count,
+                        COALESCE(SUM(gmv_base), 0) AS gmv_base,
+                        COALESCE(SUM(refunded_amount_base), 0) AS refunded_amount_base,
+                        COALESCE(SUM(cogs_base), 0) AS cogs_base,
+                        COALESCE(SUM(platform_commission_base), 0) AS platform_commission_base,
+                        COALESCE(SUM(ad_spend_base), 0) AS ad_spend_base,
+                        COALESCE(SUM(net_margin_base), 0) AS net_margin_base,
+                        COALESCE(SUM(impressions), 0) AS impressions,
+                        COALESCE(SUM(clicks), 0) AS clicks,
+                        COALESCE(SUM(external_sessions), 0) AS external_sessions
+                    FROM vw_tenant_channel_sales_analytics
+                    WHERE tenant_id = :tid
+                      AND metric_date >= (CURRENT_DATE - (CAST(:days AS integer) - 1))
+                      AND (
+                            CAST(:ctypes AS text[]) IS NULL
+                            OR channel_type = ANY(CAST(:ctypes AS text[]))
+                          )
+                    GROUP BY channel_account_id, channel_type, channel_label
+                    """),
+                    {
+                        "tid": tenant_id,
+                        "days": days,
+                        "ctypes": normalized_ctypes or None,
+                    },
+                )
+            )
+            .mappings()
+            .all()
+        )
+
+        channels: list[dict[str, Any]] = []
+        for row in rows:
+            account_id: UUID | None = row["channel_account_id"]
+            channels.append(
+                _analytics_kpis(
+                    channel_key=str(account_id) if account_id is not None else "direct_b2b",
+                    channel_account_id=account_id,
+                    channel_type=str(row["channel_type"]),
+                    channel_label=str(row["channel_label"]),
+                    order_count=int(row["order_count"]),
+                    gmv_base=Decimal(str(row["gmv_base"])),
+                    refunded_amount_base=Decimal(str(row["refunded_amount_base"])),
+                    cogs_base=Decimal(str(row["cogs_base"])),
+                    platform_commission_base=Decimal(str(row["platform_commission_base"])),
+                    ad_spend_base=Decimal(str(row["ad_spend_base"])),
+                    net_margin_base=Decimal(str(row["net_margin_base"])),
+                    impressions=int(row["impressions"]),
+                    clicks=int(row["clicks"]),
+                    external_sessions=int(row["external_sessions"]),
+                )
+            )
+        channels.sort(
+            key=lambda item: (
+                -Decimal(item["gmv_base"]),
+                -Decimal(item["ad_spend_base"]),
+                str(item["channel_label"]),
+            )
+        )
+
+        totals = _analytics_kpis(
+            channel_key="all",
+            channel_account_id=None,
+            channel_type="all",
+            channel_label="All Channels",
+            order_count=sum(int(channel["order_count"]) for channel in channels),
+            gmv_base=sum((Decimal(channel["gmv_base"]) for channel in channels), Decimal(0)),
+            refunded_amount_base=sum(
+                (Decimal(channel["refunded_amount_base"]) for channel in channels), Decimal(0)
+            ),
+            cogs_base=sum((Decimal(channel["cogs_base"]) for channel in channels), Decimal(0)),
+            platform_commission_base=sum(
+                (Decimal(channel["platform_commission_base"]) for channel in channels), Decimal(0)
+            ),
+            ad_spend_base=sum(
+                (Decimal(channel["ad_spend_base"]) for channel in channels), Decimal(0)
+            ),
+            net_margin_base=sum(
+                (Decimal(channel["net_margin_base"]) for channel in channels), Decimal(0)
+            ),
+            impressions=sum(int(channel["impressions"]) for channel in channels),
+            clicks=sum(int(channel["clicks"]) for channel in channels),
+            external_sessions=sum(int(channel["external_sessions"]) for channel in channels),
+        )
+        totals["window"] = norm_window
+
+        result = ToolResult(
+            tool_name=tool_name,
+            ok=True,
+            data={
+                "tenant_id": str(tenant_id),
+                "window": norm_window,
+                "channel_types_filter": normalized_ctypes,
+                "totals": totals,
+                "channels": channels,
             },
         )
         result.data["source_tool_call_id"] = result.tool_call_id

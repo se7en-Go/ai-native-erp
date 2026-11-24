@@ -101,7 +101,7 @@ export function livechatEmbedSnippet(
 /**
  * 渠道「真实能力」三档（诚实标注，不夸大）：
  * - live_messaging：真的能收发实时消息（Webhook 验签 + 出站发送）。
- * - order_sync：订单 / 库存 / 商品数据双向同步，但不承载会话消息。
+ * - order_sync：订单 / 库存 / 商品数据双向同步，但主通道不是通用 IM。
  * - credentials_only：只做凭证加密托管，不保证实时外发（当前 22 个渠道已全部脱离该档位）。
  *
  * PR #44 之后，Alibaba.com IOP / Amazon SP-API / eBay Sell API 都具备真实的
@@ -109,11 +109,51 @@ export function livechatEmbedSnippet(
  * 本轮新增的 8 个全球电商渠道（Shopee / Lazada / Temu / SHEIN / AliExpress /
  * Ozon / Walmart / Mercado Libre）同样带真实订单与库存同步适配器，因此
  * 22 个渠道目前全部落在 `live_messaging` 或 `order_sync`，`credentials_only` 为空。
+ *
+ * 关于「买家站内私信 IM」：12 个大跨境电商渠道（下面 `MARKETPLACE_BUYER_IM_KEYS`）
+ * 同时接入了平台买家 IM（`/api/v1/webhooks/im/{platform}` 验签入站 + 签名出站），
+ * 但这并不改变订单同步档位——电商渠道的主身份仍然是店铺（订单 / 库存 / 刊登），
+ * 因此档位保持 `order_sync`，只把徽标文案升级为「商品/库存/订单 + 买家 IM」，
+ * 让能力描述与徽标同时如实反映两类能力（`wave5-honest-ui` 逐渠道锁定该档位）。
  */
 export type ChannelCapabilityTier =
   | "live_messaging"
   | "order_sync"
   | "credentials_only";
+
+/**
+ * 12 个「买家站内私信 IM」渠道的市场键：Shopee / Lazada / Temu / SHEIN /
+ * AliExpress / Ozon / Walmart / Mercado Libre / TikTok Shop / eBay /
+ * Amazon Seller Central / Alibaba.com 国际站。
+ *
+ * 这 12 个渠道除了订单 / 库存 / 刊登，还支持平台买家站内私信双向收发：
+ * 入站 `/api/v1/webhooks/im/{platform}` 验签、出站签名发送、`/inbox` 统一收件箱。
+ * 独立站（Shopify / WooCommerce / SHOPLINE / Shoplazza）没有平台买家 IM，
+ * 因此不在本清单内，徽标保持纯「订单与库存同步」。
+ */
+export const MARKETPLACE_BUYER_IM_KEYS: ExtendedMarketplaceChannelKey[] = [
+  "tiktok_shop",
+  "amazon",
+  "ebay",
+  "alibaba_intl",
+  "shopee",
+  "lazada",
+  "temu",
+  "shein",
+  "aliexpress",
+  "ozon",
+  "walmart",
+  "mercado_libre",
+];
+
+/** 该渠道（市场键或渠道类型）是否属于「买家站内私信 IM」渠道。 */
+export function hasMarketplaceBuyerIm(key: string | null | undefined): boolean {
+  if (!key) return false;
+  if (MARKETPLACE_BUYER_IM_KEYS.includes(key as ExtendedMarketplaceChannelKey)) return true;
+  // 渠道类型与市场键的差异只有两个：amazon→amazon_sp、alibaba_intl→alibaba_email。
+  const asKey = key === "amazon_sp" ? "amazon" : key === "alibaba_email" ? "alibaba_intl" : key;
+  return MARKETPLACE_BUYER_IM_KEYS.includes(asKey as ExtendedMarketplaceChannelKey);
+}
 
 export type ChannelMarketplaceItem = {
   key: ExtendedMarketplaceChannelKey;
@@ -319,8 +359,10 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     key: "tiktok_shop",
     titleZh: "TikTok Shop",
     titleEn: "TikTok Shop",
-    descriptionZh: "卖家自备应用（BYOK），店铺 ID + Cipher 一键授权。",
-    descriptionEn: "Seller BYOK with shop ID and cipher in one authorization.",
+    descriptionZh:
+      "卖家自备应用（BYOK），店铺 ID + Cipher 一键授权；商品、库存、订单与买家站内私信 IM 共用同一收件箱。",
+    descriptionEn:
+      "Seller BYOK with shop ID and cipher in one authorization; catalog, stock, orders and buyer IM share one inbox.",
     category: "commerce",
     icon: Music2,
     tile: "bg-zinc-900/5 text-zinc-900 ring-zinc-200 dark:bg-zinc-100/10 dark:text-zinc-100 dark:ring-zinc-700",
@@ -328,17 +370,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["tiktok_shop"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "订单与库存同步",
-    capabilityBadgeEn: "Order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
   {
     key: "alibaba_intl",
     titleZh: "Alibaba.com 国际站",
     titleEn: "Alibaba.com",
     descriptionZh:
-      "App Key/Secret 信封加密托管，IOP 官方接口实时推送刊登，订单与询盘自动回拉进 ERP。",
+      "App Key/Secret 信封加密托管，IOP 官方接口实时推送刊登，订单、询盘与买家站内私信 IM 自动回拉进 ERP。",
     descriptionEn:
-      "App key/secret vaulted (AES-256-GCM); the official IOP API pushes live listings and syncs orders and inquiries automatically.",
+      "App key/secret vaulted (AES-256-GCM); the official IOP API pushes live listings and syncs orders, inquiries and buyer IM automatically.",
     category: "commerce",
     icon: Building2,
     tile: "bg-orange-50 text-orange-700 ring-orange-100",
@@ -346,17 +388,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["alibaba_email"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "实时刊登 · 订单与询盘",
-    capabilityBadgeEn: "Live listing · Orders & inquiries",
+    capabilityBadgeZh: "实时刊登 · 订单与询盘 + 买家 IM",
+    capabilityBadgeEn: "Live listing · Orders & inquiries + Buyer IM",
   },
   {
     key: "amazon",
     titleZh: "Amazon 卖家中心",
     titleEn: "Amazon Seller Central",
     descriptionZh:
-      "Seller ID / LWA 与 Refresh Token 信封加密托管，SP-API 实时推送刊登并自动拉取订单回写 ERP。",
+      "Seller ID / LWA 与 Refresh Token 信封加密托管，SP-API 实时推送刊登并自动拉取订单与买家站内私信 IM 回写 ERP。",
     descriptionEn:
-      "Seller ID, LWA keys and refresh token vaulted (AES-256-GCM); SP-API pushes live listings and pulls orders back into the ERP.",
+      "Seller ID, LWA keys and refresh token vaulted (AES-256-GCM); SP-API pushes live listings and pulls orders plus buyer IM back into the ERP.",
     category: "commerce",
     icon: Package,
     tile: "bg-amber-50 text-amber-700 ring-amber-100",
@@ -364,17 +406,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["amazon_sp"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "SP-API 实时刊登与拉单",
-    capabilityBadgeEn: "SP-API listing & order sync",
+    capabilityBadgeZh: "SP-API 实时刊登与拉单 + 买家 IM",
+    capabilityBadgeEn: "SP-API listing & order sync + Buyer IM",
   },
   {
     key: "ebay",
     titleZh: "eBay",
     titleEn: "eBay",
     descriptionZh:
-      "Seller Username / App + Cert ID 与 Refresh Token 信封加密托管，Sell API 实时推送刊登并自动拉取订单回写 ERP。",
+      "Seller Username / App + Cert ID 与 Refresh Token 信封加密托管，Sell API 实时推送刊登并自动拉取订单与买家站内私信 IM 回写 ERP。",
     descriptionEn:
-      "Seller username, app/cert IDs and refresh token vaulted (AES-256-GCM); the Sell API pushes live listings and pulls orders back into the ERP.",
+      "Seller username, app/cert IDs and refresh token vaulted (AES-256-GCM); the Sell API pushes live listings and pulls orders plus buyer IM back into the ERP.",
     category: "commerce",
     icon: BadgeDollarSign,
     tile: "bg-sky-50 text-sky-700 ring-sky-100",
@@ -382,17 +424,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["ebay"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "Sell API 实时刊登与拉单",
-    capabilityBadgeEn: "Sell API listing & order sync",
+    capabilityBadgeZh: "Sell API 实时刊登与拉单 + 买家 IM",
+    capabilityBadgeEn: "Sell API listing & order sync + Buyer IM",
   },
   {
     key: "shopee",
     titleZh: "Shopee",
     titleEn: "Shopee",
     descriptionZh:
-      "跨境直邮 / 全托管 / 轻出海（light_export）三种履约模式任选，Partner ID 与 Key 信封加密托管，订单与库存双向同步。",
+      "跨境直邮 / 全托管 / 轻出海（light_export）三种履约模式任选，Partner ID 与 Key 信封加密托管，订单、库存与买家站内私信 IM 统一进收件箱。",
     descriptionEn:
-      "Pick cross-border, full-managed or light-export fulfillment; partner ID and key are envelope-encrypted and orders/stock sync both ways.",
+      "Pick cross-border, full-managed or light-export fulfillment; partner ID and key are envelope-encrypted and orders, stock plus buyer IM land in one inbox.",
     category: "commerce",
     icon: ShoppingCart,
     tile: "bg-orange-50 text-orange-700 ring-orange-100",
@@ -400,17 +442,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["shopee"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "Partner API 订单与库存同步",
-    capabilityBadgeEn: "Partner API order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
   {
     key: "lazada",
     titleZh: "Lazada",
     titleEn: "Lazada",
     descriptionZh:
-      "跨境自发货或全托管（full_managed）二选一，App Key/Secret 与 Access Token 信封加密，东南亚六站订单统一回拉。",
+      "跨境自发货或全托管（full_managed）二选一，App Key/Secret 与 Access Token 信封加密，东南亚六站订单、库存与买家站内私信 IM 统一回拉。",
     descriptionEn:
-      "Choose cross-border self-ship or full-managed; app key/secret and access token are envelope-encrypted and SEA orders pull back into one place.",
+      "Choose cross-border self-ship or full-managed; app key/secret and access token are envelope-encrypted and SEA orders, stock plus buyer IM pull back into one place.",
     category: "commerce",
     icon: Truck,
     tile: "bg-pink-50 text-pink-700 ring-pink-100",
@@ -418,17 +460,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["lazada"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "Open Platform 订单与库存同步",
-    capabilityBadgeEn: "Open Platform order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
   {
     key: "temu",
     titleZh: "Temu",
     titleEn: "Temu",
     descriptionZh:
-      "全托管 / 半托管（semi_managed）/ 本土（local）三种备货方式都能接，卖家自备应用密钥信封加密，订单自动进 ERP。",
+      "全托管 / 半托管（semi_managed）/ 本土（local）三种备货方式都能接，卖家自备应用密钥信封加密，订单、库存与买家站内私信 IM 自动进 ERP。",
     descriptionEn:
-      "Full-managed, semi-managed or local stock all supported; seller BYOK credentials are envelope-encrypted and orders land in the ERP.",
+      "Full-managed, semi-managed or local stock all supported; seller BYOK credentials are envelope-encrypted and orders, stock plus buyer IM land in the ERP.",
     category: "commerce",
     icon: Boxes,
     tile: "bg-red-50 text-red-600 ring-red-100",
@@ -436,17 +478,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["temu"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "Partner API 订单与库存同步",
-    capabilityBadgeEn: "Partner API order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
   {
     key: "shein",
     titleZh: "SHEIN",
     titleEn: "SHEIN",
     descriptionZh:
-      "自营（standard）与半托管（semi_managed）双模式，Open Key ID / Secret Key 信封加密托管，订单与库存实时对齐。",
+      "自营（standard）与半托管（semi_managed）双模式，Open Key ID / Secret Key 信封加密托管，订单、库存与买家站内私信 IM 实时对齐。",
     descriptionEn:
-      "Self-operated or semi-managed both supported; Open Key ID / Secret Key are envelope-encrypted and orders/stock stay aligned.",
+      "Self-operated or semi-managed both supported; Open Key ID / Secret Key are envelope-encrypted and orders, stock plus buyer IM stay aligned.",
     category: "commerce",
     icon: Shirt,
     tile: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-100",
@@ -454,17 +496,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["shein"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "Open API 订单与库存同步",
-    capabilityBadgeEn: "Open API order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
   {
     key: "aliexpress",
     titleZh: "AliExpress 速卖通",
     titleEn: "AliExpress",
     descriptionZh:
-      "自运营（standard）与托管（managed）两种履约方式，App Key/Secret 与 Access Token 信封加密，订单拉回自动建单。",
+      "自运营（standard）与托管（managed）两种履约方式，App Key/Secret 与 Access Token 信封加密，订单自动建单，买家站内私信 IM 同步进收件箱。",
     descriptionEn:
-      "Self-operated or managed fulfillment; app key/secret and access token are envelope-encrypted and orders are created automatically.",
+      "Self-operated or managed fulfillment; app key/secret and access token are envelope-encrypted, orders are created automatically and buyer IM lands in the inbox.",
     category: "commerce",
     icon: Compass,
     tile: "bg-amber-50 text-amber-700 ring-amber-100",
@@ -472,17 +514,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["aliexpress"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "Open API 订单与库存同步",
-    capabilityBadgeEn: "Open API order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
   {
     key: "ozon",
     titleZh: "Ozon",
     titleEn: "Ozon",
     descriptionZh:
-      "FBS（自发货）与 FBO（平台仓代发）双轨可选，Client ID / API Key 信封加密，俄语区订单与库存自动同步。",
+      "FBS（自发货）与 FBO（平台仓代发）双轨可选，Client ID / API Key 信封加密，俄语区订单、库存与买家站内私信 IM 自动同步。",
     descriptionEn:
-      "FBS self-ship or FBO platform-hosting; Client ID / API Key are envelope-encrypted and RU-region orders/stock sync automatically.",
+      "FBS self-ship or FBO platform-hosting; Client ID / API Key are envelope-encrypted and RU-region orders, stock plus buyer IM sync automatically.",
     category: "commerce",
     icon: Globe,
     tile: "bg-cyan-50 text-cyan-700 ring-cyan-100",
@@ -490,17 +532,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["ozon"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "Seller API 订单与库存同步",
-    capabilityBadgeEn: "Seller API order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
   {
     key: "walmart",
     titleZh: "Walmart 沃尔玛",
     titleEn: "Walmart Marketplace",
     descriptionZh:
-      "自发货（standard）或 WFS 平台仓（wfs）都支持，Client ID / Secret 信封加密，北美订单与库存双向同步。",
+      "自发货（standard）或 WFS 平台仓（wfs）都支持，Client ID / Secret 信封加密，北美订单、库存与买家站内私信 IM 双向同步。",
     descriptionEn:
-      "Self-ship or WFS platform hosting; client ID / secret are envelope-encrypted and North-America orders/stock sync both ways.",
+      "Self-ship or WFS platform hosting; client ID / secret are envelope-encrypted and North-America orders, stock plus buyer IM sync both ways.",
     category: "commerce",
     icon: Store,
     tile: "bg-indigo-50 text-indigo-700 ring-indigo-100",
@@ -508,17 +550,17 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["walmart"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "Marketplace API 订单与库存同步",
-    capabilityBadgeEn: "Marketplace API order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
   {
     key: "mercado_libre",
     titleZh: "Mercado Libre 美客多",
     titleEn: "Mercado Libre",
     descriptionZh:
-      "自发货（standard）与全托管（full_managed）任选，Access / Refresh Token 信封加密，拉美站点订单自动回写 ERP。",
+      "自发货（standard）与全托管（full_managed）任选，Access / Refresh Token 信封加密，拉美站点订单与买家站内私信 IM 自动回写 ERP。",
     descriptionEn:
-      "Self-ship or full-managed fulfillment; access/refresh tokens are envelope-encrypted and LatAm orders are written back into the ERP.",
+      "Self-ship or full-managed fulfillment; access/refresh tokens are envelope-encrypted and LatAm orders plus buyer IM are written back into the ERP.",
     category: "commerce",
     icon: BadgeDollarSign,
     tile: "bg-yellow-50 text-yellow-700 ring-yellow-100",
@@ -526,8 +568,8 @@ export const CHANNEL_MARKETPLACE: ChannelMarketplaceItem[] = [
     channelTypes: ["mercado_libre"],
     adminOnly: true,
     capabilityTier: "order_sync",
-    capabilityBadgeZh: "REST API 订单与库存同步",
-    capabilityBadgeEn: "REST API order & stock sync",
+    capabilityBadgeZh: "商品/库存/订单 + 买家 IM",
+    capabilityBadgeEn: "Catalog/Stock/Orders + Buyer IM",
   },
 ];
 

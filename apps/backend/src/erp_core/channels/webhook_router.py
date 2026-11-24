@@ -18,6 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from erp_core.channels.adapters.base import AdapterRegistry, MessagingChannelAdapter
 from erp_core.channels.adapters.gateway import GatewayIngressAdapter
+from erp_core.channels.adapters.marketplace_im import (
+    CALLBACK_URL_HEADER,
+    IM_EVENT_HEADER,
+    MARKETPLACE_IM_CHANNELS,
+    build_marketplace_im_adapters,
+)
 from erp_core.channels.adapters.telegram import TELEGRAM_ROUTING_HEADER
 from erp_core.channels.ecommerce.base import CredentialVaultHelper
 from erp_core.channels.messaging_accounts import MESSAGING_CREDENTIAL
@@ -59,6 +65,82 @@ _META_CHANNELS = (
     "instagram_dm",
 )
 TELEGRAM_BOT_KEY = re.compile(r"[1-9][0-9]{0,19}")
+
+#: Buyer-IM platform slug -> canonical channel. Both the underscore and hyphen shape of
+#: every channel is accepted (`mercado_libre`/`mercado-libre`, `tiktok_shop`/`tiktok-shop`,
+#: `amazon_sp`/`amazon-sp`) plus the documented Alibaba International spellings.
+_MARKETPLACE_IM_PLATFORM_ALIASES: dict[str, ChannelType] = {
+    **{
+        alias: channel_type
+        for channel_type in MARKETPLACE_IM_CHANNELS
+        for alias in (
+            channel_type.value,
+            channel_type.value.replace("_", "-"),
+        )
+    },
+    "alibaba-intl": ChannelType.ALIBABA_EMAIL,
+    "alibaba_intl": ChannelType.ALIBABA_EMAIL,
+    "alibaba-email": ChannelType.ALIBABA_EMAIL,
+}
+
+#: Credential bundle that carries each marketplace's inbound webhook secret.
+_MARKETPLACE_IM_CREDENTIAL_TYPES: dict[ChannelType, str] = {
+    ChannelType.SHOPEE: "shopee_app",
+    ChannelType.LAZADA: "lazada_app",
+    ChannelType.TEMU: "temu_app",
+    ChannelType.SHEIN: "shein_app",
+    ChannelType.ALIEXPRESS: "aliexpress_app",
+    ChannelType.OZON: "ozon_app",
+    ChannelType.WALMART: "walmart_app",
+    ChannelType.MERCADO_LIBRE: "mercado_libre_app",
+    ChannelType.TIKTOK_SHOP: "tiktok_shop_app",
+    ChannelType.EBAY: "ebay_api",
+    ChannelType.AMAZON_SP: "amazon_sp_api",
+    ChannelType.ALIBABA_EMAIL: "alibaba_intl_app",
+}
+
+#: Platform-wide signing key env var used when the tenant has no stored credential.
+_MARKETPLACE_IM_SECRET_ENV: dict[ChannelType, str] = {
+    ChannelType.SHOPEE: "SHOPEE_PARTNER_KEY",
+    ChannelType.LAZADA: "LAZADA_APP_SECRET",
+    ChannelType.TEMU: "TEMU_APP_SECRET",
+    ChannelType.SHEIN: "SHEIN_SECRET_KEY",
+    ChannelType.ALIEXPRESS: "ALIEXPRESS_APP_SECRET",
+    ChannelType.OZON: "OZON_API_KEY",
+    ChannelType.WALMART: "WALMART_CLIENT_SECRET",
+    ChannelType.MERCADO_LIBRE: "MERCADO_LIBRE_WEBHOOK_SECRET",
+    ChannelType.TIKTOK_SHOP: "TIKTOK_SHOP_APP_SECRET",
+    ChannelType.EBAY: "EBAY_WEBHOOK_SECRET",
+    ChannelType.AMAZON_SP: "AMAZON_SP_WEBHOOK_SECRET",
+    ChannelType.ALIBABA_EMAIL: "ALIBABA_INTL_APP_SECRET",
+}
+
+#: Credential-blob keys that may carry the inbound webhook secret, in precedence order.
+_MARKETPLACE_IM_SECRET_KEYS: tuple[str, ...] = (
+    "webhook_secret",
+    "client_secret",
+    "app_secret",
+    "partner_key",
+    "secret_key",
+    "api_key",
+    "access_token",
+)
+
+
+def _invalid_signature_response(request: Request, *, detail: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        media_type="application/problem+json",
+        content={
+            "type": "https://erp.local/errors/webhook-signature-invalid",
+            "title": "Invalid Webhook Signature",
+            "status": 401,
+            "detail": detail,
+            "instance": str(request.url.path),
+            "code": "ERR_WEBHOOK_SIGNATURE_INVALID",
+        },
+    )
+
 
 # Auth material a caller may send with a webhook. Signature verification consumes these
 # in memory only; they must never be persisted with the raw webhook row.
@@ -165,6 +247,18 @@ def build_default_adapter_registry(redis: aioredis.Redis | None = None) -> Adapt
         registry.register(ChannelType.TELEGRAM.value, telegram)
     except ImportError:
         logger.debug("Meta/Telegram adapters not yet installed; skipping registration")
+
+    # Buyer-IM adapters for the twelve marketplace chat surfaces. Registered under both
+    # the canonical `ChannelType` value and the hyphen slug so `/api/v1/webhooks/im/
+    # mercado-libre` and `registry.get("mercado_libre")` resolve to the same adapter.
+    im_adapters = build_marketplace_im_adapters()
+    for channel_type, im_adapter in im_adapters.items():
+        registry.register(channel_type.value, im_adapter)
+        registry.register(channel_type.value.replace("_", "-"), im_adapter)
+    alibaba_im = im_adapters.get(ChannelType.ALIBABA_EMAIL)
+    if alibaba_im is not None:
+        for alias in ("alibaba-intl", "alibaba_intl", "alibaba-email"):
+            registry.register(alias, alibaba_im)
     return registry
 
 
@@ -270,17 +364,8 @@ async def _receive_telegram_webhook(request: Request, bot_key: str) -> JSONRespo
             raise
         secret = ""
     if not secret or not adapter.verify_webhook_signature(raw_body, headers, secret):
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            media_type="application/problem+json",
-            content={
-                "type": "https://erp.local/errors/webhook-signature-invalid",
-                "title": "Invalid Webhook Signature",
-                "status": 401,
-                "detail": "Secret token verification failed for webhook request.",
-                "instance": str(request.url.path),
-                "code": "ERR_WEBHOOK_SIGNATURE_INVALID",
-            },
+        return _invalid_signature_response(
+            request, detail="Secret token verification failed for webhook request."
         )
     try:
         payload: dict[str, Any] = json.loads(raw_body.decode("utf-8"))
@@ -341,6 +426,120 @@ async def verify_webhook_subscription(
     )
 
 
+async def _marketplace_im_secret(
+    request: Request,
+    channel_type: ChannelType,
+    external_account_id: str | None,
+) -> str:
+    """Per-tenant signing secret for one buyer-IM marketplace push.
+
+    The tenant credential wins (BYOK apps sign with their own key); a platform-wide env
+    secret is only the fallback for single-tenant deployments. Returns ``""`` when
+    neither exists, which the caller treats as fail-closed.
+    """
+    credential_type = _MARKETPLACE_IM_CREDENTIAL_TYPES[channel_type]
+    if external_account_id:
+        factory = _get_session_factory(request)
+        async with system_session(factory) as lookup:
+            route = (
+                await lookup.execute(
+                    text(
+                        "SELECT tenant_id, channel_account_id "
+                        "FROM resolve_tenant_by_channel_external_id("
+                        "CAST(:ctype AS text), CAST(:ext_id AS text))"
+                    ),
+                    {"ctype": channel_type.value, "ext_id": external_account_id},
+                )
+            ).first()
+        if route is not None and route[1] is not None:
+            tenant_id = route[0]
+            channel_account_id = route[1]
+            try:
+                async with tenant_session(factory, tenant_id) as session:
+                    credential, _ = await CredentialVaultHelper().load_secret_json(
+                        session, tenant_id, channel_account_id, credential_type
+                    )
+            except AppError as exc:
+                if exc.code != "ERR_CREDENTIAL_NOT_FOUND":
+                    raise
+                credential = {}
+            for key in _MARKETPLACE_IM_SECRET_KEYS:
+                value = credential.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    return os.environ.get(_MARKETPLACE_IM_SECRET_ENV[channel_type], "") or os.environ.get(
+        "WEBHOOK_SHARED_SECRET", ""
+    )
+
+
+# NOTE: this route MUST stay declared before `/{channel:path}`, otherwise the catch-all
+# storefront/messaging webhook route swallows every `/api/v1/webhooks/im/<platform>` push.
+@webhook_router.post("/im/{platform}")
+async def receive_marketplace_im_webhook(platform: str, request: Request) -> JSONResponse:
+    """Signed buyer-IM ingress for the twelve marketplace chat surfaces.
+
+    Buyer chat shares the marketplace's order-feed endpoint family but is answered by a
+    different API, so it gets a dedicated route: verify the platform HMAC with the
+    tenant's own signing secret, persist the receipt, and hand it to the Inbox pipeline
+    through `stream:webhooks:{channel}`.
+    """
+    canonical_type = _MARKETPLACE_IM_PLATFORM_ALIASES.get(platform.strip().lower())
+    if canonical_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unsupported buyer-IM platform: {platform}",
+        )
+
+    adapter = _get_adapter_registry(request).get(canonical_type.value)
+    if adapter is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"No adapter registered for buyer-IM channel: {canonical_type.value}",
+        )
+
+    raw_body = await request.body()
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    # Shopee signs `f"{callback_url}|{raw_body}"`, so the absolute push URL must be
+    # reconstructable when the platform (or a test) did not supply it explicitly.
+    if not headers.get(CALLBACK_URL_HEADER, "").strip():
+        headers[CALLBACK_URL_HEADER] = (
+            f"{str(request.base_url).rstrip('/')}{request.url.path}"
+        )
+
+    try:
+        payload: dict[str, Any] = json.loads(raw_body.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Payload is not a JSON object")
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Malformed JSON webhook body: {exc}",
+        ) from exc
+
+    extracted_events = adapter.extract_external_event_ids(payload, raw_body, headers)
+    external_account_id = next((ext for _, ext in extracted_events if ext), None)
+    secret = await _marketplace_im_secret(request, canonical_type, external_account_id)
+    if not secret or not adapter.verify_webhook_signature(raw_body, headers, secret):
+        return _invalid_signature_response(
+            request, detail="HMAC verification failed for webhook request."
+        )
+
+    # Internal routing markers: the IM flag lets the worker route the receipt into the
+    # Inbox pipeline; the callback url is a verification input only and never stored.
+    headers[IM_EVENT_HEADER] = "true"
+    headers.pop(CALLBACK_URL_HEADER, None)
+
+    return await _accept_events(
+        request,
+        source_channel=canonical_type,
+        canonical_type=canonical_type,
+        adapter=adapter,
+        raw_body=raw_body,
+        headers=headers,
+        payload=payload,
+    )
+
+
 @webhook_router.post("/{channel:path}")
 async def receive_webhook(channel: str, request: Request) -> JSONResponse:
     """Verify raw HMAC signature, deduplicate into PostgreSQL, and stream to Taskiq in <100ms."""
@@ -367,17 +566,8 @@ async def receive_webhook(channel: str, request: Request) -> JSONResponse:
     headers = {k.lower(): v for k, v in request.headers.items()}
     secret = _webhook_secret_for_channel(channel)
     if not secret or not adapter.verify_webhook_signature(raw_body, headers, secret):
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            media_type="application/problem+json",
-            content={
-                "type": "https://erp.local/errors/webhook-signature-invalid",
-                "title": "Invalid Webhook Signature",
-                "status": 401,
-                "detail": "HMAC verification failed for webhook request.",
-                "instance": str(request.url.path),
-                "code": "ERR_WEBHOOK_SIGNATURE_INVALID",
-            },
+        return _invalid_signature_response(
+            request, detail="HMAC verification failed for webhook request."
         )
 
     try:

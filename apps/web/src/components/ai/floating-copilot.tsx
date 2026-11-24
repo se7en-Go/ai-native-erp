@@ -34,7 +34,7 @@ import {
   formatMoney,
   type AiCapability,
 } from "@/lib/contracts";
-import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { SegmentedTabs, type SegmentedTabOption } from "@/components/ui/segmented-tabs";
 import { useI18n } from "@/lib/i18n";
 import { useAuthSession } from "@/components/providers";
 import { fetchInboxAssist } from "@/lib/phase3b-data";
@@ -163,6 +163,306 @@ const COPILOT_CHIPS = [
 /** Only plain strings are rendered, so a nested payload can never print [object Object]. */
 export function copilotBriefText(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/* ------------------------------------------------------------------ *
+ * Channel analytics (biz_analytics) — deterministic SQL payload rendering.
+ * Every value below comes from `get_live_channel_sales_analytics`
+ * (`totals` + `channels`) or `query_readonly_analytics_sql` (`rows`). Only
+ * scalars are printed, so a nested payload can never render [object Object].
+ * ------------------------------------------------------------------ */
+
+type CopilotMode = "global" | "strict_rag" | "analytics";
+type AnalyticsWindow = "7d" | "30d" | "90d";
+type CopilotAskOverride = {
+  message?: string;
+  mode?: CopilotMode;
+  window?: AnalyticsWindow;
+};
+
+const ANALYTICS_WINDOWS: readonly AnalyticsWindow[] = ["7d", "30d", "90d"];
+
+function asPlainRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function scalarText(value: unknown): string {
+  if (typeof value === "string") return value.trim() === "" ? "—" : value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "—";
+}
+
+function moneyText(value: unknown): string {
+  if (typeof value !== "string" && typeof value !== "number") return "—";
+  const normalized = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
+  if (normalized === "") return "—";
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) return "—";
+  return formatMoney(num, "USD");
+}
+
+function percentText(value: unknown): string {
+  if (typeof value !== "string" && typeof value !== "number") return "—";
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (normalized === "") return "—";
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) return "—";
+  return `${num.toFixed(2)}%`;
+}
+
+function multiplierText(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value !== "string" && typeof value !== "number") return "—";
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (normalized === "" || normalized === "None") return "—";
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) return "—";
+  return `${num.toFixed(2)}x`;
+}
+
+function countText(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
+    return String(Number(value));
+  }
+  return "—";
+}
+
+type ChannelAnalyticsRow = {
+  key: string;
+  label: string;
+  channelType: string;
+  orderCount: unknown;
+  gmvBase: unknown;
+  refundRatePct: unknown;
+  netMarginBase: unknown;
+  roas: unknown;
+};
+
+type ChannelAnalyticsTotals = {
+  window: string | null;
+  gmvBase: unknown;
+  netMarginBase: unknown;
+  adSpendBase: unknown;
+  roas: unknown;
+  refundRatePct: unknown;
+  orderCount: unknown;
+};
+
+type ChannelAnalyticsView =
+  | {
+      kind: "channels";
+      totals: ChannelAnalyticsTotals | null;
+      rows: ChannelAnalyticsRow[];
+    }
+  | {
+      kind: "rows";
+      columns: string[];
+      rows: Record<string, unknown>[];
+    };
+
+function isScalarCell(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    (typeof value === "number" && Number.isFinite(value))
+  );
+}
+
+/** Narrow the first tool call's `data` into a renderable analytics view. */
+export function readChannelAnalytics(data: unknown): ChannelAnalyticsView | null {
+  const record = asPlainRecord(data);
+  if (!record) return null;
+
+  const totalsRecord = asPlainRecord(record.totals);
+  const rawChannels = Array.isArray(record.channels) ? record.channels : null;
+
+  if (totalsRecord || rawChannels) {
+    const rows: ChannelAnalyticsRow[] = [];
+    (rawChannels ?? []).forEach((raw, index) => {
+      const row = asPlainRecord(raw);
+      if (!row) return;
+      const channelType = typeof row.channel_type === "string" ? row.channel_type : "";
+      const rawLabel = typeof row.channel_label === "string" ? row.channel_label.trim() : "";
+      rows.push({
+        key: `${channelType || "channel"}-${index}`,
+        label: rawLabel !== "" ? rawLabel : channelType || `#${index + 1}`,
+        channelType,
+        orderCount: row.order_count,
+        gmvBase: row.gmv_base,
+        refundRatePct: row.refund_rate_pct,
+        netMarginBase: row.net_margin_base,
+        roas: row.roas,
+      });
+    });
+
+    return {
+      kind: "channels",
+      totals: totalsRecord
+        ? {
+            window:
+              typeof record.window === "string"
+                ? record.window
+                : typeof totalsRecord.window === "string"
+                ? totalsRecord.window
+                : null,
+            gmvBase: totalsRecord.gmv_base,
+            netMarginBase: totalsRecord.net_margin_base,
+            adSpendBase: totalsRecord.ad_spend_base,
+            roas: totalsRecord.roas,
+            refundRatePct: totalsRecord.refund_rate_pct,
+            orderCount: totalsRecord.order_count,
+          }
+        : null,
+      rows,
+    };
+  }
+
+  const rawRows = Array.isArray(record.rows) ? record.rows : null;
+  if (!rawRows) return null;
+
+  const objectRows = rawRows.flatMap((row) => {
+    const parsed = asPlainRecord(row);
+    return parsed ? [parsed] : [];
+  });
+  if (objectRows.length === 0) return null;
+
+  const columns: string[] = [];
+  for (const row of objectRows) {
+    for (const [key, value] of Object.entries(row)) {
+      if (columns.length >= 6) break;
+      if (!columns.includes(key) && isScalarCell(value)) columns.push(key);
+    }
+  }
+  if (columns.length === 0) return null;
+
+  return { kind: "rows", columns, rows: objectRows };
+}
+
+const CHANNEL_TABLE_HEADERS = [
+  { zh: "渠道", en: "Channel" },
+  { zh: "订单", en: "Orders" },
+  { zh: "GMV", en: "GMV" },
+  { zh: "退款率", en: "Refund" },
+  { zh: "净毛利", en: "Net margin" },
+  { zh: "ROAS", en: "ROAS" },
+] as const;
+
+function ChannelAnalyticsPanel({ view }: { view: ChannelAnalyticsView }) {
+  const { bi } = useI18n();
+
+  return (
+    <div
+      data-testid="copilot-analytics-table"
+      className="mt-2 rounded-lg border border-slate-200 bg-white p-2"
+    >
+      {view.kind === "channels" && view.totals ? (
+        <dl
+          data-testid="copilot-analytics-totals"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 pb-1.5"
+        >
+          {[
+            { id: "gmv", label: bi("GMV", "GMV"), value: moneyText(view.totals.gmvBase) },
+            {
+              id: "net-margin",
+              label: bi("净毛利", "Net margin"),
+              value: moneyText(view.totals.netMarginBase),
+            },
+            {
+              id: "ad-spend",
+              label: bi("广告花费", "Ad spend"),
+              value: moneyText(view.totals.adSpendBase),
+            },
+            { id: "roas", label: "ROAS", value: multiplierText(view.totals.roas) },
+            {
+              id: "window",
+              label: bi("窗口", "Window"),
+              value: view.totals.window ?? "—",
+            },
+          ].map((cell) => (
+            <div key={cell.id} className="flex items-baseline gap-1">
+              <dt className="text-[10px] font-medium text-slate-500">{cell.label}</dt>
+              <dd
+                data-testid={`copilot-analytics-total-${cell.id}`}
+                className="text-[11px] font-bold tabular-nums text-slate-900"
+              >
+                {cell.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+
+      {view.kind === "channels" ? (
+        view.rows.length > 0 ? (
+          <table className="mt-1.5 w-full text-left text-[10.5px]">
+            <thead>
+              <tr className="text-[10px] font-semibold text-slate-500">
+                {CHANNEL_TABLE_HEADERS.map((header) => (
+                  <th key={header.en} scope="col" className="pb-1 pr-1.5 font-semibold">
+                    {bi(header.zh, header.en)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {view.rows.map((row) => (
+                <tr
+                  key={row.key}
+                  data-testid={`copilot-analytics-channel-${row.channelType || "row"}`}
+                  className="border-t border-slate-100 text-slate-800"
+                >
+                  <th scope="row" className="py-0.5 pr-1.5 text-left font-semibold">
+                    {row.label}
+                  </th>
+                  <td className="py-0.5 pr-1.5 tabular-nums">{countText(row.orderCount)}</td>
+                  <td className="py-0.5 pr-1.5 tabular-nums">{moneyText(row.gmvBase)}</td>
+                  <td className="py-0.5 pr-1.5 tabular-nums">{percentText(row.refundRatePct)}</td>
+                  <td className="py-0.5 pr-1.5 tabular-nums">{moneyText(row.netMarginBase)}</td>
+                  <td className="py-0.5 tabular-nums">{multiplierText(row.roas)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p data-testid="copilot-analytics-empty" className="pt-1.5 text-[10.5px] text-slate-500">
+            {bi("该窗口内没有渠道成交数据。", "No channel sales in this window.")}
+          </p>
+        )
+      ) : (
+        <div className="mt-1.5 overflow-x-auto">
+          <table className="w-full text-left text-[10.5px]">
+            <thead>
+              <tr className="text-[10px] font-semibold text-slate-500">
+                {view.columns.map((column) => (
+                  <th key={column} scope="col" className="pb-1 pr-1.5 font-semibold">
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {view.rows.map((row, index) => (
+                <tr
+                  key={`sql-row-${index}`}
+                  data-testid={`copilot-analytics-sql-row-${index}`}
+                  className="border-t border-slate-100 text-slate-800"
+                >
+                  {view.columns.map((column) => (
+                    <td key={column} className="py-0.5 pr-1.5 tabular-nums">
+                      {scalarText(row[column])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function renderSafeMetricValue(metric: z.infer<typeof CopilotMetricSchema>): string {
@@ -380,7 +680,8 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
   const [open, setOpen] = useState(false);
   // 默认停留在 AI 对话：底部输入框常驻，两块面板只切换顶部主体。
   const [panel, setPanel] = useState<"chat" | "patrol">("chat");
-  const [mode, setMode] = useState<"global" | "strict_rag">("global");
+  const [mode, setMode] = useState<CopilotMode>("global");
+  const [analyticsWindow, setAnalyticsWindow] = useState<AnalyticsWindow>("30d");
   const [query, setQuery] = useState("");
   const [lastResult, setLastResult] = useState<AssistantChatResult | null>(null);
   const [lastBrief, setLastBrief] = useState("");
@@ -394,6 +695,13 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
   // GET /billing/wallet is owner/admin/finance only; agents reach the copilot too.
   const canReadWallet =
     principal?.role === "owner" || principal?.role === "admin" || principal?.role === "finance";
+  // BIZ_ANALYTICS is allowed for owner | admin | manager | finance; the backend
+  // answers `agent` with 403, so the analytics entry points stay hidden for them.
+  const canQueryAnalytics =
+    principal?.role === "owner" ||
+    principal?.role === "admin" ||
+    principal?.role === "manager" ||
+    principal?.role === "finance";
   const walletQuery = useQuery({
     queryKey: ["ai", "wallet"],
     queryFn: () => fetchWallet(),
@@ -405,16 +713,32 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
     queryFn: () => fetchPendingProposalsCount(),
   });
 
-  const askMutation = useMutation({
-    mutationFn: () =>
-      assistantChat({
-        capability: mode === "strict_rag" ? "cs_support" : "sales_quoting",
+  const askMutation = useMutation<
+    AssistantChatResult,
+    Error,
+    CopilotAskOverride | undefined
+  >({
+    mutationFn: (override) => {
+      const effectiveMode = override?.mode ?? mode;
+      const effectiveWindow = override?.window ?? analyticsWindow;
+      const message = override?.message ?? query;
+      return assistantChat({
+        capability:
+          effectiveMode === "analytics"
+            ? "biz_analytics"
+            : effectiveMode === "strict_rag"
+            ? "cs_support"
+            : "sales_quoting",
         conversation_id: conversationId ?? undefined,
-        message: query,
-        strict_rag: mode === "strict_rag",
+        message,
+        strict_rag: effectiveMode === "strict_rag",
         channel_type: "web_livechat",
-        context: { mode },
-      }),
+        context:
+          effectiveMode === "analytics"
+            ? { mode: "analytics", window: effectiveWindow }
+            : { mode: effectiveMode },
+      });
+    },
     onSuccess: (res) => {
       setLastResult(res);
     },
@@ -441,6 +765,48 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
     wallet && (wallet.auto_downgrade_to_l0 && remainingCredits <= 0)
   );
   const safeCards = sanitizeCopilotCards(capabilitiesQuery.data?.capabilities ?? []);
+  const analyticsView = readChannelAnalytics(lastResult?.tool_calls?.[0]?.data ?? null);
+
+  const modeTabs: SegmentedTabOption<CopilotMode>[] = [
+    {
+      value: "global",
+      label: t("globalMode"),
+      testId: "copilot-mode-global",
+    },
+    {
+      value: "strict_rag",
+      label: (
+        <span className="inline-flex items-center gap-1">
+          <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+          {t("strictRag")}
+        </span>
+      ),
+      testId: "copilot-mode-strict-rag",
+    },
+  ];
+  if (canQueryAnalytics) {
+    modeTabs.push({
+      value: "analytics",
+      label: (
+        <span className="inline-flex items-center gap-1">
+          <Activity className="h-3 w-3" aria-hidden="true" />
+          {bi("经营分析", "Analytics")}
+        </span>
+      ),
+      testId: "copilot-mode-analytics",
+    });
+  }
+
+  const askAnalyticsChip = () => {
+    const message = bi(
+      "查看近30天全平台 GMV、退款率、佣金、净毛利与 ROAS",
+      "Show 30d multi-platform GMV, refund rate, commission, net margin, and ROAS"
+    );
+    setPanel("chat");
+    setMode("analytics");
+    if (query.trim() === "") setQuery(message);
+    askMutation.mutate({ message, mode: "analytics", window: analyticsWindow });
+  };
 
   return (
     <div
@@ -549,23 +915,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 value={mode}
                 onChange={setMode}
                 size="sm"
-                options={[
-                  {
-                    value: "global",
-                    label: t("globalMode"),
-                    testId: "copilot-mode-global",
-                  },
-                  {
-                    value: "strict_rag",
-                    label: (
-                      <span className="inline-flex items-center gap-1">
-                        <ShieldCheck className="h-3 w-3" aria-hidden="true" />
-                        {t("strictRag")}
-                      </span>
-                    ),
-                    testId: "copilot-mode-strict-rag",
-                  },
-                ]}
+                options={modeTabs}
               />
 
               {wallet && (
@@ -575,8 +925,50 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
               )}
             </div>
 
+            {mode === "analytics" && (
+              <div
+                data-testid="copilot-analytics-window-row"
+                className="flex items-center gap-1 border-b border-slate-200 bg-white px-3 py-1.5"
+              >
+                <span className="mr-0.5 text-[10px] font-medium text-slate-500">
+                  {bi("统计窗口", "Window")}
+                </span>
+                {ANALYTICS_WINDOWS.map((window) => {
+                  const active = analyticsWindow === window;
+                  return (
+                    <button
+                      key={window}
+                      type="button"
+                      data-testid={`copilot-analytics-window-${window}`}
+                      aria-pressed={active}
+                      onClick={() => setAnalyticsWindow(window)}
+                      className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold tabular-nums transition-colors ${
+                        active
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {window}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="border-b border-slate-200 bg-white px-3 py-2">
               <div className="flex flex-wrap gap-1.5">
+                {canQueryAnalytics && (
+                  <button
+                    type="button"
+                    data-testid="copilot-chip-channel-analytics"
+                    disabled={askMutation.isPending}
+                    onClick={askAnalyticsChip}
+                    className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50"
+                  >
+                    <Activity className="h-3 w-3" aria-hidden="true" />
+                    {bi("全平台 GMV/ROAS", "Channel GMV/ROAS")}
+                  </button>
+                )}
                 {COPILOT_CHIPS.map(({ id, label, labelEn, icon: Icon, ...rest }) => {
                   const href = "href" in rest ? rest.href : undefined;
                   return href ? (
@@ -694,6 +1086,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                       {bi("SQL 工具已校验", "SQL tool verified")}：{lastResult.tool_calls[0].tool_call_id}
                     </div>
                   )}
+                  {analyticsView && <ChannelAnalyticsPanel view={analyticsView} />}
                 </div>
               )}
             </div>
@@ -709,7 +1102,17 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={bi("问库存、物流进度或知识库条款…", "Ask SKU stock, order tracking or KB terms…")}
+                placeholder={
+                  mode === "analytics"
+                    ? bi(
+                        "问本窗口内全平台 GMV、退款率或单渠道 ROAS…",
+                        "Ask window GMV, refund rate or per-channel ROAS…"
+                      )
+                    : bi(
+                        "问库存、物流进度或知识库条款…",
+                        "Ask SKU stock, order tracking or KB terms…"
+                      )
+                }
                 className="flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
               />
               <button
