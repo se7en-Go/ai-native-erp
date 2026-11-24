@@ -30,12 +30,14 @@ import erp_core.social.models  # noqa: F401
 # The worker writes order rows outside FastAPI, so its mapping needs every table the
 # ORM foreign keys reference, exactly like api_main registers them.
 import erp_core.tenancy.models  # noqa: F401
+from erp_core.channels.adapters.marketplace_im import is_marketplace_im_event
 from erp_core.channels.ecommerce.inventory_sync_dispatcher import (
     drain_inventory_sync_all_tenants,
     reconcile_inventory_sync_cron,
 )
 from erp_core.channels.ecommerce.shopify import process_shopify_webhook
 from erp_core.channels.ingress_worker import (
+    process_raw_webhook_event,
     register_channel_worker_tasks,
     run_webhook_worker_loop,
 )
@@ -115,15 +117,22 @@ async def _handle_storefront_webhook_delivery(
     raw_event_id: str,
     *,
     broker_session_factory: SessionFactory | None = None,
+    runtime_session_factory: SessionFactory | None = None,
+    redis: Redis | None = None,
 ) -> int:
     """Acknowledge a storefront/marketplace webhook receipt so its stream cannot pile up.
 
     ``drain_deliveries`` hands the consumer nothing but the persisted
-    ``raw_webhook_events.id``, so this handler only needs to move that receipt out of
-    the ``received``/``queued`` window. Order materialization for WooCommerce,
-    Shopline, Shoplazza, TikTok Shop and the eight global marketplaces (Shopee, Lazada,
-    Temu, SHEIN, AliExpress, Ozon, Walmart, Mercado Libre) is done by the scheduled
+    ``raw_webhook_events.id``. Order materialization for WooCommerce, Shopline,
+    Shoplazza, TikTok Shop and the eight global marketplaces (Shopee, Lazada, Temu, SHEIN,
+    AliExpress, Ozon, Walmart, Mercado Libre) is done by the scheduled
     ``reconcile_ecommerce_orders_cron`` pull, exactly as for Shopify order topics.
+
+    Buyer-IM deliveries on those same endpoints are a different story: a marketplace chat
+    message is customer-service work, not an order feed, so the receipt is handed to the
+    ingress worker, which claims it and writes customers, conversations and messages into
+    the tenant's Inbox. The hand-off happens *before* any status write so the receipt is
+    claimed exactly once.
     """
     factory = broker_session_factory or _broker_session_factory
     try:
@@ -131,11 +140,14 @@ async def _handle_storefront_webhook_delivery(
     except (TypeError, ValueError):
         logger.warning("storefront webhook delivery has non-UUID receipt id: %r", raw_event_id)
         return 0
+
+    channel_type: str | None = None
+    delegate_to_inbox = False
     async with system_session(factory) as session:
         row = (
             await session.execute(
                 text(
-                    "SELECT channel_type FROM raw_webhook_events "
+                    "SELECT channel_type, headers, raw_payload FROM raw_webhook_events "
                     "WHERE id = :id AND processing_status IN ('received', 'queued')"
                 ),
                 {"id": receipt_id},
@@ -143,25 +155,56 @@ async def _handle_storefront_webhook_delivery(
         ).one_or_none()
         if row is None:
             return 0
-        await set_raw_webhook_processing_state(
-            session,
+        channel_type = str(row[0])
+        stored_headers = dict(row[1] or {}) if len(row) > 1 else {}
+        stored_payload = dict(row[2] or {}) if len(row) > 2 else {}
+        if is_marketplace_im_event(channel_type, stored_payload, stored_headers):
+            delegate_to_inbox = True
+        else:
+            await set_raw_webhook_processing_state(
+                session,
+                raw_event_id=receipt_id,
+                status="processed",
+            )
+
+    if delegate_to_inbox:
+        # process_raw_webhook_event claims the row itself and marks it processed/pending
+        # retry/dead-letter, so marking it here first would swallow the IM turn.
+        outcome = await process_raw_webhook_event(
+            session_factory=runtime_session_factory or _session_factory,
+            redis=redis or _redis,
             raw_event_id=receipt_id,
-            status="processed",
+            broker_session_factory=factory,
         )
+        logger.info(
+            "marketplace IM webhook routed to inbox channel=%s receipt_id=%s outcome=%s",
+            channel_type,
+            receipt_id,
+            outcome,
+        )
+        return 1
+
     logger.info(
-        "storefront webhook receipt acknowledged channel=%s receipt_id=%s", row[0], receipt_id
+        "storefront webhook receipt acknowledged channel=%s receipt_id=%s",
+        channel_type,
+        receipt_id,
     )
     return 1
 
 
 def commerce_tracking_handlers(
     broker_session_factory: SessionFactory,
+    *,
+    runtime_session_factory: SessionFactory | None = None,
+    redis: Redis | None = None,
 ) -> dict[str, Callable[[str], Awaitable[int]]]:
     """Map each dedicated provider stream to the consumer that drains it."""
     storefront = {
         channel: functools.partial(
             _handle_storefront_webhook_delivery,
             broker_session_factory=broker_session_factory,
+            runtime_session_factory=runtime_session_factory,
+            redis=redis,
         )
         for channel in (
             "woocommerce",
@@ -190,13 +233,17 @@ def commerce_tracking_handlers(
 async def drain_commerce_and_tracking_once(
     broker_session_factory: SessionFactory,
     redis: Redis,
+    *,
+    runtime_session_factory: SessionFactory | None = None,
 ) -> dict[str, int]:
     """Drain one pass for every dedicated commerce/tracking stream.
 
     A failing channel never starves the others: the exception is logged and that
     channel reports ``0`` for this pass.
     """
-    handlers = commerce_tracking_handlers(broker_session_factory)
+    handlers = commerce_tracking_handlers(
+        broker_session_factory, runtime_session_factory=runtime_session_factory, redis=redis
+    )
     counts: dict[str, int] = {}
     for channel in COMMERCE_TRACKING_CHANNELS:
         handler = handlers.get(channel)
@@ -211,6 +258,23 @@ async def drain_commerce_and_tracking_once(
             logger.exception("commerce/tracking drain failed channel=%s", channel)
             counts[channel] = 0
     return counts
+
+
+async def _drain_commerce_and_tracking_pass(
+    broker_session_factory: SessionFactory,
+    redis: Redis,
+    runtime_session_factory: SessionFactory,
+) -> dict[str, int]:
+    """Forward the runtime factory only when one was supplied explicitly.
+
+    Keeps the two-argument drain seam working for callers that predate the marketplace
+    IM hand-off (the ingress worker then falls back to the module runtime factory).
+    """
+    if runtime_session_factory is _session_factory:
+        return await drain_commerce_and_tracking_once(broker_session_factory, redis)
+    return await drain_commerce_and_tracking_once(
+        broker_session_factory, redis, runtime_session_factory=runtime_session_factory
+    )
 
 
 def _periodic_crons_enabled() -> bool:
@@ -251,7 +315,9 @@ async def _run_commerce_and_tracking_loop(
     logger.info("commerce/tracking worker loop starting (periodic_crons=%s)", crons)
     while not stop.is_set():
         try:
-            counts = await drain_commerce_and_tracking_once(broker_session_factory, redis)
+            counts = await _drain_commerce_and_tracking_pass(
+                broker_session_factory, redis, rt_factory
+            )
             drained = {channel: count for channel, count in counts.items() if count}
             if drained:
                 logger.info("commerce/tracking drained %s", drained)

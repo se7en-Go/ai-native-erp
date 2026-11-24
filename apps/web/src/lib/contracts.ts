@@ -80,6 +80,7 @@ export const IdentityTypeSchema = z.enum([
   "tiktok_buyer_id",
   "amazon_buyer_email",
   "web_visitor_id",
+  "marketplace_buyer_id",
 ]);
 export type IdentityType = z.infer<typeof IdentityTypeSchema>;
 

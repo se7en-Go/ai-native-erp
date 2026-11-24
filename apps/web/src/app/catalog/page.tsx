@@ -33,14 +33,22 @@ import type {
   CatalogCsvImportResponse,
   CollectorTokenRead,
   MediaAssetRead,
+  SourcingAiRewriteRequest,
+  SourcingAiRewriteResponse,
   SourcingCollectRequest,
+  SourcingCopyRewriteOutput,
   SourcingDraftRead,
+  SourcingDraftUpdateRequest,
   SourcingPublishResult,
   SourcingVariantSpecInput,
 } from "@/lib/api-client/types.gen";
 import {
+  REWRITE_LANGUAGE_OPTIONS,
+  REWRITE_TONE_OPTIONS,
   SOURCING_DEFAULT_FX_RATE,
   SOURCING_DEFAULT_MARGIN_PCT,
+  SOURCING_PUBLISHABLE_CHANNEL_TYPES,
+  aiRewriteSourcingDraft,
   collectSourcingDraft,
   createCollectorToken,
   deleteSourcingDraft,
@@ -49,10 +57,12 @@ import {
   importSourcingDraftToCatalog,
   publishMasterProduct,
   publishSourcingDraft,
+  defaultRewriteLanguageForChannel,
   revokeCollectorToken,
   sourcingStatusCopy,
   sourcingStoreAccounts,
   sourcingStoreLabel,
+  updateSourcingDraft,
   uploadCatalogMedia,
 } from "@/lib/api-client/pack-f-sourcing";
 import {
@@ -1159,6 +1169,66 @@ const SOURCE_PLATFORM_OPTIONS = [
   { value: "manual", zh: "粘贴中文文案", en: "Paste Chinese copy" },
 ] as const;
 
+/** 已保存的多语种文案芯片（`localized_copies["<channel>:<language>"]` 的一条）。 */
+interface LocalizedCopyChip {
+  key: string;
+  channel: string;
+  language: string;
+  title: string;
+  bullets: string[];
+}
+
+/** 把 `localized_copies` 展开成芯片列表（键格式 `channel:language`）。 */
+function localizedCopyChips(draft: SourcingDraftRead): LocalizedCopyChip[] {
+  return Object.entries(draft.localized_copies ?? {}).map(([key, entry]) => {
+    const [channelRaw, languageRaw] = key.split(":");
+    return {
+      key,
+      channel: (channelRaw ?? "").trim().toLowerCase(),
+      language: (languageRaw ?? "").trim().toLowerCase() || "en",
+      title: typeof entry.title === "string" ? entry.title : "",
+      bullets: Array.isArray(entry.bullet_points)
+        ? entry.bullet_points.filter((item): item is string => typeof item === "string")
+        : [],
+    };
+  });
+}
+
+/** 读取某个平台已保存的类目属性（渠道键大小写不敏感，与后端一致）。 */
+function draftCategoryAttrsFor(
+  draft: SourcingDraftRead,
+  channel: string,
+): Record<string, unknown> {
+  const attrs = draft.marketplace_category_attrs ?? {};
+  const normalized = channel.trim().toLowerCase();
+  const match = Object.keys(attrs).find((key) => key.trim().toLowerCase() === normalized);
+  return match ? { ...attrs[match] } : {};
+}
+
+/** 平台的自由格式属性：每行一个 `key=value`（数字 / 布尔自动转类型）。 */
+function parseCategoryAttrLines(raw: string): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const separator = trimmed.indexOf("=");
+    const key = separator > 0 ? trimmed.slice(0, separator).trim() : "";
+    if (!key) {
+      throw new Error(trimmed);
+    }
+    const value = trimmed.slice(separator + 1).trim();
+    attrs[key] =
+      value === "true"
+        ? true
+        : value === "false"
+          ? false
+          : /^-?\d+(\.\d+)?$/.test(value)
+            ? Number(value)
+            : value;
+  }
+  return attrs;
+}
+
 function SourcingWorkspace({ canWrite }: { canWrite: boolean }) {
   const { bi } = useI18n();
   const queryClient = useQueryClient();
@@ -1913,6 +1983,162 @@ function SourcingDraftCard({
   // 草稿徽标优先使用真实刊登状态（`live_published` 只能由平台回执写入）。
   const status = sourcingStatusCopy(draft.listing_state ?? draft.status);
 
+  const queryClient = useQueryClient();
+  const invalidateDrafts = () => {
+    void queryClient.invalidateQueries({ queryKey: ["catalog", "sourcing", "drafts"] });
+  };
+
+  /** 优先用草稿已刊登过的平台做默认改写目标，否则回退 Shopify（en）。 */
+  const preferredChannel = useMemo(() => {
+    const published = (draft.publish_history ?? [])
+      .map((entry) => (typeof entry.channel_type === "string" ? entry.channel_type : ""))
+      .find((value) =>
+        (SOURCING_PUBLISHABLE_CHANNEL_TYPES as readonly string[]).includes(value),
+      );
+    return published || "shopify";
+  }, [draft.publish_history]);
+
+  const chips = localizedCopyChips(draft);
+  const [localizedPreview, setLocalizedPreview] = useState<string | null>(null);
+
+  // --- AI 多语种改写 -----------------------------------------------------
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiChannel, setAiChannel] = useState(preferredChannel);
+  const [aiLanguage, setAiLanguage] = useState(
+    defaultRewriteLanguageForChannel(preferredChannel),
+  );
+  const [aiTone, setAiTone] = useState<SourcingAiRewriteRequest["tone"]>("conversion");
+  const [aiApplyToDraft, setAiApplyToDraft] = useState(true);
+  const [aiRewrite, setAiRewrite] = useState<SourcingCopyRewriteOutput | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const aiRewriteMutation = useMutation({
+    mutationFn: (body: SourcingAiRewriteRequest) => aiRewriteSourcingDraft(draft.id, body),
+    onSuccess: (result: SourcingAiRewriteResponse) => {
+      setAiRewrite(result.rewrite);
+      setAiError(null);
+      setLocalizedPreview(
+        `${result.rewrite.target_channel}:${result.rewrite.target_language}`,
+      );
+      invalidateDrafts();
+    },
+    onError: (error: Error) => {
+      setAiRewrite(null);
+      setAiError(error.message);
+    },
+  });
+
+  // --- 编辑文案与类目属性 -------------------------------------------------
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState(draft.optimized_title_en);
+  const [editPrice, setEditPrice] = useState(draft.target_price_usd);
+  const [editBullets, setEditBullets] = useState(draft.bullet_points.join("\n"));
+  const [editCategory, setEditCategory] = useState(draft.suggested_category);
+  const [editHsCode, setEditHsCode] = useState(draft.suggested_hs_code ?? "");
+  const [editChannel, setEditChannel] = useState(preferredChannel);
+  const [editCategoryId, setEditCategoryId] = useState(
+    () => String(draftCategoryAttrsFor(draft, preferredChannel).category_id ?? ""),
+  );
+  const [editAttrsText, setEditAttrsText] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSaved, setEditSaved] = useState(false);
+
+  const draftRevision = `${draft.id}:${draft.updated_at}`;
+  useEffect(() => {
+    setEditTitle(draft.optimized_title_en);
+    setEditPrice(draft.target_price_usd);
+    setEditBullets(draft.bullet_points.join("\n"));
+    setEditCategory(draft.suggested_category);
+    setEditHsCode(draft.suggested_hs_code ?? "");
+    setEditCategoryId(String(draftCategoryAttrsFor(draft, editChannel).category_id ?? ""));
+    // 只跟随草稿版本号（`id:updated_at`）同步表单，避免每次后台重取都清掉用户正在输入的内容。
+  }, [draftRevision]);
+
+  const updateDraftMutation = useMutation({
+    mutationFn: (body: SourcingDraftUpdateRequest) => updateSourcingDraft(draft.id, body),
+    onSuccess: () => {
+      setEditError(null);
+      setEditSaved(true);
+      invalidateDrafts();
+    },
+    onError: (error: Error) => {
+      setEditSaved(false);
+      setEditError(error.message);
+    },
+  });
+
+  function submitAiRewrite(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAiError(null);
+    aiRewriteMutation.mutate({
+      target_channel: aiChannel,
+      target_language: aiLanguage,
+      tone: aiTone,
+      apply_to_draft: aiApplyToDraft,
+    });
+  }
+
+  function submitDraftEdit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = editTitle.trim();
+    const price = editPrice.trim();
+    const bullets = editBullets
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+
+    if (!title) {
+      setEditSaved(false);
+      setEditError(bi("英文标题不能为空。", "The English title cannot be empty."));
+      return;
+    }
+    if (!/^\d+(\.\d+)?$/.test(price) || Number(price) <= 0) {
+      setEditSaved(false);
+      setEditError(
+        bi("USD 零售价必须是大于 0 的金额。", "The USD retail price must be a positive amount."),
+      );
+      return;
+    }
+    if (bullets.length === 0) {
+      setEditSaved(false);
+      setEditError(
+        bi("至少保留 1 条卖点。", "Keep at least one bullet point."),
+      );
+      return;
+    }
+
+    const existing = draft.marketplace_category_attrs ?? {};
+    const channelAttrs: Record<string, unknown> = { ...draftCategoryAttrsFor(draft, editChannel) };
+    const categoryId = editCategoryId.trim();
+    if (categoryId) channelAttrs.category_id = categoryId;
+    try {
+      Object.assign(channelAttrs, parseCategoryAttrLines(editAttrsText));
+    } catch {
+      setEditSaved(false);
+      setEditError(
+        bi(
+          "类目属性请按「键=值」逐行填写，例如 brand=OEM。",
+          "Write each category attribute as key=value, e.g. brand=OEM.",
+        ),
+      );
+      return;
+    }
+
+    setEditError(null);
+    setEditSaved(false);
+    updateDraftMutation.mutate({
+      optimized_title_en: title.slice(0, 200),
+      target_price_usd: price,
+      bullet_points: bullets,
+      suggested_category: editCategory.trim(),
+      suggested_hs_code: editHsCode.trim(),
+      marketplace_category_attrs: { ...existing, [editChannel]: channelAttrs },
+    });
+  }
+
+  const aiIsLlm = aiRewrite?.rewrite_mode === "llm";
+
   return (
     <article
       data-testid={`sourcing-draft-${draft.id}`}
@@ -2007,6 +2233,55 @@ function SourcingDraftCard({
           </span>
         ))}
       </div>
+
+      {chips.length > 0 && (
+        <div data-testid={`sourcing-localized-copies-${draft.id}`} className="mt-2 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {chips.map((chip) => {
+              const expanded = localizedPreview === chip.key;
+              const label = `${chip.key} · ${sourcingStoreLabel(chip.channel)} (${chip.language.toUpperCase()})`;
+              return (
+                <button
+                  key={chip.key}
+                  type="button"
+                  data-testid={`sourcing-localized-chip-${draft.id}-${chip.key}`}
+                  aria-expanded={expanded}
+                  title={chip.title || label}
+                  onClick={() => setLocalizedPreview(expanded ? null : chip.key)}
+                  className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50/70 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-900 transition-colors hover:border-indigo-300 hover:bg-indigo-100 dark:border-indigo-800/70 dark:bg-indigo-950/40 dark:text-indigo-200"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 rounded-full bg-current opacity-70"
+                  />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {localizedPreview &&
+            (() => {
+              const preview = chips.find((chip) => chip.key === localizedPreview);
+              if (!preview) return null;
+              return (
+                <div
+                  data-testid={`sourcing-localized-preview-${draft.id}-${preview.key}`}
+                  className="rounded-lg border border-indigo-200 bg-indigo-50/50 px-2 py-1.5 text-[11px] leading-5 text-indigo-950 dark:border-indigo-800/70 dark:bg-indigo-950/30 dark:text-indigo-100"
+                >
+                  <p className="font-semibold">{preview.title}</p>
+                  {preview.bullets.length > 0 && (
+                    <ul className="mt-0.5 space-y-0.5">
+                      {preview.bullets.map((bullet, index) => (
+                        <li key={`${preview.key}-${index}`}>{bullet}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })()}
+        </div>
+      )}
+
       {mediaUploadError && (
         <p role="alert" className="mt-1.5 text-[11px] font-medium text-rose-700">
           {mediaUploadError}
@@ -2037,6 +2312,26 @@ function SourcingDraftCard({
                 />
               </label>
             )}
+            <button
+              type="button"
+              data-testid={`sourcing-ai-rewrite-toggle-${draft.id}`}
+              aria-expanded={aiOpen}
+              onClick={() => setAiOpen((current) => !current)}
+              className="erp-btn rounded-xl border border-indigo-300 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-indigo-800 transition-colors hover:bg-indigo-50 dark:border-indigo-700 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-950/40"
+            >
+              <Sparkles className="h-3 w-3" />
+              <span>{bi("AI 多语种改写", "AI localize & rewrite")}</span>
+            </button>
+            <button
+              type="button"
+              data-testid={`sourcing-edit-toggle-${draft.id}`}
+              aria-expanded={editOpen}
+              onClick={() => setEditOpen((current) => !current)}
+              className="erp-btn rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-800 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+            >
+              <Tags className="h-3 w-3" />
+              <span>{bi("编辑文案与类目属性", "Edit copy & category attrs")}</span>
+            </button>
             <button
               type="button"
               data-testid={`sourcing-delete-${draft.id}`}
@@ -2073,6 +2368,340 @@ function SourcingDraftCard({
             </button>
           </div>
         </div>
+      )}
+
+      {canWrite && aiOpen && (
+        <form
+          data-testid={`sourcing-ai-rewrite-panel-${draft.id}`}
+          onSubmit={submitAiRewrite}
+          className="mt-3 space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/50 px-3 py-2.5 dark:border-indigo-900/70 dark:bg-indigo-950/30"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-indigo-900 dark:text-indigo-200">
+              <Sparkles className="h-3.5 w-3.5" />
+              {bi("AI 多语种改写", "AI localize & rewrite")}
+            </span>
+            <span className="max-w-md text-[10.5px] leading-4 font-medium text-slate-600 dark:text-slate-400">
+              {bi(
+                "结果写入草稿的多语种文案库；未配置 LLM 时按确定性规则本地生成（0 credits）。",
+                "Result is saved into the draft's localized copy deck; without an LLM key the deterministic local rules run (0 credits)."
+              )}
+            </span>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="block">
+              <span className="erp-label">{bi("目标平台", "Target platform")}</span>
+              <select
+                data-testid={`sourcing-ai-channel-${draft.id}`}
+                value={aiChannel}
+                onChange={(event) => {
+                  const channel = event.target.value;
+                  setAiChannel(channel);
+                  setAiLanguage(defaultRewriteLanguageForChannel(channel));
+                }}
+                className="erp-input mt-1 w-full rounded-xl"
+              >
+                {SOURCING_PUBLISHABLE_CHANNEL_TYPES.map((channel) => (
+                  <option key={channel} value={channel}>
+                    {sourcingStoreLabel(channel)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="erp-label">{bi("目标语言", "Target language")}</span>
+              <select
+                data-testid={`sourcing-ai-lang-${draft.id}`}
+                value={aiLanguage}
+                onChange={(event) => setAiLanguage(event.target.value)}
+                className="erp-input mt-1 w-full rounded-xl"
+              >
+                {REWRITE_LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {bi(option.zh, option.en)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="erp-label">{bi("文案语气", "Tone")}</span>
+              <select
+                data-testid={`sourcing-ai-tone-${draft.id}`}
+                value={aiTone}
+                onChange={(event) =>
+                  setAiTone(event.target.value as SourcingAiRewriteRequest["tone"])
+                }
+                className="erp-input mt-1 w-full rounded-xl"
+              >
+                {REWRITE_TONE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {bi(option.zh, option.en)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <p className="text-[10.5px] font-medium text-slate-600 dark:text-slate-400">
+            {bi(
+              "切平台自动带出默认语言：Shopee → 泰语、Lazada → 马来语、Ozon → 俄语、Mercado Libre → 西班牙语。",
+              "Switching platform applies its default language: Shopee → Thai, Lazada → Malay, Ozon → Russian, Mercado Libre → Spanish."
+            )}
+          </p>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                data-testid={`sourcing-ai-apply-${draft.id}`}
+                checked={aiApplyToDraft}
+                onChange={(event) => setAiApplyToDraft(event.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 accent-indigo-600"
+              />
+              <span>
+                {bi("同时应用到草稿标题与卖点", "Also apply to the draft title & bullets")}
+              </span>
+            </label>
+            <button
+              type="submit"
+              data-testid={`sourcing-ai-rewrite-${draft.id}`}
+              disabled={aiRewriteMutation.isPending}
+              className="erp-btn rounded-xl bg-indigo-600 px-3 py-1.5 text-[11.5px] font-semibold text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:opacity-40 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+            >
+              {aiRewriteMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Sparkles className="h-3 w-3" />
+              )}
+              <span>
+                {aiRewriteMutation.isPending
+                  ? bi("正在生成…", "Generating…")
+                  : bi("生成多语种文案", "Generate AI copy")}
+              </span>
+            </button>
+          </div>
+
+          {aiError && (
+            <p
+              role="alert"
+              data-testid={`sourcing-ai-rewrite-error-${draft.id}`}
+              className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11.5px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+            >
+              {aiError}
+            </p>
+          )}
+
+          {aiRewrite && (
+            <div
+              data-testid={`sourcing-ai-rewrite-result-${draft.id}`}
+              className="space-y-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[11.5px] leading-5 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            >
+              {/* 诚实模式徽标：LLM 与确定性回退必须一眼可辨，回退绝不冒充 LLM。 */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span
+                  data-testid={`sourcing-ai-rewrite-mode-${draft.id}`}
+                  className={
+                    aiIsLlm
+                      ? "inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-200"
+                  }
+                >
+                  {aiIsLlm
+                    ? bi(
+                        `LLM 实时改写 · ${aiRewrite.model_used} (${aiRewrite.credits_consumed ?? "0.0000"} credits)`,
+                        `LLM live rewrite · ${aiRewrite.model_used} (${aiRewrite.credits_consumed ?? "0.0000"} credits)`
+                      )
+                    : bi(
+                        `确定性本地规则回退 (${aiRewrite.fallback_reason || "fallback"} · 0 credits)`,
+                        `Deterministic local fallback (${aiRewrite.fallback_reason || "fallback"} · 0 credits)`
+                      )}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[10.5px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                  {aiRewrite.target_channel}:{aiRewrite.target_language}
+                </span>
+                <span className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">
+                  {bi("语气", "Tone")} {aiRewrite.tone}
+                </span>
+              </div>
+              <p className="font-semibold text-slate-900 dark:text-slate-100">{aiRewrite.title}</p>
+              <ul className="space-y-0.5">
+                {aiRewrite.bullet_points.map((bullet, index) => (
+                  <li key={`${draft.id}-ai-bullet-${index}`} className="flex items-start gap-1.5">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-slate-600 dark:text-slate-400">{aiRewrite.description}</p>
+            </div>
+          )}
+        </form>
+      )}
+
+      {canWrite && editOpen && (
+        <form
+          data-testid={`sourcing-edit-panel-${draft.id}`}
+          onSubmit={submitDraftEdit}
+          className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/40"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-900 dark:text-slate-100">
+              <Tags className="h-3.5 w-3.5" />
+              {bi("编辑文案与类目属性", "Edit copy & category attrs")}
+            </span>
+            <span className="max-w-md text-[10.5px] leading-4 font-medium text-slate-600 dark:text-slate-400">
+              {bi(
+                "刊登前先把平台类目 ID / 属性填对：Shopee 100630、Lazada 10000348、Mercado Libre MLM...",
+                "Fill the platform category ID / attributes before publishing: Shopee 100630, Lazada 10000348, Mercado Libre MLM..."
+              )}
+            </span>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <label className="block sm:col-span-2">
+              <span className="erp-label">{bi("英文标题", "English title")}</span>
+              <input
+                data-testid={`sourcing-edit-title-${draft.id}`}
+                value={editTitle}
+                onChange={(event) => setEditTitle(event.target.value)}
+                className="erp-input mt-1 w-full rounded-xl"
+              />
+            </label>
+            <label className="block">
+              <span className="erp-label">{bi("USD 零售价", "USD retail price")}</span>
+              <input
+                data-testid={`sourcing-edit-price-${draft.id}`}
+                type="number"
+                step="0.01"
+                min={0}
+                value={editPrice}
+                onChange={(event) => setEditPrice(event.target.value)}
+                className="erp-input mt-1 w-full rounded-xl tabular-nums"
+              />
+            </label>
+            <label className="block">
+              <span className="erp-label">{bi("建议类目", "Category")}</span>
+              <input
+                data-testid={`sourcing-edit-category-${draft.id}`}
+                value={editCategory}
+                onChange={(event) => setEditCategory(event.target.value)}
+                className="erp-input mt-1 w-full rounded-xl"
+              />
+            </label>
+            <label className="block">
+              <span className="erp-label">{bi("HS 编码", "HS code")}</span>
+              <input
+                data-testid={`sourcing-edit-hs-${draft.id}`}
+                value={editHsCode}
+                onChange={(event) => setEditHsCode(event.target.value)}
+                className="erp-input mt-1 w-full rounded-xl tabular-nums"
+                placeholder="94054200"
+              />
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="erp-label">
+              {bi("5 条卖点（每行一条）", "Five bullets (one per line)")}
+            </span>
+            <textarea
+              data-testid={`sourcing-edit-bullets-${draft.id}`}
+              rows={5}
+              value={editBullets}
+              onChange={(event) => setEditBullets(event.target.value)}
+              className="erp-input mt-1 w-full rounded-xl text-[11.5px] leading-5"
+            />
+          </label>
+
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <label className="block">
+              <span className="erp-label">{bi("类目平台", "Category platform")}</span>
+              <select
+                data-testid={`sourcing-edit-cat-channel-${draft.id}`}
+                value={editChannel}
+                onChange={(event) => {
+                  const channel = event.target.value;
+                  setEditChannel(channel);
+                  setEditCategoryId(
+                    String(draftCategoryAttrsFor(draft, channel).category_id ?? ""),
+                  );
+                }}
+                className="erp-input mt-1 w-full rounded-xl"
+              >
+                {SOURCING_PUBLISHABLE_CHANNEL_TYPES.map((channel) => (
+                  <option key={channel} value={channel}>
+                    {sourcingStoreLabel(channel)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="erp-label">{bi("平台类目 ID", "Category ID")}</span>
+              <input
+                data-testid={`sourcing-edit-cat-id-${draft.id}`}
+                value={editCategoryId}
+                onChange={(event) => setEditCategoryId(event.target.value)}
+                className="erp-input mt-1 w-full rounded-xl font-mono"
+                placeholder="100630"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="erp-label">
+                {bi("其他类目属性（每行 key=value）", "Extra attributes (one key=value per line)")}
+              </span>
+              <textarea
+                data-testid={`sourcing-edit-cat-attrs-${draft.id}`}
+                rows={2}
+                value={editAttrsText}
+                onChange={(event) => setEditAttrsText(event.target.value)}
+                className="erp-input mt-1 w-full rounded-xl text-[11.5px] leading-5"
+                placeholder="brand=OEM&#10;warranty_months=12"
+              />
+            </label>
+          </div>
+
+          {editError && (
+            <p
+              role="alert"
+              data-testid={`sourcing-edit-error-${draft.id}`}
+              className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11.5px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+            >
+              {editError}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span
+              data-testid={`sourcing-edit-saved-${draft.id}`}
+              className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400"
+            >
+              {editSaved ? bi("已保存草稿改动", "Draft changes saved") : ""}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setEditOpen(false)}
+                className="erp-btn rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {bi("收起", "Close")}
+              </button>
+              <button
+                type="submit"
+                data-testid={`sourcing-edit-save-${draft.id}`}
+                disabled={updateDraftMutation.isPending}
+                className="erp-btn rounded-xl bg-slate-900 px-3 py-1 text-[11.5px] font-semibold text-white shadow-xs transition-colors hover:bg-slate-800 disabled:opacity-40 dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                {updateDraftMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3 w-3" />
+                )}
+                <span>{bi("保存草稿改动", "Save draft changes")}</span>
+              </button>
+            </div>
+          </div>
+        </form>
       )}
 
       {publishOpen && (
@@ -2158,8 +2787,8 @@ function SourcingDraftCard({
             />
             <span className="min-w-0">
               {bi(
-                "同时通过官方 API 实时上架到全平台（Shopify / TikTok / Amazon / eBay / Woo / Shopline / Shoplazza / Alibaba）",
-                "Push live listing via official APIs (Shopify / TikTok / Amazon / eBay / Woo / Shopline / Shoplazza / Alibaba)"
+                "同时通过官方 API 实时上架到全部 16 大全球电商平台（Shopify / TikTok Shop / Amazon / eBay / WooCommerce / SHOPLINE / Shoplazza / Alibaba.com / Shopee / Lazada / Temu / SHEIN / AliExpress / Ozon / Walmart / Mercado Libre）",
+                "Push live listings through the official APIs to all 16 connected marketplaces (Shopify / TikTok Shop / Amazon / eBay / WooCommerce / SHOPLINE / Shoplazza / Alibaba.com / Shopee / Lazada / Temu / SHEIN / AliExpress / Ozon / Walmart / Mercado Libre)"
               )}
               <span className="mt-0.5 block text-[10.5px] font-normal text-slate-500 dark:text-slate-400">
                 {bi(

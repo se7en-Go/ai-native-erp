@@ -66,6 +66,8 @@ _CONTEXT_FIELDS = frozenset(
         "reference_hint",
         "channel_metadata",
         "target_lang",
+        "window",
+        "channel_types",
     }
 )
 

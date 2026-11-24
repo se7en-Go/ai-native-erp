@@ -6031,7 +6031,8 @@
           "shopify_customer_id",
           "tiktok_buyer_id",
           "amazon_buyer_email",
-          "web_visitor_id"
+          "web_visitor_id",
+          "marketplace_buyer_id"
         ],
         "title": "IdentityType",
         "type": "string"
@@ -15701,6 +15702,68 @@
         "title": "SocialSummary",
         "type": "object"
       },
+      "SourcingAiRewriteRequest": {
+        "description": "Tenant-supplied rewrite options for one sourcing draft.",
+        "properties": {
+          "apply_to_draft": {
+            "default": true,
+            "title": "Apply To Draft",
+            "type": "boolean"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "target_channel": {
+            "default": "shopify",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Target Channel",
+            "type": "string"
+          },
+          "target_language": {
+            "default": "en",
+            "maxLength": 16,
+            "minLength": 2,
+            "title": "Target Language",
+            "type": "string"
+          },
+          "tone": {
+            "default": "conversion",
+            "enum": [
+              "conversion",
+              "seo",
+              "b2b_wholesale",
+              "social_viral"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "title": "SourcingAiRewriteRequest",
+        "type": "object"
+      },
+      "SourcingAiRewriteResponse": {
+        "description": "The persisted draft plus the exact copy deck a rewrite produced.",
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/SourcingDraftRead"
+          },
+          "rewrite": {
+            "$ref": "#/components/schemas/SourcingCopyRewriteOutput"
+          }
+        },
+        "required": [
+          "draft",
+          "rewrite"
+        ],
+        "title": "SourcingAiRewriteResponse",
+        "type": "object"
+      },
       "SourcingCollectRequest": {
         "properties": {
           "category": {
@@ -15742,6 +15805,14 @@
             "maxItems": 20,
             "title": "Images",
             "type": "array"
+          },
+          "marketplace_category_attrs": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Marketplace Category Attrs",
+            "type": "object"
           },
           "options_spec": {
             "items": {
@@ -15841,6 +15912,99 @@
         "title": "SourcingCollectRequest",
         "type": "object"
       },
+      "SourcingCopyRewriteOutput": {
+        "description": "A ready-to-publish localized listing, with honest provenance of how it was produced.",
+        "properties": {
+          "bullet_points": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 5,
+            "title": "Bullet Points",
+            "type": "array"
+          },
+          "credits_consumed": {
+            "default": "0.0000",
+            "title": "Credits Consumed",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "model_used": {
+            "title": "Model Used",
+            "type": "string"
+          },
+          "rewrite_mode": {
+            "enum": [
+              "llm",
+              "deterministic_fallback"
+            ],
+            "title": "Rewrite Mode",
+            "type": "string"
+          },
+          "seo_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Seo Keywords",
+            "type": "array"
+          },
+          "target_channel": {
+            "title": "Target Channel",
+            "type": "string"
+          },
+          "target_language": {
+            "title": "Target Language",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "conversion",
+              "seo",
+              "b2b_wholesale",
+              "social_viral"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_channel",
+          "target_language",
+          "tone",
+          "title",
+          "bullet_points",
+          "description",
+          "rewrite_mode",
+          "model_used",
+          "generated_at"
+        ],
+        "title": "SourcingCopyRewriteOutput",
+        "type": "object"
+      },
       "SourcingDeleteResult": {
         "properties": {
           "deleted": {
@@ -15933,6 +16097,22 @@
             ],
             "title": "Listing State",
             "type": "string"
+          },
+          "localized_copies": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Localized Copies",
+            "type": "object"
+          },
+          "marketplace_category_attrs": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Marketplace Category Attrs",
+            "type": "object"
           },
           "moq_tiers": {
             "items": {
@@ -16056,6 +16236,112 @@
           "updated_at"
         ],
         "title": "SourcingDraftRead",
+        "type": "object"
+      },
+      "SourcingDraftUpdateRequest": {
+        "description": "Partial draft edit: only the fields that are not ``None`` are applied.",
+        "properties": {
+          "bullet_points": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 10,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bullet Points"
+          },
+          "localized_copies": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Localized Copies"
+          },
+          "marketplace_category_attrs": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketplace Category Attrs"
+          },
+          "optimized_title_en": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Optimized Title En"
+          },
+          "suggested_category": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Category"
+          },
+          "suggested_hs_code": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Hs Code"
+          },
+          "target_price_usd": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Price Usd"
+          }
+        },
+        "title": "SourcingDraftUpdateRequest",
         "type": "object"
       },
       "SourcingImportResult": {
@@ -24508,6 +24794,144 @@
           }
         },
         "summary": "Get Sourcing Draft",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      },
+      "patch": {
+        "description": "Patch a sourcing draft's copy, price and per-marketplace category attributes.",
+        "operationId": "update_sourcing_draft_api_v1_catalog_sourcing_drafts__draft_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcingDraftUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcingDraftRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Sourcing Draft",
+        "tags": [
+          "catalog-sourcing"
+        ]
+      }
+    },
+    "/api/v1/catalog/sourcing/drafts/{draft_id}/ai-rewrite": {
+      "post": {
+        "description": "Rewrite a draft into a localized, platform-shaped listing copy deck.\n\nThe LLM rewriter is injected by the composition root\n(``app.state.sourcing_copy_rewriter``); when it is absent the catalog-side deterministic\nlocalized copywriter runs, so the endpoint is always usable and always honest about\nwhich mode produced the copy. ``erp_core.catalog`` never imports the AI engine.",
+        "operationId": "rewrite_sourcing_draft_copy_api_v1_catalog_sourcing_drafts__draft_id__ai_rewrite_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcingAiRewriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcingAiRewriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rewrite Sourcing Draft Copy",
         "tags": [
           "catalog-sourcing"
         ]
@@ -34650,6 +35074,47 @@
         "summary": "Receive Aliexpress Webhook",
         "tags": [
           "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/im/{platform}": {
+      "post": {
+        "description": "Signed buyer-IM ingress for the twelve marketplace chat surfaces.\n\nBuyer chat shares the marketplace's order-feed endpoint family but is answered by a\ndifferent API, so it gets a dedicated route: verify the platform HMAC with the\ntenant's own signing secret, persist the receipt, and hand it to the Inbox pipeline\nthrough `stream:webhooks:{channel}`.",
+        "operationId": "receive_marketplace_im_webhook_api_v1_webhooks_im__platform__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "platform",
+            "required": true,
+            "schema": {
+              "title": "Platform",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receive Marketplace Im Webhook",
+        "tags": [
+          "webhooks"
         ]
       }
     },

@@ -72,6 +72,12 @@ _DELIVERY_STATUS_RANK: dict[str, int] = {
 _FAILURE_ALLOWED_FROM: frozenset[str] = frozenset(
     {DeliveryStatus.QUEUED.value, DeliveryStatus.SENT.value}
 )
+#: Channels whose ingress this worker is the single consumer for. The nine marketplace
+#: buyer-IM streams (shopee/lazada/temu/shein/aliexpress/ozon/walmart/mercado_libre/
+#: tiktok_shop) are NOT listed here: `worker_main.COMMERCE_TRACKING_CHANNELS` already
+#: drains those `stream:webhooks:{channel}` keys, and a second consumer group on the same
+#: stream would race it into duplicate processing. eBay, Amazon SP-API and Alibaba
+#: International are not in that topology, so their IM streams are consumed here.
 _WORKER_CHANNELS: tuple[ChannelType, ...] = (
     ChannelType.WHATSAPP_CLOUD,
     ChannelType.WHATSAPP_COEXISTENCE,
@@ -80,6 +86,9 @@ _WORKER_CHANNELS: tuple[ChannelType, ...] = (
     ChannelType.MESSENGER,
     ChannelType.INSTAGRAM_DM,
     ChannelType.TELEGRAM,
+    ChannelType.AMAZON_SP,
+    ChannelType.EBAY,
+    ChannelType.ALIBABA_EMAIL,
 )
 
 

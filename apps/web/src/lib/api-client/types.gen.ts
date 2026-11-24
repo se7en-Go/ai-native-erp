@@ -1069,7 +1069,7 @@ export type HttpValidationError = {
     detail?: Array<ValidationError>;
 };
 
-export type IdentityType = 'email' | 'phone_e164' | 'whatsapp_waid' | 'whatsapp_bsuid' | 'ig_psid' | 'fb_psid' | 'shopify_customer_id' | 'tiktok_buyer_id' | 'amazon_buyer_email' | 'web_visitor_id';
+export type IdentityType = 'email' | 'phone_e164' | 'whatsapp_waid' | 'whatsapp_bsuid' | 'ig_psid' | 'fb_psid' | 'shopify_customer_id' | 'tiktok_buyer_id' | 'amazon_buyer_email' | 'web_visitor_id' | 'marketplace_buyer_id';
 
 export type InboxAssistAction = 'polish' | 'summarize' | 'suggest_reply' | 'daily_brief';
 
@@ -2897,11 +2897,35 @@ export type SocialSummary = {
     total_posts: number;
 };
 
+/**
+ * Tenant-supplied rewrite options for one sourcing draft.
+ */
+export type SourcingAiRewriteRequest = {
+    apply_to_draft?: boolean;
+    keywords?: Array<string>;
+    target_channel?: string;
+    target_language?: string;
+    tone?: 'conversion' | 'seo' | 'b2b_wholesale' | 'social_viral';
+};
+
+/**
+ * The persisted draft plus the exact copy deck a rewrite produced.
+ */
+export type SourcingAiRewriteResponse = {
+    draft: SourcingDraftRead;
+    rewrite: SourcingCopyRewriteOutput;
+};
+
 export type SourcingCollectRequest = {
     category?: string;
     fx_rate_usd_cny?: number | string;
     hs_code?: string | null;
     images?: Array<string>;
+    marketplace_category_attrs?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
     options_spec?: Array<SourcingOptionSpec>;
     raw_price_cny?: number | string | null;
     raw_text?: string | null;
@@ -2910,6 +2934,30 @@ export type SourcingCollectRequest = {
     source_url?: string | null;
     target_margin_pct?: number | string;
     variants_spec?: Array<SourcingVariantSpecInput>;
+};
+
+/**
+ * A ready-to-publish localized listing, with honest provenance of how it was produced.
+ */
+export type SourcingCopyRewriteOutput = {
+    bullet_points: [
+        string,
+        string,
+        string,
+        string,
+        string
+    ];
+    credits_consumed?: string;
+    description: string;
+    fallback_reason?: string | null;
+    generated_at: string;
+    model_used: string;
+    rewrite_mode: 'llm' | 'deterministic_fallback';
+    seo_keywords?: Array<string>;
+    target_channel: string;
+    target_language: string;
+    title: string;
+    tone: 'conversion' | 'seo' | 'b2b_wholesale' | 'social_viral';
 };
 
 export type SourcingDeleteResult = {
@@ -2930,6 +2978,16 @@ export type SourcingDraftRead = {
     imported_product_id?: string | null;
     imported_variant_id?: string | null;
     listing_state?: 'draft' | 'imported' | 'mapping_ready' | 'live_published';
+    localized_copies?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
+    marketplace_category_attrs?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
     moq_tiers: Array<SourcingMoqTier>;
     optimized_title_en: string;
     options_spec?: Array<SourcingOptionSpec>;
@@ -2949,6 +3007,27 @@ export type SourcingDraftRead = {
     tenant_id: string;
     updated_at: string;
     variants_spec?: Array<SourcingVariantSpecOutput>;
+};
+
+/**
+ * Partial draft edit: only the fields that are not ``None`` are applied.
+ */
+export type SourcingDraftUpdateRequest = {
+    bullet_points?: Array<string> | null;
+    localized_copies?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    } | null;
+    marketplace_category_attrs?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    } | null;
+    optimized_title_en?: string | null;
+    suggested_category?: string | null;
+    suggested_hs_code?: string | null;
+    target_price_usd?: number | string | null;
 };
 
 export type SourcingImportResult = {
@@ -5936,6 +6015,66 @@ export type GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetResponses = {
 };
 
 export type GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetResponse = GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetResponses[keyof GetSourcingDraftApiV1CatalogSourcingDraftsDraftIdGetResponses];
+
+export type UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchData = {
+    body: SourcingDraftUpdateRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        draft_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/sourcing/drafts/{draft_id}';
+};
+
+export type UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchError = UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchErrors[keyof UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchErrors];
+
+export type UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourcingDraftRead;
+};
+
+export type UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchResponse = UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchResponses[keyof UpdateSourcingDraftApiV1CatalogSourcingDraftsDraftIdPatchResponses];
+
+export type RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostData = {
+    body: SourcingAiRewriteRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        draft_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/sourcing/drafts/{draft_id}/ai-rewrite';
+};
+
+export type RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostError = RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostErrors[keyof RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostErrors];
+
+export type RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourcingAiRewriteResponse;
+};
+
+export type RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostResponse = RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostResponses[keyof RewriteSourcingDraftCopyApiV1CatalogSourcingDraftsDraftIdAiRewritePostResponses];
 
 export type ImportSourcingDraftToCatalogApiV1CatalogSourcingDraftsDraftIdImportToCatalogPostData = {
     body?: never;
@@ -10327,6 +10466,31 @@ export type ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses = {
 };
 
 export type ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponse = ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses[keyof ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses];
+
+export type ReceiveMarketplaceImWebhookApiV1WebhooksImPlatformPostData = {
+    body?: never;
+    path: {
+        platform: string;
+    };
+    query?: never;
+    url: '/api/v1/webhooks/im/{platform}';
+};
+
+export type ReceiveMarketplaceImWebhookApiV1WebhooksImPlatformPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReceiveMarketplaceImWebhookApiV1WebhooksImPlatformPostError = ReceiveMarketplaceImWebhookApiV1WebhooksImPlatformPostErrors[keyof ReceiveMarketplaceImWebhookApiV1WebhooksImPlatformPostErrors];
+
+export type ReceiveMarketplaceImWebhookApiV1WebhooksImPlatformPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ReceiveLazadaWebhookApiV1WebhooksLazadaPostData = {
     body?: never;

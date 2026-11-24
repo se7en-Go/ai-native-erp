@@ -537,6 +537,19 @@ class MarketplaceListingDispatcher:
             channel_type,
             credential_type,
         )
+        # A per-marketplace ``category_attributes`` blob (``category_id`` for Shopee,
+        # ``primary_category`` for Ozon, …) overrides the catalog category text for THIS
+        # marketplace only. With no attributes the old ``payload.category`` is used verbatim.
+        cat_attrs = dict(getattr(payload, "category_attributes", {}) or {})
+        effective_category = (
+            str(
+                cat_attrs.get("category_id")
+                or cat_attrs.get("primary_category")
+                or cat_attrs.get("category")
+                or payload.category
+            ).strip()
+            or payload.category
+        )
         adapter = build_marketplace_adapter(
             channel_type,
             credentials,
@@ -565,7 +578,12 @@ class MarketplaceListingDispatcher:
                 MercadoLibreAdapter,
             ),
         ):
-            payload_receipt = await adapter.publish_listing(payload)
+            effective_payload = (
+                payload
+                if effective_category == payload.category
+                else payload.model_copy(update={"category": effective_category})
+            )
+            payload_receipt = await adapter.publish_listing(effective_payload)
             dispatch_receipt = _normalize_payload_receipt(payload_receipt)
         else:
             # `build_marketplace_adapter` returns the shared connector ABC (it also feeds the
@@ -591,7 +609,7 @@ class MarketplaceListingDispatcher:
                 price_usd=payload.price_usd,
                 quantity=payload.quantity,
                 images=payload.images,
-                category=payload.category,
+                category=effective_category,
                 hs_code=payload.hs_code,
                 moq_tiers=[
                     {

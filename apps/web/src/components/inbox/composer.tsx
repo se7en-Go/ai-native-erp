@@ -14,6 +14,7 @@ import {
   Languages,
   ShieldCheck,
   Info,
+  MessageSquare,
   X,
 } from "lucide-react";
 import { sendConversationMessage } from "@/lib/api-client/live-client";
@@ -27,7 +28,10 @@ import { BffApiError } from "@/lib/contracts";
 import { InboxAiToolbar } from "@/components/ai-workforce/inbox-ai-toolbar";
 import type { InboxToolbarIntent, QuickReplyTemplate } from "@/components/ai-workforce/types";
 import type { ConversationSummary } from "@/components/inbox/conversation-list";
-import type { InboxMessage } from "@/components/inbox/message-thread";
+import {
+  isMarketplaceImChannel,
+  type InboxMessage,
+} from "@/components/inbox/message-thread";
 import { fetchInboxAssist, fetchQuickReplies } from "@/lib/phase3b-data";
 import { proposeGroundedReply } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
@@ -261,6 +265,10 @@ export function InboxComposer({
 
   if (!conversation) return null;
 
+  // 12 个买家站内私信 IM 渠道：出站回复直连平台买家消息 API，不走邮件 / 短信。
+  const marketplaceIm = isMarketplaceImChannel(conversation.channel_type);
+  const showMarketplaceImHint = marketplaceIm && mode === "outbound";
+
   const phrases: readonly QuickReplyTemplate[] = phrasesQuery.data ?? [];
 
   function runAssist(intent: InboxToolbarIntent) {
@@ -427,6 +435,22 @@ export function InboxComposer({
               <X className="h-3 w-3" />
             </button>
           </div>
+        )}
+
+        {showMarketplaceImHint && (
+          <p
+            data-testid="composer-marketplace-im-hint"
+            data-marketplace-im-channel={conversation.channel_type}
+            className="mb-2 flex items-start gap-1.5 rounded-xl border border-violet-200 bg-violet-50/80 px-2.5 py-1.5 text-[11.5px] font-medium text-violet-900 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200"
+          >
+            <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600 dark:text-violet-300" />
+            <span>
+              {bi(
+                "平台买家站内私信直连 · AI 起草与实时翻译可用",
+                "Direct Marketplace Buyer IM · AI drafts & translation enabled"
+              )}
+            </span>
+          </p>
         )}
 
         <textarea
