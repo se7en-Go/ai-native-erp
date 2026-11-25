@@ -75,6 +75,7 @@ MONEY_SCALE = Decimal("0.01")
 #: ``fulfillment_mode`` values the connector accepts. ``full`` means Mercado Envíos Full,
 #: where Mercado Libre (not the seller) owns the carrier assignment and tracking push.
 MERCADO_LIBRE_FULFILLMENT_MODES: frozenset[str] = frozenset({"standard", "full"})
+_FULFILLMENT_MODE_ALIASES: Mapping[str, str] = {"full_managed": "full"}
 
 #: Mercado Libre site -> currency the item/order is priced in.
 SITE_CURRENCIES: Mapping[str, str] = {
@@ -197,7 +198,8 @@ class MercadoLibreAdapter(CommercePlatformAdapter):
                 title="Mercado Libre Access Token Required",
                 detail="A Mercado Libre adapter needs a non-empty OAuth access token.",
             )
-        mode = str(fulfillment_mode or "").strip().lower() or "standard"
+        raw_mode = str(fulfillment_mode or "").strip().lower() or "standard"
+        mode = _FULFILLMENT_MODE_ALIASES.get(raw_mode, raw_mode)
         if mode not in MERCADO_LIBRE_FULFILLMENT_MODES:
             raise AppError(
                 slug="mercado-libre-fulfillment-mode-invalid",
@@ -482,9 +484,21 @@ class MercadoLibreAdapter(CommercePlatformAdapter):
         for payment in _sequence(order.get("payments")):
             if not isinstance(payment, Mapping):
                 continue
-            if str(payment.get("status") or "").strip().lower() != "refunded":
-                continue
-            total += self._as_decimal(payment.get("transaction_amount"))
+            p_status = str(payment.get("status") or "").strip().lower()
+            tx_refunded = self._as_decimal(payment.get("transaction_amount_refunded"))
+            if tx_refunded > _ZERO:
+                total += tx_refunded
+            elif p_status in {"refunded", "partially_refunded"}:
+                total += self._as_decimal(payment.get("transaction_amount"))
+        if total <= _ZERO:
+            raw_top_refund = (
+                order.get("refunded_amount")
+                if order.get("refunded_amount") not in (None, "")
+                else order.get("refund_amount")
+            )
+            top_refund = self._as_decimal(raw_top_refund)
+            if top_refund > _ZERO:
+                total = top_refund
         total = total.quantize(MONEY_SCALE, rounding=ROUND_HALF_UP)
         if canceled and total <= _ZERO:
             # A cancelled order with no explicit refund row was refunded in full.
@@ -497,10 +511,14 @@ class MercadoLibreAdapter(CommercePlatformAdapter):
             str(tag).strip().lower() for tag in _sequence(order.get("tags")) if str(tag).strip()
         }
 
-    def _fulfillment_status(self, order: Mapping[str, Any]) -> FulfillmentStatus:
+    def _fulfillment_status(
+        self, order: Mapping[str, Any], *, full_refund: bool = False
+    ) -> FulfillmentStatus:
         status = str(order.get("status") or "").strip().lower()
-        if status in {"cancelled", "invalid"}:
+        if status in {"cancelled", "canceled", "invalid"}:
             return FulfillmentStatus.CANCELLED
+        if status in {"refunded", "returned"} or full_refund:
+            return FulfillmentStatus.REFUNDED
         tags = self._order_tags(order)
         if "delivered" in tags:
             return FulfillmentStatus.DELIVERED
@@ -509,13 +527,15 @@ class MercadoLibreAdapter(CommercePlatformAdapter):
         return FulfillmentStatus.CONFIRMED_RESERVED
 
     @staticmethod
-    def _payment_status(order: Mapping[str, Any]) -> PaymentStatus:
+    def _payment_status(
+        order: Mapping[str, Any], *, full_refund: bool = False
+    ) -> PaymentStatus:
         status = str(order.get("status") or "").strip().lower()
-        if status in {"cancelled", "invalid"}:
+        if status in {"cancelled", "canceled", "invalid", "refunded", "returned"} or full_refund:
             return PaymentStatus.REFUNDED
-        if status in {"partially_paid", "partially_refunded"}:
+        if status == "partially_paid":
             return PaymentStatus.PARTIALLY_PAID
-        if status == "paid":
+        if status in {"paid", "partially_refunded"}:
             return PaymentStatus.PAID
         return PaymentStatus.UNPAID
 
@@ -559,9 +579,18 @@ class MercadoLibreAdapter(CommercePlatformAdapter):
             else (subtotal + shipping + tax).quantize(MONEY_SCALE, rounding=ROUND_HALF_UP)
         )
 
-        fulfillment_status = self._fulfillment_status(order)
-        canceled = fulfillment_status is FulfillmentStatus.CANCELLED
-        refunded = self._refunded_amount(order, canceled=canceled)
+        raw_status = str(order.get("status") or "").strip().lower()
+        canceled_or_refunded = raw_status in {
+            "cancelled",
+            "canceled",
+            "invalid",
+            "refunded",
+            "returned",
+        }
+        refunded = self._refunded_amount(order, canceled=canceled_or_refunded)
+        full_refund = total > _ZERO and refunded >= total
+        fulfillment_status = self._fulfillment_status(order, full_refund=full_refund)
+        payment_status = self._payment_status(order, full_refund=full_refund)
 
         buyer = _mapping(order.get("buyer"))
         billing = _mapping(buyer.get("billing_info"))
@@ -609,7 +638,7 @@ class MercadoLibreAdapter(CommercePlatformAdapter):
                 MONEY_SCALE, rounding=ROUND_HALF_UP
             ),
             fulfillment_status=fulfillment_status,
-            payment_status=self._payment_status(order),
+            payment_status=payment_status,
             customer=NormalizedCustomer(
                 email=email,
                 phone_e164=self._phone_e164(buyer),
@@ -898,6 +927,7 @@ class MercadoLibreAdapter(CommercePlatformAdapter):
             "channel": "mercado_libre",
             "external_order_id": order_id,
             "external_shipment_id": shipment_id,
+            "fulfillment_id": shipment_id,
             "tracking_number": tracking,
             "carrier": str(carrier_company or "").strip() or None,
             "notify_customer": bool(notify_customer),

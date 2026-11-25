@@ -397,6 +397,7 @@ async def test_fetch_orders_maps_payment_states() -> None:
             _order(order_no="GSO-CANCELLED", status="5"),
             _order(order_no="GSO-REFUNDED", status="6"),
             _order(order_no="GSO-PARTIAL-REFUND", status="4", refundAmount="9.99"),
+            _order(order_no="GSO-FULL-REFUND", status="4", refundAmount="1240.56"),
         ]
     )
     adapter = _adapter(lambda request: httpx.Response(200, json=payload))
@@ -406,7 +407,11 @@ async def test_fetch_orders_maps_payment_states() -> None:
     assert by_id["GSO-PAID"].payment_status is PaymentStatus.PAID
     assert by_id["GSO-CANCELLED"].payment_status is PaymentStatus.UNPAID
     assert by_id["GSO-REFUNDED"].payment_status is PaymentStatus.REFUNDED
-    assert by_id["GSO-PARTIAL-REFUND"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["GSO-PARTIAL-REFUND"].payment_status is PaymentStatus.PAID
+    assert by_id["GSO-PARTIAL-REFUND"].fulfillment_status is FulfillmentStatus.DELIVERED
+    assert by_id["GSO-PARTIAL-REFUND"].channel_metadata["refunded_amount"] == "9.99"
+    assert by_id["GSO-FULL-REFUND"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["GSO-FULL-REFUND"].fulfillment_status is FulfillmentStatus.REFUNDED
 
 
 async def test_fetch_orders_uses_order_detail_when_the_list_has_no_lines() -> None:
@@ -614,6 +619,7 @@ async def test_create_fulfillment_sends_self_shipping_payload() -> None:
         "orderNo": "GSO20261119001",
         "packageNo": "PKG-77",
         "accepted": True,
+        "fulfillment_id": "PKG-77",
     }
 
 

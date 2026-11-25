@@ -32,12 +32,18 @@ TIKTOK_API_BASE = "https://open-api.tiktokglobalshop.com"
 TIKTOK_CUSTOM_APP_SHOP_LIMIT = 25
 _UNSIGNED_PARAMS = frozenset({"sign", "access_token"})
 _STATUS_MAP = {
+    "UNPAID": FulfillmentStatus.PENDING_PAYMENT,
+    "ON_HOLD": FulfillmentStatus.CONFIRMED_RESERVED,
     "AWAITING_SHIPMENT": FulfillmentStatus.CONFIRMED_RESERVED,
     "AWAITING_COLLECTION": FulfillmentStatus.CONFIRMED_RESERVED,
+    "PARTIALLY_SHIPPING": FulfillmentStatus.PARTIALLY_SHIPPED,
     "IN_TRANSIT": FulfillmentStatus.SHIPPED,
     "DELIVERED": FulfillmentStatus.DELIVERED,
     "COMPLETED": FulfillmentStatus.DELIVERED,
     "CANCELLED": FulfillmentStatus.CANCELLED,
+    "CANCELED": FulfillmentStatus.CANCELLED,
+    "REFUNDED": FulfillmentStatus.REFUNDED,
+    "RETURNED": FulfillmentStatus.REFUNDED,
 }
 
 
@@ -183,16 +189,20 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
     def _normalize_order(self, order: dict[str, Any]) -> NormalizedOrder:
         payment = order.get("payment") or {}
         recipient = order.get("recipient_address") or {}
-        status = str(order.get("status") or "")
+        status = str(order.get("status") or "").strip().upper()
+        cancelled_at = order.get("cancel_time") or order.get("cancelled_at")
         metadata: dict[str, Any] = {
             "tiktok_order_status": status,
             "tiktok_user_id": order.get("user_id"),
         }
+        if cancelled_at:
+            metadata["cancelled_at"] = str(cancelled_at)
         if order.get("packages"):
             metadata["tiktok_package_id"] = (order["packages"][0] or {}).get("id")
+        total = self._decimal(payment.get("total_amount"))
         refunded_val = self._decimal(
             order.get("refund_amount") or payment.get("seller_refund_amount")
-        )
+        ).copy_abs()
         commission_val = self._decimal(
             payment.get("platform_commission") or payment.get("referral_fee")
         )
@@ -201,6 +211,32 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
             refunded_amount=refunded_val,
             platform_commission_base=commission_val,
         )
+        is_cancelled = status in {"CANCELLED", "CANCELED"} or bool(cancelled_at)
+        is_full_refund = status in {"REFUNDED", "RETURNED", "FULLY_REFUNDED"} or (
+            total > Decimal("0") and refunded_val >= total
+        )
+        declared_payment = str(
+            order.get("payment_status") or payment.get("payment_status") or ""
+        ).strip().upper()
+        if is_cancelled:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+            payment_status = (
+                PaymentStatus.UNPAID
+                if declared_payment == "UNPAID" and refunded_val == Decimal("0")
+                else PaymentStatus.REFUNDED
+            )
+        elif is_full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+            payment_status = PaymentStatus.REFUNDED
+        elif status == "UNPAID" or declared_payment == "UNPAID":
+            fulfillment_status = FulfillmentStatus.PENDING_PAYMENT
+            payment_status = PaymentStatus.UNPAID
+        elif status == "PARTIALLY_PAID" or declared_payment == "PARTIALLY_PAID":
+            fulfillment_status = _STATUS_MAP.get(status, FulfillmentStatus.PENDING_PAYMENT)
+            payment_status = PaymentStatus.PARTIALLY_PAID
+        else:
+            fulfillment_status = _STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED)
+            payment_status = PaymentStatus.PAID
         return NormalizedOrder(
             external_order_id=str(order["id"]),
             external_order_number=str(order.get("id")),
@@ -210,14 +246,12 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
             shipping_charged=self._decimal(payment.get("shipping_fee")),
             discount_amount=self._decimal(payment.get("platform_discount")),
             tax_collected=self._decimal(payment.get("tax")),
-            total_amount=self._decimal(payment.get("total_amount")),
+            total_amount=total,
             platform_commission_base=commission_val.quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             ),
-            fulfillment_status=_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED),
-            payment_status=(
-                PaymentStatus.REFUNDED if status == "CANCELLED" else PaymentStatus.PAID
-            ),
+            fulfillment_status=fulfillment_status,
+            payment_status=payment_status,
             customer=NormalizedCustomer(
                 email=order.get("buyer_email"),
                 phone_e164=recipient.get("phone_number"),
@@ -299,7 +333,30 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
         fulfillment_order_id: str | None = None,
         notify_customer: bool = True,
     ) -> dict[str, Any]:
-        if not fulfillment_order_id:
+        del notify_customer
+        package_id = (fulfillment_order_id or "").strip() or None
+        if not package_id and external_order_id.strip():
+            details = await self._signed_request(
+                "GET",
+                "/order/202309/orders",
+                query={"ids": external_order_id.strip()},
+            )
+            for order_row in details.get("orders") or []:
+                if not isinstance(order_row, Mapping):
+                    continue
+                for pkg in order_row.get("packages") or []:
+                    if isinstance(pkg, Mapping) and pkg.get("id"):
+                        package_id = str(pkg["id"]).strip()
+                        break
+                if package_id:
+                    break
+                for li in order_row.get("line_items") or []:
+                    if isinstance(li, Mapping) and li.get("package_id"):
+                        package_id = str(li["package_id"]).strip()
+                        break
+                if package_id:
+                    break
+        if not package_id:
             raise AppError(
                 slug="tiktok-package-required",
                 status_code=422,
@@ -313,11 +370,16 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
         }
         if tracking_url:
             payload["tracking_url"] = tracking_url
-        return await self._signed_request(
+        data = await self._signed_request(
             "POST",
-            f"/fulfillment/202309/packages/{fulfillment_order_id}/ship",
+            f"/fulfillment/202309/packages/{package_id}/ship",
             body=payload,
         )
+        return {
+            "fulfillment_id": package_id,
+            "package_id": package_id,
+            "raw": data,
+        }
 
     async def _upload_image_blob(self, blob: Mapping[str, Any]) -> str | None:
         raw = blob.get("data")
@@ -353,6 +415,17 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
             )
         uri = ((payload.get("data") or {}).get("uri")) or ""
         return str(uri) if uri else None
+
+    async def _resolve_warehouse_id(self, warehouse_id: str | None = None) -> str | None:
+        wh_id = (warehouse_id or "").strip() or (self.warehouse_id or "").strip() or None
+        if wh_id:
+            return wh_id
+        wh_data = await self._signed_request("GET", "/logistics/202309/warehouses")
+        wh_rows = wh_data.get("warehouses") or wh_data.get("warehouse_list") or []
+        if wh_rows and isinstance(wh_rows[0], Mapping) and wh_rows[0].get("id"):
+            wh_id = str(wh_rows[0]["id"]).strip()
+            self.warehouse_id = wh_id
+        return wh_id
 
     async def publish_listing(
         self,
@@ -395,7 +468,18 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
 
         desc_lines = [description.strip(), *(f"• {b.strip()}" for b in bullet_points if b.strip())]
         full_description = "\n".join(line for line in desc_lines if line) or clean_title
-        wh_id = self.warehouse_id or "default"
+        wh_id = await self._resolve_warehouse_id()
+        if not wh_id:
+            raise AppError(
+                slug="tiktok-listing-rejected",
+                status_code=502,
+                code="ERR_TIKTOK_LISTING_REJECTED",
+                title="TikTok Listing Rejected",
+                detail=(
+                    "No TikTok Shop warehouse_id configured or returned by "
+                    "/logistics/202309/warehouses."
+                ),
+            )
 
         variant_list = list(variants or ())
         skus_payload: list[dict[str, Any]] = []
@@ -487,13 +571,7 @@ class TikTokShopCoreAdapter(CommercePlatformAdapter):
                 detail="TikTok Shop inventory sync requires a non-empty external_sku.",
             )
         norm_qty = max(0, int(quantity))
-        wh_id = (warehouse_id or "").strip() or (self.warehouse_id or "").strip() or None
-        if not wh_id:
-            wh_data = await self._signed_request("GET", "/logistics/202309/warehouses")
-            wh_rows = wh_data.get("warehouses") or wh_data.get("warehouse_list") or []
-            if wh_rows and isinstance(wh_rows[0], Mapping) and wh_rows[0].get("id"):
-                wh_id = str(wh_rows[0]["id"]).strip()
-                self.warehouse_id = wh_id
+        wh_id = await self._resolve_warehouse_id(warehouse_id)
         if not wh_id:
             raise AppError(
                 slug="tiktok-inventory-sync-failed",

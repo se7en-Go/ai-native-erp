@@ -435,17 +435,51 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
         )
 
         cancel = order.get("cancelStatus")
-        cancel_state = str((cancel.get("cancelState") if isinstance(cancel, Mapping) else "") or "")
-        fulfillment_status = (
-            FulfillmentStatus.CANCELLED
-            if cancel_state == "CANCELED"
-            else _FULFILLMENT_STATUS_MAP.get(
-                str(order.get("orderFulfillmentStatus") or ""),
+        cancel_state = (
+            str((cancel.get("cancelState") if isinstance(cancel, Mapping) else "") or "")
+            .strip()
+            .upper()
+        )
+        cancelled_at = order.get("cancelledAt") or order.get("canceledAt")
+        is_cancelled = cancel_state in {"CANCELED", "CANCELLED"} or bool(cancelled_at)
+
+        payment_summary = order.get("paymentSummary")
+        payment_map = payment_summary if isinstance(payment_summary, Mapping) else {}
+        refund_rows = payment_map.get("refunds") or []
+        refunded_from_rows = sum(
+            (
+                self._money(r, "amount").copy_abs()
+                for r in refund_rows
+                if isinstance(r, Mapping) and isinstance(r.get("amount"), Mapping)
+            ),
+            start=Decimal("0.00"),
+        )
+        refunded_val = (
+            refunded_from_rows
+            if refunded_from_rows > Decimal("0")
+            else self._as_decimal(order.get("refunded_amount")).copy_abs()
+        )
+        declared_payment = str(order.get("orderPaymentStatus") or "").strip().upper()
+        is_full_refund = declared_payment in {"FULLY_REFUNDED", "REFUNDED"} or (
+            total > Decimal("0") and refunded_val >= total
+        )
+
+        if is_cancelled:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+        elif is_full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+        elif declared_payment in {"FAILED", "PENDING", "UNPAID"}:
+            fulfillment_status = FulfillmentStatus.PENDING_PAYMENT
+        else:
+            fulfillment_status = _FULFILLMENT_STATUS_MAP.get(
+                str(order.get("orderFulfillmentStatus") or "").strip().upper(),
                 FulfillmentStatus.CONFIRMED_RESERVED,
             )
-        )
         payment_status = self._payment_status(
-            order, canceled=fulfillment_status is FulfillmentStatus.CANCELLED
+            order,
+            canceled=is_cancelled,
+            full_refund=is_full_refund,
+            refunded_val=refunded_val,
         )
 
         buyer = order.get("buyer")
@@ -462,17 +496,6 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
             phone_e164 = str(phone).strip() or None
         country = str(address_payload.get("countryCode") or "").strip() or None
 
-        payment_summary = order.get("paymentSummary")
-        payment_map = payment_summary if isinstance(payment_summary, Mapping) else {}
-        refund_rows = payment_map.get("refunds") or []
-        refunded_val = sum(
-            (
-                self._money(r, "amount")
-                for r in refund_rows
-                if isinstance(r, Mapping) and isinstance(r.get("amount"), Mapping)
-            ),
-            start=Decimal("0.00"),
-        )
         commission_val = (
             self._money(order, "totalMarketplaceFee")
             if isinstance(order.get("totalMarketplaceFee"), Mapping)
@@ -486,6 +509,8 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
             "ebay_cancel_state": cancel_state or None,
             "ebay_order_payment_status": order.get("orderPaymentStatus"),
         }
+        if cancelled_at:
+            ebay_metadata["cancelled_at"] = str(cancelled_at)
         attach_financial_metadata(
             ebay_metadata,
             refunded_amount=refunded_val,
@@ -524,12 +549,24 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
         )
 
     @staticmethod
-    def _payment_status(order: Mapping[str, Any], *, canceled: bool) -> PaymentStatus:
-        if canceled:
-            return PaymentStatus.REFUNDED
+    def _payment_status(
+        order: Mapping[str, Any],
+        *,
+        canceled: bool,
+        full_refund: bool = False,
+        refunded_val: Decimal = Decimal("0.00"),
+    ) -> PaymentStatus:
         declared = str(order.get("orderPaymentStatus") or "").strip().upper()
-        if declared in {"FAILED", "PENDING"}:
+        if canceled:
+            if declared in {"FAILED", "PENDING", "UNPAID"} and refunded_val == Decimal("0"):
+                return PaymentStatus.UNPAID
+            return PaymentStatus.REFUNDED
+        if full_refund or declared in {"FULLY_REFUNDED", "REFUNDED"}:
+            return PaymentStatus.REFUNDED
+        if declared in {"FAILED", "PENDING", "UNPAID"}:
             return PaymentStatus.UNPAID
+        if declared == "PARTIALLY_PAID":
+            return PaymentStatus.PARTIALLY_PAID
         return PaymentStatus.PAID
 
     # ---------------------------------------------------------------- CommercePlatformAdapter
@@ -637,6 +674,7 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
         notify_customer: bool = True,
     ) -> dict[str, Any]:
         """Create the shipping fulfillment eBay shows to the buyer (one call per order)."""
+        del tracking_url, fulfillment_order_id, notify_customer
         if not tracking_number.strip():
             raise AppError(
                 slug="ebay-tracking-number-required",
@@ -645,9 +683,21 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
                 title="eBay Tracking Number Required",
                 detail="eBay refuses a shipping fulfillment without a tracking number.",
             )
-        path = (
-            f"{EBAY_ORDERS_PATH}/{quote(external_order_id.strip(), safe='')}/shipping_fulfillment"
-        )
+        encoded_order_id = quote(external_order_id.strip(), safe="")
+        line_items: list[dict[str, Any]] = []
+        order_resp = await self._request("GET", f"{EBAY_ORDERS_PATH}/{encoded_order_id}")
+        if order_resp.status_code == 200:
+            order_data = self._json_object(order_resp)
+            for li in order_data.get("lineItems") or []:
+                if not isinstance(li, Mapping):
+                    continue
+                li_id = str(li.get("lineItemId") or "").strip()
+                if not li_id:
+                    continue
+                line_items.append(
+                    {"lineItemId": li_id, "quantity": max(self._as_int(li.get("quantity"), 1), 1)}
+                )
+        path = f"{EBAY_ORDERS_PATH}/{encoded_order_id}/shipping_fulfillment"
         response = await self._request(
             "POST",
             path,
@@ -655,7 +705,7 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
                 "shippingCarrierCode": carrier_company,
                 "trackingNumber": tracking_number,
                 "shippedDate": self._format_datetime(datetime.now(UTC)),
-                "lineItems": [],
+                "lineItems": line_items,
             },
         )
         if response.status_code >= 300:
@@ -665,7 +715,18 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
                 code="ERR_EBAY_FULFILLMENT_REJECTED",
                 title="eBay Fulfillment Rejected",
             )
-        return self._json_object(response)
+        data = self._json_object(response)
+        fid = str(data.get("fulfillment_id") or data.get("fulfillmentId") or "").strip()
+        if not fid:
+            location = str(
+                response.headers.get("Location") or response.headers.get("location") or ""
+            ).strip()
+            if location:
+                fid = location.rstrip("/").rsplit("/", 1)[-1].strip()
+        if fid:
+            data["fulfillment_id"] = fid
+            data.setdefault("fulfillmentId", fid)
+        return data
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
         """Fail-closed constant-time HMAC-SHA256 check of ``X-EBAY-SIGNATURE``."""

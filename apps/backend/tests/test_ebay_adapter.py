@@ -728,7 +728,99 @@ async def test_create_fulfillment_posts_shipping_fulfillment() -> None:
     assert payload["shippedDate"].endswith("Z")
     shipped_at = datetime.strptime(payload["shippedDate"], "%Y-%m-%dT%H:%M:%S.%fZ")
     assert shipped_at.tzinfo is None  # Z suffix stripped by strptime; value is UTC
-    assert result == {"fulfillmentId": "ful-1"}
+    assert result == {"fulfillmentId": "ful-1", "fulfillment_id": "ful-1"}
+
+
+async def test_create_fulfillment_extracts_location_header_and_populates_line_items() -> None:
+    fake = FakeEbay(
+        {
+            ("GET", f"{ORDERS_PATH}/12-55555-77777"): lambda _request: httpx.Response(
+                200,
+                json={
+                    "orderId": "12-55555-77777",
+                    "lineItems": [{"lineItemId": "li-1", "quantity": 2}],
+                },
+            ),
+            ("POST", f"{ORDERS_PATH}/12-55555-77777/shipping_fulfillment"): (
+                lambda _request: httpx.Response(
+                    201,
+                    headers={
+                        "Location": (
+                            "https://api.ebay.com/sell/fulfillment/v1/order/"
+                            "12-55555-77777/shipping_fulfillment/ful-loc-99"
+                        )
+                    },
+                    content=b"",
+                )
+            ),
+        }
+    )
+    adapter = make_adapter(fake)
+
+    result = await adapter.create_fulfillment(
+        external_order_id="12-55555-77777",
+        tracking_number="1Z999AA10123456784",
+        carrier_company="UPS",
+    )
+
+    request = fake.only("POST", f"{ORDERS_PATH}/12-55555-77777/shipping_fulfillment")
+    assert body(request)["lineItems"] == [{"lineItemId": "li-1", "quantity": 2}]
+    assert result["fulfillment_id"] == "ful-loc-99"
+    assert result["fulfillmentId"] == "ful-loc-99"
+
+
+async def test_ebay_order_normalization_refunds_and_cancellation_variants() -> None:
+    fake = FakeEbay(
+        {
+            ("GET", ORDERS_PATH): lambda _request: httpx.Response(
+                200,
+                json={
+                    "total": 3,
+                    "orders": [
+                        {
+                            "orderId": "ebay-cancelled",
+                            "cancelStatus": {"cancelState": "cancelled"},
+                            "lastModifiedDate": "2024-05-02T11:00:00.000Z",
+                            "pricingSummary": {"priceSubtotal": {"value": "10.00"}},
+                            "lineItems": [
+                                {"sku": "SKU-1", "quantity": 1, "lineItemCost": {"value": "10.00"}}
+                            ],
+                        },
+                        {
+                            "orderId": "ebay-full-refund",
+                            "orderFulfillmentStatus": "FULFILLED",
+                            "orderPaymentStatus": "FULLY_REFUNDED",
+                            "lastModifiedDate": "2024-05-02T11:00:00.000Z",
+                            "pricingSummary": {"total": {"value": "20.00"}},
+                            "lineItems": [
+                                {"sku": "SKU-2", "quantity": 1, "lineItemCost": {"value": "20.00"}}
+                            ],
+                        },
+                        {
+                            "orderId": "ebay-partial-refund",
+                            "orderFulfillmentStatus": "FULFILLED",
+                            "orderPaymentStatus": "PARTIALLY_REFUNDED",
+                            "lastModifiedDate": "2024-05-02T11:00:00.000Z",
+                            "pricingSummary": {"total": {"value": "30.00"}},
+                            "paymentSummary": {"refunds": [{"amount": {"value": "5.00"}}]},
+                            "lineItems": [
+                                {"sku": "SKU-3", "quantity": 1, "lineItemCost": {"value": "30.00"}}
+                            ],
+                        },
+                    ],
+                },
+            )
+        }
+    )
+    orders, _ = await make_adapter(fake).fetch_orders_updated_since(SINCE)
+    by_id = {o.external_order_id: o for o in orders}
+    assert by_id["ebay-cancelled"].fulfillment_status is FulfillmentStatus.CANCELLED
+    assert by_id["ebay-cancelled"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["ebay-full-refund"].fulfillment_status is FulfillmentStatus.REFUNDED
+    assert by_id["ebay-full-refund"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["ebay-partial-refund"].fulfillment_status is FulfillmentStatus.SHIPPED
+    assert by_id["ebay-partial-refund"].payment_status is PaymentStatus.PAID
+    assert by_id["ebay-partial-refund"].channel_metadata["refunded_amount"] == "5.00"
 
 
 async def test_create_fulfillment_requires_a_tracking_number() -> None:

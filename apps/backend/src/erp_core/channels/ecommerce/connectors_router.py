@@ -13,12 +13,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.channels.ecommerce.alibaba_intl import verify_alibaba_iop_webhook_signature
 from erp_core.channels.ecommerce.aliexpress import verify_aliexpress_webhook
+from erp_core.channels.ecommerce.amazon_sp import AmazonSpApiAdapter
 from erp_core.channels.ecommerce.base import (
     CredentialVaultHelper,
     register_channel_routing,
     resolve_routing_tenant,
 )
+from erp_core.channels.ecommerce.ebay import EbayConnectorAdapter
 from erp_core.channels.ecommerce.lazada import verify_lazada_webhook
 from erp_core.channels.ecommerce.mercado_libre import verify_mercado_libre_webhook
 from erp_core.channels.ecommerce.ozon import verify_ozon_webhook
@@ -53,6 +56,9 @@ CREDENTIAL_TYPES = {
     "shopline": "shopline_app",
     "shoplazza": "shoplazza_app",
     "tiktok_shop": "tiktok_shop_app",
+    "amazon_sp": "amazon_sp_api",
+    "ebay": "ebay_api",
+    "alibaba_email": "alibaba_intl_app",
     "shopee": "shopee_app",
     "lazada": "lazada_app",
     "temu": "temu_app",
@@ -67,6 +73,9 @@ SECRET_ENV = {
     "shopline": "SHOPLINE_WEBHOOK_SECRET",
     "shoplazza": "SHOPLAZZA_CLIENT_SECRET",
     "tiktok_shop": "TIKTOK_SHOP_APP_SECRET",
+    "amazon_sp": "AMAZON_SP_WEBHOOK_SECRET",
+    "ebay": "EBAY_WEBHOOK_SECRET",
+    "alibaba_email": "ALIBABA_INTL_APP_SECRET",
     "shopee": "SHOPEE_PARTNER_KEY",
     "lazada": "LAZADA_APP_SECRET",
     "temu": "TEMU_APP_SECRET",
@@ -81,6 +90,9 @@ DEDUP_HEADERS = {
     "shopline": "X-Shopline-Event-Id",
     "shoplazza": "X-Shoplazza-Deduplication-ID",
     "tiktok_shop": "X-Tts-Event-Id",
+    "amazon_sp": "X-Amazon-Event-Id",
+    "ebay": "X-eBay-Event-Id",
+    "alibaba_email": "X-Alibaba-Event-Id",
     "shopee": "X-Shopee-Event-Id",
     "lazada": "X-Lazada-Event-Id",
     "temu": "X-Temu-Event-Id",
@@ -95,6 +107,9 @@ TOPIC_HEADERS = {
     "shopline": "X-Shopline-Topic",
     "shoplazza": "X-Shoplazza-Topic",
     "tiktok_shop": "X-Tts-Topic",
+    "amazon_sp": "X-Amazon-Topic",
+    "ebay": "X-eBay-Topic",
+    "alibaba_email": "X-Alibaba-Topic",
     "shopee": "X-Shopee-Topic",
     "lazada": "X-Lazada-Topic",
     "temu": "X-Temu-Topic",
@@ -109,6 +124,9 @@ DOMAIN_HEADERS = {
     "shopline": "X-Shopline-Shop-Domain",
     "shoplazza": "X-Shoplazza-Shop-Domain",
     "tiktok_shop": "X-Tts-Shop-Domain",
+    "amazon_sp": "X-Amazon-Seller-Id",
+    "ebay": "X-eBay-Seller-Id",
+    "alibaba_email": "X-Alibaba-Store-Id",
     "shopee": "X-Shopee-Shop-Id",
     "lazada": "X-Lazada-Seller-Id",
     "temu": "X-Temu-Mall-Id",
@@ -129,6 +147,19 @@ WEBHOOK_SECRET_KEYS: tuple[str, ...] = (
     "secret_key",
     "api_key",
     "access_token",
+    "lwa_client_secret",
+    "cert_id",
+)
+
+_PAYLOAD_DOMAIN_KEYS: tuple[str, ...] = (
+    "shop_id",
+    "seller_id",
+    "user_id",
+    "mall_id",
+    "client_id",
+    "shop_domain",
+    "store_id",
+    "seller_username",
 )
 
 
@@ -142,23 +173,83 @@ def _header(headers: dict[str, str], name: str) -> str:
     return headers.get(lowered) or headers.get(name) or ""
 
 
-async def _webhook_secret(request: Request, platform: str, domain: str) -> str:
-    factory = _session_factory(request)
+async def _resolve_route(
+    factory: async_sessionmaker[AsyncSession], platform: str, domain: str
+) -> tuple[UUID, UUID] | None:
+    """Look up a routing entry trying exact external ID first, then lowercase."""
+    candidates: list[str] = []
+    cleaned = domain.strip()
+    for candidate in (cleaned, cleaned.lower()):
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+    if not candidates:
+        return None
     async with factory() as lookup:
-        route = await resolve_routing_tenant(lookup, platform, domain)
-    if route is not None:
-        tenant_id, account_id = route
-        try:
-            async with tenant_session(factory, tenant_id) as session:
-                data, _ = await CredentialVaultHelper().load_secret_json(
-                    session, tenant_id, account_id, CREDENTIAL_TYPES[platform]
-                )
-        except AppError:
-            data = {}
-        for key in WEBHOOK_SECRET_KEYS:
-            if data.get(key):
-                return str(data[key])
+        for candidate in candidates:
+            route = await resolve_routing_tenant(lookup, platform, candidate)
+            if route is not None:
+                return route
+    return None
+
+
+async def _load_vaulted_credentials(
+    request: Request, platform: str, domain: str
+) -> dict[str, Any]:
+    factory = _session_factory(request)
+    route = await _resolve_route(factory, platform, domain)
+    if route is None:
+        return {}
+    tenant_id, account_id = route
+    try:
+        async with tenant_session(factory, tenant_id) as session:
+            data, _ = await CredentialVaultHelper().load_secret_json(
+                session, tenant_id, account_id, CREDENTIAL_TYPES[platform]
+            )
+            return data
+    except AppError:
+        return {}
+
+
+def _pick_webhook_secret(data: dict[str, Any], platform: str) -> str:
+    for key in WEBHOOK_SECRET_KEYS:
+        if data.get(key):
+            return str(data[key])
     return os.getenv(SECRET_ENV[platform], "")
+
+
+async def _webhook_secret(request: Request, platform: str, domain: str) -> str:
+    data = await _load_vaulted_credentials(request, platform, domain)
+    return _pick_webhook_secret(data, platform)
+
+
+async def _tiktok_webhook_creds(request: Request, domain: str) -> tuple[str, str]:
+    data = await _load_vaulted_credentials(request, "tiktok_shop", domain)
+    app_key = str(data.get("app_key") or os.getenv("TIKTOK_SHOP_APP_KEY", ""))
+    secret = _pick_webhook_secret(data, "tiktok_shop")
+    return app_key, secret
+
+
+def _parse_json_object(raw: bytes) -> dict[str, Any] | None:
+    try:
+        loaded = json.loads(raw)
+    except ValueError:
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _extract_domain(
+    headers: dict[str, str], platform: str, payload: dict[str, Any] | None
+) -> str:
+    domain = _header(headers, DOMAIN_HEADERS[platform]).strip()
+    if domain or payload is None:
+        return domain
+    for key in _PAYLOAD_DOMAIN_KEYS:
+        candidate = payload.get(key)
+        if candidate is not None and not isinstance(candidate, bool):
+            text_val = str(candidate).strip()
+            if text_val:
+                return text_val
+    return ""
 
 
 def _callback_url(request: Request) -> str:
@@ -180,6 +271,22 @@ def _verify(
         return verify_shopline_webhook(raw, headers, secret)
     if platform == "shoplazza":
         return verify_shoplazza_webhook(raw, headers, secret)
+    if platform == "amazon_sp":
+        return AmazonSpApiAdapter(
+            seller_id="",
+            lwa_client_id="",
+            lwa_client_secret="",
+            refresh_token="",
+        ).verify_webhook(raw, headers, secret)
+    if platform == "ebay":
+        return EbayConnectorAdapter(
+            seller_username="",
+            app_id="",
+            cert_id="",
+            refresh_token="",
+        ).verify_webhook(raw, headers, secret)
+    if platform == "alibaba_email":
+        return verify_alibaba_iop_webhook_signature(raw, headers, secret)
     if platform == "shopee":
         return verify_shopee_webhook(raw, headers, secret, callback_url=callback_url or None)
     if platform == "lazada":
@@ -204,7 +311,8 @@ async def receive_signed_storefront_webhook(
 ) -> dict[str, int | str | bool]:
     raw = await request.body()
     headers = {key.lower(): value for key, value in request.headers.items()}
-    domain = _header(headers, DOMAIN_HEADERS[platform]).strip().lower()
+    payload = _parse_json_object(raw)
+    domain = _extract_domain(headers, platform, payload)
     secret = await _webhook_secret(request, platform, domain)
     if not secret or not _verify(
         platform, raw, headers, secret, callback_url=_callback_url(request)
@@ -216,18 +324,14 @@ async def receive_signed_storefront_webhook(
             title=f"Invalid {platform} Signature",
             detail="Webhook signature verification failed.",
         )
-    try:
-        payload = json.loads(raw)
-        if not isinstance(payload, dict):
-            raise ValueError("Payload is not an object")
-    except ValueError as exc:
+    if payload is None:
         raise AppError(
             slug="invalid-storefront-delivery",
             status_code=400,
             code="ERR_INVALID_STOREFRONT_DELIVERY",
             title="Invalid Storefront Delivery",
             detail="Expected a JSON object.",
-        ) from exc
+        )
     dedup_id = _header(headers, DEDUP_HEADERS[platform]) or hashlib.sha256(raw).hexdigest()
     inserted = await accept_delivery(
         request,
@@ -521,9 +625,9 @@ async def connect_tiktok_shop(
 async def receive_tiktok_webhook(request: Request) -> dict[str, int | str | bool]:
     raw = await request.body()
     headers = {key.lower(): value for key, value in request.headers.items()}
-    domain = _header(headers, DOMAIN_HEADERS["tiktok_shop"]).strip().lower()
-    secret = await _webhook_secret(request, "tiktok_shop", domain)
-    app_key = os.getenv("TIKTOK_SHOP_APP_KEY", "")
+    payload = _parse_json_object(raw)
+    domain = _extract_domain(headers, "tiktok_shop", payload)
+    app_key, secret = await _tiktok_webhook_creds(request, domain)
     if not verify_tiktok_webhook_signature(
         raw, {"Authorization": _header(headers, "Authorization")}, app_key, secret
     ):
@@ -534,18 +638,14 @@ async def receive_tiktok_webhook(request: Request) -> dict[str, int | str | bool
             title="Invalid TikTok Shop Signature",
             detail="Webhook signature verification failed.",
         )
-    try:
-        payload = json.loads(raw)
-        if not isinstance(payload, dict):
-            raise ValueError("Payload is not an object")
-    except ValueError as exc:
+    if payload is None:
         raise AppError(
             slug="invalid-storefront-delivery",
             status_code=400,
             code="ERR_INVALID_STOREFRONT_DELIVERY",
             title="Invalid Storefront Delivery",
             detail="Expected a JSON object.",
-        ) from exc
+        )
     dedup_id = str(payload.get("tts_notification_id") or hashlib.sha256(raw).hexdigest())
     inserted = await accept_delivery(
         request,
@@ -601,6 +701,21 @@ async def receive_walmart_webhook(request: Request) -> dict[str, int | str | boo
 @router.post("/webhooks/mercado-libre")
 async def receive_mercado_libre_webhook(request: Request) -> dict[str, int | str | bool]:
     return await receive_signed_storefront_webhook(request, "mercado_libre")
+
+
+@router.post("/webhooks/amazon-sp")
+async def receive_amazon_sp_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "amazon_sp")
+
+
+@router.post("/webhooks/ebay")
+async def receive_ebay_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "ebay")
+
+
+@router.post("/webhooks/alibaba-intl")
+async def receive_alibaba_intl_webhook(request: Request) -> dict[str, int | str | bool]:
+    return await receive_signed_storefront_webhook(request, "alibaba_email")
 
 
 __all__ = [

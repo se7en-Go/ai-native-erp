@@ -9221,10 +9221,32 @@
             ],
             "title": "Channel Account Id"
           },
+          "channel_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Label"
+          },
           "channel_metadata": {
             "additionalProperties": true,
             "title": "Channel Metadata",
             "type": "object"
+          },
+          "channel_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Type"
           },
           "created_at": {
             "format": "date-time",
@@ -14703,13 +14725,19 @@
             "default": "17track"
           },
           "warehouse_id": {
-            "format": "uuid",
-            "title": "Warehouse Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warehouse Id"
           }
         },
         "required": [
-          "warehouse_id",
           "tracking_number"
         ],
         "title": "ShipOrderRequest",
@@ -35186,6 +35214,41 @@
         ]
       }
     },
+    "/api/v1/webhooks/alibaba-intl": {
+      "post": {
+        "operationId": "receive_alibaba_intl_webhook_api_v1_webhooks_alibaba_intl_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Alibaba Intl Webhook Api V1 Webhooks Alibaba Intl Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Alibaba Intl Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
     "/api/v1/webhooks/aliexpress": {
       "post": {
         "operationId": "receive_aliexpress_webhook_api_v1_webhooks_aliexpress_post",
@@ -35216,6 +35279,76 @@
           }
         },
         "summary": "Receive Aliexpress Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/amazon-sp": {
+      "post": {
+        "operationId": "receive_amazon_sp_webhook_api_v1_webhooks_amazon_sp_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Amazon Sp Webhook Api V1 Webhooks Amazon Sp Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Amazon Sp Webhook",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/v1/webhooks/ebay": {
+      "post": {
+        "operationId": "receive_ebay_webhook_api_v1_webhooks_ebay_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Receive Ebay Webhook Api V1 Webhooks Ebay Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Ebay Webhook",
         "tags": [
           "connectors"
         ]

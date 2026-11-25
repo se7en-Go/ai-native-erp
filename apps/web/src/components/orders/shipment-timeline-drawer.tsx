@@ -2,8 +2,8 @@
 
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Database, RefreshCw, Truck, X } from "lucide-react";
-import { refreshShipmentTracking } from "@/lib/api-client/live-client";
+import { AlertTriangle, CheckCircle2, Database, RefreshCw, Truck, X } from "lucide-react";
+import { pushOrderFulfillment, refreshShipmentTracking } from "@/lib/api-client/live-client";
 import {
   fetchInventoryBalances,
   fetchInventoryLedger,
@@ -47,7 +47,16 @@ export function ShipmentTimelineDrawer({
     },
   });
 
+  const pushFulfillmentMutation = useMutation({
+    mutationFn: () => pushOrderFulfillment(orderId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
+      void queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
+
   const order = detailQuery.data;
+  const extSync = order?.external_fulfillment;
 
   return (
     <div
@@ -72,6 +81,47 @@ export function ShipmentTimelineDrawer({
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4 text-[13px]">
+        {order?.channel_type && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-[12px]">
+            <div className="space-y-0.5">
+              <div className="font-semibold text-slate-800">
+                {bi("平台履约回传状态", "Channel fulfillment writeback")}:{" "}
+                {order.channel_label ?? order.channel_type}
+              </div>
+              {extSync?.status === "synced" ? (
+                <div className="inline-flex items-center gap-1 text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>
+                    {bi("已回传运单", "Synced")}
+                    {extSync.external_fulfillment_id
+                      ? ` (${extSync.external_fulfillment_id})`
+                      : ""}
+                  </span>
+                </div>
+              ) : extSync?.status === "failed" ? (
+                <div className="text-rose-700">
+                  {bi("回传失败", "Sync failed")}: {extSync.error_detail ?? extSync.error_code}
+                </div>
+              ) : (
+                <div className="text-slate-500">
+                  {bi("尚未回传平台", "Not yet synced to storefront")}
+                </div>
+              )}
+            </div>
+            {(order.shipments ?? []).length > 0 && extSync?.status !== "synced" && (
+              <button
+                type="button"
+                disabled={pushFulfillmentMutation.isPending}
+                onClick={() => pushFulfillmentMutation.mutate()}
+                className="erp-btn erp-btn-secondary py-1 text-[11px]"
+              >
+                <RefreshCw className="h-3 w-3" />
+                <span>{bi("重试回传平台", "Retry channel sync")}</span>
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="flex justify-end">
           <button
             type="button"

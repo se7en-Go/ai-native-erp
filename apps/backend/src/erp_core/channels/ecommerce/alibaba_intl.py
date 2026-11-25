@@ -50,16 +50,22 @@ MONEY_SCALE = Decimal("0.01")
 #: ``sign`` is the only parameter excluded from its own canonical payload.
 _UNSIGNED_PARAMS = frozenset({"sign"})
 _SUCCESS_CODES = frozenset({"0", "200", "success", "true"})
-_CANCELLED_STATUSES = frozenset({"cancel", "cancelled", "terminated"})
+_CANCELLED_STATUSES = frozenset({"cancel", "cancelled", "canceled", "terminated"})
 
 ORDER_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "waitbuyerpay": FulfillmentStatus.PENDING_PAYMENT,
+    "unpaid": FulfillmentStatus.PENDING_PAYMENT,
     "waitsellersend": FulfillmentStatus.CONFIRMED_RESERVED,
     "waitbuyerreceive": FulfillmentStatus.SHIPPED,
     "success": FulfillmentStatus.DELIVERED,
     "cancel": FulfillmentStatus.CANCELLED,
     "cancelled": FulfillmentStatus.CANCELLED,
+    "canceled": FulfillmentStatus.CANCELLED,
     "terminated": FulfillmentStatus.CANCELLED,
+    "refunded": FulfillmentStatus.REFUNDED,
+    "refund": FulfillmentStatus.REFUNDED,
+    "returned": FulfillmentStatus.REFUNDED,
+    "fully_refunded": FulfillmentStatus.REFUNDED,
 }
 
 _ORDER_ROW_KEYS = ("orders", "order_list", "trade_list", "orders_list")
@@ -581,14 +587,31 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
         )
 
     @staticmethod
-    def _payment_status(status: str, order: Mapping[str, Any]) -> PaymentStatus:
-        if status == "waitbuyerpay":
-            return PaymentStatus.UNPAID
+    def _payment_status(
+        status: str,
+        order: Mapping[str, Any],
+        *,
+        refunded: Decimal = Decimal("0.00"),
+        total: Decimal = Decimal("0.00"),
+    ) -> PaymentStatus:
         paid_evidence = _lookup(
             order, "gmt_pay", "pay_time", "gmt_payment", "paid_time", "paid"
         )
         if status in _CANCELLED_STATUSES:
-            return PaymentStatus.REFUNDED if paid_evidence is not None else PaymentStatus.UNPAID
+            return (
+                PaymentStatus.REFUNDED
+                if (paid_evidence is not None or refunded > Decimal("0"))
+                else PaymentStatus.UNPAID
+            )
+        if status in {"refunded", "refund", "returned", "fully_refunded"} or (
+            total > Decimal("0") and refunded >= total
+        ):
+            return PaymentStatus.REFUNDED
+        if status in {"waitbuyerpay", "unpaid"}:
+            return PaymentStatus.UNPAID
+        declared_payment = (_first_str(order, "payment_status") or "").lower()
+        if status == "partially_paid" or declared_payment == "partially_paid":
+            return PaymentStatus.PARTIALLY_PAID
         return PaymentStatus.PAID
 
     def _normalize_order(
@@ -608,6 +631,13 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
             for row in self._rows(order, _ORDER_LINE_KEYS)
             if (item := self._normalize_line_item(row)) is not None
         ]
+        if not line_items:
+            logger.warning(
+                "alibaba_iop_order_without_line_items",
+                store_id=self.store_id,
+                external_order_id=external_order_id,
+            )
+            return None
 
         subtotal_raw = _lookup(
             order, "subtotal", "product_amount", "product_total", "goods_amount"
@@ -643,6 +673,20 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
         refunded = _money(
             _lookup(order, "refund_amount", "refunded_amount"),
             what="refund_amount",
+        ).copy_abs()
+        is_cancelled = status in _CANCELLED_STATUSES
+        is_full_refund = status in {"refunded", "refund", "returned", "fully_refunded"} or (
+            total > Decimal("0") and refunded >= total
+        )
+        fulfillment_status = (
+            FulfillmentStatus.CANCELLED
+            if is_cancelled
+            else FulfillmentStatus.REFUNDED
+            if is_full_refund
+            else ORDER_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED)
+        )
+        payment_status = self._payment_status(
+            status, order, refunded=refunded, total=total
         )
 
         country = _country_code(
@@ -692,10 +736,8 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
             tax_collected=tax,
             total_amount=total,
             platform_commission_base=commission,
-            fulfillment_status=ORDER_STATUS_MAP.get(
-                status, FulfillmentStatus.CONFIRMED_RESERVED
-            ),
-            payment_status=self._payment_status(status, order),
+            fulfillment_status=fulfillment_status,
+            payment_status=payment_status,
             customer=NormalizedCustomer(
                 email=_first_str(order, "buyer_email", "email") or _first_str(buyer, "email"),
                 phone_e164=_first_str(order, "buyer_phone", "phone")
@@ -831,7 +873,19 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
             notify_customer=notify_customer,
         )
         payload = await self._call_iop("POST", ALIBABA_IOP_SHIPPING_SEND_PATH, params)
-        return self._data_of(payload)
+        data = self._data_of(payload)
+        fid = (
+            data.get("fulfillment_id")
+            or data.get("logistics_id")
+            or data.get("delivery_order_id")
+            or data.get("id")
+            or data.get("trade_id")
+            or fulfillment_order_id
+            or external_order_id
+        )
+        if fid:
+            data["fulfillment_id"] = str(fid)
+        return data
 
     def verify_webhook(
         self, raw_body: bytes, headers: Mapping[str, str], secret: str
@@ -910,11 +964,20 @@ class AlibabaIntlAdapter(CommercePlatformAdapter):
     async def push_inventory_level(
         self, *, external_sku: str, quantity: int, **_extra: Any
     ) -> dict[str, Any]:
+        clean_sku = external_sku.strip()
+        if not clean_sku:
+            raise AppError(
+                slug="alibaba-inventory-sync-failed",
+                status_code=422,
+                code="ERR_ALIBABA_INVENTORY_SYNC",
+                title="Alibaba Inventory Sync Failed",
+                detail="Alibaba IOP inventory sync requires a non-empty external_sku.",
+            )
         payload = await self._call_iop(
             "POST",
             ALIBABA_IOP_INVENTORY_UPDATE_PATH,
             {
-                "sku_code": external_sku.strip(),
+                "sku_code": clean_sku,
                 "stock_quantity": str(max(0, int(quantity))),
             },
         )

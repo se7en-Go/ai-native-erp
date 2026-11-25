@@ -1655,9 +1655,11 @@ export type OrderProfitSnapshotRead = {
 
 export type OrderRead = {
     channel_account_id: string | null;
+    channel_label?: string | null;
     channel_metadata: {
         [key: string]: unknown;
     };
+    channel_type?: string | null;
     created_at: string;
     currency: string;
     customer_id: string;
@@ -2706,7 +2708,7 @@ export type ShipOrderRequest = {
     shipment_mode?: string;
     tracking_number: string;
     tracking_provider?: TrackingProvider;
-    warehouse_id: string;
+    warehouse_id?: string | null;
 };
 
 export type ShipmentRead = {
@@ -10489,6 +10491,24 @@ export type Receive17TrackWebhookApiV1Webhooks17TrackPostResponses = {
 
 export type Receive17TrackWebhookApiV1Webhooks17TrackPostResponse = Receive17TrackWebhookApiV1Webhooks17TrackPostResponses[keyof Receive17TrackWebhookApiV1Webhooks17TrackPostResponses];
 
+export type ReceiveAlibabaIntlWebhookApiV1WebhooksAlibabaIntlPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/alibaba-intl';
+};
+
+export type ReceiveAlibabaIntlWebhookApiV1WebhooksAlibabaIntlPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveAlibabaIntlWebhookApiV1WebhooksAlibabaIntlPostResponse = ReceiveAlibabaIntlWebhookApiV1WebhooksAlibabaIntlPostResponses[keyof ReceiveAlibabaIntlWebhookApiV1WebhooksAlibabaIntlPostResponses];
+
 export type ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostData = {
     body?: never;
     path?: never;
@@ -10506,6 +10526,42 @@ export type ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses = {
 };
 
 export type ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponse = ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses[keyof ReceiveAliexpressWebhookApiV1WebhooksAliexpressPostResponses];
+
+export type ReceiveAmazonSpWebhookApiV1WebhooksAmazonSpPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/amazon-sp';
+};
+
+export type ReceiveAmazonSpWebhookApiV1WebhooksAmazonSpPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveAmazonSpWebhookApiV1WebhooksAmazonSpPostResponse = ReceiveAmazonSpWebhookApiV1WebhooksAmazonSpPostResponses[keyof ReceiveAmazonSpWebhookApiV1WebhooksAmazonSpPostResponses];
+
+export type ReceiveEbayWebhookApiV1WebhooksEbayPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/webhooks/ebay';
+};
+
+export type ReceiveEbayWebhookApiV1WebhooksEbayPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: {
+        [key: string]: number | string | boolean;
+    };
+};
+
+export type ReceiveEbayWebhookApiV1WebhooksEbayPostResponse = ReceiveEbayWebhookApiV1WebhooksEbayPostResponses[keyof ReceiveEbayWebhookApiV1WebhooksEbayPostResponses];
 
 export type ReceiveMarketplaceImWebhookApiV1WebhooksImPlatformPostData = {
     body?: never;

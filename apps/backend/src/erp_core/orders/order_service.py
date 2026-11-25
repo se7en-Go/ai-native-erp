@@ -153,7 +153,12 @@ class OrderService:
         )
 
     async def _serialize_order(
-        self, session: AsyncSession, tenant_id: UUID, order: Order
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        order: Order,
+        *,
+        channel_info: tuple[str | None, str | None] | None = None,
     ) -> OrderRead:
         items = (
             (
@@ -196,12 +201,35 @@ class OrderService:
                 {"tid": tenant_id, "cid": order.customer_id},
             )
         ).scalar_one_or_none()
+        channel_type: str | None = None
+        channel_label: str | None = None
+        if channel_info is not None:
+            channel_type, channel_label = channel_info
+        elif order.channel_account_id is not None:
+            ca_row = (
+                await session.execute(
+                    text(
+                        "SELECT channel_type, display_name FROM channel_accounts "
+                        "WHERE tenant_id = :tid AND id = :caid"
+                    ),
+                    {"tid": tenant_id, "caid": order.channel_account_id},
+                )
+            ).one_or_none()
+            if ca_row is not None:
+                channel_type = (
+                    str(ca_row.channel_type) if ca_row.channel_type is not None else None
+                )
+                channel_label = (
+                    str(ca_row.display_name) if ca_row.display_name is not None else None
+                )
         return OrderRead(
             id=order.id,
             tenant_id=order.tenant_id,
             order_no=order.order_no,
             order_mode=order.order_mode,
             channel_account_id=order.channel_account_id,
+            channel_type=channel_type,
+            channel_label=channel_label,
             external_order_id=order.external_order_id,
             customer_id=order.customer_id,
             customer_name=cust_name,
@@ -536,7 +564,36 @@ class OrderService:
             .scalars()
             .all()
         )
-        items = [await self._serialize_order(session, tenant_id, row) for row in rows]
+        account_ids = {row.channel_account_id for row in rows if row.channel_account_id is not None}
+        channel_map: dict[UUID, tuple[str | None, str | None]] = {}
+        if account_ids:
+            ca_rows = (
+                await session.execute(
+                    text(
+                        "SELECT id, channel_type, display_name FROM channel_accounts "
+                        "WHERE tenant_id = :tid AND id = ANY(:ids)"
+                    ),
+                    {"tid": tenant_id, "ids": list(account_ids)},
+                )
+            ).all()
+            for ca_row in ca_rows:
+                channel_map[UUID(str(ca_row.id))] = (
+                    str(ca_row.channel_type) if ca_row.channel_type is not None else None,
+                    str(ca_row.display_name) if ca_row.display_name is not None else None,
+                )
+        items = [
+            await self._serialize_order(
+                session,
+                tenant_id,
+                row,
+                channel_info=(
+                    channel_map.get(row.channel_account_id, (None, None))
+                    if row.channel_account_id is not None
+                    else None
+                ),
+            )
+            for row in rows
+        ]
         return PaginatedResponse(
             items=items,
             total=total,
@@ -621,6 +678,49 @@ class OrderService:
             after_state={"fulfillment_status": order.fulfillment_status.value, "reason": reason},
         )
         return await self._serialize_order(session, tenant_id, order)
+
+    async def _resolve_ship_warehouse_id(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        order: Order,
+        explicit_warehouse_id: UUID | None,
+    ) -> UUID:
+        """Resolve the target warehouse for shipment deduction when omitted by the caller."""
+        if explicit_warehouse_id is not None:
+            return explicit_warehouse_id
+        reserved_ids = await self._reservation_warehouse_ids(session, tenant_id, order.id)
+        if reserved_ids:
+            return reserved_ids[0]
+        if order.channel_account_id is not None:
+            raw_wh = await session.scalar(
+                text(
+                    "SELECT config ->> 'warehouse_id' FROM channel_accounts "
+                    "WHERE tenant_id = :tid AND id = :caid"
+                ),
+                {"tid": tenant_id, "caid": order.channel_account_id},
+            )
+            if raw_wh:
+                try:
+                    return UUID(str(raw_wh))
+                except ValueError:
+                    pass
+        active_wh = await session.scalar(
+            text(
+                "SELECT id FROM warehouses WHERE tenant_id = :tid AND is_active = true "
+                "ORDER BY created_at ASC, id ASC LIMIT 1"
+            ),
+            {"tid": tenant_id},
+        )
+        if active_wh is not None:
+            return UUID(str(active_wh))
+        raise AppError(
+            slug="warehouse-required",
+            status_code=422,
+            code="ERR_WAREHOUSE_REQUIRED",
+            title="Warehouse Required",
+            detail="No warehouse found for order shipment.",
+        )
 
     async def ship_order(
         self,
@@ -715,6 +815,10 @@ class OrderService:
                         detail="override_reason is mandatory when overriding unpaid balance gate.",
                     )
 
+        target_warehouse_id = await self._resolve_ship_warehouse_id(
+            session, tenant_id, order, payload.warehouse_id
+        )
+
         items = (
             (
                 await session.execute(
@@ -745,7 +849,7 @@ class OrderService:
         await self.inventory.deduct_shipped(
             session,
             tenant_id=tenant_id,
-            warehouse_id=payload.warehouse_id,
+            warehouse_id=target_warehouse_id,
             shipment_id=shipment.id,
             items=[(i.variant_id, i.quantity) for i in items],
             idempotency_prefix=f"order-ship:{shipment.id}",

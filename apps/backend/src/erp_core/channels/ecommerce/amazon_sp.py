@@ -82,10 +82,15 @@ ORDER_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "InvoiceUnconfirmed": FulfillmentStatus.CONFIRMED_RESERVED,
     "Shipped": FulfillmentStatus.SHIPPED,
     "Canceled": FulfillmentStatus.CANCELLED,
+    "Cancelled": FulfillmentStatus.CANCELLED,
+    "Refunded": FulfillmentStatus.REFUNDED,
 }
 
-_CANCELED_STATUSES = frozenset({"Canceled", "Cancelled"})
-_UNPAID_STATUSES = frozenset({"Pending", "PendingAvailability"})
+_ORDER_STATUS_MAP_LOWER: Mapping[str, FulfillmentStatus] = {
+    k.lower(): v for k, v in ORDER_STATUS_MAP.items()
+}
+_CANCELED_STATUSES = frozenset({"canceled", "cancelled"})
+_UNPAID_STATUSES = frozenset({"pending", "pendingavailability"})
 
 _ORDER_ITEM_PAGE_LIMIT = 20
 
@@ -466,11 +471,12 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
 
     @staticmethod
     def _payment_status(status: str, payment_method: str) -> PaymentStatus:
-        if status in _CANCELED_STATUSES:
-            # A cancelled Amazon order is settled back to the buyer: the ERP receivable
+        lowered = status.strip().lower()
+        if lowered in _CANCELED_STATUSES or lowered in {"refunded", "returned", "fully_refunded"}:
+            # A cancelled/refunded Amazon order is settled back to the buyer: the ERP receivable
             # must be refunded, never left open.
             return PaymentStatus.REFUNDED
-        if status in _UNPAID_STATUSES and not payment_method:
+        if lowered in _UNPAID_STATUSES and not payment_method:
             return PaymentStatus.UNPAID
         return PaymentStatus.PAID
 
@@ -534,7 +540,7 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
             "amazon_is_business_order": bool(raw.get("IsBusinessOrder")),
             "amazon_seller_order_id": str(raw.get("SellerOrderId") or ""),
         }
-        refunded_val = self._money(raw.get("RefundedAmount"))
+        refunded_val = self._money(raw.get("RefundedAmount")).copy_abs()
         commission_val = self._money(raw.get("PlatformCommission")) + sum(
             (self._money(item.get("CommissionFee")) for item in raw_items),
             start=Decimal("0.00"),
@@ -544,6 +550,24 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
             refunded_amount=refunded_val,
             platform_commission_base=commission_val,
         )
+        status_lower = status.lower()
+        is_cancelled = status_lower in _CANCELED_STATUSES or bool(
+            raw.get("CancelledAt") or raw.get("cancelled_at")
+        )
+        is_full_refund = status_lower in {"refunded", "returned", "fully_refunded"} or (
+            total > Decimal("0") and refunded_val >= total
+        )
+        if is_cancelled:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+            payment_status = PaymentStatus.REFUNDED
+        elif is_full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+            payment_status = PaymentStatus.REFUNDED
+        else:
+            fulfillment_status = _ORDER_STATUS_MAP_LOWER.get(
+                status_lower, FulfillmentStatus.CONFIRMED_RESERVED
+            )
+            payment_status = self._payment_status(status, payment_method)
         return NormalizedOrder(
             external_order_id=order_id,
             external_order_number=str(raw.get("SellerOrderId") or order_id),
@@ -561,8 +585,8 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
             platform_commission_base=commission_val.quantize(
                 _MONEY_SCALE, rounding=ROUND_HALF_UP
             ),
-            fulfillment_status=ORDER_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED),
-            payment_status=self._payment_status(status, payment_method),
+            fulfillment_status=fulfillment_status,
+            payment_status=payment_status,
             customer=NormalizedCustomer(
                 email=buyer_email,
                 phone_e164=buyer_phone,
@@ -681,14 +705,28 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
     ) -> dict[str, Any]:
         """Confirm one shipment through ``POST /orders/v0/orders/{id}/shipmentConfirmation``."""
         ship_date = _iso8601_z(datetime.now(UTC))
+        package_ref = (fulfillment_order_id or "").strip() or "1"
+        order_items: list[dict[str, Any]] = []
+        try:
+            raw_items = await self._fetch_order_items(external_order_id)
+        except AppError as exc:
+            if exc.code != "ERR_AMAZON_SP_API_ERROR":
+                raise
+            raw_items = []
+        for item in raw_items:
+            item_id = str(item.get("OrderItemId") or "").strip()
+            if not item_id:
+                continue
+            qty = max(1, self._int(item.get("QuantityOrdered"), 1))
+            order_items.append({"orderItemId": item_id, "quantity": qty})
         payload: dict[str, Any] = {
             "marketplaceId": self.marketplace_id,
             "packageDetail": {
-                "packageReferenceId": "1",
+                "packageReferenceId": package_ref,
                 "carrierCode": carrier_company,
                 "trackingNumber": tracking_number,
                 "shipDate": ship_date,
-                "orderItems": [],
+                "orderItems": order_items,
             },
         }
         response = await self._sp_request(
@@ -698,7 +736,10 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
         )
         if response.status_code >= 400:
             raise self._api_error(response, detail="Amazon rejected the shipment confirmation.")
+        fulfillment_id = f"{external_order_id}:{package_ref}"
         return {
+            "fulfillment_id": fulfillment_id,
+            "external_fulfillment_id": fulfillment_id,
             "status": "ACCEPTED",
             "external_order_id": external_order_id,
             "tracking_number": tracking_number,
@@ -880,6 +921,15 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
         self, *, external_sku: str, quantity: int, **_extra: Any
     ) -> dict[str, Any]:
         """Patch ``fulfillment_availability`` for one SKU through Listings Items ``PATCH``."""
+        clean_sku = external_sku.strip()
+        if not clean_sku:
+            raise AppError(
+                slug="amazon-inventory-sync-failed",
+                status_code=422,
+                code="ERR_AMAZON_INVENTORY_SYNC",
+                title="Amazon Inventory Sync Failed",
+                detail="Amazon SP-API inventory sync requires a non-empty external_sku.",
+            )
         normalized_quantity = max(0, int(quantity))
         patch: list[dict[str, Any]] = [
             {
@@ -895,7 +945,7 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
         ]
         response = await self._sp_request(
             "PATCH",
-            self._listing_item_url(external_sku),
+            self._listing_item_url(clean_sku),
             params=self._listing_params(),
             json_body=patch,
         )
@@ -906,11 +956,11 @@ class AmazonSpApiAdapter(CommercePlatformAdapter):
         if response.status_code >= 400 or status.upper() == "INVALID":
             raise self._listing_rejected(
                 "Amazon rejected the inventory update for "
-                f"'{external_sku}' (status {status or 'HTTP_' + str(response.status_code)}): "
+                f"'{clean_sku}' (status {status or 'HTTP_' + str(response.status_code)}): "
                 f"{self._issue_summary(issue_list)}"
             )
         return {
-            "external_sku": external_sku,
+            "external_sku": clean_sku,
             "quantity": normalized_quantity,
             "status": status or "ACCEPTED",
             "submission_id": (

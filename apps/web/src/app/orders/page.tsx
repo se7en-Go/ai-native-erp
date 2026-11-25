@@ -5,18 +5,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRightLeft,
+  CheckCircle2,
   CircleDollarSign,
   FileSpreadsheet,
   FileText,
   Lock,
   PackageCheck,
+  RefreshCw,
   Truck,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ShipmentTimelineDrawer } from "@/components/orders/shipment-timeline-drawer";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Badge, EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/page";
-import { shipOrder } from "@/lib/api-client/live-client";
+import { pushOrderFulfillment, shipOrder } from "@/lib/api-client/live-client";
 import {
   commercialInvoicePdfUrl,
   packingListPdfUrl,
@@ -25,6 +27,36 @@ import {
 import { fetchOrders, fetchPendingProposalsCount } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
 import { formatMoney, type OrderMode } from "@/lib/contracts";
+
+const CHANNEL_LABEL: Record<string, string> = {
+  shopify: "Shopify",
+  woocommerce: "WooCommerce",
+  shopline: "SHOPLINE",
+  shoplazza: "Shoplazza",
+  tiktok_shop: "TikTok Shop",
+  amazon_sp: "Amazon",
+  ebay: "eBay",
+  alibaba_email: "Alibaba.com",
+  shopee: "Shopee",
+  lazada: "Lazada",
+  temu: "Temu",
+  shein: "SHEIN",
+  aliexpress: "AliExpress",
+  ozon: "Ozon",
+  walmart: "Walmart",
+  mercado_libre: "Mercado Libre",
+};
+
+const CARRIER_OPTIONS = [
+  "DHL",
+  "FedEx",
+  "UPS",
+  "USPS",
+  "YunExpress",
+  "4PX",
+  "SF Express",
+  "Other",
+];
 
 const MODE_LABEL: Record<OrderMode, { zh: string; en: string }> = {
   b2c_retail: { zh: "B2C 零售", en: "B2C retail" },
@@ -70,6 +102,8 @@ export default function OrdersPage() {
   const [modeFilter, setModeFilter] = useState<"" | OrderMode>("");
   const [drawerOrderId, setDrawerOrderId] = useState<string | null>(null);
   const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
+  const [carrierInputs, setCarrierInputs] = useState<Record<string, string>>({});
+  const [providerInputs, setProviderInputs] = useState<Record<string, "manual" | "17track">>({});
   // Export documents are rendered server-side from the locked contract, so the
   // language pill only swaps the `?language=` query of the same PDF route.
   const [pdfLanguage, setPdfLanguage] = useState<ExportDocumentLanguage>("en");
@@ -85,12 +119,31 @@ export default function OrdersPage() {
   });
 
   const shipMutation = useMutation({
-    mutationFn: ({ orderId, trackingNumber }: { orderId: string; trackingNumber: string }) =>
+    mutationFn: ({
+      orderId,
+      trackingNumber,
+      carrierCode,
+      trackingProvider,
+    }: {
+      orderId: string;
+      trackingNumber: string;
+      carrierCode: string;
+      trackingProvider: "manual" | "17track";
+    }) =>
       shipOrder(orderId, {
         trackingNumber,
-        carrierCode: "DHL",
+        carrierCode,
         shipmentMode: "parcel",
+        trackingProvider,
+        autoResolveWarehouse: true,
       }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
+
+  const pushFulfillmentMutation = useMutation({
+    mutationFn: (orderId: string) => pushOrderFulfillment(orderId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
@@ -175,12 +228,12 @@ export default function OrdersPage() {
           />
         </section>
 
-        {shipMutation.isError && (
+        {(shipMutation.isError || pushFulfillmentMutation.isError) && (
           <p
             role="alert"
             className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[12px] font-medium text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
           >
-            {shipMutation.error.message}
+            {shipMutation.error?.message ?? pushFulfillmentMutation.error?.message}
           </p>
         )}
 
@@ -239,6 +292,11 @@ export default function OrdersPage() {
                 {orders.map((ord) => {
                   const blocked70Unpaid =
                     ord.order_mode === "b2b_wholesale" && ord.payment_status !== "paid";
+                  const isTerminalOrShipped =
+                    ord.fulfillment_status === "shipped" ||
+                    ord.fulfillment_status === "delivered" ||
+                    ord.fulfillment_status === "cancelled" ||
+                    ord.fulfillment_status === "refunded";
                   const modeCopy = MODE_LABEL[ord.order_mode] ?? {
                     zh: ord.order_mode,
                     en: ord.order_mode,
@@ -247,12 +305,33 @@ export default function OrdersPage() {
                     zh: ord.fulfillment_status,
                     en: ord.fulfillment_status,
                   };
+                  const channelDisplay = ord.channel_type
+                    ? (CHANNEL_LABEL[ord.channel_type] ?? ord.channel_type)
+                    : null;
+                  const extSync = ord.external_fulfillment;
+                  const carrierCode = carrierInputs[ord.id] ?? "DHL";
+                  const trackingProvider = providerInputs[ord.id] ?? "manual";
                   return (
                     <tr key={ord.id}>
                       <td>
                         <div className="font-mono text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
                           {ord.order_no}
                         </div>
+                        {channelDisplay && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span
+                              data-testid={`order-channel-${ord.id}`}
+                              className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300"
+                            >
+                              {channelDisplay}
+                            </span>
+                            {ord.channel_label && (
+                              <span className="max-w-[140px] truncate text-[10px] text-gray-500 dark:text-gray-400">
+                                {ord.channel_label}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {ord.has_72h_stagnation_alert && (
                           <span
                             data-testid={`order-72h-alert-${ord.id}`}
@@ -268,24 +347,83 @@ export default function OrdersPage() {
                         <Badge className="mt-1">{bi(modeCopy.zh, modeCopy.en)}</Badge>
                       </td>
                       <td>
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                            ord.fulfillment_status === "exception"
-                              ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-                              : "border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
-                          }`}
-                        >
+                        <div className="flex flex-col items-start gap-1">
                           <span
-                            aria-hidden="true"
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              FULFILLMENT_DOT[ord.fulfillment_status] ?? "bg-slate-400"
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                              ord.fulfillment_status === "exception"
+                                ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                                : "border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                             }`}
-                          />
-                          {bi(fulfillmentCopy.zh, fulfillmentCopy.en)}
-                        </span>
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                FULFILLMENT_DOT[ord.fulfillment_status] ?? "bg-slate-400"
+                              }`}
+                            />
+                            {bi(fulfillmentCopy.zh, fulfillmentCopy.en)}
+                          </span>
+                          {extSync?.status === "synced" && (
+                            <span
+                              data-testid={`order-fulfillment-sync-${ord.id}`}
+                              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                              title={extSync.external_fulfillment_id ?? undefined}
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>
+                                {bi(
+                                  `已回传 ${channelDisplay ?? "平台"}`,
+                                  `Synced to ${channelDisplay ?? "store"}`,
+                                )}
+                              </span>
+                            </span>
+                          )}
+                          {extSync?.status === "failed" && (
+                            <button
+                              type="button"
+                              data-testid={`order-push-fulfillment-${ord.id}`}
+                              disabled={pushFulfillmentMutation.isPending}
+                              onClick={() => pushFulfillmentMutation.mutate(ord.id)}
+                              className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                              title={extSync.error_detail ?? extSync.error_code ?? undefined}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              <span>{bi("回传失败 · 重试", "Sync failed · Retry")}</span>
+                            </button>
+                          )}
+                          {!extSync &&
+                            channelDisplay &&
+                            (ord.fulfillment_status === "shipped" ||
+                              ord.fulfillment_status === "delivered") && (
+                              <button
+                                type="button"
+                                data-testid={`order-push-fulfillment-${ord.id}`}
+                                disabled={pushFulfillmentMutation.isPending}
+                                onClick={() => pushFulfillmentMutation.mutate(ord.id)}
+                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                                <span>
+                                  {bi(
+                                    `同步到 ${channelDisplay}`,
+                                    `Sync to ${channelDisplay}`,
+                                  )}
+                                </span>
+                              </button>
+                            )}
+                        </div>
                       </td>
                       <td>
                         <div className="font-medium text-gray-700 dark:text-gray-300">{ord.payment_status}</div>
+                        {ord.refunded_amount && (
+                          <span
+                            data-testid={`order-refunded-${ord.id}`}
+                            className="mt-1 inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+                          >
+                            {bi("已退", "Refunded")}{" "}
+                            {formatMoney(ord.refunded_amount, ord.currency)}
+                          </span>
+                        )}
                         {blocked70Unpaid && (
                           <span
                             data-testid={`order-ship-blocked-${ord.id}`}
@@ -335,31 +473,81 @@ export default function OrdersPage() {
                             <span>{bi("物流时间轴与台账", "Timeline & ledger")}</span>
                           </button>
 
-                          <input
-                            type="text"
-                            value={trackingInputs[ord.id] ?? ""}
-                            onChange={(e) =>
-                              setTrackingInputs((prev) => ({ ...prev, [ord.id]: e.target.value }))
-                            }
-                            placeholder={bi("运单号", "Tracking #")}
-                            aria-label={bi("运单号", "Tracking number")}
-                            disabled={blocked70Unpaid}
-                            className="erp-input w-28 rounded-xl py-1 text-[12px] disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                          />
-                          <button
-                            type="button"
-                            disabled={blocked70Unpaid || !(trackingInputs[ord.id] ?? "").trim()}
-                            onClick={() =>
-                              shipMutation.mutate({
-                                orderId: ord.id,
-                                trackingNumber: trackingInputs[ord.id] ?? "",
-                              })
-                            }
-                            className="erp-btn rounded-xl bg-blue-600 text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
-                          >
-                            <ArrowRightLeft className="h-3 w-3" />
-                            <span>{bi("出库", "Ship")}</span>
-                          </button>
+                          {!isTerminalOrShipped && (
+                            <>
+                              <select
+                                data-testid={`order-carrier-${ord.id}`}
+                                value={carrierCode}
+                                onChange={(e) =>
+                                  setCarrierInputs((prev) => ({
+                                    ...prev,
+                                    [ord.id]: e.target.value,
+                                  }))
+                                }
+                                aria-label={bi("物流商", "Carrier")}
+                                disabled={blocked70Unpaid}
+                                className="erp-input w-24 rounded-xl py-1 text-[12px] disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                              >
+                                {CARRIER_OPTIONS.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                data-testid={`order-provider-${ord.id}`}
+                                value={trackingProvider}
+                                onChange={(e) =>
+                                  setProviderInputs((prev) => ({
+                                    ...prev,
+                                    [ord.id]: e.target.value as "manual" | "17track",
+                                  }))
+                                }
+                                aria-label={bi("追踪模式", "Tracking mode")}
+                                disabled={blocked70Unpaid}
+                                className="erp-input w-24 rounded-xl py-1 text-[12px] disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                              >
+                                <option value="manual">{bi("手动直传", "Manual")}</option>
+                                <option value="17track">17TRACK</option>
+                              </select>
+                              <input
+                                type="text"
+                                data-testid={`order-tracking-input-${ord.id}`}
+                                value={trackingInputs[ord.id] ?? ""}
+                                onChange={(e) =>
+                                  setTrackingInputs((prev) => ({
+                                    ...prev,
+                                    [ord.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder={bi("运单号", "Tracking #")}
+                                aria-label={bi("运单号", "Tracking number")}
+                                disabled={blocked70Unpaid}
+                                className="erp-input w-32 rounded-xl py-1 text-[12px] disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                              />
+                              <button
+                                type="button"
+                                data-testid={`order-ship-btn-${ord.id}`}
+                                disabled={
+                                  blocked70Unpaid ||
+                                  shipMutation.isPending ||
+                                  !(trackingInputs[ord.id] ?? "").trim()
+                                }
+                                onClick={() =>
+                                  shipMutation.mutate({
+                                    orderId: ord.id,
+                                    trackingNumber: (trackingInputs[ord.id] ?? "").trim(),
+                                    carrierCode,
+                                    trackingProvider,
+                                  })
+                                }
+                                className="erp-btn rounded-xl bg-blue-600 text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-40"
+                              >
+                                <ArrowRightLeft className="h-3 w-3" />
+                                <span>{bi("出库", "Ship")}</span>
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

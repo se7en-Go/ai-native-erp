@@ -334,6 +334,50 @@ async def test_cancelled_posting_is_refunded_end_to_end() -> None:
     assert order.customer.display_name == "Anonymous"
 
 
+async def test_uppercase_cancelled_refunded_and_partial_refunds() -> None:
+    cancelled_upper = _posting(posting_number="OZ-CANCEL-UP", status="CANCELLED")
+    refunded_status = _posting(posting_number="OZ-REFUND-ST", status="REFUNDED")
+    partial_refund = _posting(
+        posting_number="OZ-PARTIAL", status="delivered", refunded_amount="250.00"
+    )
+    full_refund = _posting(
+        posting_number="OZ-FULL", status="delivered", refund_amount="3964.50"
+    )
+    fake = FakeOzon()
+    fake.on(
+        OZON_FBS_ORDER_LIST_PATH,
+        lambda request: _json(
+            {
+                "result": {
+                    "postings": [
+                        cancelled_upper,
+                        refunded_status,
+                        partial_refund,
+                        full_refund,
+                    ]
+                }
+            }
+        ),
+    )
+
+    orders, _ = await _adapter(fake.handle).fetch_orders_updated_since(SINCE)
+    by_id = {order.external_order_id: order for order in orders}
+
+    assert by_id["OZ-CANCEL-UP"].fulfillment_status is FulfillmentStatus.CANCELLED
+    assert by_id["OZ-CANCEL-UP"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["OZ-CANCEL-UP"].channel_metadata["refunded_amount"] == "3964.50"
+
+    assert by_id["OZ-REFUND-ST"].fulfillment_status is FulfillmentStatus.REFUNDED
+    assert by_id["OZ-REFUND-ST"].payment_status is PaymentStatus.REFUNDED
+
+    assert by_id["OZ-PARTIAL"].fulfillment_status is FulfillmentStatus.DELIVERED
+    assert by_id["OZ-PARTIAL"].payment_status is PaymentStatus.PAID
+    assert by_id["OZ-PARTIAL"].channel_metadata["refunded_amount"] == "250.00"
+
+    assert by_id["OZ-FULL"].fulfillment_status is FulfillmentStatus.REFUNDED
+    assert by_id["OZ-FULL"].payment_status is PaymentStatus.REFUNDED
+
+
 async def test_fbo_mode_uses_the_ozon_warehouse_endpoint() -> None:
     fake = FakeOzon()
     fake.on(
@@ -527,6 +571,7 @@ async def test_create_fulfillment_resolves_posting_products_then_ships() -> None
     assert "package_id" not in package
     assert result["channel"] == "ozon"
     assert result["status"] == "shipped"
+    assert result["fulfillment_id"] == "12345-0001-1"
     assert result["tracking_number"] == "RU123456789"
     assert result["raw"] == {"result": ["12345-0001-1"]}
 
@@ -535,14 +580,15 @@ async def test_create_fulfillment_with_package_id_skips_the_posting_lookup() -> 
     fake = FakeOzon()
     fake.on(OZON_FBS_SHIP_PATH, lambda request: _json({"result": ["12345-0001-1"]}))
 
-    await _adapter(fake.handle).create_fulfillment(
+    result = await _adapter(fake.handle).create_fulfillment(
         "12345-0001-1", "RU1", "CDEK", fulfillment_order_id="PKG-77"
     )
 
     assert fake.paths() == [OZON_FBS_SHIP_PATH]
     package = fake.body_at(OZON_FBS_SHIP_PATH)["packages"][0]
     assert package["package_id"] == "PKG-77"
-    assert package["products"] == []
+    assert "products" not in package
+    assert result["fulfillment_id"] == "PKG-77"
 
 
 async def test_create_fulfillment_refuses_fbo_and_blank_tracking() -> None:
@@ -982,3 +1028,22 @@ async def test_push_inventory_level_refuses_an_unapplied_update() -> None:
     assert excinfo.value.code == "ERR_OZON_INVENTORY_SYNC"
     assert excinfo.value.status_code == 502
     assert "sku not found" in excinfo.value.detail
+
+
+async def test_push_inventory_level_refuses_list_result_with_updated_false() -> None:
+    fake = FakeOzon()
+    fake.on(
+        OZON_STOCK_IMPORT_PATH,
+        lambda request: _json(
+            {"result": [{"offer_id": "LED-40W", "updated": False, "errors": ["bad warehouse"]}]}
+        ),
+    )
+
+    with pytest.raises(AppError) as excinfo:
+        await _adapter(fake.handle).push_inventory_level(
+            external_sku="LED-40W", quantity=5, warehouse_id="1020000123456789"
+        )
+
+    assert excinfo.value.code == "ERR_OZON_INVENTORY_SYNC"
+    assert excinfo.value.status_code == 502
+    assert "bad warehouse" in excinfo.value.detail

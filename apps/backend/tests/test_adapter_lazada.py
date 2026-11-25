@@ -469,6 +469,7 @@ async def test_fetch_orders_uses_inline_items_without_a_second_call() -> None:
         ("shipped", FulfillmentStatus.SHIPPED),
         ("delivered", FulfillmentStatus.DELIVERED),
         ("returned", FulfillmentStatus.REFUNDED),
+        ("refunded", FulfillmentStatus.REFUNDED),
         ("canceled", FulfillmentStatus.CANCELLED),
         ("failed", FulfillmentStatus.EXCEPTION),
         ("some_future_status", FulfillmentStatus.CONFIRMED_RESERVED),
@@ -510,6 +511,8 @@ async def test_fetch_orders_reads_the_statuses_list_when_status_is_absent() -> N
         ("canceled", {"payment_method": "Credit Card"}, PaymentStatus.REFUNDED),
         ("cancelled", {"paid_at": "2026-11-18T10:00:00+08:00"}, PaymentStatus.REFUNDED),
         ("returned", {"payment_method": "Credit Card"}, PaymentStatus.REFUNDED),
+        ("refunded", {}, PaymentStatus.REFUNDED),
+        ("delivered", {"refund_amount": "122.26"}, PaymentStatus.REFUNDED),
         ("delivered", {}, PaymentStatus.PAID),
     ],
 )
@@ -701,7 +704,12 @@ async def test_create_fulfillment_sends_carrier_and_tracking() -> None:
     assert params["tracking_number"] == "TRK-999-SG"
     assert params["tracking_url"] == "https://track.test/TRK-999-SG"
     assert params["package_id"] == "PKG-77"
-    assert result == {"order_id": "LAZ-10001", "package_id": "PKG-77", "accepted": True}
+    assert result == {
+        "order_id": "LAZ-10001",
+        "package_id": "PKG-77",
+        "accepted": True,
+        "fulfillment_id": "PKG-77",
+    }
 
 
 async def test_create_fulfillment_maps_the_configured_fulfillment_mode() -> None:
@@ -711,6 +719,17 @@ async def test_create_fulfillment_maps_the_configured_fulfillment_mode() -> None
         seen.append(request)
         return httpx.Response(200, json={"code": "0", "data": {}})
 
+    adapter = _adapter(handler, fulfillment_mode="full_managed")
+    result = await adapter.create_fulfillment(
+        external_order_id="LAZ-10001",
+        tracking_number="TRK-1",
+        carrier_company="Own Fleet",
+    )
+    params = _query(seen[0])
+    assert params["delivery_type"] == "dropship"
+    assert result["fulfillment_id"] == "LAZ-10001"
+
+    seen.clear()
     adapter = _adapter(handler, fulfillment_mode="self_delivery")
     await adapter.create_fulfillment(
         external_order_id="LAZ-10001",
@@ -881,20 +900,43 @@ async def test_publish_listing_rejects_options_without_variants() -> None:
     assert excinfo.value.status_code == 422
 
 
-async def test_publish_listing_rejects_raw_image_blobs() -> None:
+async def test_publish_listing_rejects_raw_image_blobs_without_https_urls() -> None:
     adapter = _adapter(lambda request: httpx.Response(200, json={"code": "0"}))
     with pytest.raises(AppError) as excinfo:
         await adapter.publish_listing(
             _listing_payload(
+                images=[],
                 image_blobs=[
                     MarketplaceImageBlob(
                         filename="main.jpg", mime_type="image/jpeg", data=b"\xff\xd8"
                     )
-                ]
+                ],
             )
         )
     assert excinfo.value.code == "ERR_LAZADA_LISTING_REJECTED"
     assert excinfo.value.status_code == 422
+
+
+async def test_publish_listing_falls_back_to_https_images_when_blobs_are_present() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"code": "0", "data": {"item_id": "6601999002"}})
+
+    adapter = _adapter(handler)
+    receipt = await adapter.publish_listing(
+        _listing_payload(
+            image_blobs=[
+                MarketplaceImageBlob(
+                    filename="main.jpg", mime_type="image/jpeg", data=b"\xff\xd8"
+                )
+            ]
+        )
+    )
+    assert receipt.external_product_id == "6601999002"
+    product = _body(seen[0])["Request"]["Product"]
+    assert product["Images"] == ["https://cdn.test/nora-1.jpg", "https://cdn.test/nora-2.jpg"]
 
 
 async def test_publish_listing_rejects_a_variant_missing_a_declared_option() -> None:

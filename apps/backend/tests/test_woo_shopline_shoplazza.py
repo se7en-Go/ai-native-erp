@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import httpx
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from erp_core.channels.ecommerce.base import resolve_routing_tenant
 from erp_core.channels.ecommerce.connectors_router import router as connectors_router
 from erp_core.channels.ecommerce.shoplazza import (
+    ShoplazzaAdapter,
     verify_shoplazza_oauth_hmac,
     verify_shoplazza_webhook,
 )
@@ -26,12 +28,13 @@ from erp_core.channels.ecommerce.shopline import (
     ShoplineAdapter,
     verify_shopline_webhook,
 )
+from erp_core.channels.ecommerce.tiktok_shop import TikTokShopCoreAdapter
 from erp_core.channels.ecommerce.woocommerce import (
     WooCommerceAdapter,
     build_wc_authorize_url,
     verify_woocommerce_webhook,
 )
-from erp_core.shared.enums import OrderMode
+from erp_core.shared.enums import FulfillmentStatus, OrderMode, PaymentStatus
 from erp_core.shared.errors import register_exception_handlers
 
 
@@ -291,3 +294,212 @@ def test_storefront_webhooks_require_a_non_empty_secret(platform: str, verifier)
         "shopline": "X-Shopline-Hmac-Sha256",
     }[platform]
     assert verifier(raw, {header: signature}, "") is False
+
+
+async def test_woo_shopline_shoplazza_tiktok_shopify_parity() -> None:
+    # WooCommerce: no double-count, status mappings, fulfillment_id + variation lookup
+    woo_calls: list[httpx.Request] = []
+
+    def woo_handler(request: httpx.Request) -> httpx.Response:
+        woo_calls.append(request)
+        if request.url.path == "/wp-json/wc/v3/products/501/variations":
+            return httpx.Response(200, json=[{"id": 601, "sku": "WOO-VAR"}])
+        if request.url.path == "/wp-json/wc/v3/products/501/variations/601":
+            return httpx.Response(200, json={"id": 601, "stock_quantity": 9})
+        if request.url.path == "/wp-json/wc/v3/orders/101/notes":
+            return httpx.Response(201, json={"id": 1})
+        if request.url.path == "/wp-json/wc/v3/orders/101/fulfillments":
+            return httpx.Response(201, json={"id": 77})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(woo_handler)) as client:
+        woo = WooCommerceAdapter("https://woo.example.com", "ck", "cs", http_client=client)
+        woo_completed = woo._normalize_order(
+            {
+                "id": 1,
+                "status": "completed",
+                "total": "100.00",
+                "refunded_amount": "10.00",
+                "refunds": [{"id": 1, "total": "-10.00"}],
+                "date_modified_gmt": "2026-11-23T08:00:00",
+                "line_items": [{"sku": "SKU-1", "quantity": 1, "total": "100.00"}],
+            }
+        )
+        assert woo_completed.fulfillment_status == FulfillmentStatus.DELIVERED
+        assert woo_completed.payment_status == PaymentStatus.PAID
+        assert woo_completed.channel_metadata["refunded_amount"] == "10.00"
+
+        woo_partial = woo._normalize_order(
+            {
+                "id": 2,
+                "status": "partially-refunded",
+                "total": "100.00",
+                "refunded_amount": "20.00",
+                "date_modified_gmt": "2026-11-23T08:00:00",
+                "line_items": [{"sku": "SKU-1", "quantity": 1, "total": "100.00"}],
+            }
+        )
+        assert woo_partial.payment_status == PaymentStatus.PAID
+
+        woo_cancelled = woo._normalize_order(
+            {
+                "id": 3,
+                "status": "cancelled",
+                "total": "100.00",
+                "date_paid_gmt": "2026-11-23T07:00:00",
+                "date_modified_gmt": "2026-11-23T08:00:00",
+                "line_items": [{"sku": "SKU-1", "quantity": 1, "total": "100.00"}],
+            }
+        )
+        assert woo_cancelled.fulfillment_status == FulfillmentStatus.CANCELLED
+        assert woo_cancelled.payment_status == PaymentStatus.REFUNDED
+
+        woo_ful = await woo.create_fulfillment(
+            "101", "TRK-1", "DHL", tracking_url="https://track.test/1"
+        )
+        assert woo_ful["fulfillment_id"] == "77"
+        woo_ful_req = json.loads(
+            next(r for r in woo_calls if r.url.path.endswith("/fulfillments")).content
+        )
+        assert woo_ful_req["tracking_url"] == "https://track.test/1"
+
+        woo_inv = await woo.push_inventory_level(
+            external_sku="WOO-VAR", quantity=9, external_product_id="501"
+        )
+        assert woo_inv["variant_id"] == "601"
+
+    # SHOPLINE & Shoplazza: options synthesis, inventory tracking, omit null tracking_url
+    sl_bodies: list[dict[str, object]] = []
+
+    def sl_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/products/products.json"):
+            body = json.loads(request.content)
+            sl_bodies.append(body)
+            return httpx.Response(
+                201,
+                json={"product": {"id": "sl-p1", "variants": [{"id": "v1", "sku": "S-1"}]}},
+            )
+        if request.url.path.endswith("/fulfillments.json"):
+            body = json.loads(request.content)
+            sl_bodies.append(body)
+            return httpx.Response(201, json={"fulfillment": {"id": "sl-f1"}})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(sl_handler)) as client:
+        sl = ShoplineAdapter("qz.myshopline.com", "tok", http_client=client)
+        sl_partial = sl._normalize_order(
+            {
+                "id": "sl-p",
+                "financial_status": "partially_refunded",
+                "total_price": "50.00",
+                "total_refunded": "10.00",
+                "updated_at": "2026-11-23T08:00:00Z",
+                "line_items": [{"sku": "S-1", "quantity": 1, "price": "50.00"}],
+            }
+        )
+        assert sl_partial.payment_status == PaymentStatus.PAID
+        sl_can = sl._normalize_order(
+            {
+                "id": "sl-c",
+                "financial_status": "paid",
+                "cancelled_at": "2026-11-23T09:00:00Z",
+                "total_price": "50.00",
+                "updated_at": "2026-11-23T08:00:00Z",
+                "line_items": [{"sku": "S-1", "quantity": 1, "price": "50.00"}],
+            }
+        )
+        assert sl_can.fulfillment_status == FulfillmentStatus.CANCELLED
+        assert sl_can.payment_status == PaymentStatus.REFUNDED
+
+        await sl.publish_listing(
+            sku="S-1",
+            title="Strip",
+            description="LED",
+            bullet_points=[],
+            price_usd=Decimal("10.00"),
+            variants=[{"external_sku": "S-1", "option_values": {"Color": "Warm"}}],
+        )
+        assert sl_bodies[0]["product"]["options"] == [{"name": "Color", "values": ["Warm"]}]
+        assert sl_bodies[0]["product"]["variants"][0]["inventory_tracker"] is True
+
+        sl_ful = await sl.create_fulfillment("sl-1", "TRK-SL", "UPS", tracking_url=None)
+        assert sl_ful["fulfillment_id"] == "sl-f1"
+        assert "tracking_url" not in sl_bodies[1]
+
+    sz_bodies: list[dict[str, object]] = []
+
+    def sz_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/products"):
+            body = json.loads(request.content)
+            sz_bodies.append(body)
+            return httpx.Response(
+                201,
+                json={"product": {"id": "sz-p1", "variants": [{"id": "v1", "sku": "Z-1"}]}},
+            )
+        if request.url.path.endswith("/fulfillments"):
+            body = json.loads(request.content)
+            sz_bodies.append(body)
+            return httpx.Response(201, json={"id": "sz-f1"})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(sz_handler)) as client:
+        sz = ShoplazzaAdapter("qz.myshoplaza.com", "tok", http_client=client)
+        sz_pp = sz._normalize_order(
+            {
+                "id": "sz-1",
+                "financial_status": "partially_paid",
+                "fulfillment_status": "partial",
+                "total_price": "80.00",
+                "updated_at": "2026-11-23T08:00:00Z",
+                "line_items": [{"sku": "Z-1", "quantity": 1, "price": "80.00"}],
+            }
+        )
+        assert sz_pp.payment_status == PaymentStatus.PARTIALLY_PAID
+        assert sz_pp.fulfillment_status == FulfillmentStatus.PARTIALLY_SHIPPED
+
+        await sz.publish_listing(
+            sku="Z-1",
+            title="Lamp",
+            description="LED",
+            bullet_points=[],
+            price_usd=Decimal("10.00"),
+            variants=[{"external_sku": "Z-1", "option_values": {"Watt": "20W"}}],
+        )
+        assert sz_bodies[0]["product"]["options"] == [{"name": "Watt", "values": ["20W"]}]
+        assert sz_bodies[0]["product"]["variants"][0]["inventory_tracking"] is True
+
+        sz_ful = await sz.create_fulfillment("sz-1", "TRK-SZ", "DHL", tracking_url=None)
+        assert sz_ful["fulfillment_id"] == "sz-f1"
+        assert "tracking_url" not in sz_bodies[1]
+
+    # TikTok Shop: auto-resolve package_id in create_fulfillment + UNPAID/REFUNDED normalization
+    def tt_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/order/202309/orders":
+            return httpx.Response(
+                200,
+                json={
+                    "code": 0,
+                    "data": {"orders": [{"id": "TT-1", "packages": [{"id": "pkg-auto"}]}]},
+                },
+            )
+        if request.url.path == "/fulfillment/202309/packages/pkg-auto/ship":
+            return httpx.Response(200, json={"code": 0, "data": {"shipped": True}})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(tt_handler)) as client:
+        tt = TikTokShopCoreAdapter("ak", "as", "tok", "cipher", http_client=client)
+        tt_unpaid = tt._normalize_order(
+            {
+                "id": "tt-u",
+                "status": "unpaid",
+                "update_time": 1763884800,
+                "payment": {"total_amount": "40.00"},
+                "line_items": [{"seller_sku": "SKU-1", "quantity": 1, "sale_price": "40.00"}],
+            }
+        )
+        assert tt_unpaid.fulfillment_status == FulfillmentStatus.PENDING_PAYMENT
+        assert tt_unpaid.payment_status == PaymentStatus.UNPAID
+
+        tt_ful = await tt.create_fulfillment("TT-1", "TRK-TT", "USPS")
+        assert tt_ful["fulfillment_id"] == "pkg-auto"
+        assert tt_ful["package_id"] == "pkg-auto"

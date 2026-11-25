@@ -578,7 +578,38 @@ async def test_create_fulfillment_sends_signed_shipping_notice() -> None:
     assert params["logistics_company"] == "UPS"
     assert params["tracking_no"] == "1Z999AA10123456784"
     assert params["tracking_url"] == "https://track.test/1Z999AA10123456784"
-    assert result == {"trade_id": "AT202611190001", "accepted": True}
+    assert result == {
+        "trade_id": "AT202611190001",
+        "accepted": True,
+        "fulfillment_id": "AT202611190001",
+    }
+
+
+async def test_alibaba_refund_empty_lines_and_empty_sku_validation() -> None:
+    orders = [
+        _order(trade_id="AT-NO-LINES", products=[]),
+        _order(trade_id="AT-FULL-REFUND", status="refunded", total_amount="100.00"),
+        _order(
+            trade_id="AT-PARTIAL-REFUND",
+            status="waitbuyerreceive",
+            total_amount="100.00",
+            refund_amount="15.00",
+        ),
+    ]
+    adapter = _adapter(lambda _req: httpx.Response(200, json=_order_payload(orders)))
+    normalized, _ = await adapter.fetch_orders_updated_since(datetime(2026, 11, 19, tzinfo=UTC))
+    by_id = {o.external_order_id: o for o in normalized}
+    assert "AT-NO-LINES" not in by_id
+    assert by_id["AT-FULL-REFUND"].fulfillment_status is FulfillmentStatus.REFUNDED
+    assert by_id["AT-FULL-REFUND"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["AT-PARTIAL-REFUND"].fulfillment_status is FulfillmentStatus.SHIPPED
+    assert by_id["AT-PARTIAL-REFUND"].payment_status is PaymentStatus.PAID
+    assert by_id["AT-PARTIAL-REFUND"].channel_metadata["refunded_amount"] == "15.00"
+
+    with pytest.raises(AppError) as excinfo:
+        await adapter.push_inventory_level(external_sku="   ", quantity=5)
+    assert excinfo.value.code == "ERR_ALIBABA_INVENTORY_SYNC"
+    assert excinfo.value.status_code == 422
 
 
 # ------------------------------------------------------------------- error mapping

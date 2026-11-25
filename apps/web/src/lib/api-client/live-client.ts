@@ -48,6 +48,7 @@ import type {
   ConvertQuoteResponse,
   CustomerRead,
   FinanceOverviewRead,
+  FulfillmentPushResponse,
   InventoryBalanceItemRead,
   InventoryLedgerRead,
   LiveSkuCheckRead,
@@ -114,6 +115,7 @@ import {
   liveCheckSkuApiV1CatalogLiveCheckGet,
   mergeCustomersEndpointApiV1CustomersMergePost,
   postConversationMessageApiV1InboxConversationsConversationIdMessagesPost,
+  pushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPost,
   refreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPost,
   replayDeadLetterEventApiV1ChannelsDlqEventIdReplayPost,
   repriceQuoteVersionApiV1B2bQuotesQuoteIdRepriceVersionPost,
@@ -218,6 +220,18 @@ export interface B2bQuoteApiItem {
   items: B2bQuoteItemApiItem[];
 }
 
+export interface ExternalFulfillmentStatus {
+  status: "synced" | "failed";
+  channel?: string | null;
+  tracking_number?: string | null;
+  carrier_company?: string | null;
+  external_fulfillment_id?: string | null;
+  error_code?: string | null;
+  error_detail?: string | null;
+  synced_at?: string | null;
+  failed_at?: string | null;
+}
+
 export interface OrderSummaryApiItem {
   id: string;
   order_no: string;
@@ -229,6 +243,11 @@ export interface OrderSummaryApiItem {
   total_amount: string;
   has_72h_stagnation_alert?: boolean;
   shipment_blocked_70_unpaid?: boolean;
+  channel_type?: string | null;
+  channel_label?: string | null;
+  external_order_id?: string | null;
+  refunded_amount?: string | null;
+  external_fulfillment?: ExternalFulfillmentStatus | null;
 }
 
 export interface OrderShipmentApiItem {
@@ -255,6 +274,11 @@ export interface OrderDetailApiItem {
   payment_status: string;
   currency?: string;
   total_amount?: string;
+  channel_type?: string | null;
+  channel_label?: string | null;
+  external_order_id?: string | null;
+  refunded_amount?: string | null;
+  external_fulfillment?: ExternalFulfillmentStatus | null;
   shipments: OrderShipmentApiItem[];
 }
 
@@ -756,6 +780,35 @@ export function mapShipment(s: ShipmentRead): OrderShipmentApiItem {
   };
 }
 
+function parseExternalFulfillment(
+  meta: Record<string, unknown> | undefined,
+): ExternalFulfillmentStatus | null {
+  const raw = meta?.external_fulfillment;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  const status = obj.status === "synced" || obj.status === "failed" ? obj.status : null;
+  if (!status) return null;
+  return {
+    status,
+    channel: typeof obj.channel === "string" ? obj.channel : null,
+    tracking_number: typeof obj.tracking_number === "string" ? obj.tracking_number : null,
+    carrier_company: typeof obj.carrier_company === "string" ? obj.carrier_company : null,
+    external_fulfillment_id:
+      typeof obj.external_fulfillment_id === "string" ? obj.external_fulfillment_id : null,
+    error_code: typeof obj.error_code === "string" ? obj.error_code : null,
+    error_detail: typeof obj.error_detail === "string" ? obj.error_detail : null,
+    synced_at: typeof obj.synced_at === "string" ? obj.synced_at : null,
+    failed_at: typeof obj.failed_at === "string" ? obj.failed_at : null,
+  };
+}
+
+function parseRefundedAmount(meta: Record<string, unknown> | undefined): string | null {
+  const raw = meta?.refunded_amount;
+  if (typeof raw === "string" && Number(raw) > 0) return raw;
+  if (typeof raw === "number" && raw > 0) return raw.toFixed(2);
+  return null;
+}
+
 export function mapOrderSummary(o: OrderRead): OrderSummaryApiItem {
   return {
     id: o.id,
@@ -771,6 +824,11 @@ export function mapOrderSummary(o: OrderRead): OrderSummaryApiItem {
     // finance receivables (shipment_blocked_70_unpaid) and is enforced
     // server-side on ship, so the list shows it as not blocked.
     shipment_blocked_70_unpaid: false,
+    channel_type: o.channel_type ?? null,
+    channel_label: o.channel_label ?? null,
+    external_order_id: o.external_order_id ?? null,
+    refunded_amount: parseRefundedAmount(o.channel_metadata),
+    external_fulfillment: parseExternalFulfillment(o.channel_metadata),
   };
 }
 
@@ -783,6 +841,11 @@ export function mapOrderDetail(o: OrderRead): OrderDetailApiItem {
     payment_status: o.payment_status,
     currency: o.currency,
     total_amount: o.total_amount,
+    channel_type: o.channel_type ?? null,
+    channel_label: o.channel_label ?? null,
+    external_order_id: o.external_order_id ?? null,
+    refunded_amount: parseRefundedAmount(o.channel_metadata),
+    external_fulfillment: parseExternalFulfillment(o.channel_metadata),
     shipments: (o.shipments ?? []).map(mapShipment),
   };
 }
@@ -1228,18 +1291,35 @@ export async function shipOrder(
     trackingNumber: string;
     carrierCode?: string;
     shipmentMode?: string;
+    trackingProvider?: "manual" | "17track";
+    autoResolveWarehouse?: boolean;
   },
 ) {
+  const warehouseId = opts.autoResolveWarehouse
+    ? opts.warehouseId ?? undefined
+    : opts.warehouseId ?? (await resolveWarehouseId());
   return unwrap(
     await shipOrderApiV1OrdersOrderIdShipPost({
       client: getBffClient(),
       path: { order_id: orderId },
       body: {
-        warehouse_id: opts.warehouseId ?? await resolveWarehouseId(),
+        ...(warehouseId !== undefined ? { warehouse_id: warehouseId } : {}),
         tracking_number: opts.trackingNumber,
         carrier_code: opts.carrierCode ?? "DHL",
         shipment_mode: opts.shipmentMode ?? "parcel",
+        ...(opts.trackingProvider ? { tracking_provider: opts.trackingProvider } : {}),
       },
+    }),
+  );
+}
+
+export async function pushOrderFulfillment(
+  orderId: string,
+): Promise<FulfillmentPushResponse> {
+  return unwrap(
+    await pushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPost({
+      client: getBffClient(),
+      path: { order_id: orderId },
     }),
   );
 }

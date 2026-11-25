@@ -90,6 +90,7 @@ _TEMU_SHIPMENT_CONFIRM_TYPE = "bg.logistics.shipment.confirm"
 
 #: Status tokens Temu returns on ``bg.order.list.get`` / ``bg.order.detail.get``.
 _STATUS_MAP: Mapping[str, FulfillmentStatus] = {
+    "UNPAID": FulfillmentStatus.PENDING_PAYMENT,
     "PENDING": FulfillmentStatus.CONFIRMED_RESERVED,
     "UN_SHIPPED": FulfillmentStatus.CONFIRMED_RESERVED,
     "WAITING_SHIP": FulfillmentStatus.CONFIRMED_RESERVED,
@@ -104,6 +105,7 @@ _STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "CANCELLED": FulfillmentStatus.CANCELLED,
     "CANCELED": FulfillmentStatus.CANCELLED,
     "REFUNDED": FulfillmentStatus.REFUNDED,
+    "RETURNED": FulfillmentStatus.REFUNDED,
 }
 
 _CENT = Decimal("0.01")
@@ -557,6 +559,29 @@ class TemuAdapter(CommercePlatformAdapter):
             # A Temu order with no resolvable SKU can never be reserved or fulfilled, so it
             # is skipped instead of importing an order the ERP cannot act on.
             return None
+        total_amount = _first_money(
+            amount, "orderTotalAmount", "totalAmount", "orderAmount", field="total"
+        ).quantize(_CENT, rounding=ROUND_HALF_UP)
+        refunded_quantized = refunded.quantize(_CENT, rounding=ROUND_HALF_UP)
+        full_refund = total_amount > Decimal("0") and refunded_quantized >= total_amount
+        if status in {"CANCELLED", "CANCELED"}:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+            pay_flag = str(row.get("paymentStatus") or row.get("payStatus") or "").strip().upper()
+            payment_status = (
+                PaymentStatus.UNPAID
+                if pay_flag in {"UNPAID", "NOT_PAID", "PENDING"}
+                else PaymentStatus.REFUNDED
+            )
+        elif status in {"UNPAID", "PENDING"}:
+            fulfillment_status = _STATUS_MAP.get(status, FulfillmentStatus.PENDING_PAYMENT)
+            payment_status = PaymentStatus.UNPAID
+        elif status in {"REFUNDED", "RETURNED"} or full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+            payment_status = PaymentStatus.REFUNDED
+        else:
+            fulfillment_status = _STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED)
+            payment_status = PaymentStatus.PAID
+
         return NormalizedOrder(
             external_order_id=order_sn,
             external_order_number=str(row.get("parentOrderSn") or order_sn),
@@ -578,16 +603,10 @@ class TemuAdapter(CommercePlatformAdapter):
             tax_collected=_first_money(amount, "taxAmount", "tax", field="tax").quantize(
                 _CENT, rounding=ROUND_HALF_UP
             ),
-            total_amount=_first_money(
-                amount, "orderTotalAmount", "totalAmount", "orderAmount", field="total"
-            ).quantize(_CENT, rounding=ROUND_HALF_UP),
+            total_amount=total_amount,
             platform_commission_base=commission_base,
-            fulfillment_status=_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED),
-            payment_status=(
-                PaymentStatus.REFUNDED
-                if status in {"CANCELLED", "CANCELED", "REFUNDED"}
-                else PaymentStatus.PAID
-            ),
+            fulfillment_status=fulfillment_status,
+            payment_status=payment_status,
             customer=NormalizedCustomer(
                 external_customer_id=buyer_id or None,
                 # Temu exposes no ISO buyer identity to sellers without the sensitive
@@ -753,9 +772,20 @@ class TemuAdapter(CommercePlatformAdapter):
         if fulfillment_order_id:
             data["packageSn"] = fulfillment_order_id.strip()
         result = await self._post_router(api_type, data)
+        fulfillment_id = (
+            str(
+                result.get("fulfillmentId")
+                or result.get("shipmentId")
+                or result.get("packageSn")
+                or fulfillment_order_id
+                or ""
+            ).strip()
+            or order_sn
+        )
         return {
             "channel": TEMU_CHANNEL_TYPE,
             "external_order_id": order_sn,
+            "fulfillment_id": fulfillment_id,
             "fulfillment_order_id": fulfillment_order_id,
             "tracking_number": tracking,
             "carrier_company": carrier,
