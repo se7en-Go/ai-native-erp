@@ -890,6 +890,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
                         "optionValues": [{"optionName": "Title", "name": "Default Title"}],
                         "sku": clean_sku,
                         "price": str(normalized_price),
+                        "inventoryItem": {"tracked": True},
                     }
                 ],
             )
@@ -940,6 +941,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
                     "optionValues": opt_pairs,
                     "sku": v_sku,
                     "price": str(v_price),
+                    "inventoryItem": {"tracked": True},
                 }
             )
 
