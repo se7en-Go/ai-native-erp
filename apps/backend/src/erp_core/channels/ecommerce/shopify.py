@@ -50,7 +50,7 @@ SHOPIFY_API_PATH = f"/admin/api/{SHOPIFY_API_VERSION}/graphql.json"
 
 ORDERS_GRAPHQL_QUERY = """
 query SyncOrders($first: Int!, $query: String, $after: String) {
-  orders(first: $first, query: $query, after: $after, sortKey: UPDATED_AT) {
+  orders(first: $first, query: $query, after: $after, sortKey: UPDATED_AT, reverse: true) {
     pageInfo { hasNextPage endCursor }
     nodes {
       id
@@ -726,7 +726,8 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
     ) -> tuple[list[NormalizedOrder], str | None]:
         iso = since.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         data = await self._graphql(
-            ORDERS_GRAPHQL_QUERY, {"first": 50, "query": f"updated_at:>={iso}", "after": cursor}
+            ORDERS_GRAPHQL_QUERY,
+            {"first": 50, "query": f"updated_at:>='{iso}'", "after": cursor},
         )
         connection = data["orders"]
         orders = [
@@ -742,7 +743,8 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
     ) -> tuple[list[NormalizedProduct], str | None]:
         iso = since.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         data = await self._graphql(
-            PRODUCTS_GRAPHQL_QUERY, {"first": 50, "query": f"updated_at:>={iso}", "after": cursor}
+            PRODUCTS_GRAPHQL_QUERY,
+            {"first": 50, "query": f"updated_at:>='{iso}'", "after": cursor},
         )
         connection = data["products"]
         products = [
