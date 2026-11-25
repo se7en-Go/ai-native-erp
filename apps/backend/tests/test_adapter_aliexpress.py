@@ -395,6 +395,7 @@ async def test_fetch_orders_skips_orders_without_an_id_and_lines_without_a_sku()
                                 ]
                             }
                         ),
+                        _order(order_id="8192345678909999", order_line_list={"order_line": []}),
                     ]
                 },
             ),
@@ -421,6 +422,11 @@ async def test_fetch_orders_skips_orders_without_an_id_and_lines_without_a_sku()
         ("IN_CANCEL", FulfillmentStatus.CANCELLED),
         ("BUYER_CANCEL", FulfillmentStatus.CANCELLED),
         ("SELLER_CANCEL_CLOSE_ORDER", FulfillmentStatus.CANCELLED),
+        ("CANCEL", FulfillmentStatus.CANCELLED),
+        ("CANCELLED", FulfillmentStatus.CANCELLED),
+        ("CANCELED", FulfillmentStatus.CANCELLED),
+        ("REFUNDED", FulfillmentStatus.REFUNDED),
+        ("RETURNED", FulfillmentStatus.REFUNDED),
         ("SOME_FUTURE_STATUS", FulfillmentStatus.CONFIRMED_RESERVED),
     ],
 )
@@ -441,6 +447,10 @@ async def test_fetch_orders_maps_statuses(
         ("BUYER_CANCEL", "NOT_PAID", {}, PaymentStatus.UNPAID),
         ("BUYER_CANCEL", "", {"pay_time": "2026-11-18 09:00:00"}, PaymentStatus.REFUNDED),
         ("BUYER_CANCEL", "", {}, PaymentStatus.UNPAID),
+        ("REFUNDED", "", {}, PaymentStatus.REFUNDED),
+        ("RETURNED", "", {}, PaymentStatus.REFUNDED),
+        ("FINISH", "PAID", {"refund_amount": {"amount": "123.45"}}, PaymentStatus.REFUNDED),
+        ("FINISH", "PAID", {"refund_amount": {"amount": "10.00"}}, PaymentStatus.PAID),
     ],
 )
 async def test_fetch_orders_maps_payment_states(
@@ -606,6 +616,7 @@ async def test_create_fulfillment_standard_sends_tracking_and_carrier() -> None:
         "shipment_id": "SHP-1",
         "order_id": "8192345678901234",
         "shipment_mode": "standard",
+        "fulfillment_id": "SHP-1",
     }
 
 

@@ -337,6 +337,45 @@ async def test_fetch_orders_skips_orders_without_line_items() -> None:
     assert orders == []
 
 
+async def test_fetch_orders_maps_unpaid_pending_and_full_refund_statuses() -> None:
+    rows = [
+        {**order_detail_row(), "orderSn": "TEMU-UNPAID", "orderStatus": "UNPAID"},
+        {**order_detail_row(), "orderSn": "TEMU-PENDING", "orderStatus": "PENDING"},
+        {
+            **order_detail_row(),
+            "orderSn": "TEMU-FULL-REFUND",
+            "orderStatus": "DELIVERED",
+            "orderAmount": {
+                "currency": "USD",
+                "orderTotalAmount": "11.81",
+                "refundAmount": "11.81",
+            },
+        },
+        {
+            **order_detail_row(),
+            "orderSn": "TEMU-PARTIAL-REFUND",
+            "orderStatus": "DELIVERED",
+            "orderAmount": {"currency": "USD", "orderTotalAmount": "11.81", "refundAmount": "2.00"},
+        },
+    ]
+    fake = FakeTemu(
+        {
+            "bg.order.list.get": order_list_route([r["orderSn"] for r in rows], total=4),
+            "bg.order.detail.get": lambda _body: ok({"orderList": rows}),
+        }
+    )
+    orders, _ = await build(fake.transport).fetch_orders_updated_since(SINCE)
+    by_id = {order.external_order_id: order for order in orders}
+    assert by_id["TEMU-UNPAID"].fulfillment_status is FulfillmentStatus.PENDING_PAYMENT
+    assert by_id["TEMU-UNPAID"].payment_status is PaymentStatus.UNPAID
+    assert by_id["TEMU-PENDING"].payment_status is PaymentStatus.UNPAID
+    assert by_id["TEMU-FULL-REFUND"].fulfillment_status is FulfillmentStatus.REFUNDED
+    assert by_id["TEMU-FULL-REFUND"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["TEMU-PARTIAL-REFUND"].fulfillment_status is FulfillmentStatus.DELIVERED
+    assert by_id["TEMU-PARTIAL-REFUND"].payment_status is PaymentStatus.PAID
+    assert by_id["TEMU-PARTIAL-REFUND"].channel_metadata["refunded_amount"] == "2.00"
+
+
 async def test_remote_error_detail_redacts_credentials() -> None:
     def rejected(_body: dict[str, Any]) -> httpx.Response:
         return httpx.Response(
@@ -515,6 +554,7 @@ async def test_create_fulfillment_in_seller_managed_mode() -> None:
     assert data["notifyCustomer"] is True
     assert result["channel"] == "temu"
     assert result["external_order_id"] == "TEMU-1001"
+    assert result["fulfillment_id"] == "SHIP-77"
     assert result["fulfillment_order_id"] == "PKG-77"
     assert result["tracking_number"] == "1Z999AA10123456784"
     assert result["fulfillment_mode"] == "semi_managed"
@@ -524,11 +564,12 @@ async def test_create_fulfillment_in_seller_managed_mode() -> None:
 async def test_create_fulfillment_in_standard_mode_confirms_tracking() -> None:
     fake = FakeTemu({"bg.logistics.shipment.confirm": lambda _body: ok({"confirmed": True})})
     adapter = build(fake.transport)
-    await adapter.create_fulfillment("TEMU-1002", "TRACK-1", "FedEx")
+    result = await adapter.create_fulfillment("TEMU-1002", "TRACK-1", "FedEx")
     data = fake.only("bg.logistics.shipment.confirm")["data"]
     assert data["orderSn"] == "TEMU-1002"
     assert data["trackingNumber"] == "TRACK-1"
     assert "packageSn" not in data
+    assert result["fulfillment_id"] == "TEMU-1002"
 
 
 async def test_create_fulfillment_requires_tracking_and_carrier() -> None:

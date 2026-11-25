@@ -705,8 +705,60 @@ async def test_create_fulfillment_posts_shipment_confirmation() -> None:
     datetime.fromisoformat(package["shipDate"].replace("Z", "+00:00"))
 
     assert result["status"] == "ACCEPTED"
+    assert result["fulfillment_id"] == "111-2223334-5556667:1"
     assert result["tracking_number"] == "1Z999AA10123456784"
     assert result["tracking_url"] == "https://www.ups.com/track?num=1Z999AA10123456784"
+
+
+async def test_amazon_cancelled_double_l_refunded_and_empty_sku_guard() -> None:
+    cancelled_double_l = _order_payload(
+        order_id="111-0000001-0000001",
+        seller_order_id="SO-DBL",
+        status="Cancelled",
+        total="20.00",
+    )
+    refunded_order = _order_payload(
+        order_id="111-0000001-0000002",
+        seller_order_id="SO-REF",
+        status="Refunded",
+        total="30.00",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _is_lwa(request):
+            return _lwa_ok()
+        if request.url.path == "/orders/v0/orders":
+            return httpx.Response(
+                200, json={"payload": {"Orders": [cancelled_double_l, refunded_order]}}
+            )
+        return httpx.Response(
+            200,
+            json={
+                "payload": {
+                    "OrderItems": [
+                        {
+                            "OrderItemId": "OI-1",
+                            "SellerSKU": "AMZ-SKU",
+                            "QuantityOrdered": 1,
+                            "ItemPrice": {"Amount": "20.00", "CurrencyCode": "USD"},
+                        }
+                    ]
+                }
+            },
+        )
+
+    adapter = _adapter(handler)
+    orders, _ = await adapter.fetch_orders_updated_since(datetime(2026, 11, 20, tzinfo=UTC))
+    by_id = {o.external_order_id: o for o in orders}
+    assert by_id["111-0000001-0000001"].fulfillment_status == FulfillmentStatus.CANCELLED
+    assert by_id["111-0000001-0000001"].payment_status == PaymentStatus.REFUNDED
+    assert by_id["111-0000001-0000002"].fulfillment_status == FulfillmentStatus.REFUNDED
+    assert by_id["111-0000001-0000002"].payment_status == PaymentStatus.REFUNDED
+
+    with pytest.raises(AppError) as excinfo:
+        await adapter.push_inventory_level(external_sku="  ", quantity=5)
+    assert excinfo.value.code == "ERR_AMAZON_INVENTORY_SYNC"
+    assert excinfo.value.status_code == 422
 
 
 # ---------------------------------------------------------------------------- webhooks

@@ -33,14 +33,51 @@ def _extract_fulfillment_error(exc: Exception) -> tuple[str, str]:
     return type(exc).__name__, str(exc)[:500]
 
 
+_FULFILLMENT_ID_KEYS: tuple[str, ...] = (
+    "fulfillment_id",
+    "external_fulfillment_id",
+    "external_shipment_id",
+    "fulfillment_order_id",
+    "package_number",
+    "package_id",
+    "packageNo",
+    "packageSn",
+    "shipment_id",
+    "shipmentId",
+    "fulfillmentId",
+    "logistics_order_id",
+    "id",
+)
+
+_METADATA_FULFILLMENT_HINT_KEYS: tuple[str, ...] = (
+    "fulfillment_order_id",
+    "tiktok_package_id",
+    "package_number",
+    "package_id",
+    "packageNo",
+    "packageSn",
+    "shipment_id",
+    "external_shipment_id",
+)
+
+
 def _extract_external_fulfillment_id(result: Mapping[str, Any]) -> str | None:
-    fulfillment = result.get("fulfillment")
-    if isinstance(fulfillment, Mapping) and fulfillment.get("id"):
-        return str(fulfillment["id"])
-    for key in ("fulfillment_id", "external_fulfillment_id", "package_number", "id"):
-        val = result.get(key)
-        if val:
-            return str(val)
+    containers = (
+        result,
+        result.get("fulfillment"),
+        result.get("data"),
+        result.get("raw"),
+        result.get("result"),
+    )
+    for container in containers:
+        if not isinstance(container, Mapping):
+            continue
+        for key in _FULFILLMENT_ID_KEYS:
+            val = container.get(key)
+            if val is not None and not isinstance(val, bool):
+                text_val = str(val).strip()
+                if text_val:
+                    return text_val
     return None
 
 
@@ -69,7 +106,8 @@ async def push_order_fulfillment(
         await session.execute(
             text(
                 """
-                SELECT o.id, o.channel_account_id, o.external_order_id, ca.channel_type
+                SELECT o.id, o.channel_account_id, o.external_order_id, o.channel_metadata,
+                       ca.channel_type
                 FROM orders o
                 LEFT JOIN channel_accounts ca
                   ON ca.id = o.channel_account_id AND ca.tenant_id = o.tenant_id
@@ -121,12 +159,22 @@ async def push_order_fulfillment(
         if http_client is not None and hasattr(adapter, "_http_client"):
             adapter._http_client = http_client
 
+        resolved_fulfillment_order_id = fulfillment_order_id
+        if resolved_fulfillment_order_id is None and isinstance(row.channel_metadata, Mapping):
+            for hint_key in _METADATA_FULFILLMENT_HINT_KEYS:
+                hint_val = row.channel_metadata.get(hint_key)
+                if hint_val is not None and not isinstance(hint_val, bool):
+                    hint_text = str(hint_val).strip()
+                    if hint_text:
+                        resolved_fulfillment_order_id = hint_text
+                        break
+
         raw = await adapter.create_fulfillment(
             external_order_id=str(row.external_order_id),
             tracking_number=tracking_number,
             carrier_company=carrier_company,
             tracking_url=tracking_url,
-            fulfillment_order_id=fulfillment_order_id,
+            fulfillment_order_id=resolved_fulfillment_order_id,
             notify_customer=notify_customer,
         )
     except (AppError, httpx.HTTPError) as exc:

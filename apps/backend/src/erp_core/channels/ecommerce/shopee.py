@@ -87,6 +87,10 @@ _DEFAULT_PACKAGE_DIMENSION_CM: Mapping[str, int] = {
 #: configuration this connector does not manage, so those modes fail closed instead of
 #: inventing a window.
 _FULFILLMENT_MODES = frozenset({"standard", "dropoff", "pickup"})
+_FULFILLMENT_MODE_ALIASES: Mapping[str, str] = {
+    "full_managed": "standard",
+    "light_export": "standard",
+}
 
 _SHOPEE_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "UNPAID": FulfillmentStatus.PENDING_PAYMENT,
@@ -99,6 +103,9 @@ _SHOPEE_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "TO_CONFIRM_RECEIVE": FulfillmentStatus.SHIPPED,
     "COMPLETED": FulfillmentStatus.DELIVERED,
     "CANCELLED": FulfillmentStatus.CANCELLED,
+    "CANCELED": FulfillmentStatus.CANCELLED,
+    "REFUNDED": FulfillmentStatus.REFUNDED,
+    "RETURNED": FulfillmentStatus.REFUNDED,
 }
 
 
@@ -201,7 +208,8 @@ class ShopeeAdapter(CommercePlatformAdapter):
                     "access_token."
                 ),
             )
-        mode = (fulfillment_mode or "").strip().lower()
+        raw_mode = (fulfillment_mode or "").strip().lower()
+        mode = _FULFILLMENT_MODE_ALIASES.get(raw_mode, raw_mode)
         if mode not in _FULFILLMENT_MODES:
             raise AppError(
                 slug="shopee-fulfillment-mode-invalid",
@@ -391,11 +399,19 @@ class ShopeeAdapter(CommercePlatformAdapter):
         )
 
     @staticmethod
-    def _payment_status(order_status: str, refunded: Decimal, total: Decimal) -> PaymentStatus:
-        """Only a full refund (or a cancelled order) flips the payment to ``refunded``."""
+    def _payment_status(
+        order_status: str,
+        refunded: Decimal,
+        total: Decimal,
+        *,
+        explicit_unpaid: bool = False,
+    ) -> PaymentStatus:
+        """Only a full refund (or a paid cancelled order) flips payment to ``refunded``."""
         if order_status == "UNPAID":
             return PaymentStatus.UNPAID
-        if order_status == "CANCELLED":
+        if order_status in {"CANCELLED", "CANCELED"}:
+            return PaymentStatus.UNPAID if explicit_unpaid else PaymentStatus.REFUNDED
+        if order_status in {"REFUNDED", "RETURNED"}:
             return PaymentStatus.REFUNDED
         if total > Decimal("0") and refunded >= total:
             return PaymentStatus.REFUNDED
@@ -416,10 +432,23 @@ class ShopeeAdapter(CommercePlatformAdapter):
             if line_items
             else total_amount
         )
-        refunded = self._decimal(order.get("refunded_amount") or order.get("refund_amount"))
+        refunded = _money(self._decimal(order.get("refunded_amount") or order.get("refund_amount")))
         commission = self._decimal(
             order.get("commission_fee") or order.get("platform_commission")
         )
+        explicit_unpaid = (
+            str(order.get("payment_status") or "").strip().upper() in {"UNPAID", "NOT_PAID"}
+            or order.get("paid") is False
+        )
+        full_refund = total_amount > Decimal("0") and refunded >= total_amount
+        if status in {"CANCELLED", "CANCELED"}:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+        elif status in {"REFUNDED", "RETURNED"} or full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+        else:
+            fulfillment_status = _SHOPEE_STATUS_MAP.get(
+                status, FulfillmentStatus.CONFIRMED_RESERVED
+            )
         email = str(order.get("buyer_email") or "").strip() or None
         phone = str(recipient.get("phone") or "").strip() or None
         buyer_username = str(order.get("buyer_username") or "").strip() or None
@@ -447,10 +476,10 @@ class ShopeeAdapter(CommercePlatformAdapter):
             tax_collected=_money(self._decimal(order.get("tax_amount"))),
             total_amount=total_amount,
             platform_commission_base=_money(commission),
-            fulfillment_status=_SHOPEE_STATUS_MAP.get(
-                status, FulfillmentStatus.CONFIRMED_RESERVED
+            fulfillment_status=fulfillment_status,
+            payment_status=self._payment_status(
+                status, refunded, total_amount, explicit_unpaid=explicit_unpaid
             ),
-            payment_status=self._payment_status(status, refunded, total_amount),
             customer=NormalizedCustomer(
                 email=email,
                 phone_e164=phone,
@@ -674,9 +703,14 @@ class ShopeeAdapter(CommercePlatformAdapter):
             error_code="ERR_SHOPEE_FULFILLMENT_REJECTED",
             error_title="Shopee Fulfillment Rejected",
         )
+        fulfillment_id = (
+            str(data.get("package_number") or data.get("fulfillment_id") or package_number).strip()
+            or order_sn
+        )
         return {
             "channel": "shopee",
             "external_order_id": order_sn,
+            "fulfillment_id": fulfillment_id,
             "tracking_number": tracking,
             "carrier_company": carrier,
             "tracking_url": tracking_url,

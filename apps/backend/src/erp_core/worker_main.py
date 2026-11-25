@@ -5,7 +5,9 @@ import functools
 import logging
 import os
 import signal
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from redis.asyncio import Redis
@@ -31,6 +33,7 @@ import erp_core.social.models  # noqa: F401
 # ORM foreign keys reference, exactly like api_main registers them.
 import erp_core.tenancy.models  # noqa: F401
 from erp_core.channels.adapters.marketplace_im import is_marketplace_im_event
+from erp_core.channels.ecommerce.base import resolve_routing_tenant
 from erp_core.channels.ecommerce.inventory_sync_dispatcher import (
     drain_inventory_sync_all_tenants,
     reconcile_inventory_sync_cron,
@@ -43,7 +46,13 @@ from erp_core.channels.ingress_worker import (
 )
 from erp_core.channels.webhook_delivery import SessionFactory, drain_deliveries
 from erp_core.channels.webhook_store import set_raw_webhook_processing_state
-from erp_core.orders.reconciliation_worker import reconcile_ecommerce_orders_cron
+from erp_core.orders.reconciliation_worker import (
+    _adapter_credentials,
+    _instantiate_adapter,
+    reconcile_channel_account_orders,
+    reconcile_ecommerce_orders_cron,
+    resolve_default_warehouse_id,
+)
 from erp_core.orders.tracking_worker import monitor_stalled_shipments_cron, process_17track_webhook
 from erp_core.shared.config import get_settings
 from erp_core.shared.db import (
@@ -51,7 +60,9 @@ from erp_core.shared.db import (
     create_runtime_engine,
     create_session_factory,
     system_session,
+    tenant_session,
 )
+from erp_core.shared.enums import ChannelType
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.social.scheduler import dispatch_due_social_posts_cron
 
@@ -61,13 +72,14 @@ logger = logging.getLogger(__name__)
 # only registered by the live E2E fixture, so their Redis streams grew without bound
 # in production. This module now owns that topology: one ingress loop plus one
 # commerce/tracking drain loop, both running until SIGINT/SIGTERM.
-COMMERCE_TRACKING_CHANNELS: tuple[str, ...] = (
-    "17track",
-    "shopify",
+_STOREFRONT_CHANNELS: tuple[str, ...] = (
     "woocommerce",
     "shopline",
     "shoplazza",
     "tiktok_shop",
+    "amazon_sp",
+    "ebay",
+    "alibaba_email",
     "shopee",
     "lazada",
     "temu",
@@ -77,6 +89,7 @@ COMMERCE_TRACKING_CHANNELS: tuple[str, ...] = (
     "walmart",
     "mercado_libre",
 )
+COMMERCE_TRACKING_CHANNELS: tuple[str, ...] = ("17track", "shopify", *_STOREFRONT_CHANNELS)
 COMMERCE_DRAIN_INTERVAL_SECONDS = 2.0
 ECOMMERCE_RECONCILE_INTERVAL_SECONDS = 15 * 60.0
 INVENTORY_SYNC_RECONCILE_INTERVAL_SECONDS = 30 * 60.0
@@ -113,6 +126,55 @@ async def worker_ping() -> str:
     return "pong"
 
 
+_ACCOUNT_HEADER_KEYS: tuple[str, ...] = ("shop_domain", "external_account_id")
+_ACCOUNT_PAYLOAD_KEYS: tuple[str, ...] = (
+    "shop_id",
+    "seller_id",
+    "user_id",
+    "mall_id",
+    "client_id",
+    "shop_domain",
+    "MerchantId",
+    "sellerId",
+)
+
+
+def _unpack_raw_webhook_row(
+    row: Any,
+) -> tuple[str, str, dict[str, Any], dict[str, Any]]:
+    channel_type = str(row[0])
+    if len(row) == 3 and isinstance(row[1], Mapping):
+        return channel_type, "", dict(row[1] or {}), dict(row[2] or {})
+    external_account_id = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+    stored_headers = dict(row[2] or {}) if len(row) > 2 and isinstance(row[2], Mapping) else {}
+    stored_payload = dict(row[3] or {}) if len(row) > 3 and isinstance(row[3], Mapping) else {}
+    return channel_type, external_account_id, stored_headers, stored_payload
+
+
+def _extract_storefront_account_candidates(
+    external_account_id: str,
+    stored_headers: Mapping[str, Any],
+    stored_payload: Mapping[str, Any],
+) -> list[str]:
+    raw_values: list[str] = []
+    if external_account_id:
+        raw_values.append(external_account_id)
+    for key in _ACCOUNT_HEADER_KEYS:
+        val = stored_headers.get(key)
+        if val is not None and not isinstance(val, bool) and str(val).strip():
+            raw_values.append(str(val).strip())
+    for key in _ACCOUNT_PAYLOAD_KEYS:
+        val = stored_payload.get(key)
+        if val is not None and not isinstance(val, bool) and str(val).strip():
+            raw_values.append(str(val).strip())
+    candidates: list[str] = []
+    for raw_val in raw_values:
+        for variant in (raw_val, raw_val.lower()):
+            if variant and variant not in candidates:
+                candidates.append(variant)
+    return candidates
+
+
 async def _handle_storefront_webhook_delivery(
     raw_event_id: str,
     *,
@@ -120,19 +182,12 @@ async def _handle_storefront_webhook_delivery(
     runtime_session_factory: SessionFactory | None = None,
     redis: Redis | None = None,
 ) -> int:
-    """Acknowledge a storefront/marketplace webhook receipt so its stream cannot pile up.
+    """Process or acknowledge a storefront/marketplace webhook receipt so its stream drains.
 
-    ``drain_deliveries`` hands the consumer nothing but the persisted
-    ``raw_webhook_events.id``. Order materialization for WooCommerce, Shopline,
-    Shoplazza, TikTok Shop and the eight global marketplaces (Shopee, Lazada, Temu, SHEIN,
-    AliExpress, Ozon, Walmart, Mercado Libre) is done by the scheduled
-    ``reconcile_ecommerce_orders_cron`` pull, exactly as for Shopify order topics.
-
-    Buyer-IM deliveries on those same endpoints are a different story: a marketplace chat
-    message is customer-service work, not an order feed, so the receipt is handed to the
-    ingress worker, which claims it and writes customers, conversations and messages into
-    the tenant's Inbox. The hand-off happens *before* any status write so the receipt is
-    claimed exactly once.
+    Buyer-IM deliveries are handed off to ``process_raw_webhook_event`` so the ingress
+    worker materializes customers/conversations/messages into the Inbox. Non-IM receipts
+    with a resolvable channel account trigger an immediate 30-minute incremental order
+    reconciliation before marking the raw receipt ``processed``.
     """
     factory = broker_session_factory or _broker_session_factory
     try:
@@ -143,11 +198,14 @@ async def _handle_storefront_webhook_delivery(
 
     channel_type: str | None = None
     delegate_to_inbox = False
+    resolved_route: tuple[UUID, UUID] | None = None
+    marked_processed = False
     async with system_session(factory) as session:
         row = (
             await session.execute(
                 text(
-                    "SELECT channel_type, headers, raw_payload FROM raw_webhook_events "
+                    "SELECT channel_type, external_account_id, headers, raw_payload "
+                    "FROM raw_webhook_events "
                     "WHERE id = :id AND processing_status IN ('received', 'queued')"
                 ),
                 {"id": receipt_id},
@@ -155,17 +213,36 @@ async def _handle_storefront_webhook_delivery(
         ).one_or_none()
         if row is None:
             return 0
-        channel_type = str(row[0])
-        stored_headers = dict(row[1] or {}) if len(row) > 1 else {}
-        stored_payload = dict(row[2] or {}) if len(row) > 2 else {}
+        channel_type, external_account_id, stored_headers, stored_payload = (
+            _unpack_raw_webhook_row(row)
+        )
         if is_marketplace_im_event(channel_type, stored_payload, stored_headers):
             delegate_to_inbox = True
         else:
-            await set_raw_webhook_processing_state(
-                session,
-                raw_event_id=receipt_id,
-                status="processed",
+            candidates = _extract_storefront_account_candidates(
+                external_account_id, stored_headers, stored_payload
             )
+            for candidate in candidates:
+                try:
+                    route = await resolve_routing_tenant(session, channel_type, candidate)
+                except Exception:
+                    logger.debug(
+                        "storefront routing lookup skipped channel=%s candidate=%s",
+                        channel_type,
+                        candidate,
+                        exc_info=True,
+                    )
+                    route = None
+                if route is not None:
+                    resolved_route = route
+                    break
+            if resolved_route is None:
+                await set_raw_webhook_processing_state(
+                    session,
+                    raw_event_id=receipt_id,
+                    status="processed",
+                )
+                marked_processed = True
 
     if delegate_to_inbox:
         # process_raw_webhook_event claims the row itself and marks it processed/pending
@@ -183,6 +260,57 @@ async def _handle_storefront_webhook_delivery(
             outcome,
         )
         return 1
+
+    if resolved_route is not None and channel_type is not None:
+        tenant_id, channel_account_id = resolved_route
+        rt_factory = runtime_session_factory or _session_factory
+        try:
+            ch_enum = ChannelType(channel_type)
+            async with tenant_session(rt_factory, tenant_id) as rt_session:
+                acct_row = (
+                    await rt_session.execute(
+                        text(
+                            "SELECT config FROM channel_accounts "
+                            "WHERE tenant_id = :tid AND id = :caid AND status = 'active'"
+                        ),
+                        {"tid": tenant_id, "caid": channel_account_id},
+                    )
+                ).one_or_none()
+                if acct_row is not None:
+                    account_config = acct_row[0] if isinstance(acct_row[0], Mapping) else None
+                    credentials = await _adapter_credentials(
+                        rt_session, tenant_id, channel_account_id, ch_enum
+                    )
+                    warehouse_id = await resolve_default_warehouse_id(
+                        rt_session,
+                        tenant_id=tenant_id,
+                        channel_account_id=channel_account_id,
+                        account_config=account_config,
+                    )
+                    adapter = await _instantiate_adapter(ch_enum, credentials, warehouse_id)
+                    await reconcile_channel_account_orders(
+                        rt_session,
+                        tenant_id=tenant_id,
+                        channel_account_id=channel_account_id,
+                        channel_type=ch_enum,
+                        adapter=adapter,
+                        default_warehouse_id=warehouse_id,
+                        since=datetime.now(UTC) - timedelta(minutes=30),
+                    )
+        except Exception:
+            logger.exception(
+                "storefront webhook order reconciliation failed channel=%s receipt_id=%s",
+                channel_type,
+                receipt_id,
+            )
+
+    if not marked_processed:
+        async with system_session(factory) as session:
+            await set_raw_webhook_processing_state(
+                session,
+                raw_event_id=receipt_id,
+                status="processed",
+            )
 
     logger.info(
         "storefront webhook receipt acknowledged channel=%s receipt_id=%s",
@@ -206,20 +334,7 @@ def commerce_tracking_handlers(
             runtime_session_factory=runtime_session_factory,
             redis=redis,
         )
-        for channel in (
-            "woocommerce",
-            "shopline",
-            "shoplazza",
-            "tiktok_shop",
-            "shopee",
-            "lazada",
-            "temu",
-            "shein",
-            "aliexpress",
-            "ozon",
-            "walmart",
-            "mercado_libre",
-        )
+        for channel in _STOREFRONT_CHANNELS
     }
     return {
         "17track": process_17track_webhook,

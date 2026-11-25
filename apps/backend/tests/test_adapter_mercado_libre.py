@@ -251,6 +251,10 @@ def test_endpoint_currency_and_mode_defaults_and_repr_redaction() -> None:
     brazil = MercadoLibreAdapter(
         seller_id=SELLER_ID, access_token=ACCESS_TOKEN, site_id="mlb", fulfillment_mode="FULL"
     )
+    managed = MercadoLibreAdapter(
+        seller_id=SELLER_ID, access_token=ACCESS_TOKEN, fulfillment_mode="full_managed"
+    )
+    assert managed.fulfillment_mode == "full"
     overridden = MercadoLibreAdapter(
         seller_id=SELLER_ID,
         access_token=ACCESS_TOKEN,
@@ -366,9 +370,50 @@ async def test_fetch_orders_sums_only_refunded_payments_for_partial_refunds() ->
     orders, _cursor = await adapter.fetch_orders_updated_since(SINCE)
 
     order = orders[0]
-    assert order.payment_status is PaymentStatus.PARTIALLY_PAID
+    assert order.payment_status is PaymentStatus.PAID
     assert order.fulfillment_status is FulfillmentStatus.CONFIRMED_RESERVED
     assert order.channel_metadata["refunded_amount"] == "10.01"
+
+
+async def test_fetch_orders_handles_refunded_and_transaction_amount_refunded() -> None:
+    tx_refunded = order_payload(
+        id=2000012345679,
+        status="partially_refunded",
+        payments=[
+            {
+                "id": 5,
+                "status": "partially_refunded",
+                "transaction_amount": 32.84,
+                "transaction_amount_refunded": 5.50,
+            }
+        ],
+    )
+    top_full_refund = order_payload(
+        id=2000012345680,
+        status="paid",
+        payments=[{"id": 6, "status": "approved", "transaction_amount": 32.84}],
+        refunded_amount=32.84,
+    )
+    explicit_refunded = order_payload(id=2000012345681, status="refunded", payments=[])
+    fake = FakeMercadoLibre(
+        {
+            ("GET", ORDERS_SEARCH_PATH): lambda _r: httpx.Response(
+                200, json={"results": [tx_refunded, top_full_refund, explicit_refunded]}
+            )
+        }
+    )
+    orders, _ = await make_adapter(fake).fetch_orders_updated_since(SINCE)
+    by_id = {o.external_order_id: o for o in orders}
+
+    assert by_id["2000012345679"].payment_status is PaymentStatus.PAID
+    assert by_id["2000012345679"].channel_metadata["refunded_amount"] == "5.50"
+
+    assert by_id["2000012345680"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["2000012345680"].fulfillment_status is FulfillmentStatus.REFUNDED
+    assert by_id["2000012345680"].channel_metadata["refunded_amount"] == "32.84"
+
+    assert by_id["2000012345681"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["2000012345681"].fulfillment_status is FulfillmentStatus.REFUNDED
 
 
 @pytest.mark.parametrize(
@@ -751,6 +796,7 @@ async def test_create_fulfillment_resolves_the_shipment_from_the_order() -> None
     assert result["channel"] == "mercado_libre"
     assert result["external_order_id"] == "2000012345678"
     assert result["external_shipment_id"] == "412345678"
+    assert result["fulfillment_id"] == "412345678"
     assert result["tracking_number"] == "MEX123456789"
     assert result["carrier"] == "DHL"
     assert result["raw"] == {"id": 412345678, "status": "shipped"}

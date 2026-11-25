@@ -202,6 +202,12 @@ def test_unknown_fulfillment_mode_fails_closed() -> None:
     assert excinfo.value.code == "ERR_SHOPEE_FULFILLMENT_MODE_INVALID"
 
 
+@pytest.mark.parametrize("mode", ["full_managed", "light_export"])
+def test_connect_fulfillment_modes_normalize_safely(mode: str) -> None:
+    adapter = _adapter(_router({}), fulfillment_mode=mode)
+    assert adapter.fulfillment_mode == "standard"
+
+
 async def test_429_maps_to_rate_limited_error() -> None:
     handler = _router({ORDER_LIST_PATH: lambda _r: httpx.Response(429, json={})})
     with pytest.raises(AppError) as excinfo:
@@ -314,6 +320,9 @@ async def test_fetch_orders_maps_shopee_statuses() -> None:
         "TO_CONFIRM_RECEIVE": (FulfillmentStatus.SHIPPED, PaymentStatus.PAID),
         "COMPLETED": (FulfillmentStatus.DELIVERED, PaymentStatus.PAID),
         "CANCELLED": (FulfillmentStatus.CANCELLED, PaymentStatus.REFUNDED),
+        "CANCELED": (FulfillmentStatus.CANCELLED, PaymentStatus.REFUNDED),
+        "REFUNDED": (FulfillmentStatus.REFUNDED, PaymentStatus.REFUNDED),
+        "RETURNED": (FulfillmentStatus.REFUNDED, PaymentStatus.REFUNDED),
         "TO_RETURN": (FulfillmentStatus.EXCEPTION, PaymentStatus.PAID),
     }
     for status, (fulfillment, payment) in cases.items():
@@ -348,6 +357,7 @@ async def test_fetch_orders_marks_a_full_refund_as_refunded() -> None:
     orders, _ = await _adapter(handler).fetch_orders_updated_since(
         datetime(2025, 1, 1, tzinfo=UTC)
     )
+    assert orders[0].fulfillment_status is FulfillmentStatus.REFUNDED
     assert orders[0].payment_status is PaymentStatus.REFUNDED
     assert orders[0].channel_metadata["refunded_amount"] == "41.70"
 
@@ -543,6 +553,7 @@ async def test_create_fulfillment_ships_non_integrated_tracking() -> None:
     }
     assert result["channel"] == "shopee"
     assert result["external_order_id"] == "240101ABCDEFGH"
+    assert result["fulfillment_id"] == "PKG-1"
     assert result["tracking_number"] == "TRK-889900"
     assert result["package_number"] == "PKG-1"
     assert result["fulfillment_mode"] == "standard"

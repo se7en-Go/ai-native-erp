@@ -76,6 +76,7 @@ DEFAULT_LAZADA_PRIMARY_CATEGORY = "10000348"
 #: ``fulfillment_mode`` -> Lazada ``delivery_type`` token.
 LAZADA_DELIVERY_TYPE_MAP: Mapping[str, str] = {
     "standard": "dropship",
+    "full_managed": "dropship",
     "dropship": "dropship",
     "dropshipping": "dropship",
     "pickup": "pickup",
@@ -94,6 +95,7 @@ ORDER_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "shipped": FulfillmentStatus.SHIPPED,
     "delivered": FulfillmentStatus.DELIVERED,
     "returned": FulfillmentStatus.REFUNDED,
+    "refunded": FulfillmentStatus.REFUNDED,
     "canceled": FulfillmentStatus.CANCELLED,
     "cancelled": FulfillmentStatus.CANCELLED,
     "failed": FulfillmentStatus.EXCEPTION,
@@ -587,14 +589,22 @@ class LazadaAdapter(CommercePlatformAdapter):
         return ""
 
     @staticmethod
-    def _payment_status(status: str, order: Mapping[str, Any]) -> PaymentStatus:
+    def _payment_status(
+        status: str,
+        order: Mapping[str, Any],
+        *,
+        refunded: Decimal = Decimal("0.00"),
+        total: Decimal = Decimal("0.00"),
+    ) -> PaymentStatus:
         if status == "pending":
             return PaymentStatus.UNPAID
-        if status == "returned":
+        if status in {"returned", "refunded"}:
             return PaymentStatus.REFUNDED
         paid_evidence = _lookup(order, "paid_at", "payment_method", "pay_time")
         if status in _CANCELLED_STATUSES:
             return PaymentStatus.REFUNDED if paid_evidence is not None else PaymentStatus.UNPAID
+        if total > Decimal("0") and refunded >= total:
+            return PaymentStatus.REFUNDED
         return PaymentStatus.PAID
 
     async def _order_items(
@@ -700,6 +710,14 @@ class LazadaAdapter(CommercePlatformAdapter):
             platform_commission_base=commission,
         )
 
+        full_refund = total > Decimal("0") and refunded >= total
+        if status in _CANCELLED_STATUSES:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+        elif full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+        else:
+            fulfillment_status = ORDER_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED)
+
         return NormalizedOrder(
             external_order_id=external_order_id,
             external_order_number=order_number,
@@ -714,8 +732,8 @@ class LazadaAdapter(CommercePlatformAdapter):
             tax_collected=tax,
             total_amount=total,
             platform_commission_base=commission.quantize(MONEY_SCALE, rounding=ROUND_HALF_UP),
-            fulfillment_status=ORDER_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED),
-            payment_status=self._payment_status(status, order),
+            fulfillment_status=fulfillment_status,
+            payment_status=self._payment_status(status, order, refunded=refunded, total=total),
             customer=NormalizedCustomer(
                 email=email,
                 phone_e164=phone,
@@ -860,7 +878,16 @@ class LazadaAdapter(CommercePlatformAdapter):
             notify_customer=notify_customer,
         )
         payload = await self._request("POST", LAZADA_ORDERS_FULFILL_PATH, params)
-        return self._data_of(payload)
+        data = self._data_of(payload)
+        fulfillment_id = (
+            _first_str(data, "fulfillment_id", "package_id", "shipment_id", "order_id")
+            or (fulfillment_order_id or "").strip()
+            or order_id
+        )
+        return {
+            **data,
+            "fulfillment_id": fulfillment_id,
+        }
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:
         return verify_lazada_webhook(raw_body, headers, secret or self._app_secret)
@@ -903,7 +930,8 @@ class LazadaAdapter(CommercePlatformAdapter):
                     f"'{clean_sku}' declared options without variants."
                 ),
             )
-        if payload.image_blobs:
+        images = _https_images(payload.images)
+        if payload.image_blobs and not images:
             # Raw bytes cannot reach Lazada: its product API only accepts hosted https URLs
             # and this adapter has no signed media-upload stream. Publishing anyway would
             # ship an image-less listing, so the caller is asked for hosted URLs instead.
@@ -937,7 +965,6 @@ class LazadaAdapter(CommercePlatformAdapter):
                     ),
                 )
 
-        images = _https_images(payload.images)
         attributes: dict[str, Any] = {
             "name": clean_title[:255],
             "description": _listing_description(payload.description, payload.bullet_points)[:25000],

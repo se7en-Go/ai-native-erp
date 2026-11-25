@@ -514,6 +514,29 @@ class WalmartAdapter(CommercePlatformAdapter):
             return FulfillmentStatus.PARTIALLY_SHIPPED
         return FulfillmentStatus.CONFIRMED_RESERVED
 
+    def _line_refund_amount(self, row: Mapping[str, Any]) -> Decimal:
+        """Sum any explicit per-line ``refund.refundCharges`` amounts (2dp, positive magnitude)."""
+        refund_block = _mapping(row.get("refund"))
+        raw_charges = refund_block.get("refundCharges")
+        charge_rows = (
+            raw_charges.get("refundCharge") if isinstance(raw_charges, Mapping) else raw_charges
+        )
+        if not isinstance(charge_rows, list):
+            return Decimal("0.00")
+        total_refund = Decimal("0.00")
+        for entry in charge_rows:
+            if not isinstance(entry, Mapping):
+                continue
+            charge = (
+                _mapping(entry.get("charge"))
+                if isinstance(entry.get("charge"), Mapping)
+                else entry
+            )
+            amount_payload = _mapping(charge.get("chargeAmount"))
+            if amount_payload.get("amount") is not None:
+                total_refund += self._as_decimal(amount_payload.get("amount")).copy_abs()
+        return total_refund.quantize(MONEY_SCALE, rounding=ROUND_HALF_UP)
+
     @staticmethod
     def _payment_status(order: Mapping[str, Any], *, dead: bool) -> PaymentStatus:
         """Walmart collects payment up front; only an explicit negative signal downgrades it."""
@@ -522,7 +545,9 @@ class WalmartAdapter(CommercePlatformAdapter):
         declared = str(order.get("paymentStatus") or "").strip().upper()
         if declared in {"UNPAID", "PENDING", "FAILED"}:
             return PaymentStatus.UNPAID
-        if declared == "REFUNDED":
+        if declared == "PARTIALLY_PAID":
+            return PaymentStatus.PARTIALLY_PAID
+        if declared in {"REFUNDED", "FULLY_REFUNDED"}:
             return PaymentStatus.REFUNDED
         return PaymentStatus.PAID
 
@@ -563,7 +588,10 @@ class WalmartAdapter(CommercePlatformAdapter):
             tax += line_tax
             status = self._line_status(row)
             line_statuses.append(status)
-            if status in _DEAD_LINE:
+            line_refund = self._line_refund_amount(row)
+            if line_refund > Decimal("0"):
+                refunded += line_refund
+            elif status in _DEAD_LINE:
                 refunded += product
             title = str(item.get("productName") or sku)
             existing = merged.get(sku)
@@ -595,8 +623,22 @@ class WalmartAdapter(CommercePlatformAdapter):
             )
         currency = next(iter(order_currencies), "USD")
         fulfillment_status = self._rollup_fulfillment(line_statuses)
-        dead = fulfillment_status in _DEAD_LINE
         total = (subtotal + shipping + tax).quantize(MONEY_SCALE, rounding=ROUND_HALF_UP)
+        declared_payment = str(order.get("paymentStatus") or "").strip().upper()
+        is_full_refund = (
+            declared_payment in {"REFUNDED", "FULLY_REFUNDED"}
+            or (total > Decimal("0") and refunded >= total)
+        )
+        if fulfillment_status is not FulfillmentStatus.CANCELLED and is_full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+            if refunded == Decimal("0") and total > Decimal("0"):
+                refunded = total
+        elif (
+            fulfillment_status is FulfillmentStatus.CONFIRMED_RESERVED
+            and declared_payment in {"UNPAID", "PENDING", "FAILED"}
+        ):
+            fulfillment_status = FulfillmentStatus.PENDING_PAYMENT
+        dead = fulfillment_status in _DEAD_LINE
 
         # Walmart reports commissions in the settlement report, not the order feed: pay the
         # figure through only when the platform actually sent one instead of inventing a rate.
@@ -823,15 +865,27 @@ class WalmartAdapter(CommercePlatformAdapter):
             )
         order_payload = self._json_object(order_response)
         raw_lines = _mapping(order_payload.get("orderLines")).get("orderLine")
-        rows = raw_lines if isinstance(raw_lines, list) else []
+        rows = [
+            row
+            for row in (raw_lines if isinstance(raw_lines, list) else [])
+            if isinstance(row, Mapping) and str(row.get("lineNumber") or "").strip()
+        ]
+        shippable_rows = [
+            row
+            for row in rows
+            if self._line_status(row)
+            not in {
+                FulfillmentStatus.CANCELLED,
+                FulfillmentStatus.REFUNDED,
+                FulfillmentStatus.SHIPPED,
+                FulfillmentStatus.DELIVERED,
+            }
+        ]
+        target_rows = shippable_rows if shippable_rows else rows
         order_lines: list[dict[str, Any]] = []
         line_numbers: list[str] = []
-        for row in rows:
-            if not isinstance(row, Mapping):
-                continue
+        for row in target_rows:
             line_number = str(row.get("lineNumber") or "").strip()
-            if not line_number:
-                continue
             quantity = max(
                 self._as_int(_mapping(row.get("orderLineQuantity")).get("amount"), 1), 1
             )
@@ -891,18 +945,26 @@ class WalmartAdapter(CommercePlatformAdapter):
             fulfillment_mode=self.fulfillment_mode,
             line_numbers=line_numbers,
         )
+        po_id = str(order_payload.get("purchaseOrderId") or clean_order_id)
+        raw_ship = self._json_object(ship_response)
+        fid = str(
+            raw_ship.get("fulfillment_id")
+            or raw_ship.get("shipmentId")
+            or raw_ship.get("id")
+            or (fulfillment_order_id or "").strip()
+            or f"{po_id}:{'-'.join(line_numbers)}"
+        )
         return {
             "channel": "walmart",
+            "fulfillment_id": fid,
             "external_order_id": clean_order_id,
-            "purchase_order_id": str(
-                order_payload.get("purchaseOrderId") or clean_order_id
-            ),
+            "purchase_order_id": po_id,
             "tracking_number": clean_tracking,
             "carrier_company": carrier_company,
             "tracking_url": tracking_url,
             "fulfillment_mode": self.fulfillment_mode,
             "line_numbers": line_numbers,
-            "raw": self._json_object(ship_response),
+            "raw": raw_ship,
         }
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str], secret: str) -> bool:

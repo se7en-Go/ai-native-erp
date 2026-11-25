@@ -97,10 +97,12 @@ OZON_POSTING_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "delivering": FulfillmentStatus.SHIPPED,
     "delivered": FulfillmentStatus.DELIVERED,
     "returned": FulfillmentStatus.REFUNDED,
+    "refunded": FulfillmentStatus.REFUNDED,
     "cancelled": FulfillmentStatus.CANCELLED,
+    "canceled": FulfillmentStatus.CANCELLED,
 }
 
-_CANCELLED_POSTING_STATUSES = frozenset({"cancelled", "returned"})
+_CANCELLED_POSTING_STATUSES = frozenset({"cancelled", "canceled", "returned", "refunded"})
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -394,6 +396,7 @@ class OzonAdapter(CommercePlatformAdapter):
         financial_products = _mapping_rows(financial.get("products"))
         analytics = _mapping(posting.get("analytics_data"))
         status = str(posting.get("status") or "").strip()
+        status_lower = status.lower()
 
         currency = ""
         for candidates in (
@@ -422,7 +425,38 @@ class OzonAdapter(CommercePlatformAdapter):
         total_amount = _money(subtotal - discount_amount)
         if total_amount < Decimal("0"):
             total_amount = Decimal("0.00")
-        refunded_amount = total_amount if status in _CANCELLED_POSTING_STATUSES else Decimal("0.00")
+
+        explicit_refund = _decimal(
+            posting.get("refunded_amount")
+            if posting.get("refunded_amount") not in (None, "")
+            else posting.get("refund_amount")
+        )
+        if explicit_refund <= Decimal("0"):
+            explicit_refund = _decimal(
+                financial.get("refunded_amount")
+                if financial.get("refunded_amount") not in (None, "")
+                else financial.get("refund_amount")
+            )
+        if explicit_refund <= Decimal("0"):
+            explicit_refund = sum(
+                (
+                    _decimal(
+                        row.get("refunded_amount")
+                        if row.get("refunded_amount") not in (None, "")
+                        else row.get("refund_amount")
+                    )
+                    for row in financial_products
+                ),
+                Decimal("0"),
+            )
+        explicit_refund = _money(explicit_refund)
+        if explicit_refund > Decimal("0"):
+            refunded_amount = explicit_refund
+        elif status_lower in _CANCELLED_POSTING_STATUSES:
+            refunded_amount = total_amount
+        else:
+            refunded_amount = Decimal("0.00")
+        full_refund = total_amount > Decimal("0") and refunded_amount >= total_amount
 
         metadata: dict[str, Any] = {
             "ozon_posting_number": posting_number,
@@ -459,6 +493,18 @@ class OzonAdapter(CommercePlatformAdapter):
             posting.get("in_process_at") or posting.get("created_at")
         ) or fallback_updated_at
 
+        if status_lower in {"cancelled", "canceled"}:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+            payment_status = PaymentStatus.REFUNDED
+        elif status_lower in {"returned", "refunded"} or full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+            payment_status = PaymentStatus.REFUNDED
+        else:
+            fulfillment_status = OZON_POSTING_STATUS_MAP.get(
+                status_lower, FulfillmentStatus.CONFIRMED_RESERVED
+            )
+            payment_status = PaymentStatus.PAID
+
         return NormalizedOrder(
             external_order_id=posting_number,
             external_order_number=str(posting.get("order_number") or posting_number),
@@ -468,14 +514,8 @@ class OzonAdapter(CommercePlatformAdapter):
             discount_amount=discount_amount,
             total_amount=total_amount,
             platform_commission_base=commission,
-            fulfillment_status=OZON_POSTING_STATUS_MAP.get(
-                status.lower(), FulfillmentStatus.CONFIRMED_RESERVED
-            ),
-            payment_status=(
-                PaymentStatus.REFUNDED
-                if status.lower() in _CANCELLED_POSTING_STATUSES
-                else PaymentStatus.PAID
-            ),
+            fulfillment_status=fulfillment_status,
+            payment_status=payment_status,
             customer=NormalizedCustomer(
                 email=email,
                 phone_e164=phone,
@@ -668,7 +708,6 @@ class OzonAdapter(CommercePlatformAdapter):
 
         package_id = str(fulfillment_order_id or "").strip()
         package: dict[str, Any] = {
-            "products": await self._posting_products(posting_number) if not package_id else [],
             "tracking_number": tracking,
             "carrier": carrier,
         }
@@ -676,6 +715,8 @@ class OzonAdapter(CommercePlatformAdapter):
             package["tracking_url"] = tracking_url.strip()
         if package_id:
             package["package_id"] = package_id
+        else:
+            package["products"] = await self._posting_products(posting_number)
 
         payload = await self._request(
             "POST",
@@ -688,10 +729,17 @@ class OzonAdapter(CommercePlatformAdapter):
             carrier=carrier,
             tracking_number=tracking,
         )
+        raw_result = payload.get("result")
+        resolved_result_id = (
+            str(raw_result[0]).strip()
+            if isinstance(raw_result, list) and raw_result and str(raw_result[0]).strip()
+            else ""
+        )
         return {
             "channel": "ozon",
             "external_order_id": posting_number,
             "fulfillment_order_id": package_id or posting_number,
+            "fulfillment_id": package_id or resolved_result_id or posting_number,
             "status": "shipped",
             "tracking_number": tracking,
             "carrier": carrier,
@@ -1075,19 +1123,26 @@ class OzonAdapter(CommercePlatformAdapter):
         payload = await self._request(
             "POST", OZON_STOCK_IMPORT_PATH, body={"stocks": [stock_row]}
         )
-        result = _mapping(payload.get("result"))
-        updated = result.get("updated")
-        if updated is False:
-            raise AppError(
-                slug="ozon-inventory-sync-failed",
-                status_code=502,
-                code="ERR_OZON_INVENTORY_SYNC",
-                title="Ozon Inventory Sync Failed",
-                detail=(
-                    f"Ozon refused the stock update for '{clean_sku}' "
-                    f"({self._redacted(json.dumps(result))})."
-                ),
-            )
+        raw_result = payload.get("result")
+        result_rows: list[Mapping[str, Any]]
+        if isinstance(raw_result, list):
+            result_rows = [row for row in raw_result if isinstance(row, Mapping)]
+        elif isinstance(raw_result, Mapping):
+            result_rows = [raw_result]
+        else:
+            result_rows = []
+        for row in result_rows:
+            if row.get("updated") is False or bool(row.get("errors")):
+                raise AppError(
+                    slug="ozon-inventory-sync-failed",
+                    status_code=502,
+                    code="ERR_OZON_INVENTORY_SYNC",
+                    title="Ozon Inventory Sync Failed",
+                    detail=(
+                        f"Ozon refused the stock update for '{clean_sku}' "
+                        f"({self._redacted(json.dumps(dict(row)))})."
+                    ),
+                )
         return {
             "channel": "ozon",
             "external_sku": clean_sku,

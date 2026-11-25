@@ -173,12 +173,24 @@ class ShoplineAdapter(CommercePlatformAdapter):
         customer = order.get("customer") or {}
         location = order.get("b2b_company_location") or {}
         company_name = str(location.get("company_name") or "").strip()
-        metadata: dict[str, Any] = {"shopline_order_number": order.get("order_number")}
+        cancelled_at = order.get("cancelled_at") or order.get("cancel_time")
+        status_raw = str(order.get("status") or "").strip().lower()
+        is_cancelled = bool(cancelled_at) or status_raw in {"cancelled", "canceled"}
+        financial = str(order.get("financial_status") or "").strip().lower()
+        fulfillment = str(order.get("fulfillment_status") or "").strip().lower()
+        total = self._decimal(order.get("total_price"))
+        metadata: dict[str, Any] = {
+            "shopline_order_number": order.get("order_number"),
+            "financial_status": financial or None,
+            "fulfillment_status": fulfillment or None,
+        }
+        if cancelled_at:
+            metadata["cancelled_at"] = str(cancelled_at)
         if order.get("purchase_order_number"):
             metadata["po_number"] = order["purchase_order_number"]
         refunded_val = self._decimal(
             order.get("total_refunded") or order.get("refunded_amount")
-        )
+        ).copy_abs()
         commission_val = self._decimal(
             order.get("platform_commission") or order.get("platform_fee")
         )
@@ -187,24 +199,54 @@ class ShoplineAdapter(CommercePlatformAdapter):
             refunded_amount=refunded_val,
             platform_commission_base=commission_val,
         )
-        financial = str(order.get("financial_status") or "").lower()
-        payment_status = (
-            PaymentStatus.PAID
-            if financial == "paid"
-            else PaymentStatus.PARTIALLY_PAID
-            if financial in {"partially_paid", "partially_refunded"}
-            else PaymentStatus.REFUNDED
-            if financial == "refunded"
-            else PaymentStatus.UNPAID
+        is_full_refund = financial in {"refunded", "fully_refunded"} or (
+            total > Decimal("0") and refunded_val >= total
         )
-        fulfillment = str(order.get("fulfillment_status") or "").lower()
-        fulfillment_status = (
-            FulfillmentStatus.SHIPPED
-            if fulfillment == "fulfilled"
-            else FulfillmentStatus.PARTIALLY_SHIPPED
-            if fulfillment == "partial"
-            else FulfillmentStatus.CONFIRMED_RESERVED
-        )
+        if is_cancelled:
+            payment_status = (
+                PaymentStatus.REFUNDED
+                if (
+                    financial
+                    in {
+                        "paid",
+                        "partially_paid",
+                        "partially_refunded",
+                        "refunded",
+                        "fully_refunded",
+                    }
+                    or refunded_val > Decimal("0")
+                )
+                else PaymentStatus.UNPAID
+            )
+            fulfillment_status = FulfillmentStatus.CANCELLED
+        elif is_full_refund:
+            payment_status = PaymentStatus.REFUNDED
+            fulfillment_status = FulfillmentStatus.REFUNDED
+        else:
+            if financial in {"paid", "partially_refunded"} or (
+                Decimal("0") < refunded_val < total
+            ):
+                payment_status = PaymentStatus.PAID
+            elif financial == "partially_paid":
+                payment_status = PaymentStatus.PARTIALLY_PAID
+            else:
+                payment_status = PaymentStatus.UNPAID
+
+            if fulfillment in {"fulfilled", "shipped"}:
+                fulfillment_status = FulfillmentStatus.SHIPPED
+            elif fulfillment == "delivered":
+                fulfillment_status = FulfillmentStatus.DELIVERED
+            elif fulfillment in {"partial", "partially_fulfilled", "partially_shipped"}:
+                fulfillment_status = FulfillmentStatus.PARTIALLY_SHIPPED
+            elif payment_status == PaymentStatus.UNPAID and financial in {
+                "unpaid",
+                "pending",
+                "authorized",
+                "voided",
+            }:
+                fulfillment_status = FulfillmentStatus.PENDING_PAYMENT
+            else:
+                fulfillment_status = FulfillmentStatus.CONFIRMED_RESERVED
         name = f"{customer.get('first_name') or ''} {customer.get('last_name') or ''}".strip()
         return NormalizedOrder(
             external_order_id=str(order["id"]),
@@ -264,9 +306,11 @@ class ShoplineAdapter(CommercePlatformAdapter):
             },
         )
         rows = payload.get("orders") or []
-        return [self._normalize_order(row) for row in rows], (
-            str(int(cursor or 1) + 1) if len(rows) == 50 else None
-        )
+        return [
+            self._normalize_order(row)
+            for row in rows
+            if any(str(item.get("sku") or "").strip() for item in (row.get("line_items") or []))
+        ], (str(int(cursor or 1) + 1) if len(rows) == 50 else None)
 
     async def fetch_products_updated_since(
         self, since: datetime, cursor: str | None = None
@@ -299,16 +343,28 @@ class ShoplineAdapter(CommercePlatformAdapter):
         fulfillment_order_id: str | None = None,
         notify_customer: bool = True,
     ) -> dict[str, Any]:
-        return await self._request(
+        del fulfillment_order_id
+        body: dict[str, Any] = {
+            "tracking_number": tracking_number,
+            "tracking_company": carrier_company,
+            "notify_customer": notify_customer,
+        }
+        if tracking_url:
+            body["tracking_url"] = tracking_url
+        res = await self._request(
             "POST",
             f"/orders/{external_order_id}/fulfillments.json",
-            json_body={
-                "tracking_number": tracking_number,
-                "tracking_company": carrier_company,
-                "tracking_url": tracking_url,
-                "notify_customer": notify_customer,
-            },
+            json_body=body,
         )
+        data = dict(res)
+        fid = data.get("fulfillment_id") or data.get("id")
+        if not fid and isinstance(data.get("fulfillment"), Mapping):
+            fid = data["fulfillment"].get("id")
+        if not fid and isinstance(data.get("data"), Mapping):
+            fid = data["data"].get("id")
+        if fid:
+            data["fulfillment_id"] = str(fid)
+        return data
 
     async def publish_listing(
         self,
@@ -354,9 +410,18 @@ class ShoplineAdapter(CommercePlatformAdapter):
 
         variant_list = list(variants or ())
         sl_variants: list[dict[str, Any]] = []
+        synthesized_options: dict[str, list[str]] = {}
         if variant_list:
             for var in variant_list:
-                opt_vals = list((var.get("option_values") or {}).values())
+                opt_map = var.get("option_values") or {}
+                opt_vals = list(opt_map.values())
+                for k, v in opt_map.items():
+                    k_str = str(k).strip()
+                    v_str = str(v).strip()
+                    if k_str and v_str:
+                        vals = synthesized_options.setdefault(k_str, [])
+                        if v_str not in vals:
+                            vals.append(v_str)
                 v_entry: dict[str, Any] = {
                     "sku": str(var.get("external_sku") or clean_sku),
                     "price": str(
@@ -368,6 +433,7 @@ class ShoplineAdapter(CommercePlatformAdapter):
                         0,
                         int(var["quantity"]) if var.get("quantity") is not None else quantity,
                     ),
+                    "inventory_tracker": True,
                 }
                 for idx, val in enumerate(opt_vals[:3], start=1):
                     v_entry[f"option{idx}"] = str(val)
@@ -378,14 +444,20 @@ class ShoplineAdapter(CommercePlatformAdapter):
                     "sku": clean_sku,
                     "price": str(norm_price),
                     "inventory_quantity": max(0, int(quantity)),
+                    "inventory_tracker": True,
                     "option1": "Default Title",
                 }
             )
+            synthesized_options["Title"] = ["Default Title"]
         sl_options = [
             {"name": str(opt["name"]), "values": [str(v) for v in opt.get("values") or ()]}
             for opt in (options or ())
             if opt.get("name")
         ]
+        if not sl_options and synthesized_options:
+            sl_options = [
+                {"name": name, "values": vals} for name, vals in synthesized_options.items()
+            ]
         product_body: dict[str, Any] = {
             "title": clean_title,
             "body_html": "".join(desc_parts) or f"<p>{html.escape(clean_title)}</p>",

@@ -369,6 +369,33 @@ describe("live-client (generated SDK over the BFF)", () => {
     expect(JSON.parse(captured[0].bodyText ?? "")).toMatchObject({ warehouse_id: "wh-selected" });
   });
 
+  it("shipOrder autoResolveWarehouse skips /warehouses and forwards trackingProvider", async () => {
+    const { captured } = stubFetch(() => jsonResponse({ id: "sh-1" }, 201));
+    await shipOrder("ord-1", {
+      trackingNumber: "DHL-AUTO-1",
+      carrierCode: "DHL",
+      trackingProvider: "manual",
+      autoResolveWarehouse: true,
+    });
+    expect(captured).toHaveLength(1);
+    expect(captured[0].url).toBe(`${BFF}/api/v1/orders/ord-1/ship`);
+    const body = JSON.parse(captured[0].bodyText ?? "");
+    expect(body.warehouse_id).toBeUndefined();
+    expect(body.tracking_provider).toBe("manual");
+    expect(body.tracking_number).toBe("DHL-AUTO-1");
+  });
+
+  it("pushOrderFulfillment calls POST /orders/{id}/push-fulfillment", async () => {
+    const { captured } = stubFetch(() =>
+      jsonResponse({ status: "synced", channel: "shopify", external_fulfillment_id: "f-1" }),
+    );
+    const { pushOrderFulfillment } = await import("@/lib/api-client/live-client");
+    const res = await pushOrderFulfillment("ord-1");
+    expect(captured).toHaveLength(1);
+    expect(captured[0].url).toBe(`${BFF}/api/v1/orders/ord-1/push-fulfillment`);
+    expect(res.status).toBe("synced");
+  });
+
   it("generateQuotePdf returns the signed download_url", async () => {
     stubFetch(() =>
       jsonResponse({

@@ -76,9 +76,11 @@ _CANCELLED_STATUSES = frozenset(
         "seller_cancel_close_order",
         "cancel",
         "cancelled",
+        "canceled",
         "closed",
     }
 )
+_REFUNDED_STATUSES = frozenset({"refunded", "returned"})
 _UNPAID_FLAGS = frozenset({"not_paid", "unpaid", "wait_buyer_pay"})
 
 ORDER_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
@@ -90,7 +92,12 @@ ORDER_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "in_cancel": FulfillmentStatus.CANCELLED,
     "buyer_cancel": FulfillmentStatus.CANCELLED,
     "seller_cancel_close_order": FulfillmentStatus.CANCELLED,
+    "cancel": FulfillmentStatus.CANCELLED,
+    "cancelled": FulfillmentStatus.CANCELLED,
+    "canceled": FulfillmentStatus.CANCELLED,
     "closed": FulfillmentStatus.CANCELLED,
+    "refunded": FulfillmentStatus.REFUNDED,
+    "returned": FulfillmentStatus.REFUNDED,
 }
 
 _ORDER_ROW_KEYS = ("orders", "order", "order_list", "order_list_get")
@@ -621,17 +628,30 @@ class AliExpressAdapter(CommercePlatformAdapter):
 
     @staticmethod
     def _payment_status(
-        status: str, payment_flag: str, order: Mapping[str, Any]
+        status: str,
+        payment_flag: str,
+        order: Mapping[str, Any],
+        *,
+        refunded: Decimal = Decimal("0.00"),
+        total: Decimal = Decimal("0.00"),
     ) -> PaymentStatus:
         if payment_flag in _UNPAID_FLAGS:
             return PaymentStatus.UNPAID
+        if status in _REFUNDED_STATUSES:
+            return PaymentStatus.REFUNDED
         if status in _CANCELLED_STATUSES:
             paid_evidence = _lookup(
                 order, "pay_time", "gmt_pay_success", "paid_time", "gmt_pay"
             )
             # A PAID flag is itself paid evidence: a cancelled paid order is a refund.
-            refunded = payment_flag == "paid" or paid_evidence is not None
-            return PaymentStatus.REFUNDED if refunded else PaymentStatus.UNPAID
+            was_paid = (
+                payment_flag == "paid"
+                or paid_evidence is not None
+                or refunded > Decimal("0.00")
+            )
+            return PaymentStatus.REFUNDED if was_paid else PaymentStatus.UNPAID
+        if total > Decimal("0.00") and refunded >= total:
+            return PaymentStatus.REFUNDED
         return PaymentStatus.PAID
 
     def _normalize_order(
@@ -650,6 +670,13 @@ class AliExpressAdapter(CommercePlatformAdapter):
             for row in _rows(order, *_ORDER_LINE_KEYS)
             if (item := self._normalize_line_item(row)) is not None
         ]
+        if not line_items:
+            logger.warning(
+                "aliexpress_order_without_mappable_items",
+                seller_id=self.seller_id,
+                order_id=external_order_id,
+            )
+            return None
 
         currency = (
             _currency_code(_lookup(order, "order_amount", "payment_amount"))
@@ -714,6 +741,16 @@ class AliExpressAdapter(CommercePlatformAdapter):
             platform_commission_base=commission,
         )
 
+        full_refund = total > Decimal("0.00") and refunded >= total
+        if status in _CANCELLED_STATUSES:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+        elif status in _REFUNDED_STATUSES or full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+        else:
+            fulfillment_status = ORDER_STATUS_MAP.get(
+                status, FulfillmentStatus.CONFIRMED_RESERVED
+            )
+
         return NormalizedOrder(
             external_order_id=external_order_id,
             external_order_number=order_number,
@@ -730,10 +767,10 @@ class AliExpressAdapter(CommercePlatformAdapter):
             platform_commission_base=commission.quantize(
                 MONEY_SCALE, rounding=ROUND_HALF_UP
             ),
-            fulfillment_status=ORDER_STATUS_MAP.get(
-                status, FulfillmentStatus.CONFIRMED_RESERVED
+            fulfillment_status=fulfillment_status,
+            payment_status=self._payment_status(
+                status, payment_flag, order, refunded=refunded, total=total
             ),
-            payment_status=self._payment_status(status, payment_flag, order),
             customer=NormalizedCustomer(
                 email=email,
                 phone_e164=_first_str(order, "buyer_phone", "phone")
@@ -893,6 +930,12 @@ class AliExpressAdapter(CommercePlatformAdapter):
         data = self._result_of(payload)
         data.setdefault("order_id", order_id)
         data.setdefault("shipment_mode", self.fulfillment_mode)
+        fulfillment_id = (
+            _first_str(data, "fulfillment_id", "shipment_id", "awb_number")
+            or str(fulfillment_order_id or "").strip()
+            or order_id
+        )
+        data.setdefault("fulfillment_id", fulfillment_id)
         return data
 
     def verify_webhook(

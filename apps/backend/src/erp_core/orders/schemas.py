@@ -163,6 +163,8 @@ class OrderRead(BaseModel):
     order_no: str
     order_mode: OrderMode
     channel_account_id: UUID | None
+    channel_type: str | None = None
+    channel_label: str | None = None
     external_order_id: str | None
     customer_id: UUID
     customer_name: str | None = None
@@ -190,7 +192,7 @@ class CancelOrderRequest(BaseModel):
 
 
 class ShipOrderRequest(BaseModel):
-    warehouse_id: UUID
+    warehouse_id: UUID | None = None
     tracking_number: str = Field(min_length=3, max_length=128)
     carrier_code: str | None = None
     tracking_provider: TrackingProvider = TrackingProvider("17track")

@@ -883,6 +883,7 @@ async def test_create_fulfillment_reads_lines_then_ships_every_line() -> None:
     )
 
     assert result["channel"] == "walmart"
+    assert result["fulfillment_id"]
     assert result["purchase_order_id"] == "PO-SHIP-1"
     assert result["tracking_number"] == "1Z999AA10123456784"
     assert result["fulfillment_mode"] == "mcs"
@@ -1376,3 +1377,90 @@ async def test_push_inventory_level_forwards_ship_node_metadata() -> None:
 
 def test_listing_payload_channel_account_id_is_a_uuid() -> None:
     assert isinstance(listing_payload().channel_account_id, UUID)
+
+
+async def test_walmart_order_level_refunded_live_refund_charges_and_line_filtering() -> None:
+    live_refund_line = _line(
+        line_number="1", sku="SKU-A", quantity="2", product="40.00", status="Shipped"
+    )
+    live_refund_line["refund"] = {
+        "refundCharges": {
+            "refundCharge": [
+                {"charge": {"chargeType": "PRODUCT", "chargeAmount": {"amount": "-10.00"}}}
+            ]
+        }
+    }
+    cancelled_with_refund = _line(
+        line_number="2", sku="SKU-B", quantity="1", product="15.00", status="Cancelled"
+    )
+    cancelled_with_refund["refund"] = {
+        "refundCharges": {
+            "refundCharge": [
+                {"charge": {"chargeType": "PRODUCT", "chargeAmount": {"amount": "-15.00"}}}
+            ]
+        }
+    }
+    fake = FakeWalmart(
+        {
+            ("GET", WALMART_ORDERS_PATH): lambda _req: httpx.Response(
+                200,
+                json={
+                    "list": {
+                        "elements": {
+                            "order": [
+                                order_payload(
+                                    purchase_order_id="PO-ORD-REFUNDED",
+                                    paymentStatus="REFUNDED",
+                                ),
+                                order_payload(
+                                    purchase_order_id="PO-LIVE-PARTIAL",
+                                    lines=[live_refund_line, cancelled_with_refund],
+                                ),
+                            ]
+                        },
+                        "meta": {},
+                    }
+                },
+            ),
+            ("GET", f"{WALMART_ORDERS_PATH}/PO-MIXED"): lambda _req: httpx.Response(
+                200,
+                json={
+                    "purchaseOrderId": "PO-MIXED",
+                    "orderLines": {
+                        "orderLine": [
+                            {
+                                "lineNumber": "1",
+                                "orderLineQuantity": {"amount": "1"},
+                                "orderLineStatuses": {
+                                    "orderLineStatus": [{"currentStatus": {"status": "Cancelled"}}]
+                                },
+                            },
+                            {
+                                "lineNumber": "2",
+                                "orderLineQuantity": {"amount": "2"},
+                                "orderLineStatuses": {
+                                    "orderLineStatus": [{"currentStatus": {"status": "Created"}}]
+                                },
+                            },
+                        ]
+                    },
+                },
+            ),
+            ("POST", f"{WALMART_ORDERS_PATH}/PO-MIXED/shipping"): lambda _req: httpx.Response(
+                200, json={"purchaseOrderId": "PO-MIXED"}
+            ),
+        }
+    )
+    adapter = make_adapter(fake)
+    orders, _ = await adapter.fetch_orders_updated_since(SINCE)
+    by_id = {o.external_order_id: o for o in orders}
+    assert by_id["PO-ORD-REFUNDED"].fulfillment_status is FulfillmentStatus.REFUNDED
+    assert by_id["PO-ORD-REFUNDED"].payment_status is PaymentStatus.REFUNDED
+    assert by_id["PO-LIVE-PARTIAL"].fulfillment_status is FulfillmentStatus.SHIPPED
+    assert by_id["PO-LIVE-PARTIAL"].payment_status is PaymentStatus.PAID
+    # 10.00 from live line refund + 15.00 from cancelled line (no double counting!)
+    assert by_id["PO-LIVE-PARTIAL"].channel_metadata["refunded_amount"] == "25.00"
+
+    ful_res = await adapter.create_fulfillment("PO-MIXED", "TRACK-MIXED", "UPS")
+    assert ful_res["line_numbers"] == ["2"]
+    assert ful_res["fulfillment_id"]

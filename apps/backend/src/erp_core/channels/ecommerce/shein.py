@@ -96,6 +96,7 @@ ORDER_STATUS_MAP: Mapping[str, FulfillmentStatus] = {
     "cancelled": FulfillmentStatus.CANCELLED,
     "canceled": FulfillmentStatus.CANCELLED,
     "refunded": FulfillmentStatus.REFUNDED,
+    "returned": FulfillmentStatus.REFUNDED,
 }
 
 _ORDER_ROW_KEYS = (
@@ -610,13 +611,19 @@ class SheinAdapter(CommercePlatformAdapter):
                 return nested
         return {}
 
-    def _payment_status(self, status: str, refunded: Decimal) -> PaymentStatus:
+    def _payment_status(
+        self, status: str, refunded: Decimal, total: Decimal = Decimal("0.00")
+    ) -> PaymentStatus:
         if status in {"pending", "unpaid", "pending_payment", "1"}:
             return PaymentStatus.UNPAID
-        if refunded > Decimal("0.00"):
+        if status in {"refunded", "returned", "6"}:
             return PaymentStatus.REFUNDED
-        if status in {"cancelled", "canceled", "refunded", "5", "6"}:
-            return PaymentStatus.REFUNDED if status in {"refunded", "6"} else PaymentStatus.UNPAID
+        if status in {"cancelled", "canceled", "5"}:
+            if refunded > Decimal("0.00"):
+                return PaymentStatus.REFUNDED
+            return PaymentStatus.UNPAID
+        if total > Decimal("0.00") and refunded >= total:
+            return PaymentStatus.REFUNDED
         return PaymentStatus.PAID
 
     def _normalize_order(
@@ -714,6 +721,15 @@ class SheinAdapter(CommercePlatformAdapter):
             platform_commission_base=commission,
         )
 
+        refunded_quantized = refunded.quantize(MONEY_SCALE, rounding=ROUND_HALF_UP)
+        full_refund = total > Decimal("0.00") and refunded_quantized >= total
+        if status in {"cancelled", "canceled", "5"}:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+        elif status in {"refunded", "returned", "6"} or full_refund:
+            fulfillment_status = FulfillmentStatus.REFUNDED
+        else:
+            fulfillment_status = ORDER_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED)
+
         return NormalizedOrder(
             external_order_id=external_order_id,
             external_order_number=_first_str(order, "orderNo", "order_no") or external_order_id,
@@ -729,8 +745,8 @@ class SheinAdapter(CommercePlatformAdapter):
             tax_collected=tax,
             total_amount=total,
             platform_commission_base=commission.quantize(MONEY_SCALE, rounding=ROUND_HALF_UP),
-            fulfillment_status=ORDER_STATUS_MAP.get(status, FulfillmentStatus.CONFIRMED_RESERVED),
-            payment_status=self._payment_status(status, refunded),
+            fulfillment_status=fulfillment_status,
+            payment_status=self._payment_status(status, refunded_quantized, total),
             customer=NormalizedCustomer(
                 email=email,
                 phone_e164=phone,
@@ -930,7 +946,16 @@ class SheinAdapter(CommercePlatformAdapter):
             notify_customer=notify_customer,
         )
         payload = await self._request("POST", SHEIN_ORDER_SHIP_PATH, body=body)
-        return self._data_of(payload)
+        data = self._data_of(payload)
+        fulfillment_id = (
+            _first_str(data, "fulfillment_id", "packageNo", "shipmentId", "orderNo")
+            or (fulfillment_order_id or "").strip()
+            or order_no
+        )
+        return {
+            **data,
+            "fulfillment_id": fulfillment_id,
+        }
 
     async def _upload_image(self, blob: MarketplaceImageBlob) -> str | None:
         """Upload one binary image asset and return the URL SHEIN hosts it at."""

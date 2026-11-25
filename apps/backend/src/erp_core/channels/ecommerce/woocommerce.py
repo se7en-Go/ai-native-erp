@@ -281,30 +281,65 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         discount = self._decimal(order.get("discount_total"))
         tax = self._decimal(order.get("total_tax"))
         company = (billing.get("company") or "").strip()
-        status = str(order.get("status") or "").lower()
-        payment_status = (
-            PaymentStatus.PAID
-            if status in {"processing", "completed"}
-            else PaymentStatus.REFUNDED
-            if status == "refunded"
-            else PaymentStatus.UNPAID
+        status = str(order.get("status") or "").strip().lower()
+        cancelled_at = (
+            order.get("cancelled_at")
+            or order.get("date_cancelled")
+            or order.get("date_cancelled_gmt")
         )
         metadata: dict[str, Any] = {
             "wc_order_number": order.get("number"),
             "wc_status": status,
         }
+        if cancelled_at:
+            metadata["cancelled_at"] = str(cancelled_at)
         if "po_number" in meta:
             metadata["po_number"] = str(meta["po_number"])
         if "tracking_number" in meta:
             metadata["tracking_number"] = str(meta["tracking_number"])
-        refunded_sum = sum(
-            (
-                self._decimal(r.get("total")).copy_abs()
-                for r in (order.get("refunds") or ())
-                if isinstance(r, Mapping)
-            ),
-            start=self._decimal(order.get("refunded_amount")),
+        refund_rows = [r for r in (order.get("refunds") or ()) if isinstance(r, Mapping)]
+        refunded_from_rows = sum(
+            (self._decimal(r.get("total")).copy_abs() for r in refund_rows),
+            start=Decimal("0.00"),
         )
+        refunded_sum = (
+            refunded_from_rows
+            if refunded_from_rows > Decimal("0")
+            else self._decimal(order.get("refunded_amount")).copy_abs()
+        )
+        is_cancelled = status in {"cancelled", "canceled"} or bool(cancelled_at)
+        is_full_refund = status in {"refunded", "fully_refunded", "fully-refunded"} or (
+            total > Decimal("0") and refunded_sum >= total
+        )
+        has_paid_evidence = bool(
+            order.get("date_paid")
+            or order.get("date_paid_gmt")
+            or order.get("transaction_id")
+            or refunded_sum > Decimal("0")
+        )
+        if is_cancelled:
+            payment_status = PaymentStatus.REFUNDED if has_paid_evidence else PaymentStatus.UNPAID
+            fulfillment_status = FulfillmentStatus.CANCELLED
+        elif is_full_refund:
+            payment_status = PaymentStatus.REFUNDED
+            fulfillment_status = FulfillmentStatus.REFUNDED
+        else:
+            if (
+                status in {"processing", "completed", "partially-refunded", "partially_refunded"}
+                or (Decimal("0") < refunded_sum < total)
+            ):
+                payment_status = PaymentStatus.PAID
+            elif status in {"partially-paid", "partially_paid"}:
+                payment_status = PaymentStatus.PARTIALLY_PAID
+            else:
+                payment_status = PaymentStatus.UNPAID
+
+            if status == "completed":
+                fulfillment_status = FulfillmentStatus.DELIVERED
+            elif status in {"pending", "on-hold", "failed"}:
+                fulfillment_status = FulfillmentStatus.PENDING_PAYMENT
+            else:
+                fulfillment_status = FulfillmentStatus.CONFIRMED_RESERVED
         commission_val = self._decimal(
             order.get("platform_commission") or meta.get("platform_commission")
         )
@@ -327,7 +362,7 @@ class WooCommerceAdapter(CommercePlatformAdapter):
             platform_commission_base=commission_val.quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             ),
-            fulfillment_status=FulfillmentStatus.CONFIRMED_RESERVED,
+            fulfillment_status=fulfillment_status,
             payment_status=payment_status,
             customer=NormalizedCustomer(
                 email=billing.get("email"),
@@ -431,20 +466,30 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         fulfillment_order_id: str | None = None,
         notify_customer: bool = True,
     ) -> dict[str, Any]:
+        del fulfillment_order_id
         note = f"Shipped via {carrier_company}. Tracking number: {tracking_number}"
         if tracking_url:
             note = f"{note} ({tracking_url})"
         await self.post_order_note(external_order_id, note, customer_note=notify_customer)
+        body: dict[str, Any] = {
+            "tracking_number": tracking_number,
+            "carrier": carrier_company,
+            "notify_customer": notify_customer,
+        }
+        if tracking_url:
+            body["tracking_url"] = tracking_url
         result = await self._request(
             "POST",
             f"/orders/{external_order_id}/fulfillments",
-            json_body={
-                "tracking_number": tracking_number,
-                "carrier": carrier_company,
-                "notify_customer": notify_customer,
-            },
+            json_body=body,
         )
-        return result if isinstance(result, dict) else {}
+        data: dict[str, Any] = dict(result) if isinstance(result, Mapping) else {}
+        fid = data.get("fulfillment_id") or data.get("id")
+        if not fid and isinstance(data.get("fulfillment"), Mapping):
+            fid = data["fulfillment"].get("id")
+        if fid:
+            data["fulfillment_id"] = str(fid)
+        return data
 
     async def publish_listing(
         self,
@@ -639,6 +684,20 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         norm_qty = max(0, int(quantity))
         pid = (external_product_id or "").strip() or None
         vid = (external_variant_id or "").strip() or None
+        if pid and not vid:
+            try:
+                vars_found = await self._request(
+                    "GET", f"/products/{pid}/variations", params={"sku": clean_sku}
+                )
+                if (
+                    isinstance(vars_found, list)
+                    and vars_found
+                    and isinstance(vars_found[0], Mapping)
+                ):
+                    vid = str(vars_found[0].get("id") or "").strip() or None
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code != 404:
+                    raise
         if not pid:
             found = await self._request("GET", "/products", params={"sku": clean_sku})
             if isinstance(found, list) and found and isinstance(found[0], Mapping):
