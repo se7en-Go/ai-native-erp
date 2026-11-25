@@ -5867,6 +5867,90 @@
         "title": "FollowupUpdate",
         "type": "object"
       },
+      "FulfillmentPushResponse": {
+        "properties": {
+          "carrier_company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carrier Company"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "external_fulfillment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Fulfillment Id"
+          },
+          "status": {
+            "enum": [
+              "synced",
+              "skipped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tracking_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Number"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "FulfillmentPushResponse",
+        "type": "object"
+      },
       "FulfillmentStatus": {
         "enum": [
           "pending_payment",
@@ -32101,6 +32185,66 @@
           }
         },
         "summary": "Download Packing List Pdf",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/push-fulfillment": {
+      "post": {
+        "description": "Retry or trigger outbound fulfillment tracking writeback for a shipped order.",
+        "operationId": "push_order_fulfillment_endpoint_api_v1_orders__order_id__push_fulfillment_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FulfillmentPushResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Push Order Fulfillment Endpoint",
         "tags": [
           "orders"
         ]

@@ -5,14 +5,18 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.channels.ecommerce.fulfillment_dispatcher import push_order_fulfillment
 from erp_core.orders.documents import (
     ExportDocumentService,
     render_commercial_invoice_pdf,
     render_packing_list_pdf,
     safe_filename,
 )
+from erp_core.orders.models import Shipment
 from erp_core.orders.order_service import OrderService
 from erp_core.orders.schemas import (
     CancelOrderRequest,
@@ -26,6 +30,7 @@ from erp_core.orders.schemas import (
 )
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import FulfillmentStatus, OrderMode, PaymentStatus, UserRole
+from erp_core.shared.errors import AppError
 from erp_core.shared.pagination import PaginatedResponse
 from erp_core.tenancy.dependencies import CurrentPrincipal, require_roles
 
@@ -239,6 +244,16 @@ async def cancel_order(
         )
 
 
+class FulfillmentPushResponse(BaseModel):
+    status: Literal["synced", "skipped", "failed"]
+    channel: str | None = None
+    tracking_number: str | None = None
+    carrier_company: str | None = None
+    external_fulfillment_id: str | None = None
+    error_code: str | None = None
+    error_detail: str | None = None
+
+
 @router.post("/{order_id}/ship", response_model=ShipmentRead, status_code=status.HTTP_201_CREATED)
 async def ship_order(
     request: Request,
@@ -247,8 +262,9 @@ async def ship_order(
     payload: ShipOrderRequest,
 ) -> ShipmentRead:
     tracking_adapter = getattr(request.app.state, "tracking_adapter", None)
-    async with tenant_session(_get_session_factory(request), principal.tenant_id) as session:
-        return await _service.ship_order(
+    factory = _get_session_factory(request)
+    async with tenant_session(factory, principal.tenant_id) as session:
+        shipment = await _service.ship_order(
             session,
             principal.tenant_id,
             principal=principal,
@@ -256,3 +272,75 @@ async def ship_order(
             payload=payload,
             tracking_adapter=tracking_adapter,
         )
+    # Run outbound storefront fulfillment push in a separate transaction so an upstream
+    # API error never rolls back the physical warehouse shipment or holds row locks.
+    async with tenant_session(factory, principal.tenant_id) as session:
+        await push_order_fulfillment(
+            session,
+            principal.tenant_id,
+            order_id,
+            tracking_number=shipment.tracking_number,
+            carrier_company=shipment.carrier_code or "Other",
+            raise_on_error=False,
+        )
+    return shipment
+
+
+@router.post("/{order_id}/push-fulfillment", response_model=FulfillmentPushResponse)
+async def push_order_fulfillment_endpoint(
+    request: Request,
+    principal: WriterPrincipal,
+    order_id: UUID,
+) -> FulfillmentPushResponse:
+    """Retry or trigger outbound fulfillment tracking writeback for a shipped order."""
+    factory = _get_session_factory(request)
+    async with tenant_session(factory, principal.tenant_id) as session:
+        latest_shipment = (
+            await session.execute(
+                select(Shipment)
+                .where(Shipment.tenant_id == principal.tenant_id, Shipment.order_id == order_id)
+                .order_by(Shipment.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if latest_shipment is None:
+            raise AppError(
+                slug="shipment-not-found",
+                status_code=404,
+                code="ERR_SHIPMENT_NOT_FOUND",
+                title="Shipment Not Found",
+                detail=f"No shipment found for order '{order_id}'.",
+            )
+        tracking_number = latest_shipment.tracking_number
+        carrier_company = latest_shipment.carrier_code or "Other"
+
+    async with tenant_session(factory, principal.tenant_id) as session:
+        result = await push_order_fulfillment(
+            session,
+            principal.tenant_id,
+            order_id,
+            tracking_number=tracking_number,
+            carrier_company=carrier_company,
+            raise_on_error=False,
+        )
+    if result is None:
+        return FulfillmentPushResponse(
+            status="skipped",
+            tracking_number=tracking_number,
+            carrier_company=carrier_company,
+        )
+    if result.get("status") == "failed":
+        raise AppError(
+            slug="fulfillment-writeback-failed",
+            status_code=502,
+            code=str(result.get("error_code") or "ERR_FULFILLMENT_WRITEBACK_FAILED"),
+            title="Fulfillment Writeback Failed",
+            detail=str(result.get("error_detail") or "Storefront fulfillment writeback failed."),
+        )
+    return FulfillmentPushResponse(
+        status="synced",
+        channel=result.get("channel"),
+        tracking_number=result.get("tracking_number"),
+        carrier_company=result.get("carrier_company"),
+        external_fulfillment_id=result.get("external_fulfillment_id"),
+    )
