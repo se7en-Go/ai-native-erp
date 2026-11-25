@@ -21,6 +21,7 @@ from erp_core.channels.adapters.base import (
     NormalizedWebhookBatch,
     OutboundMessageRequest,
 )
+from erp_core.channels.adapters.marketplace_im import is_marketplace_im_event
 from erp_core.channels.rate_limiter import DualTokenBucketLimiter
 from erp_core.channels.webhook_router import (
     OUTBOUND_STREAM_KEY,
@@ -925,6 +926,71 @@ async def _maybe_generate_auto_proposal(
         )
 
 
+async def _handle_ingress_order_reconciliation(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    broker_session_factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    channel_account_id: uuid.UUID,
+    channel_type: str,
+    raw_event_id: uuid.UUID,
+) -> None:
+    """Reconcile recent orders for an ingress-owned commerce webhook receipt."""
+    from erp_core.orders.reconciliation_worker import (
+        _adapter_credentials,
+        _instantiate_adapter,
+        reconcile_channel_account_orders,
+        resolve_default_warehouse_id,
+    )
+
+    try:
+        ch_enum = ChannelType(channel_type)
+        async with tenant_session(session_factory, tenant_id) as rt_session:
+            acct_row = (
+                await rt_session.execute(
+                    text(
+                        "SELECT config FROM channel_accounts "
+                        "WHERE tenant_id = :tid AND id = :caid AND status = 'active'"
+                    ),
+                    {"tid": tenant_id, "caid": channel_account_id},
+                )
+            ).one_or_none()
+            if acct_row is not None:
+                account_config = acct_row[0] if isinstance(acct_row[0], dict) else None
+                credentials = await _adapter_credentials(
+                    rt_session, tenant_id, channel_account_id, ch_enum
+                )
+                warehouse_id = await resolve_default_warehouse_id(
+                    rt_session,
+                    tenant_id=tenant_id,
+                    channel_account_id=channel_account_id,
+                    account_config=account_config,
+                )
+                adapter = await _instantiate_adapter(ch_enum, credentials, warehouse_id)
+                await reconcile_channel_account_orders(
+                    rt_session,
+                    tenant_id=tenant_id,
+                    channel_account_id=channel_account_id,
+                    channel_type=ch_enum,
+                    adapter=adapter,
+                    default_warehouse_id=warehouse_id,
+                    since=datetime.now(UTC) - timedelta(minutes=30),
+                )
+    except Exception:
+        logger.exception(
+            "ingress order reconciliation failed channel=%s receipt_id=%s",
+            channel_type,
+            raw_event_id,
+        )
+
+    async with system_session(broker_session_factory) as sys_sess:
+        await set_raw_webhook_processing_state(
+            sys_sess,
+            raw_event_id=raw_event_id,
+            status="processed",
+        )
+
+
 async def process_raw_webhook_event(
     session_factory: async_sessionmaker[AsyncSession],
     redis: aioredis.Redis,
@@ -984,6 +1050,20 @@ async def process_raw_webhook_event(
             broker_session_factory=broker_session_factory,
         )
         return "dead_letter"
+
+    lowered_headers = {str(k).lower(): str(v) for k, v in headers.items()}
+    if channel_type in {"amazon_sp", "ebay", "alibaba_email"} and not is_marketplace_im_event(
+        channel_type, payload, lowered_headers
+    ):
+        await _handle_ingress_order_reconciliation(
+            session_factory=session_factory,
+            broker_session_factory=broker_session_factory,
+            tenant_id=tenant_id,
+            channel_account_id=channel_account_id,
+            channel_type=channel_type,
+            raw_event_id=raw_event_id,
+        )
+        return "order_reconciled"
 
     adapter = registry.get(channel_type)
     if adapter is None:

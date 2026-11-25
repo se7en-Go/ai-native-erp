@@ -120,9 +120,14 @@ async def _cleanup_tenant(tenant_id: UUID) -> None:
 
 
 def test_all_16_ecommerce_channels_registered_in_worker_webhooks_and_dispatchers() -> None:
+    from erp_core.channels import ingress_worker
+
     assert frozenset(c.value for c in ECOMMERCE_CHANNELS) == ALL_16_ECOMMERCE_CHANNELS
     assert SUPPORTED_CHANNEL_TYPES == ALL_16_ECOMMERCE_CHANNELS
-    assert ALL_16_ECOMMERCE_CHANNELS.issubset(frozenset(worker_main.COMMERCE_TRACKING_CHANNELS))
+    commerce_set = frozenset(worker_main.COMMERCE_TRACKING_CHANNELS)
+    ingress_set = frozenset(c.value for c in ingress_worker._WORKER_CHANNELS)
+    assert ALL_16_ECOMMERCE_CHANNELS.issubset(commerce_set | ingress_set)
+    assert not (commerce_set & ingress_set)
     non_shopify = ALL_16_ECOMMERCE_CHANNELS - {"shopify"}
     assert set(CONNECTOR_CREDENTIAL_TYPES.keys()) == non_shopify
 
