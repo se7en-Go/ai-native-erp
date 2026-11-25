@@ -1034,6 +1034,16 @@ export type FollowupUpdate = {
     summary?: string | null;
 };
 
+export type FulfillmentPushResponse = {
+    carrier_company?: string | null;
+    channel?: string | null;
+    error_code?: string | null;
+    error_detail?: string | null;
+    external_fulfillment_id?: string | null;
+    status: 'synced' | 'skipped' | 'failed';
+    tracking_number?: string | null;
+};
+
 export type FulfillmentStatus = 'pending_payment' | 'confirmed_reserved' | 'in_production' | 'partially_shipped' | 'shipped' | 'delivered' | 'exception' | 'cancelled' | 'refunded';
 
 export type FunnelStage = {
@@ -9138,6 +9148,36 @@ export type DownloadPackingListPdfApiV1OrdersOrderIdDocumentsPackingListPdfGetRe
      */
     200: unknown;
 };
+
+export type PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/{order_id}/push-fulfillment';
+};
+
+export type PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostError = PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostErrors[keyof PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostErrors];
+
+export type PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: FulfillmentPushResponse;
+};
+
+export type PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostResponse = PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostResponses[keyof PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostResponses];
 
 export type ShipOrderApiV1OrdersOrderIdShipPostData = {
     body: ShipOrderRequest;

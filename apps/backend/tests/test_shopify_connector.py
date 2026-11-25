@@ -29,6 +29,7 @@ from erp_core.channels.ecommerce.base import (
     register_channel_routing,
     resolve_routing_tenant,
 )
+from erp_core.channels.ecommerce.fulfillment_dispatcher import push_order_fulfillment
 from erp_core.channels.ecommerce.shopify import (
     ORDERS_GRAPHQL_QUERY,
     SHOPIFY_API_PATH,
@@ -472,3 +473,540 @@ def _admin_url() -> str:
         "DATABASE_ADMIN_URL",
         "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas",
     )
+
+
+def test_shopify_orders_query_includes_refund_and_cancel_fields() -> None:
+    assert "cancelledAt" in ORDERS_GRAPHQL_QUERY
+    assert "totalRefundedSet" in ORDERS_GRAPHQL_QUERY
+
+
+async def _cleanup_test_tenant(tenant_id: UUID) -> None:
+    admin_engine = create_async_engine(_admin_url())
+    try:
+        async with admin_engine.begin() as conn:
+            for statement in (
+                "DELETE FROM order_profit_snapshots WHERE tenant_id = :tid",
+                "DELETE FROM payment_records WHERE tenant_id = :tid",
+                "DELETE FROM receivables_payables WHERE tenant_id = :tid",
+                "DELETE FROM inventory_ledger WHERE tenant_id = :tid",
+                "DELETE FROM inventory_balances WHERE tenant_id = :tid",
+                "DELETE FROM shipments WHERE tenant_id = :tid",
+                "DELETE FROM order_items WHERE tenant_id = :tid",
+                "DELETE FROM orders WHERE tenant_id = :tid",
+                "DELETE FROM platform_sku_mappings WHERE tenant_id = :tid",
+                "DELETE FROM product_variants WHERE tenant_id = :tid",
+                "DELETE FROM products WHERE tenant_id = :tid",
+                "DELETE FROM customer_identities WHERE tenant_id = :tid",
+                "DELETE FROM customers WHERE tenant_id = :tid",
+                "DELETE FROM b2b_companies WHERE tenant_id = :tid",
+                "DELETE FROM channel_credentials WHERE tenant_id = :tid",
+                "DELETE FROM channel_routing_directory WHERE tenant_id = :tid",
+                "DELETE FROM channel_accounts WHERE tenant_id = :tid",
+                "DELETE FROM tenant_keys WHERE tenant_id = :tid",
+                "DELETE FROM audit_events WHERE tenant_id = :tid",
+                "DELETE FROM tenants WHERE id = :tid",
+            ):
+                await conn.execute(text(statement), {"tid": tenant_id})
+    finally:
+        await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_shopify_partial_refund_and_cancellation_webhooks_update_inventory_and_profit(
+    runtime_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    tenant_id, account_id, warehouse_id = uuid4(), uuid4(), uuid4()
+    domain = f"refund-{tenant_id.hex[:6]}.myshopify.com"
+    order_state: dict[str, object] = {
+        "displayFinancialStatus": "PAID",
+        "displayFulfillmentStatus": "UNFULFILLED",
+        "cancelledAt": None,
+        "refunded": "0.00",
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == SHOPIFY_API_PATH
+        node = {
+            "id": "gid://shopify/Order/99001",
+            "name": "#1003",
+            "updatedAt": "2026-11-25T07:30:00Z",
+            "cancelledAt": order_state["cancelledAt"],
+            "displayFinancialStatus": order_state["displayFinancialStatus"],
+            "displayFulfillmentStatus": order_state["displayFulfillmentStatus"],
+            "currencyCode": "USD",
+            "currentSubtotalPriceSet": {"shopMoney": {"amount": "33.80", "currencyCode": "USD"}},
+            "totalShippingPriceSet": {"shopMoney": {"amount": "0.00", "currencyCode": "USD"}},
+            "totalTaxSet": {"shopMoney": {"amount": "0.00", "currencyCode": "USD"}},
+            "currentTotalPriceSet": {"shopMoney": {"amount": "33.80", "currencyCode": "USD"}},
+            "totalRefundedSet": {
+                "shopMoney": {"amount": str(order_state["refunded"]), "currencyCode": "USD"}
+            },
+            "customer": {
+                "id": "gid://shopify/Customer/9901",
+                "email": "buyer@example.com",
+                "firstName": "Alex",
+                "lastName": "Buyer",
+            },
+            "shippingAddress": {"countryCodeV2": "US"},
+            "lineItems": {
+                "nodes": [
+                    {
+                        "sku": "SHOP-UFO-100W",
+                        "title": "UFO High Bay 100W",
+                        "quantity": 2,
+                        "originalTotalSet": {
+                            "shopMoney": {"amount": "33.80", "currencyCode": "USD"}
+                        },
+                    }
+                ]
+            },
+        }
+        return httpx.Response(
+            200,
+            json={"data": {"orders": {"pageInfo": {"hasNextPage": False}, "nodes": [node]}}},
+        )
+
+    crypto = EnvelopeCryptoService(get_settings())
+    try:
+        async with tenant_session(runtime_session_factory, tenant_id) as session:
+            await session.execute(
+                text(
+                    "INSERT INTO tenants (id, name, slug, base_currency) "
+                    "VALUES (:tid, 'Refund Shop', :slug, 'USD')"
+                ),
+                {"tid": tenant_id, "slug": f"ref-{tenant_id.hex}"},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO channel_accounts (id, tenant_id, channel_type, "
+                    "external_account_id, display_name, config) "
+                    "VALUES (:id, :tid, 'shopify', :ext, :ext, CAST(:cfg AS jsonb))"
+                ),
+                {
+                    "id": account_id,
+                    "tid": tenant_id,
+                    "ext": domain,
+                    "cfg": json.dumps({"warehouse_id": str(warehouse_id)}),
+                },
+            )
+            await register_channel_routing(
+                session,
+                channel_type="shopify",
+                external_account_id=domain,
+                tenant_id=tenant_id,
+                channel_account_id=account_id,
+            )
+            await crypto.provision_tenant_dek(session, tenant_id)
+            await CredentialVaultHelper(crypto).save_secret_json(
+                session,
+                tenant_id=tenant_id,
+                channel_account_id=account_id,
+                credential_type="shopify_custom_app",
+                payload={"shop_domain": domain, "auth_mode": "oauth", "access_token": "shpat_ref"},
+            )
+            catalog = CatalogService()
+            product = await catalog.create_product(
+                session,
+                tenant_id,
+                actor_id="seed",
+                payload=ProductCreate(spu_code="SPU-UFO-REF", category="led"),
+            )
+            variant = await catalog.create_variant(
+                session,
+                tenant_id,
+                actor_id="seed",
+                role=UserRole.ADMIN,
+                payload=VariantCreate(
+                    product_id=product.id,
+                    sku="UFO-100W-REF",
+                    cost_price_base=Decimal("9.4444"),
+                    retail_price_usd=Decimal("16.90"),
+                    weight_grams=500,
+                ),
+            )
+            await catalog.create_sku_mapping(
+                session,
+                tenant_id,
+                actor_id="seed",
+                payload=SkuMappingCreate(
+                    variant_id=variant.id,
+                    channel_account_id=account_id,
+                    external_product_id="gid://shopify/Product/99",
+                    external_sku="SHOP-UFO-100W",
+                    bundle_multiplier=1,
+                ),
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO inventory_balances (tenant_id, warehouse_id, variant_id, "
+                    "on_hand_qty, reserved_qty) VALUES (:tid, :wid, :vid, 86, 0)"
+                ),
+                {"tid": tenant_id, "wid": warehouse_id, "vid": variant.id},
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            assert (
+                await process_shopify_webhook_event(
+                    runtime_session_factory,
+                    "orders/create",
+                    domain,
+                    {"id": 99001, "admin_graphql_api_id": "gid://shopify/Order/99001"},
+                    http_client=http,
+                )
+                is True
+            )
+
+            order_state["displayFinancialStatus"] = "PARTIALLY_REFUNDED"
+            order_state["refunded"] = "16.90"
+            assert (
+                await process_shopify_webhook_event(
+                    runtime_session_factory,
+                    "refunds/create",
+                    domain,
+                    {"id": 444, "order_id": 99001},
+                    http_client=http,
+                )
+                is True
+            )
+
+        async with tenant_session(runtime_session_factory, tenant_id) as session:
+            partial_row = (
+                await session.execute(
+                    text(
+                        "SELECT o.payment_status, o.fulfillment_status, o.channel_metadata, "
+                        "ops.gross_revenue_base, ops.cogs_base, ops.net_contribution_margin_base, "
+                        "ib.reserved_qty "
+                        "FROM orders o "
+                        "JOIN order_profit_snapshots ops ON ops.order_id = o.id "
+                        "JOIN inventory_balances ib ON ib.variant_id = :vid "
+                        "WHERE o.external_order_id = 'gid://shopify/Order/99001'"
+                    ),
+                    {"vid": variant.id},
+                )
+            ).one()
+            assert partial_row.payment_status == PaymentStatus.PAID.value
+            assert partial_row.fulfillment_status == FulfillmentStatus.CONFIRMED_RESERVED.value
+            assert partial_row.channel_metadata["refunded_amount"] == "16.90"
+            assert Decimal(str(partial_row.gross_revenue_base)) == Decimal("16.90")
+            assert Decimal(str(partial_row.cogs_base)) == Decimal("18.89")
+            assert partial_row.reserved_qty == 2
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            order_state["displayFinancialStatus"] = "REFUNDED"
+            order_state["cancelledAt"] = "2026-11-25T08:00:00Z"
+            order_state["refunded"] = "33.80"
+            assert (
+                await process_shopify_webhook_event(
+                    runtime_session_factory,
+                    "orders/cancelled",
+                    domain,
+                    {"id": 99001, "admin_graphql_api_id": "gid://shopify/Order/99001"},
+                    http_client=http,
+                )
+                is True
+            )
+
+        async with tenant_session(runtime_session_factory, tenant_id) as session:
+            cancelled_row = (
+                await session.execute(
+                    text(
+                        "SELECT o.payment_status, o.fulfillment_status, o.channel_metadata, "
+                        "ops.gross_revenue_base, ops.cogs_base, ops.net_contribution_margin_base, "
+                        "ib.reserved_qty "
+                        "FROM orders o "
+                        "JOIN order_profit_snapshots ops ON ops.order_id = o.id "
+                        "JOIN inventory_balances ib ON ib.variant_id = :vid "
+                        "WHERE o.external_order_id = 'gid://shopify/Order/99001'"
+                    ),
+                    {"vid": variant.id},
+                )
+            ).one()
+            assert cancelled_row.payment_status == PaymentStatus.REFUNDED.value
+            assert cancelled_row.fulfillment_status == FulfillmentStatus.CANCELLED.value
+            assert cancelled_row.channel_metadata["cancelled_at"] == "2026-11-25T08:00:00Z"
+            assert Decimal(str(cancelled_row.gross_revenue_base)) == Decimal("0.00")
+            assert Decimal(str(cancelled_row.cogs_base)) == Decimal("0.00")
+            assert Decimal(str(cancelled_row.net_contribution_margin_base)) == Decimal("0.00")
+            assert cancelled_row.reserved_qty == 0
+    finally:
+        await _cleanup_test_tenant(tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_shopify_fulfillment_writeback_resolves_fulfillment_order_and_persists_status(
+    runtime_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    tenant_id, account_id, warehouse_id = uuid4(), uuid4(), uuid4()
+    domain = f"fulfill-{tenant_id.hex[:6]}.myshopify.com"
+    recorded_mutations: list[dict[str, object]] = []
+    fail_mode = {"fail": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        gql = str(body.get("query") or "")
+        variables = body.get("variables") or {}
+        if "OrderFulfillmentOrders" in gql:
+            assert variables["id"] == "gid://shopify/Order/99002"
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "order": {
+                            "fulfillmentOrders": {
+                                "nodes": [
+                                    {
+                                        "id": "gid://shopify/FulfillmentOrder/8800",
+                                        "status": "CLOSED",
+                                        "supportedActions": [],
+                                    },
+                                    {
+                                        "id": "gid://shopify/FulfillmentOrder/8801",
+                                        "status": "OPEN",
+                                        "supportedActions": [{"action": "CREATE_FULFILLMENT"}],
+                                    },
+                                ]
+                            }
+                        }
+                    }
+                },
+            )
+        if "fulfillmentCreate" in gql:
+            recorded_mutations.append(variables)
+            if fail_mode["fail"]:
+                return httpx.Response(
+                    200,
+                    json={
+                        "data": {
+                            "fulfillmentCreate": {
+                                "fulfillment": None,
+                                "userErrors": [{"field": ["fulfillment"], "message": "Denied"}],
+                            }
+                        }
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "fulfillmentCreate": {
+                            "fulfillment": {
+                                "id": "gid://shopify/Fulfillment/9901",
+                                "status": "SUCCESS",
+                                "trackingInfo": [
+                                    {"company": "DHL", "number": "DHL-99002", "url": None}
+                                ],
+                            },
+                            "userErrors": [],
+                        }
+                    }
+                },
+            )
+        if "SyncOrders" in gql:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "orders": {
+                            "pageInfo": {"hasNextPage": False},
+                            "nodes": [
+                                {
+                                    "id": "gid://shopify/Order/99002",
+                                    "name": "#1004",
+                                    "updatedAt": "2026-11-25T07:45:00Z",
+                                    "displayFinancialStatus": "PAID",
+                                    "displayFulfillmentStatus": "UNFULFILLED",
+                                    "currencyCode": "USD",
+                                    "currentSubtotalPriceSet": {
+                                        "shopMoney": {"amount": "16.90", "currencyCode": "USD"}
+                                    },
+                                    "totalShippingPriceSet": {
+                                        "shopMoney": {"amount": "0.00", "currencyCode": "USD"}
+                                    },
+                                    "totalTaxSet": {
+                                        "shopMoney": {"amount": "0.00", "currencyCode": "USD"}
+                                    },
+                                    "currentTotalPriceSet": {
+                                        "shopMoney": {"amount": "16.90", "currencyCode": "USD"}
+                                    },
+                                    "customer": {
+                                        "id": "gid://shopify/Customer/9902",
+                                        "email": "ship@example.com",
+                                    },
+                                    "shippingAddress": {"countryCodeV2": "US"},
+                                    "lineItems": {
+                                        "nodes": [
+                                            {
+                                                "sku": "SHOP-UFO-SHIP",
+                                                "title": "UFO High Bay",
+                                                "quantity": 1,
+                                                "originalTotalSet": {
+                                                    "shopMoney": {
+                                                        "amount": "16.90",
+                                                        "currencyCode": "USD",
+                                                    }
+                                                },
+                                            }
+                                        ]
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                },
+            )
+        raise AssertionError(f"Unexpected query: {gql}")
+
+    crypto = EnvelopeCryptoService(get_settings())
+    try:
+        async with tenant_session(runtime_session_factory, tenant_id) as session:
+            await session.execute(
+                text(
+                    "INSERT INTO tenants (id, name, slug, base_currency) "
+                    "VALUES (:tid, 'Fulfill Shop', :slug, 'USD')"
+                ),
+                {"tid": tenant_id, "slug": f"ful-{tenant_id.hex}"},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO channel_accounts (id, tenant_id, channel_type, "
+                    "external_account_id, display_name, config) "
+                    "VALUES (:id, :tid, 'shopify', :ext, :ext, CAST(:cfg AS jsonb))"
+                ),
+                {
+                    "id": account_id,
+                    "tid": tenant_id,
+                    "ext": domain,
+                    "cfg": json.dumps({"warehouse_id": str(warehouse_id)}),
+                },
+            )
+            await register_channel_routing(
+                session,
+                channel_type="shopify",
+                external_account_id=domain,
+                tenant_id=tenant_id,
+                channel_account_id=account_id,
+            )
+            await crypto.provision_tenant_dek(session, tenant_id)
+            await CredentialVaultHelper(crypto).save_secret_json(
+                session,
+                tenant_id=tenant_id,
+                channel_account_id=account_id,
+                credential_type="shopify_custom_app",
+                payload={"shop_domain": domain, "auth_mode": "oauth", "access_token": "shpat_ful"},
+            )
+            catalog = CatalogService()
+            product = await catalog.create_product(
+                session,
+                tenant_id,
+                actor_id="seed",
+                payload=ProductCreate(spu_code="SPU-UFO-FUL", category="led"),
+            )
+            variant = await catalog.create_variant(
+                session,
+                tenant_id,
+                actor_id="seed",
+                role=UserRole.ADMIN,
+                payload=VariantCreate(
+                    product_id=product.id,
+                    sku="UFO-100W-FUL",
+                    cost_price_base=Decimal("9.4444"),
+                    retail_price_usd=Decimal("16.90"),
+                    weight_grams=500,
+                ),
+            )
+            await catalog.create_sku_mapping(
+                session,
+                tenant_id,
+                actor_id="seed",
+                payload=SkuMappingCreate(
+                    variant_id=variant.id,
+                    channel_account_id=account_id,
+                    external_product_id="gid://shopify/Product/100",
+                    external_sku="SHOP-UFO-SHIP",
+                    bundle_multiplier=1,
+                ),
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO inventory_balances (tenant_id, warehouse_id, variant_id, "
+                    "on_hand_qty, reserved_qty) VALUES (:tid, :wid, :vid, 20, 0)"
+                ),
+                {"tid": tenant_id, "wid": warehouse_id, "vid": variant.id},
+            )
+
+        async with (
+            httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http,
+            tenant_session(runtime_session_factory, tenant_id) as session,
+        ):
+            adapter = await ShopifyGraphqlAdapter.from_channel_account(
+                session, tenant_id, account_id, crypto=crypto, http_client=http
+            )
+            orders, _ = await adapter.fetch_orders_updated_since(
+                datetime.now(UTC) - timedelta(hours=1)
+            )
+            order_id, created = await EcommerceOrderSyncService().ingest_normalized_order(
+                session,
+                tenant_id=tenant_id,
+                channel_account_id=account_id,
+                default_warehouse_id=warehouse_id,
+                order_dto=orders[0],
+            )
+            assert created is True
+
+        async with (
+            httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http,
+            tenant_session(runtime_session_factory, tenant_id) as session,
+        ):
+            res = await push_order_fulfillment(
+                session,
+                tenant_id,
+                order_id,
+                tracking_number="DHL-99002",
+                carrier_company="DHL",
+                raise_on_error=False,
+                http_client=http,
+            )
+            assert res is not None
+            assert res["status"] == "synced"
+            assert res["external_fulfillment_id"] == "gid://shopify/Fulfillment/9901"
+
+        assert recorded_mutations[0]["fulfillment"]["lineItemsByFulfillmentOrder"] == [
+            {"fulfillmentOrderId": "gid://shopify/FulfillmentOrder/8801"}
+        ]
+
+        async with tenant_session(runtime_session_factory, tenant_id) as session:
+            meta = await session.scalar(
+                text("SELECT channel_metadata FROM orders WHERE id = :oid"),
+                {"oid": order_id},
+            )
+            assert meta["external_fulfillment"]["status"] == "synced"
+            assert meta["external_fulfillment"]["external_fulfillment_id"] == (
+                "gid://shopify/Fulfillment/9901"
+            )
+
+        fail_mode["fail"] = True
+        async with (
+            httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http,
+            tenant_session(runtime_session_factory, tenant_id) as session,
+        ):
+            fail_res = await push_order_fulfillment(
+                session,
+                tenant_id,
+                order_id,
+                tracking_number="DHL-99002",
+                carrier_company="DHL",
+                raise_on_error=False,
+                http_client=http,
+            )
+            assert fail_res is not None
+            assert fail_res["status"] == "failed"
+            assert fail_res["error_code"] == "ERR_SHOPIFY_FULFILLMENT"
+
+        async with tenant_session(runtime_session_factory, tenant_id) as session:
+            meta2 = await session.scalar(
+                text("SELECT channel_metadata FROM orders WHERE id = :oid"),
+                {"oid": order_id},
+            )
+            assert meta2["external_fulfillment"]["status"] == "failed"
+    finally:
+        await _cleanup_test_tenant(tenant_id)

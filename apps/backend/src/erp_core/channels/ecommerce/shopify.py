@@ -57,6 +57,7 @@ query SyncOrders($first: Int!, $query: String, $after: String) {
       name
       createdAt
       updatedAt
+      cancelledAt
       displayFinancialStatus
       displayFulfillmentStatus
       currencyCode
@@ -65,6 +66,7 @@ query SyncOrders($first: Int!, $query: String, $after: String) {
       totalShippingPriceSet { shopMoney { amount currencyCode } }
       totalTaxSet { shopMoney { amount currencyCode } }
       currentTotalPriceSet { shopMoney { amount currencyCode } }
+      totalRefundedSet { shopMoney { amount currencyCode } }
       customer { id email phone firstName lastName }
       shippingAddress { countryCodeV2 }
       purchasingEntity {
@@ -98,8 +100,26 @@ query SyncProducts($first: Int!, $query: String, $after: String) {
 FULFILLMENT_CREATE_MUTATION = """
 mutation CreateFulfillment($fulfillment: FulfillmentInput!) {
   fulfillmentCreate(fulfillment: $fulfillment) {
-    fulfillment { id status }
+    fulfillment {
+      id
+      status
+      trackingInfo { company number url }
+    }
     userErrors { field message }
+  }
+}
+"""
+
+ORDER_FULFILLMENT_ORDERS_QUERY = """
+query OrderFulfillmentOrders($id: ID!) {
+  order(id: $id) {
+    fulfillmentOrders(first: 20) {
+      nodes {
+        id
+        status
+        supportedActions { action }
+      }
+    }
   }
 }
 """
@@ -622,6 +642,9 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             "financial_status": node.get("displayFinancialStatus"),
             "fulfillment_status": node.get("displayFulfillmentStatus"),
         }
+        cancelled_at = node.get("cancelledAt")
+        if cancelled_at:
+            channel_metadata["cancelled_at"] = str(cancelled_at)
         if node.get("poNumber"):
             channel_metadata["po_number"] = node["poNumber"]
         if purchasing.get("__typename") == "PurchasingCompany" and purchasing.get("company"):
@@ -647,13 +670,19 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         payment_status = {
             "PAID": PaymentStatus.PAID,
             "PARTIALLY_PAID": PaymentStatus.PARTIALLY_PAID,
+            "PARTIALLY_REFUNDED": PaymentStatus.PAID,
             "REFUNDED": PaymentStatus.REFUNDED,
         }.get(financial, PaymentStatus.UNPAID)
         fulfillment = str(node.get("displayFulfillmentStatus") or "").upper()
-        fulfillment_status = {
-            "FULFILLED": FulfillmentStatus.SHIPPED,
-            "PARTIALLY_FULFILLED": FulfillmentStatus.PARTIALLY_SHIPPED,
-        }.get(fulfillment, FulfillmentStatus.CONFIRMED_RESERVED)
+        if cancelled_at:
+            fulfillment_status = FulfillmentStatus.CANCELLED
+        elif financial == "REFUNDED":
+            fulfillment_status = FulfillmentStatus.REFUNDED
+        else:
+            fulfillment_status = {
+                "FULFILLED": FulfillmentStatus.SHIPPED,
+                "PARTIALLY_FULFILLED": FulfillmentStatus.PARTIALLY_SHIPPED,
+            }.get(fulfillment, FulfillmentStatus.CONFIRMED_RESERVED)
 
         def money(field: str) -> Decimal:
             shop_money = (node.get(field) or {}).get("shopMoney") or {}
@@ -758,6 +787,37 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         page_info = connection["pageInfo"]
         return products, (page_info["endCursor"] if page_info.get("hasNextPage") else None)
 
+    async def _resolve_open_fulfillment_order_id(self, external_order_id: str) -> str:
+        data = await self._graphql(
+            ORDER_FULFILLMENT_ORDERS_QUERY, {"id": external_order_id}
+        )
+        nodes: list[dict[str, Any]] = (
+            ((data.get("order") or {}).get("fulfillmentOrders") or {}).get("nodes") or []
+        )
+        open_nodes = [
+            node
+            for node in nodes
+            if str(node.get("status") or "").upper() in {"OPEN", "IN_PROGRESS", "SCHEDULED"}
+            and node.get("id")
+        ]
+        for node in open_nodes:
+            actions = {
+                str(a.get("action") or "").upper()
+                for a in (node.get("supportedActions") or [])
+                if isinstance(a, Mapping)
+            }
+            if "CREATE_FULFILLMENT" in actions:
+                return str(node["id"])
+        if open_nodes:
+            return str(open_nodes[0]["id"])
+        raise AppError(
+            slug="shopify-fulfillment-order-not-found",
+            status_code=422,
+            code="ERR_SHOPIFY_FULFILLMENT_ORDER_NOT_FOUND",
+            title="Shopify Fulfillment Order Not Found",
+            detail=f"No open fulfillment order found for '{external_order_id}'.",
+        )
+
     async def create_fulfillment(
         self,
         external_order_id: str,
@@ -767,6 +827,15 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         fulfillment_order_id: str | None = None,
         notify_customer: bool = True,
     ) -> dict[str, Any]:
+        resolved_fo_id = (fulfillment_order_id or "").strip()
+        if not resolved_fo_id or (
+            external_order_id.startswith("gid://shopify/Order/")
+            and not resolved_fo_id.startswith("gid://shopify/FulfillmentOrder/")
+        ):
+            if external_order_id.startswith("gid://shopify/Order/"):
+                resolved_fo_id = await self._resolve_open_fulfillment_order_id(external_order_id)
+            elif not resolved_fo_id:
+                resolved_fo_id = external_order_id
         tracking_info: dict[str, Any] = {"number": tracking_number, "company": carrier_company}
         if tracking_url:
             tracking_info["url"] = tracking_url
@@ -776,9 +845,7 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
                 "fulfillment": {
                     "notifyCustomer": notify_customer,
                     "trackingInfo": tracking_info,
-                    "lineItemsByFulfillmentOrder": [
-                        {"fulfillmentOrderId": fulfillment_order_id or external_order_id}
-                    ],
+                    "lineItemsByFulfillmentOrder": [{"fulfillmentOrderId": resolved_fo_id}],
                 }
             },
         )
@@ -1231,7 +1298,7 @@ async def process_shopify_webhook_event(
                 channel_account_id=channel_account_id,
                 is_active=False,
             )
-        elif topic in {"orders/create", "orders/updated", "orders/cancelled"}:
+        elif topic in {"orders/create", "orders/updated", "orders/cancelled", "refunds/create"}:
             warehouse_id = channel_account_id
             configured = await session.scalar(
                 text(
@@ -1248,12 +1315,16 @@ async def process_shopify_webhook_event(
             orders, _ = await adapter.fetch_orders_updated_since(
                 datetime.now(UTC) - timedelta(hours=1)
             )
-            target = (
-                payload.get("admin_graphql_api_id") or f"gid://shopify/Order/{payload.get('id')}"
-            )
+            if topic == "refunds/create":
+                order_raw_id = payload.get("order_id")
+                target = f"gid://shopify/Order/{order_raw_id}" if order_raw_id is not None else ""
+            else:
+                target = (
+                    payload.get("admin_graphql_api_id") or f"gid://shopify/Order/{payload.get('id')}"
+                )
             sync = EcommerceOrderSyncService()
             for order in orders:
-                if order.external_order_id == target:
+                if target and order.external_order_id == target:
                     await sync.ingest_normalized_order(
                         session,
                         tenant_id=tenant_id,
