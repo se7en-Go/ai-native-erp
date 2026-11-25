@@ -155,7 +155,6 @@ query PrimaryLocations {
   locations(first: 1) {
     nodes {
       id
-      name
     }
   }
 }
@@ -169,6 +168,28 @@ query VariantBySku($query: String!) {
       sku
       inventoryItem {
         id
+        inventoryLevels(first: 1) {
+          nodes {
+            location {
+              id
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+INVENTORY_ITEM_LOCATION_QUERY = """
+query InventoryItemLocations($id: ID!) {
+  inventoryItem(id: $id) {
+    id
+    inventoryLevels(first: 1) {
+      nodes {
+        location {
+          id
+        }
       }
     }
   }
@@ -1073,7 +1094,52 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
             )
         norm_qty = max(0, int(quantity))
 
-        loc_id = (location_id or "").strip() or self._default_location_id
+        item_id = (external_inventory_item_id or "").strip() or None
+        stocked_loc_id: str | None = None
+        if not item_id:
+            var_data = await self._graphql(
+                VARIANT_BY_SKU_QUERY, {"query": f"sku:{clean_sku}"}
+            )
+            var_nodes = ((var_data.get("productVariants") or {}).get("nodes")) or []
+            if var_nodes:
+                inv_item = var_nodes[0].get("inventoryItem") or {}
+                item_id = str(inv_item.get("id") or "").strip() or None
+                lvl_nodes = ((inv_item.get("inventoryLevels") or {}).get("nodes")) or []
+                if lvl_nodes:
+                    stocked_loc_id = (
+                        str(((lvl_nodes[0].get("location") or {}).get("id")) or "").strip()
+                        or None
+                    )
+        if not item_id:
+            raise AppError(
+                slug="shopify-inventory-sync-failed",
+                status_code=502,
+                code="ERR_SHOPIFY_INVENTORY_SYNC",
+                title="Shopify Inventory Sync Failed",
+                detail=(
+                    f"Could not resolve Shopify inventoryItemId for external SKU '{clean_sku}'."
+                ),
+            )
+
+        loc_id = (location_id or "").strip() or stocked_loc_id
+        if not loc_id and (external_inventory_item_id or "").strip():
+            try:
+                lvl_data = await self._graphql(INVENTORY_ITEM_LOCATION_QUERY, {"id": item_id})
+                lvl_nodes = (
+                    (
+                        (lvl_data.get("inventoryItem") or {}).get("inventoryLevels")
+                        or {}
+                    ).get("nodes")
+                ) or []
+                if lvl_nodes:
+                    loc_id = (
+                        str(((lvl_nodes[0].get("location") or {}).get("id")) or "").strip()
+                        or None
+                    )
+            except AppError:
+                loc_id = None
+        if not loc_id:
+            loc_id = self._default_location_id
         if not loc_id:
             loc_data = await self._graphql(LOCATIONS_QUERY, {})
             loc_nodes = ((loc_data.get("locations") or {}).get("nodes")) or []
@@ -1087,27 +1153,6 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
                 )
             loc_id = str(loc_nodes[0]["id"])
             self._default_location_id = loc_id
-
-        item_id = (external_inventory_item_id or "").strip() or None
-        if not item_id:
-            var_data = await self._graphql(
-                VARIANT_BY_SKU_QUERY, {"query": f"sku:{clean_sku}"}
-            )
-            var_nodes = ((var_data.get("productVariants") or {}).get("nodes")) or []
-            if var_nodes:
-                item_id = str(
-                    ((var_nodes[0].get("inventoryItem") or {}).get("id")) or ""
-                ).strip() or None
-        if not item_id:
-            raise AppError(
-                slug="shopify-inventory-sync-failed",
-                status_code=502,
-                code="ERR_SHOPIFY_INVENTORY_SYNC",
-                title="Shopify Inventory Sync Failed",
-                detail=(
-                    f"Could not resolve Shopify inventoryItemId for external SKU '{clean_sku}'."
-                ),
-            )
 
         data = await self._graphql(
             INVENTORY_SET_QUANTITIES_MUTATION,
