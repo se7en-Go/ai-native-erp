@@ -769,3 +769,84 @@ async def test_inventory_sync_backoff_dead_letter_retry_and_tenant_rls(
         mig_factory, rt_factory, dispatcher=ok_dispatcher, tenant_ids=[tid_a, tid_b]
     )
     assert drain_res["dispatched"] == 0
+
+
+@pytest.mark.asyncio
+async def test_shopify_inventory_sync_skips_location_name_and_prefers_stocked_level() -> None:
+    """Shopify sync must not request `locations.name` and prefers the item's stocked location."""
+    from erp_core.channels.ecommerce.shopify import (
+        LOCATIONS_QUERY,
+        ShopifyGraphqlAdapter,
+    )
+
+    assert "name" not in LOCATIONS_QUERY
+
+    seen_queries: list[str] = []
+    sent_quantities: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        q = str(body.get("query") or "")
+        seen_queries.append(q)
+        if "PrimaryLocations" in q:
+            assert "name" not in q
+            return httpx.Response(
+                200,
+                json={"data": {"locations": {"nodes": [{"id": "gid://shopify/Location/1001"}]}}},
+            )
+        if "InventoryItemLocations" in q:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "inventoryItem": {
+                            "id": "gid://shopify/InventoryItem/555",
+                            "inventoryLevels": {
+                                "nodes": [{"location": {"id": "gid://shopify/Location/2002"}}]
+                            },
+                        }
+                    }
+                },
+            )
+        if "InventorySetQuantities" in q:
+            sent_quantities.append(body["variables"]["input"]["quantities"][0])
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "inventorySetQuantities": {
+                            "inventoryAdjustmentGroup": {
+                                "reason": "correction",
+                                "changes": [{"quantityAfterChange": 88}],
+                            },
+                            "userErrors": [],
+                        }
+                    }
+                },
+            )
+        raise AssertionError(f"Unexpected Shopify GraphQL query: {q}")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    adapter = ShopifyGraphqlAdapter(
+        shop_domain="qzled-inv-scope.myshopify.com",
+        access_token="shpat_test_scope",
+        http_client=client,
+    )
+    try:
+        res = await adapter.push_inventory_level(
+            external_sku="SKU-STOCKED-LOC",
+            quantity=88,
+            external_inventory_item_id="gid://shopify/InventoryItem/555",
+        )
+    finally:
+        await client.aclose()
+
+    assert res["location_id"] == "gid://shopify/Location/2002"
+    assert sent_quantities == [
+        {
+            "inventoryItemId": "gid://shopify/InventoryItem/555",
+            "locationId": "gid://shopify/Location/2002",
+            "quantity": 88,
+        }
+    ]
+    assert not any("PrimaryLocations" in q for q in seen_queries)
