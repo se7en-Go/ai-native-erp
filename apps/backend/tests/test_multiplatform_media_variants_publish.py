@@ -386,6 +386,10 @@ async def test_multivariant_sourcing_to_shopify_staged_upload_and_variant_mappin
     assert len(product_set_vars) == 1
     assert product_set_vars[0]["files"][0]["originalSource"] == "https://cdn.shopify.com/staged/cob-strip.png"
     assert len(product_set_vars[0]["variants"]) == 2
+    assert all(
+        variant.get("inventoryItem") == {"tracked": True}
+        for variant in product_set_vars[0]["variants"]
+    )
 
 
 async def test_tiktok_woocommerce_shopline_shoplazza_live_multivariant_publish(
@@ -652,3 +656,131 @@ async def test_master_catalog_product_publish_endpoint(
     assert len(body) == 1
     assert body[0]["listing_state"] == "live_published"
     assert body[0]["external_product_id"] == "gid://shopify/Product/99002"
+
+
+@pytest.mark.asyncio
+async def test_sourcing_import_converts_cny_cost_and_shopify_tracks_single_variant(
+    runtime_session_factory: Factory,
+    workspace: dict[str, Any],
+) -> None:
+    """CNY sourcing costs convert to USD base currency on import, and Shopify defaults tracked."""
+    from erp_core.catalog.sourcing_service import _resolve_variant_base_cost
+    from erp_core.channels.ecommerce.shopify import ShopifyGraphqlAdapter
+
+    # 1. Pure currency resolution check (USD vs CNY tenant)
+    assert _resolve_variant_base_cost(Decimal("68.00"), Decimal("7.200000"), "USD") == (
+        Decimal("9.4444"),
+        "USD",
+    )
+    assert _resolve_variant_base_cost(Decimal("68.00"), Decimal("7.200000"), "CNY") == (
+        Decimal("68.0000"),
+        "CNY",
+    )
+
+    # 2. Single-variant Shopify productSet sets inventoryItem.tracked = True
+    options, single_vars = ShopifyGraphqlAdapter._build_product_options_and_variants(
+        clean_sku="SKU-SINGLE-TRACKED",
+        normalized_price=Decimal("16.90"),
+        options=None,
+        variants=None,
+    )
+    assert options == [{"name": "Title", "values": [{"name": "Default Title"}]}]
+    assert single_vars[0]["inventoryItem"] == {"tracked": True}
+
+    # 3. PG17 import_to_catalog keeps CNY for CNY tenants and converts CNY->USD for USD tenants
+    tenant = workspace["tenant"]
+    actor = str(workspace["owner_id"])
+    async with tenant_session(runtime_session_factory, tenant) as session:
+        service = SourcingService()
+        cny_single_draft = await service.collect(
+            session,
+            tenant,
+            actor,
+            SourcingCollectRequest(
+                source_platform="1688",
+                source_url="https://detail.1688.com/offer/777889001.html",
+                raw_title="CNY Tenant Passthrough Test",
+                raw_price_cny=Decimal("36.00"),
+                fx_rate_usd_cny=Decimal("7.200000"),
+                target_margin_pct=Decimal("40.00"),
+            ),
+        )
+        await service.import_to_catalog(session, tenant, actor, cny_single_draft.id)
+        cny_row = (
+            await session.execute(
+                text(
+                    "SELECT cost_price_base, base_currency, attributes "
+                    "FROM product_variants WHERE tenant_id = :tid AND sku = :sku"
+                ),
+                {"tid": tenant, "sku": cny_single_draft.suggested_sku},
+            )
+        ).mappings().one()
+        assert cny_row["cost_price_base"] == Decimal("36.0000")
+        assert cny_row["base_currency"] == "CNY"
+        assert cny_row["attributes"]["raw_cost_cny"] == "36.00"
+
+        await session.execute(
+            text("UPDATE tenants SET base_currency = 'USD' WHERE id = :tid"),
+            {"tid": tenant},
+        )
+        multi_draft = await service.collect(
+            session,
+            tenant,
+            actor,
+            SourcingCollectRequest(
+                source_platform="1688",
+                source_url="https://detail.1688.com/offer/777888999.html",
+                raw_title="CNY Cost Convert Test LED Lamp",
+                raw_price_cny=Decimal("72.00"),
+                fx_rate_usd_cny=Decimal("7.200000"),
+                target_margin_pct=Decimal("40.00"),
+                variants_spec=[
+                    SourcingVariantSpec(
+                        sku_suffix="C1",
+                        option_values={"Power": "50W"},
+                        cost_price_cny=Decimal("72.00"),
+                        retail_price_usd=Decimal("18.00"),
+                    )
+                ],
+            ),
+        )
+        await service.import_to_catalog(session, tenant, actor, multi_draft.id)
+        multi_row = (
+            await session.execute(
+                text(
+                    "SELECT cost_price_base, base_currency, attributes "
+                    "FROM product_variants WHERE tenant_id = :tid AND sku = :sku"
+                ),
+                {"tid": tenant, "sku": f"{multi_draft.suggested_sku}-C1"},
+            )
+        ).mappings().one()
+        assert multi_row["cost_price_base"] == Decimal("10.0000")
+        assert multi_row["base_currency"] == "USD"
+        assert multi_row["attributes"]["raw_cost_cny"] == "72.00"
+
+        single_draft = await service.collect(
+            session,
+            tenant,
+            actor,
+            SourcingCollectRequest(
+                source_platform="1688",
+                source_url="https://detail.1688.com/offer/777889000.html",
+                raw_title="Single Variant CNY Convert Test",
+                raw_price_cny=Decimal("36.00"),
+                fx_rate_usd_cny=Decimal("7.200000"),
+                target_margin_pct=Decimal("40.00"),
+            ),
+        )
+        await service.import_to_catalog(session, tenant, actor, single_draft.id)
+        single_row = (
+            await session.execute(
+                text(
+                    "SELECT cost_price_base, base_currency, attributes "
+                    "FROM product_variants WHERE tenant_id = :tid AND sku = :sku"
+                ),
+                {"tid": tenant, "sku": single_draft.suggested_sku},
+            )
+        ).mappings().one()
+        assert single_row["cost_price_base"] == Decimal("5.0000")
+        assert single_row["base_currency"] == "USD"
+        assert single_row["attributes"]["raw_cost_cny"] == "36.00"

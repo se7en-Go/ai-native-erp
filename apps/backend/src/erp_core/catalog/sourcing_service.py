@@ -64,6 +64,19 @@ _DEFAULT_LEAD_TIME_DAYS = 7
 _DEFAULT_MIN_MARGIN_FLOOR_PCT = Decimal("15.00")
 _USER_AGENT = "OmniERP-SourcingBot/1.0 (+https://erp.local/sourcing)"
 
+
+def _resolve_variant_base_cost(
+    cost_cny: Decimal,
+    fx_rate_usd_cny: Decimal,
+    tenant_base_currency: str,
+) -> tuple[Decimal, str]:
+    """Convert supplier CNY cost into the tenant's ledger base currency."""
+    currency = (tenant_base_currency or "USD").strip().upper() or "USD"
+    if currency == "CNY" or fx_rate_usd_cny <= Decimal("0"):
+        return cost_cny.quantize(_COST_SCALE, rounding=ROUND_HALF_UP), "CNY"
+    converted = (cost_cny / fx_rate_usd_cny).quantize(_COST_SCALE, rounding=ROUND_HALF_UP)
+    return converted, currency
+
 # Honest listing bookkeeping. ``sourcing_drafts.status`` is pinned by the 0012 DB CHECK
 # constraint to ``('draft', 'imported', 'published')``; publishing only writes a local
 # ``platform_sku_mappings`` row and never calls a marketplace API, so a remote product
@@ -1718,7 +1731,13 @@ class SourcingService:
         actor_id: str,
         draft: SourcingDraftRead,
         product_id: UUID,
+        tenant_base_currency: str = "USD",
     ) -> UUID:
+        cost_base, base_currency = _resolve_variant_base_cost(
+            draft.raw_price_cny,
+            draft.fx_rate_usd_cny,
+            tenant_base_currency,
+        )
         variant = await self.catalog.create_variant(
             session,
             tenant_id,
@@ -1731,11 +1750,10 @@ class SourcingService:
                     "source_platform": draft.source_platform,
                     "source_url": draft.source_url,
                     "images": draft.images,
+                    "raw_cost_cny": str(draft.raw_price_cny),
                 },
-                cost_price_base=draft.raw_price_cny.quantize(
-                    _COST_SCALE, rounding=ROUND_HALF_UP
-                ),
-                base_currency="CNY",
+                cost_price_base=cost_base,
+                base_currency=base_currency,
                 min_margin_floor_pct=_DEFAULT_MIN_MARGIN_FLOOR_PCT,
                 retail_price_usd=draft.target_price_usd,
                 b2b_moq_tiers=[
@@ -1792,11 +1810,25 @@ class SourcingService:
                 session, tenant_id, draft.suggested_sku
             )
 
+        tenant_base_currency = str(
+            (
+                await session.scalar(
+                    text("SELECT base_currency FROM tenants WHERE id = :tid"),
+                    {"tid": tenant_id},
+                )
+            )
+            or "USD"
+        )
         variant_id: UUID | None = None
         if draft.variants_spec:
             for item in draft.variants_spec:
                 child_sku = f"{draft.suggested_sku}-{item.sku_suffix}"
                 retail_usd = item.retail_price_usd or draft.target_price_usd
+                cost_base, base_currency = _resolve_variant_base_cost(
+                    item.cost_price_cny,
+                    draft.fx_rate_usd_cny,
+                    tenant_base_currency,
+                )
                 try:
                     created_var = await self.catalog.create_variant(
                         session,
@@ -1812,11 +1844,10 @@ class SourcingService:
                                 "option_values": dict(item.option_values),
                                 "image_url": item.image_url,
                                 "images": draft.images,
+                                "raw_cost_cny": str(item.cost_price_cny),
                             },
-                            cost_price_base=item.cost_price_cny.quantize(
-                                _COST_SCALE, rounding=ROUND_HALF_UP
-                            ),
-                            base_currency="CNY",
+                            cost_price_base=cost_base,
+                            base_currency=base_currency,
                             min_margin_floor_pct=_DEFAULT_MIN_MARGIN_FLOOR_PCT,
                             retail_price_usd=retail_usd,
                             b2b_moq_tiers=[
@@ -1840,7 +1871,7 @@ class SourcingService:
         if variant_id is None:
             try:
                 variant_id = await self._ensure_variant(
-                    session, tenant_id, actor_id, draft, product_id
+                    session, tenant_id, actor_id, draft, product_id, tenant_base_currency
                 )
             except AppError as exc:
                 if exc.code != "ERR_DUPLICATE_SKU":
