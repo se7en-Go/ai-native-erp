@@ -424,6 +424,49 @@ def test_shopify_oauth_install_url_requests_fulfillment_order_scopes() -> None:
     assert "write_merchant_managed_fulfillment_orders" in url
 
 
+@pytest.mark.asyncio
+async def test_shopify_updated_since_quotes_iso_timestamp() -> None:
+    """Shopify search queries require single quotes around ISO timestamps containing colons."""
+    assert "reverse: true" in ORDERS_GRAPHQL_QUERY
+
+    seen_queries: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        q = str((body.get("variables") or {}).get("query") or "")
+        seen_queries.append(q)
+        gql = str(body.get("query") or "")
+        if "SyncOrders" in gql:
+            return httpx.Response(
+                200,
+                json={"data": {"orders": {"pageInfo": {"hasNextPage": False}, "nodes": []}}},
+            )
+        if "SyncProducts" in gql:
+            return httpx.Response(
+                200,
+                json={"data": {"products": {"pageInfo": {"hasNextPage": False}, "nodes": []}}},
+            )
+        raise AssertionError(f"Unexpected GraphQL query: {gql}")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    adapter = ShopifyGraphqlAdapter(
+        shop_domain="qzled.myshopify.com",
+        access_token="shpat_test_quote",
+        http_client=client,
+    )
+    since = datetime(2026, 11, 25, 3, 0, 0, tzinfo=UTC)
+    try:
+        await adapter.fetch_orders_updated_since(since)
+        await adapter.fetch_products_updated_since(since)
+    finally:
+        await client.aclose()
+
+    assert seen_queries == [
+        "updated_at:>='2026-11-25T03:00:00Z'",
+        "updated_at:>='2026-11-25T03:00:00Z'",
+    ]
+
+
 def _admin_url() -> str:
     return os.environ.get(
         "DATABASE_ADMIN_URL",
