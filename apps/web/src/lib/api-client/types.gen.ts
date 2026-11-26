@@ -382,6 +382,96 @@ export type BodyUploadKbDocumentApiV1AiKbDocumentsPost = {
     title: string;
 };
 
+export type BomAssembleRead = {
+    consumed: Array<BomAssemblyConsumptionRead>;
+    parent_on_hand_qty: number;
+    parent_sku: string;
+    parent_variant_id: string;
+    qty_kits: number;
+    replayed: boolean;
+    request_id: string;
+    warehouse_id: string;
+};
+
+/**
+ * Assemble `qty_kits` kits, deducting every component from one warehouse.
+ */
+export type BomAssembleRequest = {
+    notes?: string | null;
+    qty_kits: number;
+    request_id: string;
+    warehouse_id: string;
+};
+
+export type BomAssemblyConsumptionRead = {
+    component_sku: string;
+    component_variant_id: string;
+    qty_consumed: number;
+};
+
+export type BomComponentRead = {
+    component_sku: string;
+    component_unit_cost_base: string;
+    component_variant_id: string;
+    created_at: string;
+    effective_qty_per_unit: string;
+    id: string;
+    line_unit_cost_base: string;
+    notes: string | null;
+    parent_sku: string;
+    parent_variant_id: string;
+    qty_per_unit: string;
+    updated_at: string;
+    waste_rate_pct: string;
+};
+
+/**
+ * Add or update one component line of a 1-level kit.
+ */
+export type BomComponentUpsert = {
+    component_variant_id: string;
+    notes?: string | null;
+    parent_variant_id: string;
+    qty_per_unit: number | string;
+    waste_rate_pct?: number | string;
+};
+
+export type BomCostRollupLineRead = {
+    component_id: string;
+    component_sku: string;
+    component_unit_cost_base: string;
+    component_variant_id: string;
+    effective_qty_per_unit: string;
+    line_unit_cost_base: string;
+    qty_per_unit: string;
+    waste_rate_pct: string;
+};
+
+export type BomCostRollupRead = {
+    base_currency: string;
+    component_count: number;
+    lines: Array<BomCostRollupLineRead>;
+    parent_sku: string;
+    parent_variant_id: string;
+    unit_cost_base: string;
+};
+
+/**
+ * One parent SKU and every component that makes it.
+ */
+export type BomKitRead = {
+    component_count: number;
+    components: Array<BomComponentRead>;
+    parent_sku: string;
+    parent_variant_id: string;
+    rolled_up_unit_cost: string;
+};
+
+export type BomListRead = {
+    items: Array<BomKitRead>;
+    total: number;
+};
+
 export type BuyerLocalTimeInfo = {
     formatted_time?: string | null;
     iana_timezone?: string | null;
@@ -1011,6 +1101,32 @@ export type DeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed'
 export type DisconnectChannelResponse = {
     channel_account_id: string;
     status?: ChannelStatus;
+};
+
+export type DocReplenishmentRead = {
+    critical_count: number;
+    generated_at: string;
+    items: Array<DocReplenishmentRowRead>;
+    target_doc_days: number;
+    total: number;
+    warning_count: number;
+};
+
+export type DocReplenishmentRowRead = {
+    doc_days: string | null;
+    in_transit_qty: number;
+    local_available_qty: number;
+    overseas_available_qty: number;
+    product_name: string;
+    risk_level: 'critical' | 'warning' | 'healthy';
+    sku: string;
+    suggested_reorder_qty: number;
+    total_available_qty: number;
+    units_sold_30d: number;
+    units_sold_7d: number;
+    units_sold_90d: number;
+    variant_id: string;
+    weighted_daily_sales: string;
 };
 
 /**
@@ -1824,7 +1940,7 @@ export type MovementRead = {
     created_at: string;
     id: string;
     movement_no: string;
-    movement_type: 'inbound_po' | 'outbound_order' | 'transfer' | 'stocktake_adjust';
+    movement_type: 'inbound_po' | 'outbound_order' | 'transfer' | 'transfer_out' | 'transfer_in' | 'stocktake_adjust';
     notes: string | null;
     operator_user_id: string | null;
     qty_delta: number;
@@ -3899,6 +4015,61 @@ export type StockRead = {
     sku: string;
     variant_id: string;
     warehouse_id: string;
+};
+
+export type StockTransferCreate = {
+    destination_warehouse_id: string;
+    eta_days?: number;
+    lines: Array<StockTransferLineInput>;
+    notes?: string | null;
+    shipping_method?: 'sea_freight' | 'air_freight' | 'express' | 'rail' | 'truck';
+    source_warehouse_id: string;
+    tracking_no?: string | null;
+    transfer_no?: string | null;
+};
+
+export type StockTransferLineInput = {
+    qty: number;
+    unit_freight_cost_base?: number | string;
+    variant_id: string;
+};
+
+export type StockTransferLineRead = {
+    id: string;
+    line_freight_cost_base: string;
+    qty: number;
+    received_qty: number;
+    sku: string;
+    unit_freight_cost_base: string;
+    variant_id: string;
+};
+
+export type StockTransferListRead = {
+    items: Array<StockTransferRead>;
+    total: number;
+};
+
+export type StockTransferRead = {
+    created_at: string;
+    created_by: string | null;
+    destination_warehouse_id: string;
+    destination_warehouse_name: string;
+    dispatched_at: string | null;
+    eta_days: number;
+    id: string;
+    lines: Array<StockTransferLineRead>;
+    notes: string | null;
+    received_at: string | null;
+    shipping_method: 'sea_freight' | 'air_freight' | 'express' | 'rail' | 'truck';
+    source_warehouse_id: string;
+    source_warehouse_name: string;
+    status: 'draft' | 'in_transit' | 'received' | 'cancelled';
+    tenant_id: string;
+    total_freight_cost_base: string;
+    total_qty: number;
+    tracking_no: string | null;
+    transfer_no: string;
+    updated_at: string;
 };
 
 /**
@@ -12157,6 +12328,184 @@ export type SocialSummaryApiV1SocialSummaryGetResponses = {
 
 export type SocialSummaryApiV1SocialSummaryGetResponse = SocialSummaryApiV1SocialSummaryGetResponses[keyof SocialSummaryApiV1SocialSummaryGetResponses];
 
+export type ListBomApiV1SupplyChainBomGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        parent_variant_id?: string | null;
+    };
+    url: '/api/v1/supply-chain/bom';
+};
+
+export type ListBomApiV1SupplyChainBomGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListBomApiV1SupplyChainBomGetError = ListBomApiV1SupplyChainBomGetErrors[keyof ListBomApiV1SupplyChainBomGetErrors];
+
+export type ListBomApiV1SupplyChainBomGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BomListRead;
+};
+
+export type ListBomApiV1SupplyChainBomGetResponse = ListBomApiV1SupplyChainBomGetResponses[keyof ListBomApiV1SupplyChainBomGetResponses];
+
+export type UpsertBomComponentApiV1SupplyChainBomComponentsPostData = {
+    body: BomComponentUpsert;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/supply-chain/bom/components';
+};
+
+export type UpsertBomComponentApiV1SupplyChainBomComponentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertBomComponentApiV1SupplyChainBomComponentsPostError = UpsertBomComponentApiV1SupplyChainBomComponentsPostErrors[keyof UpsertBomComponentApiV1SupplyChainBomComponentsPostErrors];
+
+export type UpsertBomComponentApiV1SupplyChainBomComponentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: BomComponentRead;
+};
+
+export type UpsertBomComponentApiV1SupplyChainBomComponentsPostResponse = UpsertBomComponentApiV1SupplyChainBomComponentsPostResponses[keyof UpsertBomComponentApiV1SupplyChainBomComponentsPostResponses];
+
+export type DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        component_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/bom/components/{component_id}';
+};
+
+export type DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteError = DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteErrors[keyof DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteErrors];
+
+export type DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteResponse = DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteResponses[keyof DeleteBomComponentApiV1SupplyChainBomComponentsComponentIdDeleteResponses];
+
+export type AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostData = {
+    body: BomAssembleRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        parent_variant_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/bom/{parent_variant_id}/assemble';
+};
+
+export type AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostError = AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostErrors[keyof AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostErrors];
+
+export type AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostResponses = {
+    /**
+     * Successful Response
+     */
+    201: BomAssembleRead;
+};
+
+export type AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostResponse = AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostResponses[keyof AssembleBomApiV1SupplyChainBomParentVariantIdAssemblePostResponses];
+
+export type ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        parent_variant_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/bom/{parent_variant_id}/cost-rollup';
+};
+
+export type ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetError = ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetErrors[keyof ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetErrors];
+
+export type ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BomCostRollupRead;
+};
+
+export type ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetResponse = ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetResponses[keyof ReadBomCostRollupApiV1SupplyChainBomParentVariantIdCostRollupGetResponses];
+
+export type ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        target_doc_days?: number;
+    };
+    url: '/api/v1/supply-chain/doc-replenishment';
+};
+
+export type ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetError = ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetErrors[keyof ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetErrors];
+
+export type ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DocReplenishmentRead;
+};
+
+export type ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetResponse = ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetResponses[keyof ReadDocReplenishmentApiV1SupplyChainDocReplenishmentGetResponses];
+
 export type ListPurchaseOrdersApiV1SupplyChainPurchaseOrdersGetData = {
     body?: never;
     headers?: {
@@ -12486,6 +12835,152 @@ export type UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchResponses = {
 };
 
 export type UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchResponse = UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchResponses[keyof UpdateSupplierApiV1SupplyChainSuppliersSupplierIdPatchResponses];
+
+export type ListStockTransfersApiV1SupplyChainTransfersGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/supply-chain/transfers';
+};
+
+export type ListStockTransfersApiV1SupplyChainTransfersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListStockTransfersApiV1SupplyChainTransfersGetError = ListStockTransfersApiV1SupplyChainTransfersGetErrors[keyof ListStockTransfersApiV1SupplyChainTransfersGetErrors];
+
+export type ListStockTransfersApiV1SupplyChainTransfersGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: StockTransferListRead;
+};
+
+export type ListStockTransfersApiV1SupplyChainTransfersGetResponse = ListStockTransfersApiV1SupplyChainTransfersGetResponses[keyof ListStockTransfersApiV1SupplyChainTransfersGetResponses];
+
+export type CreateStockTransferApiV1SupplyChainTransfersPostData = {
+    body: StockTransferCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/supply-chain/transfers';
+};
+
+export type CreateStockTransferApiV1SupplyChainTransfersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateStockTransferApiV1SupplyChainTransfersPostError = CreateStockTransferApiV1SupplyChainTransfersPostErrors[keyof CreateStockTransferApiV1SupplyChainTransfersPostErrors];
+
+export type CreateStockTransferApiV1SupplyChainTransfersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: StockTransferRead;
+};
+
+export type CreateStockTransferApiV1SupplyChainTransfersPostResponse = CreateStockTransferApiV1SupplyChainTransfersPostResponses[keyof CreateStockTransferApiV1SupplyChainTransfersPostResponses];
+
+export type CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        transfer_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/transfers/{transfer_id}/cancel';
+};
+
+export type CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostError = CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostErrors[keyof CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostErrors];
+
+export type CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: StockTransferRead;
+};
+
+export type CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostResponse = CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostResponses[keyof CancelStockTransferApiV1SupplyChainTransfersTransferIdCancelPostResponses];
+
+export type DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        transfer_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/transfers/{transfer_id}/dispatch';
+};
+
+export type DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostError = DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostErrors[keyof DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostErrors];
+
+export type DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: StockTransferRead;
+};
+
+export type DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostResponse = DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostResponses[keyof DispatchStockTransferApiV1SupplyChainTransfersTransferIdDispatchPostResponses];
+
+export type ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        transfer_id: string;
+    };
+    query?: never;
+    url: '/api/v1/supply-chain/transfers/{transfer_id}/receive';
+};
+
+export type ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostError = ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostErrors[keyof ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostErrors];
+
+export type ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: StockTransferRead;
+};
+
+export type ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostResponse = ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostResponses[keyof ReceiveStockTransferApiV1SupplyChainTransfersTransferIdReceivePostResponses];
 
 export type GetAuditEventsApiV1TenancyAuditEventsGetData = {
     body?: never;

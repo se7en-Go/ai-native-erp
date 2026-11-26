@@ -18,7 +18,14 @@ Quantity = Annotated[int, Field(gt=0, le=1_000_000_000)]
 UnitCost = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=4)]
 SupplierStatus = Literal["active", "inactive"]
 PurchaseStatus = Literal["draft", "ordered", "partially_received", "received", "cancelled"]
-MovementType = Literal["inbound_po", "outbound_order", "transfer", "stocktake_adjust"]
+MovementType = Literal[
+    "inbound_po",
+    "outbound_order",
+    "transfer",
+    "transfer_out",
+    "transfer_in",
+    "stocktake_adjust",
+]
 
 
 class SupplierFields(BaseModel):

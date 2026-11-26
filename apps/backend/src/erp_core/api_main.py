@@ -27,6 +27,7 @@ import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
 import erp_core.orders.routing_models  # noqa: F401
 import erp_core.social.models  # noqa: F401
+import erp_core.supply_chain.bom_doc_models  # noqa: F401
 import erp_core.supply_chain.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
 import erp_core.tenancy.store_scope_models  # noqa: F401
@@ -97,6 +98,7 @@ from erp_core.social.attribution_router import router as social_attribution_rout
 from erp_core.social.publishers import HttpSocialPublisherDispatcher
 from erp_core.social.router import router as social_router
 from erp_core.supply_chain.analytics import router as executive_router
+from erp_core.supply_chain.bom_doc_router import router as bom_doc_router
 from erp_core.supply_chain.router import supply_router, wms_router
 from erp_core.tenancy.audit import ensure_audit_child_rls
 from erp_core.tenancy.onboarding import onboarding_router
@@ -254,6 +256,9 @@ def create_app() -> FastAPI:
     app.include_router(crm_workbench_router, prefix="/api/v1")
     app.include_router(supply_router, prefix="/api/v1")
     app.include_router(wms_router, prefix="/api/v1")
+    # Track 7: 1-level light BOM, in-transit headhaul transfers, DOC replenishment.
+    # The router owns its own `/api/v1/supply-chain` prefix.
+    app.include_router(bom_doc_router)
     app.include_router(executive_router, prefix="/api/v1")
     app.include_router(inventory_sync_router)
     # `order_routing_router` owns the static `/orders/routing-rules` path, so it must be

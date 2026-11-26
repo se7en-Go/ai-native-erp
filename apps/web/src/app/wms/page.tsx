@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { BomTransferDocPanel } from "@/components/wms/bom-transfer-doc-panel";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { useAuthSession } from "@/components/providers";
@@ -574,6 +575,9 @@ export default function WmsPage() {
             </tbody>
           </table>
         </section>
+
+        {/* Track 7: 1-level light BOM + headhaul in-transit transfers + DOC replenishment. */}
+        <BomTransferDocPanel />
 
         <section
           data-testid="wms-inventory-sync-card"
