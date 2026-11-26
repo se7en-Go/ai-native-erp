@@ -17,7 +17,6 @@ import type { ChannelAccountApiItem, TeamMemberApiItem } from "@/lib/api-client/
 import {
   STORE_ACCESS_LEVELS,
   assignStoreScope,
-  canManageStore,
   fetchStoreScopes,
   handoverImpactRows,
   revokeStoreScope,
@@ -300,12 +299,8 @@ export function TeamGovernancePanel({
                         <button
                           type="button"
                           data-testid={`store-scope-revoke-${scope.id}`}
-                          disabled={revokeMutation.isPending || !canManageStore(scope.access_level)}
-                          title={
-                            canManageStore(scope.access_level)
-                              ? bi("撤销授权", "Revoke grant")
-                              : bi("只有管理级授权可以撤销", "Only manage-level grants can be revoked")
-                          }
+                          disabled={revokeMutation.isPending || !isAdmin}
+                          title={bi("撤销授权", "Revoke grant")}
                           onClick={() => revokeMutation.mutate(scope.id)}
                           className="erp-btn rounded-lg border border-rose-200 bg-rose-50 text-[11.5px] font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300"
                         >
@@ -472,7 +467,9 @@ export function TeamGovernancePanel({
                 </span>
                 {handoverResult.from_user_deactivated && (
                   <Badge tone="warning">
-                    {bi("离职成员已停用", "Leaver deactivated")}
+                    {handoverResult.dry_run
+                      ? bi("执行时将停用离职成员", "Will deactivate leaver on execute")
+                      : bi("离职成员已停用", "Leaver deactivated")}
                   </Badge>
                 )}
               </div>

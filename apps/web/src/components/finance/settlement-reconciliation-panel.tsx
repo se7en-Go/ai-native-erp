@@ -243,11 +243,12 @@ export function SettlementReconciliationPanel({ role }: { role?: UserRole }) {
   const matchPayouts = useMutation({
     mutationFn: () => autoMatchPayouts(),
     onSuccess: (result) => {
+      const currency = dualQuery.data?.base_currency ?? "CNY";
       setFeedback({
         error: false,
         text: bi(
-          `本次匹配 ${result.matched_count} 笔，剩余 ${result.remaining_unmatched_count} 笔未匹配；累计汇兑损益 ${formatExactMoney(result.total_fx_variance_base)}。`,
-          `Matched ${result.matched_count} payout(s), ${result.remaining_unmatched_count} still unmatched; cumulative FX gain/loss ${formatExactMoney(result.total_fx_variance_base)}.`
+          `本次匹配 ${result.matched_count} 笔，剩余 ${result.remaining_unmatched_count} 笔未匹配；累计汇兑损益 ${formatExactMoney(result.total_fx_variance_base, currency)}。`,
+          `Matched ${result.matched_count} payout(s), ${result.remaining_unmatched_count} still unmatched; cumulative FX gain/loss ${formatExactMoney(result.total_fx_variance_base, currency)}.`
         ),
       });
       invalidateReconciliation();
