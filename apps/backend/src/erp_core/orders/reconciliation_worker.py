@@ -329,15 +329,35 @@ async def reconcile_tenant_orders(
                     code=exc.code,
                 )
                 continue
-            stats = await reconcile_channel_account_orders(
-                session,
-                tenant_id=tenant_id,
-                channel_account_id=account.id,
-                channel_type=channel_type,
-                adapter=adapter,
-                default_warehouse_id=warehouse_id,
-                since=datetime.now(UTC) - REPLAY_WINDOW,
-            )
+            try:
+                async with session.begin_nested():
+                    stats = await reconcile_channel_account_orders(
+                        session,
+                        tenant_id=tenant_id,
+                        channel_account_id=account.id,
+                        channel_type=channel_type,
+                        adapter=adapter,
+                        default_warehouse_id=warehouse_id,
+                        since=datetime.now(UTC) - REPLAY_WINDOW,
+                    )
+            except (AppError, httpx.HTTPError) as exc:
+                totals["failed"] += 1
+                logger.warning(
+                    "reconciliation_account_failed",
+                    tenant_id=str(tenant_id),
+                    channel_account_id=str(account.id),
+                    channel_type=channel_type.value,
+                    error_type=type(exc).__name__,
+                    code=exc.code if isinstance(exc, AppError) else None,
+                    status_code=(
+                        exc.status_code
+                        if isinstance(exc, AppError)
+                        else exc.response.status_code
+                        if isinstance(exc, httpx.HTTPStatusError)
+                        else None
+                    ),
+                )
+                continue
             totals["accounts"] += 1
             for key in ("recovered", "updated", "failed", "scanned"):
                 totals[key] += stats[key]
@@ -367,7 +387,17 @@ async def reconcile_ecommerce_orders_cron() -> dict[str, int]:
                 ).all()
             ]
         for tenant_id in tenant_ids:
-            stats = await reconcile_tenant_orders(runtime_factory, tenant_id)
+            try:
+                stats = await reconcile_tenant_orders(runtime_factory, tenant_id)
+            except (AppError, httpx.HTTPError) as exc:
+                totals["failed"] += 1
+                logger.warning(
+                    "reconciliation_tenant_failed",
+                    tenant_id=str(tenant_id),
+                    error_type=type(exc).__name__,
+                    code=exc.code if isinstance(exc, AppError) else None,
+                )
+                continue
             totals["tenants"] += 1
             for key in ("recovered", "updated", "failed", "scanned", "accounts"):
                 totals[key] += stats[key]

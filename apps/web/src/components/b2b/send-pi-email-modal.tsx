@@ -100,22 +100,33 @@ const AUTO_ACCOUNT = "__auto__";
  */
 export function SendPiEmailModal({
   quote,
+  defaultRecipientEmail = null,
   onClose,
 }: {
   quote: QuoteRecord;
+  defaultRecipientEmail?: string | null;
   onClose: () => void;
 }) {
   const { bi } = useI18n();
   const queryClient = useQueryClient();
 
   const [language, setLanguage] = useState<EmailLanguage>("en");
-  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState(
+    () => defaultRecipientEmail?.trim() ?? "",
+  );
+  const [recipientTouched, setRecipientTouched] = useState(false);
   const [channelAccountId, setChannelAccountId] = useState<string>(AUTO_ACCOUNT);
   const [subject, setSubject] = useState(() => defaultPiEmailSubject(quote));
   const [messageBody, setMessageBody] = useState(() => defaultPiEmailBody(quote, "en"));
   const [subjectTouched, setSubjectTouched] = useState(false);
   const [bodyTouched, setBodyTouched] = useState(false);
   const [receipt, setReceipt] = useState<SendQuotePiEmailResponse | null>(null);
+
+  useEffect(() => {
+    if (!recipientTouched && defaultRecipientEmail?.trim()) {
+      setRecipientEmail(defaultRecipientEmail.trim());
+    }
+  }, [defaultRecipientEmail, recipientTouched]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -311,7 +322,10 @@ export function SendPiEmailModal({
                   type="email"
                   inputMode="email"
                   value={recipientEmail}
-                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  onChange={(e) => {
+                    setRecipientTouched(true);
+                    setRecipientEmail(e.target.value);
+                  }}
                   placeholder="purchasing@buyer.example.com"
                   className="erp-input mt-1.5"
                 />

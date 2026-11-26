@@ -117,6 +117,7 @@ function B2bQuotesPageInner() {
   // Inbox 上下文抽屉的深链：/b2b/quotes?customer_id=...&customer_name=...
   const contextCustomerId = searchParams.get("customer_id");
   const contextCustomerName = searchParams.get("customer_name");
+  const defaultRecipientEmail = searchParams.get("recipient_email");
   const deepLinkQuoteId = searchParams.get("quoteId");
   const autoOpenSendEmail = searchParams.get("send_pi_email") === "1";
 
@@ -343,6 +344,9 @@ function B2bQuotesPageInner() {
         <QuotePiBuilder
           quotes={quotes}
           variants={variantsQuery.data?.items ?? []}
+          opportunities={opportunities}
+          defaultCustomerId={contextCustomerId}
+          defaultRecipientEmail={defaultRecipientEmail}
           initialQuoteId={deepLinkQuoteId}
           autoOpenSendEmail={autoOpenSendEmail}
         />

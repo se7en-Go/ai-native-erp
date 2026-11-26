@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { FloatingCopilot } from "@/components/ai/floating-copilot";
 import { ChannelAnalyticsCard } from "@/components/finance/channel-analytics-card";
 import { useAuthSession } from "@/components/providers";
 import {
@@ -635,6 +636,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      <FloatingCopilot />
     </AppShell>
   );
 }

@@ -57,6 +57,7 @@ import type {
   OnboardingStateRead,
   OpportunityRead,
   OrderRead,
+  QuoteCreate,
   QuoteItemRead,
   QuotePdfResponse,
   QuoteRead,
@@ -98,6 +99,7 @@ import {
   connectMessengerApiV1ChannelsMessengerConnectPost,
   connectTelegramApiV1ChannelsTelegramConnectPost,
   convertQuoteToOrderApiV1B2bQuotesQuoteIdConvertToOrderPost,
+  createQuoteApiV1B2bQuotesPost,
   generateQuotePdfApiV1B2bQuotesQuoteIdPdfPost,
   getCustomerApiV1CustomersCustomerIdGet,
   getFinanceOverviewApiV1FinanceOverviewGet,
@@ -119,6 +121,7 @@ import {
   refreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPost,
   replayDeadLetterEventApiV1ChannelsDlqEventIdReplayPost,
   repriceQuoteVersionApiV1B2bQuotesQuoteIdRepriceVersionPost,
+  sendQuoteApiV1B2bQuotesQuoteIdSendPost,
   shipOrderApiV1OrdersOrderIdShipPost,
   splitCustomersEndpointApiV1CustomersSplitPost,
   updateOnboardingPresetApiV1OnboardingPresetPatch,
@@ -178,6 +181,7 @@ export interface PlatformSkuMappingApiItem {
 
 export interface B2bOpportunityApiItem {
   id: string;
+  customer_id?: string;
   title: string;
   company_name?: string | null;
   stage: OpportunityStage;
@@ -616,6 +620,13 @@ export function mapConversation(c: ConversationRead): ConversationSummary {
     assigned_user_name: optionalString(raw.assigned_user_name),
     channel_account_display_name: optionalString(raw.channel_account_display_name),
     channel_visibility_scope: optionalVisibilityScope(raw.channel_visibility_scope),
+    unverified_prechat: c.unverified_prechat
+      ? {
+          email: c.unverified_prechat.email ?? null,
+          whatsapp_phone: c.unverified_prechat.whatsapp_phone ?? null,
+          marketing_opt_in: Boolean(c.unverified_prechat.marketing_opt_in),
+        }
+      : null,
   };
 }
 
@@ -706,6 +717,7 @@ export function mapVariantMapping(
 export function mapOpportunity(o: OpportunityRead): B2bOpportunityApiItem {
   return {
     id: o.id,
+    customer_id: o.customer_id,
     title: o.title,
     company_name: o.company_name,
     stage: o.stage as OpportunityStage,
@@ -1192,6 +1204,26 @@ export async function getB2bQuotes(
     offset: data.offset,
     has_more: data.has_more,
   };
+}
+
+export async function createB2bQuote(payload: QuoteCreate): Promise<B2bQuoteApiItem> {
+  const quote = unwrap(
+    await createQuoteApiV1B2bQuotesPost({
+      client: getBffClient(),
+      body: payload,
+    }),
+  );
+  return mapQuote(quote);
+}
+
+export async function sendQuote(quoteId: string): Promise<B2bQuoteApiItem> {
+  const quote = unwrap(
+    await sendQuoteApiV1B2bQuotesQuoteIdSendPost({
+      client: getBffClient(),
+      path: { quote_id: quoteId },
+    }),
+  );
+  return mapQuote(quote);
 }
 
 export async function acceptQuote(quoteId: string) {
@@ -1965,7 +1997,7 @@ function mapCitations(values: Array<Record<string, unknown>> = []): AiProposalIt
 }
 
 export type AssistantChatResult = Pick<AssistantChatResponse,
-  "reply_text" | "should_abstain" | "degraded_to_l0"> & {
+  "reply_text" | "should_abstain" | "degraded_to_l0" | "reason"> & {
     citations: AiProposalItem["citations"];
     // `data` is the deterministic SQL tool payload (e.g. the channel analytics
     // rollup from `get_live_channel_sales_analytics`); absent when a turn is

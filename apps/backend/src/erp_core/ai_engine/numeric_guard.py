@@ -110,19 +110,31 @@ def _trusted_rows(result: ToolResult) -> list[dict[str, Any]]:
     data = result.data
     match result.tool_name:
         case "get_live_sku_pricing_and_stock":
-            return [
+            base_row = {
+                **data,
+                "price": data.get("applied_unit_price_usd"),
+                "unit_price": data.get("applied_unit_price_usd"),
+                "stock": data.get("available_qty"),
+                "qty": data.get("qty_requested"),
+                "quantity": data.get("qty_requested"),
+                "moq": data.get("applied_moq_tier"),
+                "currency": "USD",
+                "line_total": data.get("line_total_usd"),
+            }
+            tier_rows = [
                 {
-                    **data,
-                    "price": data.get("applied_unit_price_usd"),
-                    "unit_price": data.get("applied_unit_price_usd"),
-                    "stock": data.get("available_qty"),
-                    "qty": data.get("qty_requested"),
-                    "quantity": data.get("qty_requested"),
-                    "moq": data.get("applied_moq_tier"),
+                    "sku": data.get("sku"),
+                    "incoterm": data.get("incoterm"),
                     "currency": "USD",
-                    "line_total": data.get("line_total_usd"),
+                    "moq": tier.get("min_qty"),
+                    "applied_moq_tier": tier.get("min_qty"),
+                    "price": tier.get("unit_price_usd"),
+                    "unit_price": tier.get("unit_price_usd"),
                 }
+                for tier in data.get("b2b_moq_tiers") or []
+                if isinstance(tier, dict)
             ]
+            return [base_row, *tier_rows]
         case "get_live_order_tracking":
             return [
                 data,

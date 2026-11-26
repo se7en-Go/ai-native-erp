@@ -66,7 +66,7 @@ _ORDER = re.compile(r"\bORD-[A-Z0-9-]+\b", re.I)
 _SKU = re.compile(r"\b[A-Z]{2,}-[A-Z0-9]+(?:-[A-Z0-9]+)+\b", re.I)
 _LIVE = re.compile(
     r"\b(?:price|pricing|cost|discount|stock|inventory|moq|quote|tracking|shipment status)\b|"
-    r"售价|价格|库存|起订量|单号|物流状态",
+    r"售价|价格|阶梯价|库存|起订量|单号|物流状态",
     re.I,
 )
 _ARCHIVE = re.compile(r"\b(?:old|legacy|archived?|historical)\b.*\b(?:price|pricing)\b", re.I)
@@ -273,6 +273,89 @@ def _analytics_reply(
         for row in top
     )
     lines.append(f"Source source_tool_call_id: {tool_call_id}")
+    return "\n".join(lines)
+
+
+def _sku_pricing_claims(tool: ToolResult) -> list[dict[str, Any]]:
+    """Build guard claims bound to one SQL SKU pricing/stock tool call."""
+    data = tool.data
+    base_claim = {
+        "source_tool_call_id": tool.tool_call_id,
+        "sku": data.get("sku"),
+        "incoterm": data.get("incoterm"),
+        "qty_requested": data.get("qty_requested"),
+        "applied_unit_price_usd": data.get("applied_unit_price_usd"),
+        "retail_price_usd": data.get("retail_price_usd"),
+        "available_qty": data.get("available_qty"),
+        "on_hand_qty": data.get("on_hand_qty"),
+        "reserved_qty": data.get("reserved_qty"),
+        "lead_time_days": data.get("lead_time_days"),
+    }
+    claims: list[dict[str, Any]] = [
+        {key: value for key, value in base_claim.items() if value is not None}
+    ]
+    for tier in data.get("b2b_moq_tiers") or []:
+        if not isinstance(tier, dict):
+            continue
+        tier_claim = {
+            "source_tool_call_id": tool.tool_call_id,
+            "sku": data.get("sku"),
+            "incoterm": data.get("incoterm"),
+            "moq": tier.get("min_qty"),
+            "unit_price": tier.get("unit_price_usd"),
+        }
+        claims.append({key: value for key, value in tier_claim.items() if value is not None})
+    return claims
+
+
+def _sku_pricing_reply(query: str, tool: ToolResult) -> str:
+    """Compose a bilingual stock & MOQ tier summary citing only exact SQL tool values."""
+    data = tool.data
+    tiers = sorted(
+        (tier for tier in (data.get("b2b_moq_tiers") or []) if isinstance(tier, dict)),
+        key=lambda tier: int(tier.get("min_qty") or 0),
+    )
+    sku = data.get("sku")
+    incoterm = data.get("incoterm")
+    available = data.get("available_qty")
+    on_hand = data.get("on_hand_qty")
+    reserved = data.get("reserved_qty")
+    qty_req = data.get("qty_requested")
+    unit_price = data.get("applied_unit_price_usd")
+    retail_price = data.get("retail_price_usd")
+    lead_time = data.get("lead_time_days")
+    if _CJK.search(query):
+        lines = [
+            f"{sku}（{incoterm}）实时库存与价格：",
+            (
+                f"可售库存 {available} 件（在库 {on_hand} 件，预占 {reserved} 件），"
+                f"交期 {lead_time} 天。"
+            ),
+            f"{qty_req} 件试算单价 USD {unit_price}（零售参考价 USD {retail_price}）。",
+        ]
+        if tiers:
+            tier_text = "；".join(
+                f"MOQ {tier.get('min_qty')}+ 件：USD {tier.get('unit_price_usd')}/件"
+                for tier in tiers
+            )
+            lines.append(f"B2B 阶梯价：{tier_text}。")
+        lines.append(f"数据来源 source_tool_call_id: {tool.tool_call_id}")
+        return "\n".join(lines)
+    lines = [
+        f"{sku} ({incoterm}) live stock & pricing:",
+        f"Available stock: {available} units (on hand {on_hand}, reserved {reserved}); "
+        f"lead time {lead_time} days.",
+        (
+            f"Unit price for {qty_req} unit(s): USD {unit_price} "
+            f"(retail reference USD {retail_price})."
+        ),
+    ]
+    if tiers:
+        tier_text = "; ".join(
+            f"MOQ {tier.get('min_qty')}+: USD {tier.get('unit_price_usd')}/unit" for tier in tiers
+        )
+        lines.append(f"B2B MOQ tiers: {tier_text}.")
+    lines.append(f"Source source_tool_call_id: {tool.tool_call_id}")
     return "\n".join(lines)
 
 
@@ -698,26 +781,31 @@ class PolicyRuntime:
                     qty=qty,
                 )
                 self._trace(result, tool)
-                d = tool.data
-                context = (
-                    (
+                if not tool.ok:
+                    return await abstain(tool.error_code or "sku_not_found")
+                if input_payload.get("staff_copilot_lookup") is True:
+                    verified = self.numeric_guard.verify("", [tool], _sku_pricing_claims(tool))
+                    result.numeric_guard_passed = verified.passed
+                    reply = _sku_pricing_reply(query, tool)
+                    result.tool_calls[-1]["data"] = tool.data
+                else:
+                    d = tool.data
+                    context = (
                         f"For {d['qty_requested']} units of {d['sku']} ({d['incoterm']}), "
                         f"the live unit price is ${d['applied_unit_price_usd']} and "
-                        "we currently "
-                        f"have {d['available_qty']} units in stock."
+                        f"we currently have {d['available_qty']} units in stock."
                     )
-                    if tool.ok
-                    else ""
-                )
-                generation = await self._generate(
-                    session, tenant_id, capability, query, context, "pricing_stock", result
-                )
-                if generation is None:
-                    return await abstain(result.reason or "model_unavailable")
-                reply = generation.text.strip()
-                result.numeric_guard_passed = self.numeric_guard.verify(
-                    reply, [tool]
-                ).allow_l2_auto_send
+                    generation = await self._generate(
+                        session, tenant_id, capability, query, context, "pricing_stock", result
+                    )
+                    if generation is None:
+                        return await abstain(result.reason or "model_unavailable")
+                    reply = generation.text.strip()
+                    result.numeric_guard_passed = self.numeric_guard.verify(
+                        reply, [tool]
+                    ).allow_l2_auto_send
+                    result.model_used = generation.model_id
+                    result.credits_consumed = generation.credits_consumed
             else:
                 rag = await self.rag_service.search(
                     session, tenant_id, query, strict_mode=strict_rag
@@ -747,8 +835,8 @@ class PolicyRuntime:
                 if strict_rag and not verify_strict_citations(reply, rag.hits).is_valid:
                     result.numeric_guard_passed = False
                 score = Decimal(str(rag.top_score))
-            result.model_used = generation.model_id
-            result.credits_consumed = generation.credits_consumed
+                result.model_used = generation.model_id
+                result.credits_consumed = generation.credits_consumed
             if _AFTER_SALES.search(query):
                 kind = ProposalType.REFUND_OR_RESHIP
 

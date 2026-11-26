@@ -39,6 +39,7 @@ import {
 import { formatMoney, type Incoterm } from "@/lib/contracts";
 import { fetchCatalogVariants, shouldUseMockApi } from "@/lib/data-source";
 import { useI18n } from "@/lib/i18n";
+import type { UnverifiedPrechatLead } from "@/components/inbox/conversation-list";
 
 export type { CustomerContextPayload };
 
@@ -79,6 +80,7 @@ export function buildSkuReplySnippet(
 export function ContextDrawer({
   customerId,
   conversationId = null,
+  unverifiedPrechat = null,
   onInsertReplyText,
 }: {
   customerId: string;
@@ -87,6 +89,8 @@ export function ContextDrawer({
    * 旧调用方不传也能正常渲染，只是提炼按钮置灰。
    */
   conversationId?: string | null;
+  /** WebChat 会话留资快照（未经过 HMAC 验真，只展示给人工判断，不并入身份图谱）。 */
+  unverifiedPrechat?: UnverifiedPrechatLead | null;
   /** 把报价/库存片段直接插进 Inbox 回复框（可选，缺省时按钮不显示）。 */
   onInsertReplyText?: (text: string) => void;
 }) {
@@ -249,6 +253,35 @@ export function ContextDrawer({
                 ))}
               </div>
             </div>
+
+            {unverifiedPrechat && (unverifiedPrechat.email || unverifiedPrechat.whatsapp_phone) && (
+              <div
+                data-testid="unverified-prechat-card"
+                className="mt-2.5 rounded-xl border border-amber-200 bg-amber-50/80 p-2 text-[11px] text-amber-950"
+              >
+                <div className="flex items-center justify-between gap-1 font-semibold text-amber-900">
+                  <span>{bi("访客留资（未验真）", "Pre-chat lead (unverified)")}</span>
+                  {unverifiedPrechat.marketing_opt_in && (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                      {bi("已勾选订阅", "Marketing opt-in")}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 space-y-0.5 text-amber-900">
+                  {unverifiedPrechat.email && (
+                    <div className="truncate">
+                      <span className="font-medium">Email:</span> {unverifiedPrechat.email}
+                    </div>
+                  )}
+                  {unverifiedPrechat.whatsapp_phone && (
+                    <div className="truncate">
+                      <span className="font-medium">WhatsApp:</span>{" "}
+                      {unverifiedPrechat.whatsapp_phone}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-0.5 rounded-xl border border-slate-200/80 bg-slate-100/80 p-1 text-[11px] font-semibold dark:border-gray-700 dark:bg-gray-800/80">

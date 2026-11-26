@@ -421,3 +421,36 @@ async def test_options_preflight_never_grants_credentials(widget_env: WidgetEnv)
     )
     assert trusted.status_code == 204
     assert "access-control-allow-credentials" not in {key.lower() for key in trusted.headers}
+
+
+async def test_create_app_enforces_widget_per_account_origin_outside_global_cors(
+    widget_env: WidgetEnv,
+) -> None:
+    from erp_core.api_main import create_app
+
+    full_app = create_app()
+    full_app.state.session_factory = widget_env.session_factory
+    async with AsyncClient(
+        transport=ASGITransport(app=full_app), base_url="http://test"
+    ) as client:
+        preflight = await client.options(
+            "/api/v1/widget/session",
+            headers={"Origin": ALLOWED_ORIGIN, "Access-Control-Request-Method": "POST"},
+        )
+        assert preflight.status_code == 204
+        assert preflight.headers.get("access-control-allow-origin") == ALLOWED_ORIGIN
+
+        allowed_resp = await client.post(
+            "/api/v1/widget/session",
+            json={"site_key": widget_env.site_key},
+            headers={"Origin": ALLOWED_ORIGIN},
+        )
+        assert allowed_resp.status_code == 200
+        assert allowed_resp.headers.get("access-control-allow-origin") == ALLOWED_ORIGIN
+
+        blocked_resp = await client.post(
+            "/api/v1/widget/session",
+            json={"site_key": widget_env.site_key},
+            headers={"Origin": UNTRUSTED_ORIGIN},
+        )
+        assert blocked_resp.status_code == 403

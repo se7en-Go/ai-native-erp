@@ -642,6 +642,7 @@ export type ConversationRead = {
     tags?: Array<string>;
     tenant_id: string;
     unread_count: number;
+    unverified_prechat?: UnverifiedPrechatLead | null;
     updated_at: string;
 };
 
@@ -3294,6 +3295,12 @@ export type TranslateResponse = {
     model_used: string;
     target_lang: string;
     translated_text: string;
+};
+
+export type UnverifiedPrechatLead = {
+    email?: string | null;
+    marketing_opt_in?: boolean;
+    whatsapp_phone?: string | null;
 };
 
 export type UpdateChannelOwnershipRequest = {

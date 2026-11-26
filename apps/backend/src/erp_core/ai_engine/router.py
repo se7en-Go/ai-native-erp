@@ -380,7 +380,10 @@ async def assistant_chat(
     _check_capability(principal.role, body.capability)
     payload = {key: val for key, val in body.context.items() if key in _CONTEXT_FIELDS}
     payload.update(
-        message=body.message, conversation_id=body.conversation_id, channel_type=body.channel_type
+        message=body.message,
+        conversation_id=body.conversation_id,
+        channel_type=body.channel_type,
+        staff_copilot_lookup=True,
     )
     try:
         result = await runtime.run_capability(

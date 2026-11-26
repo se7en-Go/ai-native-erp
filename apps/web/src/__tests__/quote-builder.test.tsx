@@ -282,4 +282,144 @@ describe("Task 5.5 Catalog COGS Masking, SKU Mapping & B2B PI Quote Builder", ()
       expect(screen.getByText(/ORD-B2B-99/)).toBeInTheDocument();
     });
   });
+
+  it("supports manual quote creation, draft -> Mark Sent -> Mark Accepted lifecycle, and surfaces errors", async () => {
+    const futureIso = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
+    const quotesList = [
+      {
+        id: "q-draft",
+        opportunity_id: "opp-1",
+        quote_no: "PI-202611-0099",
+        version: 1,
+        is_proforma_invoice: true,
+        incoterm: "FOB",
+        port_of_loading: "Xiamen, China",
+        port_of_destination: "Hamburg",
+        payment_terms: "30% T/T deposit, 70% before shipment",
+        base_currency: "CNY",
+        quote_currency: "USD",
+        fx_rate_snapshot: "7.120000",
+        fx_locked_until: futureIso,
+        freight_fee: "0.00",
+        insurance_fee: "0.00",
+        customs_duty_estimate: "0.00",
+        total_amount: "7100.00",
+        pdf_r2_key: null,
+        status: "draft" as "draft" | "sent" | "accepted",
+        items: [
+          {
+            id: "qi-99",
+            variant_id: "var-1",
+            sku_snapshot: "LED-COB-24V-5M",
+            quantity: 500,
+            moq_tier_applied: 500,
+            unit_price_quote_ccy: "14.2000",
+            line_total_quote_ccy: "7100.00",
+          },
+        ],
+      },
+    ];
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const { url, method } = normalizeFetchInput(input, init);
+      if (url.includes("/ai/proposals")) {
+        return Response.json({ items: [], total: 0, limit: 1, offset: 0, has_more: false });
+      }
+      if (url.includes("/catalog/variants")) {
+        return Response.json({ items: [SAMPLE_VARIANT], total: 1, limit: 20, offset: 0, has_more: false });
+      }
+      if (url.includes("/b2b/opportunities")) {
+        return Response.json({
+          items: [
+            {
+              id: "opp-1",
+              customer_id: "cust-1",
+              title: "Berlin Lighting 500pcs COB Strip",
+              company_name: "Berlin Lighting GmbH",
+              stage: "quoting",
+              expected_amount: "7100.00",
+              currency: "USD",
+            },
+          ],
+          total: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        });
+      }
+      if (url.endsWith("/b2b/quotes") && method === "POST") {
+        const created = {
+          ...quotesList[0],
+          id: "q-created",
+          quote_no: "PI-202611-0100",
+          status: "draft" as "draft" | "sent" | "accepted",
+        };
+        quotesList.unshift(created);
+        return new Response(JSON.stringify(created), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/b2b/quotes/") && url.endsWith("/send") && method === "POST") {
+        const target = quotesList.find((q) => url.includes(q.id)) ?? quotesList[0];
+        target.status = "sent";
+        return Response.json(target);
+      }
+      if (url.includes("/b2b/quotes/") && url.endsWith("/accept") && method === "POST") {
+        return new Response(
+          JSON.stringify({ detail: "Quote must be 'sent' before acceptance" }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/b2b/quotes")) {
+        return Response.json({
+          items: quotesList,
+          total: quotesList.length,
+          limit: 20,
+          offset: 0,
+          has_more: false,
+        });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    wrapAuth(<B2bQuotesPage />, "manager");
+
+    // Draft quote renders Mark Sent (NOT Mark Accepted)
+    const sendBtn = await screen.findByTestId("send-quote-btn-q-draft");
+    expect(screen.queryByRole("button", { name: "Mark Accepted" })).toBeNull();
+
+    // Create a new quote manually from the MOQ calculator
+    fireEvent.change(screen.getByTestId("create-quote-destination-input"), {
+      target: { value: "Rotterdam" },
+    });
+    fireEvent.click(screen.getByTestId("create-b2b-quote-btn"));
+
+    await waitFor(async () => {
+      const createCall = fetchMock.mock.calls.find(
+        (c) => fetchCallUrl(c).endsWith("/b2b/quotes") && fetchCallMethod(c) === "POST",
+      );
+      expect(createCall).toBeDefined();
+      expect(JSON.parse(await fetchCallBody(createCall!))).toMatchObject({
+        opportunity_id: "opp-1",
+        port_of_destination: "Rotterdam",
+        items: [{ variant_id: "var-1", quantity: 500 }],
+      });
+    });
+
+    // Newly created draft quote can click Mark Sent -> transitions to sent -> Mark Accepted appears
+    const createdSendBtn = await screen.findByTestId("send-quote-btn-q-created");
+    fireEvent.click(createdSendBtn);
+
+    const acceptBtn = await screen.findByTestId("accept-quote-btn-q-created");
+    fireEvent.click(acceptBtn);
+
+    // Failed /accept 409 surfaces unified role="alert" banner instead of failing silently
+    const alert = await screen.findByTestId("quote-mutation-error");
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toHaveTextContent("Quote must be 'sent' before acceptance");
+
+    void sendBtn;
+  });
 });

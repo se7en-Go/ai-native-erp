@@ -11,19 +11,24 @@ import {
   FileDown,
   Layers3,
   Mail,
+  PlusCircle,
   RefreshCw,
   ScrollText,
+  Send,
 } from "lucide-react";
 import {
   acceptQuote,
   convertQuoteToOrder,
+  createB2bQuote,
   generateQuotePdf,
   repriceQuoteVersion,
+  sendQuote,
+  type B2bOpportunityApiItem,
 } from "@/lib/api-client/live-client";
 import { quotePdfDownloadUrl } from "@/lib/data-source";
 import { SendPiEmailModal } from "@/components/b2b/send-pi-email-modal";
 import { useI18n } from "@/lib/i18n";
-import { formatMoney, type Incoterm, type QuoteStatus } from "@/lib/contracts";
+import { BffApiError, formatMoney, type Incoterm, type QuoteStatus } from "@/lib/contracts";
 import { Badge, Card, CardHeader, EmptyState } from "@/components/ui/page";
 import type { CatalogVariantItem, MoqTier } from "@/components/catalog/sku-mapping-drawer";
 
@@ -101,14 +106,27 @@ const QUOTE_STATUS_LABEL: Record<QuoteStatus, { zh: string; en: string }> = {
   converted: { zh: "已转订单", en: "Converted" },
 };
 
+function formatMutationError(error: unknown): string | null {
+  if (!error) return null;
+  if (error instanceof BffApiError) return error.detail;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 export function QuotePiBuilder({
   quotes,
   variants,
+  opportunities = [],
+  defaultCustomerId = null,
+  defaultRecipientEmail = null,
   initialQuoteId = null,
   autoOpenSendEmail = false,
 }: {
   quotes: QuoteRecord[];
   variants: CatalogVariantItem[];
+  opportunities?: B2bOpportunityApiItem[];
+  defaultCustomerId?: string | null;
+  defaultRecipientEmail?: string | null;
   /** Inbox 抽屉深链 ?quoteId=... 时直接选中该版本。 */
   initialQuoteId?: string | null;
   /** Inbox 抽屉的「发 PI 邮件」深链 ?send_pi_email=1 时直接打开发送抽屉。 */
@@ -125,6 +143,12 @@ export function QuotePiBuilder({
   const [previewVariantId, setPreviewVariantId] = useState<string>(variants[0]?.id ?? "");
   const [previewQty, setPreviewQty] = useState<number>(500);
   const [previewIncoterm, setPreviewIncoterm] = useState<Incoterm>("FOB");
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string>("");
+  const [destinationPort, setDestinationPort] = useState<string>("");
+  const [paymentTerms, setPaymentTerms] = useState<string>(
+    "30% T/T deposit, 70% before shipment",
+  );
+  const [createdBanner, setCreatedBanner] = useState<string | null>(null);
   const [convertedBanner, setConvertedBanner] = useState<string | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [emailQuoteId, setEmailQuoteId] = useState<string | null>(null);
@@ -144,6 +168,25 @@ export function QuotePiBuilder({
   const activeVariant = variants.find((v) => v.id === previewVariantId) ?? variants[0] ?? null;
   const emailModalQuote = quotes.find((q) => q.id === emailQuoteId) ?? null;
 
+  const defaultOpportunityId = useMemo(() => {
+    if (opportunities.length === 0) return "";
+    if (defaultCustomerId) {
+      const customerMatch = opportunities.find(
+        (o) => o.customer_id === defaultCustomerId && o.stage !== "closed_lost",
+      );
+      if (customerMatch) return customerMatch.id;
+    }
+    const openMatch = opportunities.find(
+      (o) => o.stage !== "closed_won" && o.stage !== "closed_lost",
+    );
+    return (openMatch ?? opportunities[0]).id;
+  }, [defaultCustomerId, opportunities]);
+
+  const activeOpportunityId =
+    selectedOpportunityId && opportunities.some((o) => o.id === selectedOpportunityId)
+      ? selectedOpportunityId
+      : defaultOpportunityId;
+
   const moqPreview = useMemo(() => {
     if (!activeVariant) return null;
     return resolveMoqTierPrice(
@@ -161,9 +204,51 @@ export function QuotePiBuilder({
     },
   });
 
+  const sendMutation = useMutation({
+    mutationFn: (quoteId: string) => sendQuote(quoteId),
+    onSuccess: () => {
+      setCreatedBanner(null);
+      void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => {
+      if (!activeVariant || !activeOpportunityId) {
+        throw new Error(bi("请先选择商机和商品 SKU。", "Select an opportunity and SKU first."));
+      }
+      return createB2bQuote({
+        opportunity_id: activeOpportunityId,
+        is_proforma_invoice: true,
+        incoterm: previewIncoterm,
+        port_of_loading: "Xiamen, China",
+        port_of_destination: destinationPort.trim() || null,
+        payment_terms: paymentTerms.trim() || "30% T/T deposit, 70% before shipment",
+        base_currency: activeVariant.base_currency || "CNY",
+        quote_currency: "USD",
+        fx_rate_snapshot: "7.120000",
+        fx_locked_until: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
+        items: [{ variant_id: activeVariant.id, quantity: previewQty }],
+      });
+    },
+    onSuccess: (created) => {
+      setSelectedQuoteId(created.id);
+      setPdfPreviewUrl(null);
+      setConvertedBanner(null);
+      setCreatedBanner(
+        bi(
+          `已创建形式发票 ${created.quote_no}（草稿），请核对后点击「标记已发送」。`,
+          `Created draft PI ${created.quote_no}. Review it and click Mark Sent.`,
+        ),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
+    },
+  });
+
   const acceptMutation = useMutation({
     mutationFn: (quoteId: string) => acceptQuote(quoteId),
     onSuccess: () => {
+      setCreatedBanner(null);
       void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
     },
   });
@@ -183,12 +268,21 @@ export function QuotePiBuilder({
   const convertMutation = useMutation({
     mutationFn: (quoteId: string) => convertQuoteToOrder(quoteId),
     onSuccess: (res) => {
+      setCreatedBanner(null);
       // E2E 断言该成功提示包含 "Converted 1-Click to Order"，保持英文原文。
       setConvertedBanner(`Converted 1-Click to Order ${res.order.order_no} (${res.order.id})`);
       void queryClient.invalidateQueries({ queryKey: ["b2b", "quotes"] });
       void queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
   });
+
+  const activeMutationError =
+    formatMutationError(sendMutation.error) ??
+    formatMutationError(acceptMutation.error) ??
+    formatMutationError(convertMutation.error) ??
+    formatMutationError(pdfMutation.error) ??
+    formatMutationError(renewFxMutation.error) ??
+    formatMutationError(createMutation.error);
 
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
@@ -281,6 +375,85 @@ export function QuotePiBuilder({
             </div>
           )}
 
+          <div className="space-y-2.5 rounded-2xl border border-gray-200 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-800/40">
+            <div className="text-[12px] font-semibold text-gray-800 dark:text-gray-200">
+              {bi("按以上试算新建正式报价单 / PI", "Create formal quote / PI from calculator")}
+            </div>
+            {opportunities.length > 0 ? (
+              <>
+                <div>
+                  <label className="erp-label" htmlFor="create-quote-opportunity-select">
+                    {bi("关联商机", "Opportunity")}
+                  </label>
+                  <select
+                    id="create-quote-opportunity-select"
+                    data-testid="create-quote-opportunity-select"
+                    value={activeOpportunityId}
+                    onChange={(e) => setSelectedOpportunityId(e.target.value)}
+                    className="erp-input mt-1 rounded-xl"
+                  >
+                    {opportunities.map((opp) => (
+                      <option key={opp.id} value={opp.id}>
+                        {opp.title}
+                        {opp.company_name ? ` (${opp.company_name})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className="erp-label" htmlFor="create-quote-destination-input">
+                      {bi("目的港（可选）", "Destination port (optional)")}
+                    </label>
+                    <input
+                      id="create-quote-destination-input"
+                      data-testid="create-quote-destination-input"
+                      type="text"
+                      value={destinationPort}
+                      onChange={(e) => setDestinationPort(e.target.value)}
+                      placeholder={bi("如：Hamburg, Germany", "e.g. Hamburg, Germany")}
+                      className="erp-input mt-1 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="erp-label" htmlFor="create-quote-payment-terms-input">
+                      {bi("付款条件", "Payment terms")}
+                    </label>
+                    <input
+                      id="create-quote-payment-terms-input"
+                      data-testid="create-quote-payment-terms-input"
+                      type="text"
+                      value={paymentTerms}
+                      onChange={(e) => setPaymentTerms(e.target.value)}
+                      className="erp-input mt-1 rounded-xl"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="create-b2b-quote-btn"
+                  disabled={!activeVariant || !activeOpportunityId || createMutation.isPending}
+                  onClick={() => createMutation.mutate()}
+                  className="erp-btn erp-btn-primary w-full justify-center rounded-xl disabled:opacity-50"
+                >
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  <span>
+                    {createMutation.isPending
+                      ? bi("生成中…", "Creating…")
+                      : bi("新建报价 / PI", "New Quote / PI")}
+                  </span>
+                </button>
+              </>
+            ) : (
+              <p className="text-[11.5px] text-gray-500 dark:text-gray-400">
+                {bi(
+                  "暂无关联商机，请先在 CRM 创建商机后再新建报价单。",
+                  "No opportunities found yet — create a B2B opportunity before issuing a quote.",
+                )}
+              </p>
+            )}
+          </div>
+
           <div className="space-y-1.5 rounded-xl border border-gray-200/70 bg-gray-50 p-3 text-[12px] leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-400">
             <p>{bi("阶梯价规则：数量越大单价越低，报价单落库时快照保存。", "Tier pricing: larger quantities get lower unit prices, snapshotted into the quote.")}</p>
             <p>{bi("FOB/CIF 需确认装运港与目的港，DDP 需另计目的国关税。", "FOB/CIF require POL/POD; DDP must include destination duty.")}</p>
@@ -338,7 +511,16 @@ export function QuotePiBuilder({
             <select
               aria-label={bi("选择报价单版本", "Select quote version")}
               value={activeQuote?.id ?? ""}
-              onChange={(e) => setSelectedQuoteId(e.target.value)}
+              onChange={(e) => {
+                setSelectedQuoteId(e.target.value);
+                setPdfPreviewUrl(null);
+                setCreatedBanner(null);
+                sendMutation.reset();
+                acceptMutation.reset();
+                convertMutation.reset();
+                pdfMutation.reset();
+                renewFxMutation.reset();
+              }}
               className="erp-input w-auto rounded-xl py-1 text-[12px]"
             >
               {quotes.map((q) => (
@@ -350,6 +532,16 @@ export function QuotePiBuilder({
           }
         />
         <div className="space-y-3 p-4 text-[13px]">
+          {createdBanner && (
+            <div
+              data-testid="quote-created-banner"
+              className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-[12px] font-semibold text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span>{createdBanner}</span>
+            </div>
+          )}
+
           {convertedBanner && (
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[12px] font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -357,12 +549,13 @@ export function QuotePiBuilder({
             </div>
           )}
 
-          {convertMutation.isError && (
+          {activeMutationError && (
             <p
               role="alert"
+              data-testid="quote-mutation-error"
               className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[12px] text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
             >
-              {convertMutation.error.message}
+              {activeMutationError}
             </p>
           )}
 
@@ -499,11 +692,26 @@ export function QuotePiBuilder({
                         </button>
                       )}
 
-                      {activeQuote.status !== "accepted" && activeQuote.status !== "converted" && (
+                      {(activeQuote.status === "draft" || activeQuote.status === "pending_approval") && (
                         <button
                           type="button"
+                          data-testid={`send-quote-btn-${activeQuote.id}`}
+                          disabled={sendMutation.isPending}
+                          onClick={() => sendMutation.mutate(activeQuote.id)}
+                          className="erp-btn rounded-xl border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          <span>{bi("标记已发送", "Mark Sent")}</span>
+                        </button>
+                      )}
+
+                      {activeQuote.status === "sent" && (
+                        <button
+                          type="button"
+                          data-testid={`accept-quote-btn-${activeQuote.id}`}
+                          disabled={acceptMutation.isPending}
                           onClick={() => acceptMutation.mutate(activeQuote.id)}
-                          className="erp-btn rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                          className="erp-btn rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           <span>Mark Accepted</span>
@@ -534,6 +742,7 @@ export function QuotePiBuilder({
       {emailModalQuote && (
         <SendPiEmailModal
           quote={emailModalQuote}
+          defaultRecipientEmail={defaultRecipientEmail}
           onClose={() => setEmailQuoteId(null)}
         />
       )}

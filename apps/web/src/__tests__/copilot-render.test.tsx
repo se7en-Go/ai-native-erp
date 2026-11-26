@@ -372,4 +372,113 @@ describe("Task 5.3 ContextDrawer & FloatingCopilot", () => {
       });
     });
   }
+
+  it("sends cs_support for global copilot mode and renders accurate non-RAG abstention reason with empty reply fallback", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const { url, method } = normalizeFetchInput(input, init);
+      if (url.includes("/ai/proposals")) {
+        return Response.json({ items: [], total: 0, limit: 1, offset: 0, has_more: false });
+      }
+      if (url.includes("/billing/wallet")) {
+        return Response.json({
+          plan_tier: "Growth",
+          included_credits_remaining: 4000,
+          topup_credits_balance: 0,
+          auto_downgrade_to_l0: false,
+        });
+      }
+      if (url.includes("/ai/capabilities")) {
+        return Response.json({ capabilities: [] });
+      }
+      if (url.includes("/ai/assistant/chat") && method === "POST") {
+        return Response.json({
+          reply_text: "",
+          citations: [],
+          tool_calls: [{ tool_call_id: "tc-99", tool_name: "get_live_sku_pricing_and_stock" }],
+          should_abstain: true,
+          reason: "grounding_verification_failed",
+        });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWrap(<FloatingCopilot />, "owner");
+    fireEvent.click(await screen.findByTestId("copilot-fab-btn"));
+    await waitFor(() => expect(screen.getByTestId("copilot-drawer")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByTestId("copilot-query-input"), {
+      target: { value: "Check LED-COB-24V-5M price" },
+    });
+    fireEvent.click(screen.getByTestId("copilot-query-submit"));
+
+    await waitFor(async () => {
+      const chatCall = fetchMock.mock.calls.find((c) =>
+        fetchCallUrl(c).includes("/ai/assistant/chat"),
+      );
+      expect(chatCall).toBeDefined();
+      expect(JSON.parse(await fetchCallBody(chatCall!))).toMatchObject({
+        capability: "cs_support",
+        strict_rag: false,
+        message: "Check LED-COB-24V-5M price",
+      });
+    });
+
+    const banner = await screen.findByTestId("copilot-abstain-banner");
+    expect(banner).toHaveTextContent("SQL grounding check failed");
+    expect(banner).not.toHaveTextContent("Strict RAG < 0.62");
+    expect(screen.getByTestId("copilot-abstain-fallback")).toBeInTheDocument();
+  });
+
+  it("renders unverified pre-chat lead details clearly in ContextDrawer without merging identities", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const { url } = normalizeFetchInput(input);
+        if (url.includes("/customers/cust-target")) {
+          return Response.json({
+            id: "cust-target",
+            tenant_id: "t1",
+            display_name: "Visitor 9f1e2d",
+            customer_type: "b2c_consumer",
+            ltv_usd: "0.00",
+            lifecycle_stage: "lead",
+            created_at: "2026-11-26T00:00:00Z",
+            identities: [
+              {
+                id: "id-web-1",
+                identity_type: "web_visitor_id",
+                identity_value: "visitor-uuid-1",
+                confidence_level: "deterministic",
+              },
+            ],
+            merge_proposals: [],
+          });
+        }
+        if (url.includes("/orders") || url.includes("/b2b/opportunities")) {
+          return Response.json({ items: [], total: 0, limit: 5, offset: 0, has_more: false });
+        }
+        return Response.json({});
+      }),
+    );
+
+    renderWrap(
+      <ContextDrawer
+        customerId="cust-target"
+        unverifiedPrechat={{
+          email: "buyer.b2b.audit@nordiclight.de",
+          whatsapp_phone: "+4915123456789",
+          marketing_opt_in: true,
+        }}
+      />,
+      "owner",
+    );
+
+    const card = await screen.findByTestId("unverified-prechat-card");
+    expect(card).toHaveTextContent("Pre-chat lead (unverified)");
+    expect(card).toHaveTextContent("buyer.b2b.audit@nordiclight.de");
+    expect(card).toHaveTextContent("+4915123456789");
+    expect(card).toHaveTextContent("Marketing opt-in");
+    expect(screen.getByTestId("identity-badge-web_visitor_id")).toBeInTheDocument();
+  });
 });

@@ -8,6 +8,12 @@ import { useI18n } from "@/lib/i18n";
 
 export type ConversationFilterTab = "all" | "unread" | "pending_human" | "sla_urgent";
 
+export interface UnverifiedPrechatLead {
+  email?: string | null;
+  whatsapp_phone?: string | null;
+  marketing_opt_in?: boolean;
+}
+
 export interface ConversationSummary {
   id: string;
   customer_id: string;
@@ -32,6 +38,8 @@ export interface ConversationSummary {
   /** Pack B 增量字段：会话置顶与服务端标签集合（缺省即未置顶 / 无标签）。 */
   is_pinned?: boolean;
   tags?: string[];
+  /** WebChat 留资线索（未经过 HMAC 验真，不写入 customer_identities）。 */
+  unverified_prechat?: UnverifiedPrechatLead | null;
 }
 
 /** 「按绑定账号筛选」下拉里的一个渠道账号。 */
