@@ -23,7 +23,7 @@ Fail-closed tenancy: each table gets PG17 `ENABLE ROW LEVEL SECURITY` +
 plus `GRANT SELECT, INSERT, UPDATE, DELETE ... TO app_runtime`.
 
 Revision ID: 0022_finance_dual_settlement
-Revises: 0019_analytics_im_sourcing
+Revises: 0021_b2b_buyer_portal
 Create Date: 2026-11-26
 """
 
@@ -36,7 +36,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0022_finance_dual_settlement"
-down_revision: str | None = "0019_analytics_im_sourcing"
+down_revision: str | None = "0021_b2b_buyer_portal"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -246,7 +246,7 @@ def test_migration_revision_chain_is_locked() -> None:
     script = ScriptDirectory(str(Path(__file__).parents[1] / "alembic"))
     revision = script.get_revision("0022_finance_dual_settlement")
     assert revision is not None
-    assert revision.down_revision == "0019_analytics_im_sourcing"
+    assert revision.down_revision == "0021_b2b_buyer_portal"
 
 
 async def test_pg17_force_rls_policies_and_runtime_grants(
