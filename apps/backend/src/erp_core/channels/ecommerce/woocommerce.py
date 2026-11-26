@@ -124,8 +124,13 @@ def normalize_store_url(store_url: str, *, allow_local: bool = False) -> str:
             literal = None
         if literal is not None and not _is_public_ip(literal):
             raise _unsafe_store(f"IP literal '{host}' is not a public internet address.")
-    # Ports survive (``netloc`` includes them); the scheme is always normalised to https.
-    return f"{_DEFAULT_STORE_SCHEME}://{parsed.netloc}"
+    # Ports survive (``netloc`` includes them); keep explicit http:// only when allow_local=True.
+    scheme = (
+        parsed.scheme.lower()
+        if allow_local and "://" in (store_url or "")
+        else _DEFAULT_STORE_SCHEME
+    )
+    return f"{scheme}://{parsed.netloc}"
 
 
 async def validate_store_url(
@@ -365,8 +370,8 @@ class WooCommerceAdapter(CommercePlatformAdapter):
             fulfillment_status=fulfillment_status,
             payment_status=payment_status,
             customer=NormalizedCustomer(
-                email=billing.get("email"),
-                phone_e164=billing.get("phone"),
+                email=(billing.get("email") or "").strip() or None,
+                phone_e164=(billing.get("phone") or "").strip() or None,
                 external_customer_id=str(order.get("customer_id") or "") or None,
                 external_identity_type=IdentityType.EMAIL,
                 display_name=name or billing.get("email") or "WooCommerce Buyer",
@@ -405,7 +410,7 @@ class WooCommerceAdapter(CommercePlatformAdapter):
             "GET",
             "/orders",
             params={
-                "after": since.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
+                "modified_after": since.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
                 "per_page": 50,
                 "page": page,
                 "orderby": "modified",
@@ -470,7 +475,9 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         note = f"Shipped via {carrier_company}. Tracking number: {tracking_number}"
         if tracking_url:
             note = f"{note} ({tracking_url})"
-        await self.post_order_note(external_order_id, note, customer_note=notify_customer)
+        note_res = await self.post_order_note(
+            external_order_id, note, customer_note=notify_customer
+        )
         body: dict[str, Any] = {
             "tracking_number": tracking_number,
             "carrier": carrier_company,
@@ -478,11 +485,50 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         }
         if tracking_url:
             body["tracking_url"] = tracking_url
-        result = await self._request(
-            "POST",
-            f"/orders/{external_order_id}/fulfillments",
-            json_body=body,
-        )
+        try:
+            result = await self._request(
+                "POST",
+                f"/orders/{external_order_id}/fulfillments",
+                json_body=body,
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in {404, 405}:
+                raise
+            meta_data: list[dict[str, Any]] = [
+                {"key": "_tracking_number", "value": tracking_number},
+                {"key": "_tracking_provider", "value": carrier_company},
+                {
+                    "key": "_wc_shipment_tracking_items",
+                    "value": [
+                        {
+                            "tracking_provider": carrier_company,
+                            "tracking_number": tracking_number,
+                            "tracking_link": tracking_url or "",
+                            "date_shipped": datetime.now(UTC).strftime("%Y-%m-%d"),
+                        }
+                    ],
+                },
+            ]
+            if tracking_url:
+                meta_data.append({"key": "_tracking_url", "value": tracking_url})
+            updated = await self._request(
+                "PUT",
+                f"/orders/{external_order_id}",
+                json_body={"status": "completed", "meta_data": meta_data},
+            )
+            note_id = str(note_res.get("id") or "").strip()
+            order_id_str = str(
+                (updated if isinstance(updated, Mapping) else {}).get("id") or external_order_id
+            )
+            fallback_fid = f"wc-{order_id_str}-{note_id}" if note_id else f"wc-{order_id_str}"
+            return {
+                "fulfillment_id": fallback_fid,
+                "status": str(
+                    (updated if isinstance(updated, Mapping) else {}).get("status") or "completed"
+                ),
+                "order_note_id": note_id or None,
+                "order": dict(updated) if isinstance(updated, Mapping) else {},
+            }
         data: dict[str, Any] = dict(result) if isinstance(result, Mapping) else {}
         fid = data.get("fulfillment_id") or data.get("id")
         if not fid and isinstance(data.get("fulfillment"), Mapping):

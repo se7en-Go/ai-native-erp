@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from typing import Annotated, Any
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -173,15 +175,33 @@ def _header(headers: dict[str, str], name: str) -> str:
     return headers.get(lowered) or headers.get(name) or ""
 
 
+def _normalize_route_candidates(domain: str) -> list[str]:
+    """Return unique routing lookup keys for a raw host, URL, or external account ID."""
+    candidates: list[str] = []
+    cleaned = domain.strip()
+    raw_values = [cleaned]
+    if "://" in cleaned or "/" in cleaned:
+        parsed = urlparse(cleaned if "://" in cleaned else f"https://{cleaned}")
+        if parsed.netloc:
+            raw_values.append(parsed.netloc)
+        if parsed.hostname and (
+            parsed.port is None
+            or (parsed.scheme.lower() == "http" and parsed.port == 80)
+            or (parsed.scheme.lower() == "https" and parsed.port == 443)
+        ):
+            raw_values.append(parsed.hostname)
+    for val in raw_values:
+        for candidate in (val, val.lower()):
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
+    return candidates
+
+
 async def _resolve_route(
     factory: async_sessionmaker[AsyncSession], platform: str, domain: str
 ) -> tuple[UUID, UUID] | None:
-    """Look up a routing entry trying exact external ID first, then lowercase."""
-    candidates: list[str] = []
-    cleaned = domain.strip()
-    for candidate in (cleaned, cleaned.lower()):
-        if candidate and candidate not in candidates:
-            candidates.append(candidate)
+    """Look up a routing entry trying normalized host/URL variants in order."""
+    candidates = _normalize_route_candidates(domain)
     if not candidates:
         return None
     async with factory() as lookup:
@@ -483,8 +503,23 @@ async def woocommerce_auth_callback(
     return ConnectResponse(channel_account_id=account_id, external_account_id=domain)
 
 
+_WC_WEBHOOK_PING_RE = re.compile(rb"^webhook_id=\d+$")
+
+
 @router.post("/webhooks/woocommerce")
 async def receive_woocommerce_webhook(request: Request) -> dict[str, int | str | bool]:
+    raw = await request.body()
+    headers = {key.lower(): value for key, value in request.headers.items()}
+    sig = _header(headers, "X-WC-Webhook-Signature").strip()
+    topic = _header(headers, "X-WC-Webhook-Topic").strip()
+    content_type = _header(headers, "Content-Type").strip().lower()
+    if (
+        not sig
+        and not topic
+        and content_type.startswith("application/x-www-form-urlencoded")
+        and _WC_WEBHOOK_PING_RE.fullmatch(raw.strip())
+    ):
+        return {"code": 200, "status": "ping_ok", "deduplicated": False}
     return await receive_signed_storefront_webhook(request, "woocommerce")
 
 
