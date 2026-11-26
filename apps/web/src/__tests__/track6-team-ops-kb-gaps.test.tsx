@@ -560,7 +560,7 @@ describe("TeamGovernancePanel", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("lists grants, assigns a new one and revokes a manage-level grant", async () => {
+  it("lists grants, assigns a new one and revokes any grant as admin", async () => {
     let scopes = [...SCOPES];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const { url, method } = callShape(input, init);
@@ -582,8 +582,10 @@ describe("TeamGovernancePanel", () => {
         scopes = [...scopes, created];
         return json(created, 201);
       }
-      if (url.includes("/v1/tenants/store-scopes/scope-2") && method === "DELETE") {
-        scopes = scopes.filter((scope) => scope.id !== "scope-2");
+      const prefix = "/v1/tenants/store-scopes/";
+      if (url.includes(prefix) && method === "DELETE") {
+        const deletedId = url.slice(url.indexOf(prefix) + prefix.length).split("?")[0];
+        scopes = scopes.filter((scope) => scope.id !== deletedId);
         return new Response(null, { status: 204 });
       }
       return json({}, 200);
@@ -596,8 +598,8 @@ describe("TeamGovernancePanel", () => {
       expect(screen.getByTestId("store-scope-row-scope-1")).toBeInTheDocument();
       expect(screen.getByTestId("store-scope-row-scope-2")).toBeInTheDocument();
     });
-    // Only manage-level grants can be revoked from the table.
-    expect(screen.getByTestId("store-scope-revoke-scope-1")).toBeDisabled();
+    // Admin can revoke any grant regardless of access_level (`operate` or `manage`).
+    expect(screen.getByTestId("store-scope-revoke-scope-1")).not.toBeDisabled();
     expect(screen.getByTestId("store-scope-revoke-scope-2")).not.toBeDisabled();
 
     fireEvent.change(screen.getByTestId("store-scope-member"), {
@@ -622,6 +624,11 @@ describe("TeamGovernancePanel", () => {
       user_id: "u-leaver",
       channel_account_id: "ch-web",
       access_level: "manage",
+    });
+
+    fireEvent.click(screen.getByTestId("store-scope-revoke-scope-1"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("store-scope-row-scope-1")).toBeNull();
     });
 
     fireEvent.click(screen.getByTestId("store-scope-revoke-scope-2"));
@@ -675,6 +682,8 @@ describe("TeamGovernancePanel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("handover-result")).toHaveAttribute("data-dry-run", "true");
     });
+    expect(screen.getByTestId("handover-result").textContent).toContain("Will deactivate leaver on execute");
+    expect(screen.getByTestId("handover-result").textContent).not.toContain("Leaver deactivated");
     expect(screen.getByTestId("handover-count-opportunities").textContent).toContain("4");
     expect(screen.getByTestId("handover-count-conversations").textContent).toContain("12");
     expect(screen.getByTestId("handover-count-store_scopes").textContent).toContain("3");
@@ -693,6 +702,7 @@ describe("TeamGovernancePanel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("handover-result")).toHaveAttribute("data-dry-run", "false");
     });
+    expect(screen.getByTestId("handover-result").textContent).toContain("Leaver deactivated");
     const executeCall = fetchMock.mock.calls
       .filter((call) => fetchCallUrl(call).endsWith("/v1/tenants/handover"))
       .at(-1);

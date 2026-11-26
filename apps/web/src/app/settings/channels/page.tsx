@@ -230,6 +230,21 @@ function ChannelsHub() {
     setDrawerKey(connectParam);
   }, [canOpenDrawer, connectParam]);
 
+  // 直达指定分栏：/settings/channels?tab=team 等
+  const tabParam = searchParams.get("tab");
+  useEffect(() => {
+    if (tabParam === "marketplace" || tabParam === "accounts") {
+      setTab(tabParam);
+      return;
+    }
+    if (
+      isAdmin &&
+      (tabParam === "team" || tabParam === "pi_template" || tabParam === "compliance")
+    ) {
+      setTab(tabParam);
+    }
+  }, [isAdmin, tabParam]);
+
   const tabs = useMemo<SegmentedTabOption<HubTab>[]>(() => {
     const options: SegmentedTabOption<HubTab>[] = [
       {
