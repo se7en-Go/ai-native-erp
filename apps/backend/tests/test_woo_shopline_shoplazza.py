@@ -17,7 +17,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from erp_core.channels.ecommerce.base import resolve_routing_tenant
-from erp_core.channels.ecommerce.connectors_router import router as connectors_router
+from erp_core.channels.ecommerce.connectors_router import (
+    _normalize_route_candidates,
+)
+from erp_core.channels.ecommerce.connectors_router import (
+    router as connectors_router,
+)
 from erp_core.channels.ecommerce.shoplazza import (
     ShoplazzaAdapter,
     verify_shoplazza_oauth_hmac,
@@ -32,10 +37,12 @@ from erp_core.channels.ecommerce.tiktok_shop import TikTokShopCoreAdapter
 from erp_core.channels.ecommerce.woocommerce import (
     WooCommerceAdapter,
     build_wc_authorize_url,
+    normalize_store_url,
     verify_woocommerce_webhook,
 )
 from erp_core.shared.enums import FulfillmentStatus, OrderMode, PaymentStatus
 from erp_core.shared.errors import register_exception_handlers
+from erp_core.worker_main import _extract_storefront_account_candidates
 
 
 async def test_woocommerce_meta_data_order_notes_and_webhook_hmac() -> None:
@@ -503,3 +510,94 @@ async def test_woo_shopline_shoplazza_tiktok_shopify_parity() -> None:
         tt_ful = await tt.create_fulfillment("TT-1", "TRK-TT", "USPS")
         assert tt_ful["fulfillment_id"] == "pkg-auto"
         assert tt_ful["package_id"] == "pkg-auto"
+
+
+async def test_woocommerce_real_world_fallback_modified_after_local_scheme_and_ping() -> None:
+    seen_requests: list[tuple[str, str, dict[str, object] | None, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else None
+        seen_requests.append((request.method, request.url.path, body, str(request.url.params)))
+        if request.method == "GET" and request.url.path == "/wp-json/wc/v3/orders":
+            return httpx.Response(200, json=[])
+        if request.method == "POST" and request.url.path == "/wp-json/wc/v3/orders/42/notes":
+            return httpx.Response(201, json={"id": 888, "note": (body or {}).get("note")})
+        if request.method == "POST" and request.url.path == "/wp-json/wc/v3/orders/42/fulfillments":
+            return httpx.Response(404, json={"code": "rest_no_route"})
+        if request.method == "PUT" and request.url.path == "/wp-json/wc/v3/orders/42":
+            return httpx.Response(200, json={"id": 42, "status": "completed"})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        woo = WooCommerceAdapter(
+            "https://woo-fallback.example.com", "ck", "cs", http_client=client
+        )
+        empty = woo._normalize_order(
+            {
+                "id": 41,
+                "status": "processing",
+                "total": "16.90",
+                "billing": {"email": " ", "phone": ""},
+                "date_modified_gmt": "2026-11-26T01:00:00",
+                "line_items": [{"sku": "WOO-SKU", "quantity": 1, "total": "16.90"}],
+            }
+        )
+        assert empty.customer.email is None
+        assert empty.customer.phone_e164 is None
+
+        orders, _ = await woo.fetch_orders_updated_since(datetime(2026, 11, 26, 0, 0, tzinfo=UTC))
+        assert orders == []
+        assert "modified_after=" in seen_requests[0][3]
+        assert "after=" not in seen_requests[0][3].replace("modified_after=", "")
+
+        res = await woo.create_fulfillment(
+            "42", "DHL-WOO-1", "DHL", tracking_url="https://track.example/1"
+        )
+        assert res["fulfillment_id"] == "wc-42-888"
+        assert res["status"] == "completed"
+        put_req = next(item for item in seen_requests if item[0] == "PUT")
+        assert put_req[2] is not None
+        assert put_req[2]["status"] == "completed"
+        meta_keys = {entry["key"]: entry["value"] for entry in put_req[2]["meta_data"]}  # type: ignore[index]
+        assert meta_keys["_tracking_number"] == "DHL-WOO-1"
+        assert meta_keys["_tracking_provider"] == "DHL"
+        assert meta_keys["_wc_shipment_tracking_items"][0]["tracking_number"] == "DHL-WOO-1"
+
+    assert (
+        normalize_store_url("http://erp_woo_wordpress:80", allow_local=True)
+        == "http://erp_woo_wordpress:80"
+    )
+    with pytest.raises(Exception) as unsafe_err:
+        normalize_store_url("http://127.0.0.1:8088", allow_local=False)
+    assert getattr(unsafe_err.value, "code", None) == "ERR_WOOCOMMERCE_UNSAFE_HOST"
+
+    assert _normalize_route_candidates("https://woo.example.com/") == [
+        "https://woo.example.com/",
+        "woo.example.com",
+    ]
+    assert _extract_storefront_account_candidates(
+        "",
+        {"shop_domain": "http://127.0.0.1:8088/"},
+        {},
+    ) == ["http://127.0.0.1:8088/", "127.0.0.1:8088"]
+
+    app = FastAPI()
+    app.include_router(connectors_router, prefix="/api/v1")
+    app.state.session_factory = lambda: None  # ping path does not query DB
+    register_exception_handlers(app)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as api_client:
+        ping = await api_client.post(
+            "/api/v1/webhooks/woocommerce",
+            content=b"webhook_id=7",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert ping.status_code == 200
+        assert ping.json() == {"code": 200, "status": "ping_ok", "deduplicated": False}
+
+        bad_json = await api_client.post(
+            "/api/v1/webhooks/woocommerce",
+            content=b'{"id": 7}',
+            headers={"Content-Type": "application/json"},
+        )
+        assert bad_json.status_code == 401
+

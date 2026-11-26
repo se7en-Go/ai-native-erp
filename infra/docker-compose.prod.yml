@@ -67,6 +67,7 @@ x-backend-environment: &backend-environment
   SHOPIFY_CLIENT_SECRET: ${SHOPIFY_CLIENT_SECRET:-}
   TIKTOK_SHOP_APP_KEY: ${TIKTOK_SHOP_APP_KEY:-}
   TIKTOK_SHOP_APP_SECRET: ${TIKTOK_SHOP_APP_SECRET:-}
+  ALLOW_LOCAL_WEBHOOK_URLS: ${ALLOW_LOCAL_WEBHOOK_URLS:-false}
 
 services:
   # -------------------------------------------------------------------------

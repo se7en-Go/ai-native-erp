@@ -1,0 +1,63 @@
+# Isolated local WordPress + WooCommerce sandbox for real-world REST v3 and webhook E2E verification.
+# Starts independently of infra/docker-compose.prod.yml and shares only the prod Docker network
+# so WooCommerce webhooks can reach http://erp_prod_backend:8000 directly without an external tunnel.
+
+name: ai-native-erp-woo-sandbox
+
+services:
+  woo_db:
+    image: mariadb:11
+    container_name: erp_woo_db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: woocommerce
+      MARIADB_USER: woo
+      MARIADB_PASSWORD: woo_sandbox_pass
+      MARIADB_ROOT_PASSWORD: woo_root_sandbox_pass
+    volumes:
+      - erp_woo_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  woo_wordpress:
+    image: wordpress:php8.2-apache
+    container_name: erp_woo_wordpress
+    restart: unless-stopped
+    depends_on:
+      woo_db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: woo_db
+      WORDPRESS_DB_USER: woo
+      WORDPRESS_DB_PASSWORD: woo_sandbox_pass
+      WORDPRESS_DB_NAME: woocommerce
+      WORDPRESS_CONFIG_EXTRA: |
+        if (str_starts_with($_SERVER['REQUEST_URI'] ?? '', '/wp-json/wc/')) {
+            $_SERVER['HTTPS'] = 'on';
+        }
+    ports:
+      - "127.0.0.1:8088:80"
+    volumes:
+      - erp_woo_wp_data:/var/www/html
+    networks:
+      - default
+      - erp_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1/wp-login.php >/dev/null || curl -sf http://127.0.0.1/ >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+
+volumes:
+  erp_woo_db_data:
+  erp_woo_wp_data:
+
+networks:
+  erp_prod_net:
+    external: true
+    name: ai-native-erp-prod_default

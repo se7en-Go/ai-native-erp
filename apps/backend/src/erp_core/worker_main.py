@@ -8,6 +8,7 @@ import signal
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 from redis.asyncio import Redis
@@ -165,8 +166,21 @@ def _extract_storefront_account_candidates(
         if val is not None and not isinstance(val, bool) and str(val).strip():
             raw_values.append(str(val).strip())
     candidates: list[str] = []
+    expanded: list[str] = []
     for raw_val in raw_values:
-        for variant in (raw_val, raw_val.lower()):
+        expanded.append(raw_val)
+        if "://" in raw_val:
+            parsed = urlparse(raw_val)
+            if parsed.netloc:
+                expanded.append(parsed.netloc)
+            if parsed.hostname and (
+                parsed.port is None
+                or (parsed.scheme.lower() == "http" and parsed.port == 80)
+                or (parsed.scheme.lower() == "https" and parsed.port == 443)
+            ):
+                expanded.append(parsed.hostname)
+    for item in expanded:
+        for variant in (item, item.lower()):
             if variant and variant not in candidates:
                 candidates.append(variant)
     return candidates
