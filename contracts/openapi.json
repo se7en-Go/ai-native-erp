@@ -2016,6 +2016,65 @@
         "title": "BuyerLocalTimeInfo",
         "type": "object"
       },
+      "BuyerPortalViewRead": {
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "accepted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By Name"
+          },
+          "can_accept": {
+            "title": "Can Accept",
+            "type": "boolean"
+          },
+          "can_upload_receipt": {
+            "title": "Can Upload Receipt",
+            "type": "boolean"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortalOrderRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote": {
+            "$ref": "#/components/schemas/PortalQuoteRead"
+          },
+          "seller": {
+            "$ref": "#/components/schemas/PortalSellerRead"
+          }
+        },
+        "required": [
+          "seller",
+          "quote",
+          "can_accept",
+          "can_upload_receipt"
+        ],
+        "title": "BuyerPortalViewRead",
+        "type": "object"
+      },
       "CampaignCreate": {
         "properties": {
           "body_template": {
@@ -12550,6 +12609,744 @@
           "compliance_note"
         ],
         "title": "PlatformRead",
+        "type": "object"
+      },
+      "PortalAcceptRequest": {
+        "properties": {
+          "buyer_name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Buyer Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "buyer_name"
+        ],
+        "title": "PortalAcceptRequest",
+        "type": "object"
+      },
+      "PortalAcceptResponse": {
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "accepted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By Name"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "quote_no": {
+            "title": "Quote No",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteStatus"
+          }
+        },
+        "required": [
+          "quote_id",
+          "quote_no",
+          "status"
+        ],
+        "title": "PortalAcceptResponse",
+        "type": "object"
+      },
+      "PortalLinkCreateRequest": {
+        "properties": {
+          "allow_accept": {
+            "default": true,
+            "title": "Allow Accept",
+            "type": "boolean"
+          },
+          "allow_receipt_upload": {
+            "default": true,
+            "title": "Allow Receipt Upload",
+            "type": "boolean"
+          },
+          "buyer_email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buyer Email"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
+          }
+        },
+        "title": "PortalLinkCreateRequest",
+        "type": "object"
+      },
+      "PortalLinkCreateResponse": {
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/PortalLinkRead"
+          },
+          "plain_token": {
+            "title": "Plain Token",
+            "type": "string"
+          },
+          "portal_path": {
+            "title": "Portal Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link",
+          "plain_token",
+          "portal_path"
+        ],
+        "title": "PortalLinkCreateResponse",
+        "type": "object"
+      },
+      "PortalLinkRead": {
+        "description": "Operator-facing token metadata. Never carries the plaintext token or its hash.",
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "accepted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By Name"
+          },
+          "allow_accept": {
+            "title": "Allow Accept",
+            "type": "boolean"
+          },
+          "allow_receipt_upload": {
+            "title": "Allow Receipt Upload",
+            "type": "boolean"
+          },
+          "buyer_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buyer Email"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_accessed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Accessed At"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "token_prefix": {
+            "title": "Token Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "quote_id",
+          "token_prefix",
+          "allow_accept",
+          "allow_receipt_upload",
+          "is_active",
+          "created_at"
+        ],
+        "title": "PortalLinkRead",
+        "type": "object"
+      },
+      "PortalOrderRead": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "fulfillment_status": {
+            "title": "Fulfillment Status",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          },
+          "payment_status": {
+            "title": "Payment Status",
+            "type": "string"
+          },
+          "receivables": {
+            "items": {
+              "$ref": "#/components/schemas/PortalReceivableRead"
+            },
+            "title": "Receivables",
+            "type": "array"
+          },
+          "shipments": {
+            "items": {
+              "$ref": "#/components/schemas/PortalShipmentRead"
+            },
+            "title": "Shipments",
+            "type": "array"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "order_no",
+          "fulfillment_status",
+          "payment_status",
+          "total_amount",
+          "currency"
+        ],
+        "title": "PortalOrderRead",
+        "type": "object"
+      },
+      "PortalQuoteLineRead": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "line_total": {
+            "title": "Line Total",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "unit_price": {
+            "title": "Unit Price",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku",
+          "description",
+          "quantity",
+          "unit_price",
+          "line_total"
+        ],
+        "title": "PortalQuoteLineRead",
+        "type": "object"
+      },
+      "PortalQuoteRead": {
+        "properties": {
+          "customs_duty_estimate": {
+            "title": "Customs Duty Estimate",
+            "type": "string"
+          },
+          "freight_fee": {
+            "title": "Freight Fee",
+            "type": "string"
+          },
+          "fx_locked_until": {
+            "format": "date-time",
+            "title": "Fx Locked Until",
+            "type": "string"
+          },
+          "fx_rate_snapshot": {
+            "title": "Fx Rate Snapshot",
+            "type": "string"
+          },
+          "incoterm": {
+            "$ref": "#/components/schemas/Incoterm"
+          },
+          "insurance_fee": {
+            "title": "Insurance Fee",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PortalQuoteLineRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "payment_terms": {
+            "title": "Payment Terms",
+            "type": "string"
+          },
+          "port_of_destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port Of Destination"
+          },
+          "port_of_loading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port Of Loading"
+          },
+          "quote_currency": {
+            "title": "Quote Currency",
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "quote_no": {
+            "title": "Quote No",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteStatus"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "quote_id",
+          "quote_no",
+          "version",
+          "status",
+          "incoterm",
+          "payment_terms",
+          "quote_currency",
+          "fx_rate_snapshot",
+          "fx_locked_until",
+          "freight_fee",
+          "insurance_fee",
+          "customs_duty_estimate",
+          "total_amount",
+          "items"
+        ],
+        "title": "PortalQuoteRead",
+        "type": "object"
+      },
+      "PortalReceiptResponse": {
+        "properties": {
+          "amount_received": {
+            "title": "Amount Received",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "payment_id": {
+            "format": "uuid",
+            "title": "Payment Id",
+            "type": "string"
+          },
+          "receipt_r2_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt R2 Key"
+          },
+          "rp_id": {
+            "format": "uuid",
+            "title": "Rp Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "pending_verification",
+            "default": "pending_verification",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_id",
+          "rp_id",
+          "order_id",
+          "amount_received",
+          "currency"
+        ],
+        "title": "PortalReceiptResponse",
+        "type": "object"
+      },
+      "PortalReceivableRead": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "due_amount": {
+            "title": "Due Amount",
+            "type": "string"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "milestone_label": {
+            "title": "Milestone Label",
+            "type": "string"
+          },
+          "paid_amount": {
+            "title": "Paid Amount",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "milestone_label",
+          "due_amount",
+          "paid_amount",
+          "currency",
+          "status"
+        ],
+        "title": "PortalReceivableRead",
+        "type": "object"
+      },
+      "PortalSellerRead": {
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "bank_account_no": {
+            "title": "Bank Account No",
+            "type": "string"
+          },
+          "bank_address": {
+            "title": "Bank Address",
+            "type": "string"
+          },
+          "bank_beneficiary_name": {
+            "title": "Bank Beneficiary Name",
+            "type": "string"
+          },
+          "bank_name": {
+            "title": "Bank Name",
+            "type": "string"
+          },
+          "bank_swift_code": {
+            "title": "Bank Swift Code",
+            "type": "string"
+          },
+          "company_name": {
+            "title": "Company Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          },
+          "tax_or_reg_no": {
+            "title": "Tax Or Reg No",
+            "type": "string"
+          },
+          "terms_notes": {
+            "title": "Terms Notes",
+            "type": "string"
+          },
+          "website": {
+            "title": "Website",
+            "type": "string"
+          }
+        },
+        "required": [
+          "company_name",
+          "address",
+          "phone",
+          "email",
+          "website",
+          "tax_or_reg_no",
+          "bank_beneficiary_name",
+          "bank_name",
+          "bank_account_no",
+          "bank_swift_code",
+          "bank_address",
+          "terms_notes"
+        ],
+        "title": "PortalSellerRead",
+        "type": "object"
+      },
+      "PortalShipmentRead": {
+        "properties": {
+          "carrier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carrier"
+          },
+          "estimated_delivery_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Delivery At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_event_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Event At"
+          },
+          "standardized_status": {
+            "title": "Standardized Status",
+            "type": "string"
+          },
+          "sub_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Status"
+          },
+          "tracking_events": {
+            "items": {
+              "$ref": "#/components/schemas/PortalTrackingEventRead"
+            },
+            "title": "Tracking Events",
+            "type": "array"
+          },
+          "tracking_number": {
+            "title": "Tracking Number",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tracking_number",
+          "standardized_status"
+        ],
+        "title": "PortalShipmentRead",
+        "type": "object"
+      },
+      "PortalTrackingEventRead": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "PortalTrackingEventRead",
         "type": "object"
       },
       "PostCreate": {
@@ -24204,6 +25001,65 @@
         ]
       }
     },
+    "/api/v1/b2b/portal-links/{token_id}": {
+      "delete": {
+        "operationId": "revoke_portal_link_api_v1_b2b_portal_links__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalLinkRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Portal Link",
+        "tags": [
+          "b2b-portal"
+        ]
+      }
+    },
     "/api/v1/b2b/quotes": {
       "get": {
         "operationId": "list_quotes_api_v1_b2b_quotes_get",
@@ -24617,6 +25473,136 @@
         "summary": "Download Quote Pdf",
         "tags": [
           "b2b"
+        ]
+      }
+    },
+    "/api/v1/b2b/quotes/{quote_id}/portal-links": {
+      "get": {
+        "operationId": "list_portal_links_api_v1_b2b_quotes__quote_id__portal_links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PortalLinkRead"
+                  },
+                  "title": "Response List Portal Links Api V1 B2B Quotes  Quote Id  Portal Links Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Portal Links",
+        "tags": [
+          "b2b-portal"
+        ]
+      },
+      "post": {
+        "operationId": "create_portal_link_api_v1_b2b_quotes__quote_id__portal_links_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalLinkCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalLinkCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Portal Link",
+        "tags": [
+          "b2b-portal"
         ]
       }
     },
@@ -34231,6 +35217,275 @@
         "summary": "Refresh Shipment Status",
         "tags": [
           "logistics"
+        ]
+      }
+    },
+    "/api/v1/portal/{token}": {
+      "get": {
+        "operationId": "get_portal_view_api_v1_portal__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuyerPortalViewRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Portal View",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/api/v1/portal/{token}/accept": {
+      "post": {
+        "operationId": "accept_quote_api_v1_portal__token__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalAcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalAcceptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Quote",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/api/v1/portal/{token}/documents/{doc_type}": {
+      "get": {
+        "operationId": "download_document_api_v1_portal__token__documents__doc_type__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "doc_type",
+            "required": true,
+            "schema": {
+              "enum": [
+                "pi",
+                "ci",
+                "pl"
+              ],
+              "title": "Doc Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "enum": [
+                "en",
+                "zh"
+              ],
+              "title": "Language",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Document",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/api/v1/portal/{token}/receipt": {
+      "post": {
+        "operationId": "submit_receipt_api_v1_portal__token__receipt_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "amount_received": {
+                    "type": "string"
+                  },
+                  "currency": {
+                    "type": "string"
+                  },
+                  "external_tx_ref": {
+                    "type": "string"
+                  },
+                  "payment_method": {
+                    "type": "string"
+                  },
+                  "rp_id": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rp_id",
+                  "amount_received",
+                  "currency"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "amount_received": {
+                    "type": "string"
+                  },
+                  "currency": {
+                    "type": "string"
+                  },
+                  "external_tx_ref": {
+                    "type": "string"
+                  },
+                  "payment_method": {
+                    "type": "string"
+                  },
+                  "receipt_file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "rp_id": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rp_id",
+                  "amount_received",
+                  "currency"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalReceiptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Receipt",
+        "tags": [
+          "portal"
         ]
       }
     },

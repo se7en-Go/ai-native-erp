@@ -11,6 +11,7 @@ import {
   UserRoundSearch,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { PortalLinkPanel } from "@/components/b2b/portal-link-panel";
 import { QuotePiBuilder } from "@/components/b2b/quote-pi-builder";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Page, PageHeader } from "@/components/ui/page";
@@ -349,6 +350,16 @@ function B2bQuotesPageInner() {
           defaultRecipientEmail={defaultRecipientEmail}
           initialQuoteId={deepLinkQuoteId}
           autoOpenSendEmail={autoOpenSendEmail}
+        />
+
+        <PortalLinkPanel
+          quotes={quotes.map((quote) => ({
+            id: quote.id,
+            quote_no: quote.quote_no,
+            version: quote.version,
+            status: quote.status,
+          }))}
+          initialQuoteId={deepLinkQuoteId}
         />
       </Page>
     </AppShell>

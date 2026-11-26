@@ -362,6 +362,16 @@ export type BuyerLocalTimeInfo = {
     recommended_send_at_utc?: string | null;
 };
 
+export type BuyerPortalViewRead = {
+    accepted_at?: string | null;
+    accepted_by_name?: string | null;
+    can_accept: boolean;
+    can_upload_receipt: boolean;
+    order?: PortalOrderRead | null;
+    quote: PortalQuoteRead;
+    seller: PortalSellerRead;
+};
+
 export type CampaignCreate = {
     body_template: string;
     channel_type: 'email' | 'whatsapp_cloud';
@@ -2316,6 +2326,142 @@ export type PlatformRead = {
     publish_mode: 'api' | 'manual_export';
     region: 'overseas' | 'domestic';
     supports_scheduled_publish: boolean;
+};
+
+export type PortalAcceptRequest = {
+    buyer_name: string;
+};
+
+export type PortalAcceptResponse = {
+    accepted_at?: string | null;
+    accepted_by_name?: string | null;
+    order_id?: string | null;
+    quote_id: string;
+    quote_no: string;
+    status: QuoteStatus;
+};
+
+export type PortalLinkCreateRequest = {
+    allow_accept?: boolean;
+    allow_receipt_upload?: boolean;
+    buyer_email?: string | null;
+    expires_in_days?: number | null;
+};
+
+export type PortalLinkCreateResponse = {
+    link: PortalLinkRead;
+    plain_token: string;
+    portal_path: string;
+};
+
+/**
+ * Operator-facing token metadata. Never carries the plaintext token or its hash.
+ */
+export type PortalLinkRead = {
+    accepted_at?: string | null;
+    accepted_by_name?: string | null;
+    allow_accept: boolean;
+    allow_receipt_upload: boolean;
+    buyer_email?: string | null;
+    created_at: string;
+    expires_at?: string | null;
+    id: string;
+    is_active: boolean;
+    last_accessed_at?: string | null;
+    quote_id: string;
+    revoked_at?: string | null;
+    token_prefix: string;
+};
+
+export type PortalOrderRead = {
+    currency: string;
+    fulfillment_status: string;
+    order_id: string;
+    order_no: string;
+    payment_status: string;
+    receivables?: Array<PortalReceivableRead>;
+    shipments?: Array<PortalShipmentRead>;
+    total_amount: string;
+};
+
+export type PortalQuoteLineRead = {
+    description: string;
+    line_total: string;
+    quantity: number;
+    sku: string;
+    unit_price: string;
+};
+
+export type PortalQuoteRead = {
+    customs_duty_estimate: string;
+    freight_fee: string;
+    fx_locked_until: string;
+    fx_rate_snapshot: string;
+    incoterm: Incoterm;
+    insurance_fee: string;
+    items: Array<PortalQuoteLineRead>;
+    payment_terms: string;
+    port_of_destination?: string | null;
+    port_of_loading?: string | null;
+    quote_currency: string;
+    quote_id: string;
+    quote_no: string;
+    status: QuoteStatus;
+    total_amount: string;
+    version: number;
+};
+
+export type PortalReceiptResponse = {
+    amount_received: string;
+    currency: string;
+    order_id: string;
+    payment_id: string;
+    receipt_r2_key?: string | null;
+    rp_id: string;
+    status?: 'pending_verification';
+};
+
+export type PortalReceivableRead = {
+    currency: string;
+    due_amount: string;
+    due_date?: string | null;
+    id: string;
+    milestone_label: string;
+    paid_amount: string;
+    status: string;
+};
+
+export type PortalSellerRead = {
+    address: string;
+    bank_account_no: string;
+    bank_address: string;
+    bank_beneficiary_name: string;
+    bank_name: string;
+    bank_swift_code: string;
+    company_name: string;
+    email: string;
+    phone: string;
+    tax_or_reg_no: string;
+    terms_notes: string;
+    website: string;
+};
+
+export type PortalShipmentRead = {
+    carrier?: string | null;
+    estimated_delivery_at?: string | null;
+    id: string;
+    last_event_at?: string | null;
+    standardized_status: string;
+    sub_status?: string | null;
+    tracking_events?: Array<PortalTrackingEventRead>;
+    tracking_number: string;
+};
+
+export type PortalTrackingEventRead = {
+    description: string;
+    location?: string | null;
+    occurred_at?: string | null;
+    stage?: string | null;
 };
 
 export type PostCreate = {
@@ -5460,6 +5606,36 @@ export type UpdateOpportunityStageApiV1B2bOpportunitiesOpportunityIdPatchRespons
 
 export type UpdateOpportunityStageApiV1B2bOpportunitiesOpportunityIdPatchResponse = UpdateOpportunityStageApiV1B2bOpportunitiesOpportunityIdPatchResponses[keyof UpdateOpportunityStageApiV1B2bOpportunitiesOpportunityIdPatchResponses];
 
+export type RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        token_id: string;
+    };
+    query?: never;
+    url: '/api/v1/b2b/portal-links/{token_id}';
+};
+
+export type RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteError = RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteErrors[keyof RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteErrors];
+
+export type RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: PortalLinkRead;
+};
+
+export type RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteResponse = RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteResponses[keyof RevokePortalLinkApiV1B2bPortalLinksTokenIdDeleteResponses];
+
 export type ListQuotesApiV1B2bQuotesGetData = {
     body?: never;
     headers?: {
@@ -5641,6 +5817,66 @@ export type DownloadQuotePdfApiV1B2bQuotesQuoteIdPdfDownloadGetResponses = {
      */
     200: unknown;
 };
+
+export type ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        quote_id: string;
+    };
+    query?: never;
+    url: '/api/v1/b2b/quotes/{quote_id}/portal-links';
+};
+
+export type ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetError = ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetErrors[keyof ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetErrors];
+
+export type ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<PortalLinkRead>;
+};
+
+export type ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetResponse = ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetResponses[keyof ListPortalLinksApiV1B2bQuotesQuoteIdPortalLinksGetResponses];
+
+export type CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostData = {
+    body: PortalLinkCreateRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        quote_id: string;
+    };
+    query?: never;
+    url: '/api/v1/b2b/quotes/{quote_id}/portal-links';
+};
+
+export type CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostError = CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostErrors[keyof CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostErrors];
+
+export type CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: PortalLinkCreateResponse;
+};
+
+export type CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostResponse = CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostResponses[keyof CreatePortalLinkApiV1B2bQuotesQuoteIdPortalLinksPostResponses];
 
 export type RepriceQuoteVersionApiV1B2bQuotesQuoteIdRepriceVersionPostData = {
     body: QuoteRepriceRequest;
@@ -9800,6 +10036,121 @@ export type RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTra
 };
 
 export type RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponse = RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponses[keyof RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponses];
+
+export type GetPortalViewApiV1PortalTokenGetData = {
+    body?: never;
+    path: {
+        token: string;
+    };
+    query?: never;
+    url: '/api/v1/portal/{token}';
+};
+
+export type GetPortalViewApiV1PortalTokenGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPortalViewApiV1PortalTokenGetError = GetPortalViewApiV1PortalTokenGetErrors[keyof GetPortalViewApiV1PortalTokenGetErrors];
+
+export type GetPortalViewApiV1PortalTokenGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BuyerPortalViewRead;
+};
+
+export type GetPortalViewApiV1PortalTokenGetResponse = GetPortalViewApiV1PortalTokenGetResponses[keyof GetPortalViewApiV1PortalTokenGetResponses];
+
+export type AcceptQuoteApiV1PortalTokenAcceptPostData = {
+    body: PortalAcceptRequest;
+    path: {
+        token: string;
+    };
+    query?: never;
+    url: '/api/v1/portal/{token}/accept';
+};
+
+export type AcceptQuoteApiV1PortalTokenAcceptPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AcceptQuoteApiV1PortalTokenAcceptPostError = AcceptQuoteApiV1PortalTokenAcceptPostErrors[keyof AcceptQuoteApiV1PortalTokenAcceptPostErrors];
+
+export type AcceptQuoteApiV1PortalTokenAcceptPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PortalAcceptResponse;
+};
+
+export type AcceptQuoteApiV1PortalTokenAcceptPostResponse = AcceptQuoteApiV1PortalTokenAcceptPostResponses[keyof AcceptQuoteApiV1PortalTokenAcceptPostResponses];
+
+export type DownloadDocumentApiV1PortalTokenDocumentsDocTypeGetData = {
+    body?: never;
+    path: {
+        token: string;
+        doc_type: 'pi' | 'ci' | 'pl';
+    };
+    query?: {
+        language?: 'en' | 'zh';
+    };
+    url: '/api/v1/portal/{token}/documents/{doc_type}';
+};
+
+export type DownloadDocumentApiV1PortalTokenDocumentsDocTypeGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DownloadDocumentApiV1PortalTokenDocumentsDocTypeGetError = DownloadDocumentApiV1PortalTokenDocumentsDocTypeGetErrors[keyof DownloadDocumentApiV1PortalTokenDocumentsDocTypeGetErrors];
+
+export type DownloadDocumentApiV1PortalTokenDocumentsDocTypeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SubmitReceiptApiV1PortalTokenReceiptPostData = {
+    body: {
+        amount_received: string;
+        currency: string;
+        external_tx_ref?: string;
+        payment_method?: string;
+        rp_id: string;
+    };
+    path: {
+        token: string;
+    };
+    query?: never;
+    url: '/api/v1/portal/{token}/receipt';
+};
+
+export type SubmitReceiptApiV1PortalTokenReceiptPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitReceiptApiV1PortalTokenReceiptPostError = SubmitReceiptApiV1PortalTokenReceiptPostErrors[keyof SubmitReceiptApiV1PortalTokenReceiptPostErrors];
+
+export type SubmitReceiptApiV1PortalTokenReceiptPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: PortalReceiptResponse;
+};
+
+export type SubmitReceiptApiV1PortalTokenReceiptPostResponse = SubmitReceiptApiV1PortalTokenReceiptPostResponses[keyof SubmitReceiptApiV1PortalTokenReceiptPostResponses];
 
 export type GlobalSearchApiV1SearchGetData = {
     body?: never;

@@ -30,10 +30,29 @@ WAVE3_0003_RLS_TABLES = ("products", "orders", "payment_records")
 #: 0013 (Wave 2 finance hardening) table created with append-only RLS.
 WAVE6_0013_RLS_TABLES = ("payable_payments",)
 
-#: Current head of the Alembic chain rendered by `upgrade head --sql`.
-HEAD_REVISION = "0020_notifications_automation"
-
 OFFLINE_SQL_TIMEOUT_SECONDS = 600
+
+
+def _head_revision() -> str:
+    """Derive the Alembic head from the versions directory instead of hardcoding it.
+
+    A literal head turns every new migration into an unrelated red test, so the
+    expected head is the one revision that no other migration lists as its
+    `down_revision`.
+    """
+    revisions: set[str] = set()
+    parents: set[str] = set()
+    for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        revision = re.search(r'^revision(?::\s*[^=]+)?\s*=\s*"([^"]+)"', source, re.M)
+        parent = re.search(r'^down_revision(?::\s*[^=]+)?\s*=\s*"([^"]+)"', source, re.M)
+        if revision:
+            revisions.add(revision.group(1))
+        if parent:
+            parents.add(parent.group(1))
+    heads = revisions - parents
+    assert len(heads) == 1, f"expected exactly one head revision, got {sorted(heads)}"
+    return heads.pop()
 
 
 def _alembic_env() -> dict[str, str]:
@@ -84,9 +103,10 @@ def test_alembic_offline_sql_reaches_head_without_error(offline_sql: str) -> Non
     )
     assert rendered[0] == "0001_tenancy_rls_and_audit"
     assert "0003" in rendered
-    assert rendered[-1] == HEAD_REVISION
+    head = _head_revision()
+    assert rendered[-1] == head
     # Head is stamped only after the last migration body rendered successfully.
-    assert f"UPDATE alembic_version SET version_num='{HEAD_REVISION}'" in offline_sql
+    assert f"UPDATE alembic_version SET version_num='{head}'" in offline_sql
     assert offline_sql.rstrip().endswith("COMMIT;")
 
 

@@ -17,6 +17,7 @@ import erp_core.billing.models  # noqa: F401
 import erp_core.catalog.models  # noqa: F401
 import erp_core.channels.models  # noqa: F401
 import erp_core.crm.models  # noqa: F401
+import erp_core.crm.portal_models  # noqa: F401
 import erp_core.finance.models  # noqa: F401
 import erp_core.growth.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
@@ -54,6 +55,10 @@ from erp_core.channels.ingress_worker import dlq_router
 from erp_core.channels.settings_router import router as channel_settings_router
 from erp_core.channels.webhook_router import webhook_router
 from erp_core.channels.widget_router import widget_router
+from erp_core.crm.portal_router import (
+    portal_operator_router,
+    portal_public_router,
+)
 from erp_core.crm.router import router as b2b_router
 from erp_core.crm.workbench import router as crm_workbench_router
 from erp_core.finance.ap_router import router as finance_ap_router
@@ -214,6 +219,10 @@ def create_app() -> FastAPI:
     app.include_router(catalog_router, prefix="/api/v1")
     app.include_router(catalog_sourcing_router)
     app.include_router(b2b_router, prefix="/api/v1")
+    # Buyer self-service portal: the operator router mints/revokes magic links, the
+    # public router is authenticated solely by the opaque `{token}` path segment.
+    app.include_router(portal_operator_router, prefix="/api/v1")
+    app.include_router(portal_public_router, prefix="/api/v1")
     app.include_router(crm_workbench_router, prefix="/api/v1")
     app.include_router(supply_router, prefix="/api/v1")
     app.include_router(wms_router, prefix="/api/v1")
