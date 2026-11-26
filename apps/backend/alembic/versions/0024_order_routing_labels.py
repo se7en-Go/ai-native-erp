@@ -12,7 +12,7 @@ Three tenant-scoped tables, all fail-closed under PG17 ``FORCE ROW LEVEL SECURIT
    shipping cost estimate, and the object-storage key of the rendered PDF.
 
 Revision ID: 0024_order_routing_labels
-Revises: 0019_analytics_im_sourcing
+Revises: 0023_tenant_mcp_tokens
 Create Date: 2026-11-27
 """
 
@@ -23,7 +23,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "0024_order_routing_labels"
-down_revision: str | None = "0019_analytics_im_sourcing"
+down_revision: str | None = "0023_tenant_mcp_tokens"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

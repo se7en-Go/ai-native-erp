@@ -481,6 +481,24 @@ export type CaptionRead = {
     text: string;
 };
 
+export type CarrierShippingLabelRead = {
+    carrier_code: 'yunexpress' | '4px' | 'dhl' | 'ups' | 'fedex' | 'sandbox_carrier';
+    created_at: string;
+    currency: string;
+    id: string;
+    label_format: string;
+    label_r2_key: string | null;
+    mode: 'live' | 'sandbox';
+    order_id: string;
+    service_code: string;
+    shipment_id: string | null;
+    shipping_cost_estimate: string | null;
+    status: string;
+    tenant_id: string;
+    tracking_number: string;
+    waybill_number: string;
+};
+
 /**
  * AR/AP position and net cash flow, all denominated in the tenant base currency.
  *
@@ -1920,6 +1938,23 @@ export type OrderRead = {
     updated_at: string;
 };
 
+export type OrderRoutingEvaluationRead = {
+    applied_tags: Array<string>;
+    estimated_margin_pct: string | null;
+    evaluated_at: string;
+    hold_reason: string | null;
+    hold_released_at: string | null;
+    hold_released_by: string | null;
+    id: string;
+    is_held: boolean;
+    matched_rule_ids: Array<string>;
+    order_id: string;
+    recommended_carrier: string | null;
+    recommended_service: string | null;
+    recommended_warehouse_id: string | null;
+    tenant_id: string;
+};
+
 export type OverviewRead = {
     channels: Array<ChannelVolume>;
     funnel: Array<FunnelStage>;
@@ -3021,6 +3056,83 @@ export type RegisterRequest = {
     timezone?: string;
 };
 
+export type ReleaseHoldRequest = {
+    reason: string;
+};
+
+/**
+ * What a matched rule does to the order.
+ */
+export type RoutingActions = {
+    add_tags?: Array<string>;
+    carrier_code?: string | null;
+    hold_for_review?: boolean;
+    hold_reason?: string | null;
+    service_code?: string | null;
+    warehouse_id?: string | null;
+};
+
+/**
+ * Rule scope plus the anti-loss margin floor.
+ *
+ * Scope keys (``destination_countries``/``channel_types``/``order_modes``/
+ * ``min_total_amount``/``max_weight_kg``) decide whether the rule *matches*.
+ * ``min_margin_pct`` is the anti-loss floor: a matched rule whose floor is above the
+ * order's estimated margin holds the order for review.
+ */
+export type RoutingConditionsInput = {
+    channel_types?: Array<string>;
+    destination_countries?: Array<string>;
+    max_weight_kg?: number | string | null;
+    min_margin_pct?: number | string | null;
+    min_total_amount?: number | string | null;
+    order_modes?: Array<string>;
+};
+
+/**
+ * Rule scope plus the anti-loss margin floor.
+ *
+ * Scope keys (``destination_countries``/``channel_types``/``order_modes``/
+ * ``min_total_amount``/``max_weight_kg``) decide whether the rule *matches*.
+ * ``min_margin_pct`` is the anti-loss floor: a matched rule whose floor is above the
+ * order's estimated margin holds the order for review.
+ */
+export type RoutingConditionsOutput = {
+    channel_types?: Array<string>;
+    destination_countries?: Array<string>;
+    max_weight_kg?: string | null;
+    min_margin_pct?: string | null;
+    min_total_amount?: string | null;
+    order_modes?: Array<string>;
+};
+
+export type RoutingRuleCreate = {
+    actions?: RoutingActions;
+    conditions?: RoutingConditionsInput;
+    is_enabled?: boolean;
+    name: string;
+    priority?: number;
+};
+
+export type RoutingRuleRead = {
+    actions: RoutingActions;
+    conditions: RoutingConditionsOutput;
+    created_at: string;
+    id: string;
+    is_enabled: boolean;
+    name: string;
+    priority: number;
+    updated_at: string;
+};
+
+export type RoutingRuleUpdate = {
+    actions?: RoutingActions | null;
+    conditions?: RoutingConditionsInput | null;
+    is_enabled?: boolean | null;
+    name?: string | null;
+    priority?: number | null;
+};
+
 export type SandboxRequest = {
     message: string;
     scenario_id: 'b2c_wismo' | 'strict_rag_warranty' | 'b2b_moq_quote';
@@ -3209,6 +3321,19 @@ export type ShipmentRead = {
     }>;
     tracking_number: string;
     tracking_provider: TrackingProvider;
+};
+
+/**
+ * Book a carrier waybill for an order and persist its 4x6 thermal PDF.
+ */
+export type ShippingLabelBookRequest = {
+    carrier_code?: 'yunexpress' | '4px' | 'dhl' | 'ups' | 'fedex' | 'sandbox_carrier';
+    currency?: string | null;
+    declared_weight_kg?: number | string | null;
+    mode?: 'live' | 'sandbox';
+    override_hold?: boolean;
+    override_reason?: string | null;
+    service_code?: string | null;
 };
 
 export type ShopeeConnectRequest = {
@@ -10328,6 +10453,122 @@ export type TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostResponses = {
 
 export type TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostResponse = TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostResponses[keyof TriggerInventorySyncNowApiV1OrdersInventorySyncNowPostResponses];
 
+export type ListRoutingRulesApiV1OrdersRoutingRulesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/orders/routing-rules';
+};
+
+export type ListRoutingRulesApiV1OrdersRoutingRulesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRoutingRulesApiV1OrdersRoutingRulesGetError = ListRoutingRulesApiV1OrdersRoutingRulesGetErrors[keyof ListRoutingRulesApiV1OrdersRoutingRulesGetErrors];
+
+export type ListRoutingRulesApiV1OrdersRoutingRulesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<RoutingRuleRead>;
+};
+
+export type ListRoutingRulesApiV1OrdersRoutingRulesGetResponse = ListRoutingRulesApiV1OrdersRoutingRulesGetResponses[keyof ListRoutingRulesApiV1OrdersRoutingRulesGetResponses];
+
+export type CreateRoutingRuleApiV1OrdersRoutingRulesPostData = {
+    body: RoutingRuleCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/orders/routing-rules';
+};
+
+export type CreateRoutingRuleApiV1OrdersRoutingRulesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRoutingRuleApiV1OrdersRoutingRulesPostError = CreateRoutingRuleApiV1OrdersRoutingRulesPostErrors[keyof CreateRoutingRuleApiV1OrdersRoutingRulesPostErrors];
+
+export type CreateRoutingRuleApiV1OrdersRoutingRulesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RoutingRuleRead;
+};
+
+export type CreateRoutingRuleApiV1OrdersRoutingRulesPostResponse = CreateRoutingRuleApiV1OrdersRoutingRulesPostResponses[keyof CreateRoutingRuleApiV1OrdersRoutingRulesPostResponses];
+
+export type DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        rule_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/routing-rules/{rule_id}';
+};
+
+export type DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteError = DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteErrors[keyof DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteErrors];
+
+export type DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteResponse = DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteResponses[keyof DeleteRoutingRuleApiV1OrdersRoutingRulesRuleIdDeleteResponses];
+
+export type UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchData = {
+    body: RoutingRuleUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        rule_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/routing-rules/{rule_id}';
+};
+
+export type UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchError = UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchErrors[keyof UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchErrors];
+
+export type UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RoutingRuleRead;
+};
+
+export type UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchResponse = UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchResponses[keyof UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchResponses];
+
 export type ListWarehousesApiV1OrdersWarehousesGetData = {
     body?: never;
     headers?: {
@@ -10476,6 +10717,36 @@ export type DownloadPackingListPdfApiV1OrdersOrderIdDocumentsPackingListPdfGetRe
     200: unknown;
 };
 
+export type EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/{order_id}/evaluate-routing';
+};
+
+export type EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostError = EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostErrors[keyof EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostErrors];
+
+export type EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: OrderRoutingEvaluationRead;
+};
+
+export type EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostResponse = EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostResponses[keyof EvaluateOrderRoutingApiV1OrdersOrderIdEvaluateRoutingPostResponses];
+
 export type PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostData = {
     body?: never;
     headers?: {
@@ -10505,6 +10776,66 @@ export type PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostRes
 };
 
 export type PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostResponse = PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostResponses[keyof PushOrderFulfillmentEndpointApiV1OrdersOrderIdPushFulfillmentPostResponses];
+
+export type ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostData = {
+    body?: ReleaseHoldRequest | null;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/{order_id}/release-hold';
+};
+
+export type ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostError = ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostErrors[keyof ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostErrors];
+
+export type ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: OrderRoutingEvaluationRead;
+};
+
+export type ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostResponse = ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostResponses[keyof ReleaseRoutingHoldApiV1OrdersOrderIdReleaseHoldPostResponses];
+
+export type GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/{order_id}/routing-evaluation';
+};
+
+export type GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetError = GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetErrors[keyof GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetErrors];
+
+export type GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: OrderRoutingEvaluationRead;
+};
+
+export type GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetResponse = GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetResponses[keyof GetRoutingEvaluationApiV1OrdersOrderIdRoutingEvaluationGetResponses];
 
 export type ShipOrderApiV1OrdersOrderIdShipPostData = {
     body: ShipOrderRequest;
@@ -10657,6 +10988,95 @@ export type RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTra
 };
 
 export type RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponse = RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponses[keyof RefreshShipmentStatusApiV1OrdersOrderIdShipmentsShipmentIdRefreshTrackingPostResponses];
+
+export type BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostData = {
+    body: ShippingLabelBookRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/{order_id}/shipping-label';
+};
+
+export type BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostError = BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostErrors[keyof BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostErrors];
+
+export type BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CarrierShippingLabelRead;
+};
+
+export type BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostResponse = BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostResponses[keyof BookOrderShippingLabelApiV1OrdersOrderIdShippingLabelPostResponses];
+
+export type ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/{order_id}/shipping-labels';
+};
+
+export type ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetError = ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetErrors[keyof ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetErrors];
+
+export type ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<CarrierShippingLabelRead>;
+};
+
+export type ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetResponse = ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetResponses[keyof ListShippingLabelsApiV1OrdersOrderIdShippingLabelsGetResponses];
+
+export type DownloadShippingLabelPdfApiV1OrdersOrderIdShippingLabelsLabelIdPdfGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        order_id: string;
+        label_id: string;
+    };
+    query?: never;
+    url: '/api/v1/orders/{order_id}/shipping-labels/{label_id}/pdf';
+};
+
+export type DownloadShippingLabelPdfApiV1OrdersOrderIdShippingLabelsLabelIdPdfGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DownloadShippingLabelPdfApiV1OrdersOrderIdShippingLabelsLabelIdPdfGetError = DownloadShippingLabelPdfApiV1OrdersOrderIdShippingLabelsLabelIdPdfGetErrors[keyof DownloadShippingLabelPdfApiV1OrdersOrderIdShippingLabelsLabelIdPdfGetErrors];
+
+export type DownloadShippingLabelPdfApiV1OrdersOrderIdShippingLabelsLabelIdPdfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type GetPortalViewApiV1PortalTokenGetData = {
     body?: never;

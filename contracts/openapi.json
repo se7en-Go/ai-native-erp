@@ -2748,6 +2748,127 @@
         "title": "CaptionRead",
         "type": "object"
       },
+      "CarrierShippingLabelRead": {
+        "properties": {
+          "carrier_code": {
+            "enum": [
+              "yunexpress",
+              "4px",
+              "dhl",
+              "ups",
+              "fedex",
+              "sandbox_carrier"
+            ],
+            "title": "Carrier Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label_format": {
+            "title": "Label Format",
+            "type": "string"
+          },
+          "label_r2_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label R2 Key"
+          },
+          "mode": {
+            "enum": [
+              "live",
+              "sandbox"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "service_code": {
+            "title": "Service Code",
+            "type": "string"
+          },
+          "shipment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipment Id"
+          },
+          "shipping_cost_estimate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipping Cost Estimate"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "tracking_number": {
+            "title": "Tracking Number",
+            "type": "string"
+          },
+          "waybill_number": {
+            "title": "Waybill Number",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "order_id",
+          "shipment_id",
+          "carrier_code",
+          "service_code",
+          "tracking_number",
+          "waybill_number",
+          "label_format",
+          "label_r2_key",
+          "mode",
+          "shipping_cost_estimate",
+          "currency",
+          "status",
+          "created_at"
+        ],
+        "title": "CarrierShippingLabelRead",
+        "type": "object"
+      },
       "CashflowSummaryRead": {
         "description": "AR/AP position and net cash flow, all denominated in the tenant base currency.\n\nThe top-level fields stay the base-currency summary (fully backwards compatible),\nwhile `by_currency` reports every currency actually present in the ledger. Each\ncurrency is only ever summed against itself - no cross-currency addition.",
         "properties": {
@@ -10682,6 +10803,146 @@
         "title": "OrderRead",
         "type": "object"
       },
+      "OrderRoutingEvaluationRead": {
+        "properties": {
+          "applied_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applied Tags",
+            "type": "array"
+          },
+          "estimated_margin_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Margin Pct"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Reason"
+          },
+          "hold_released_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Released At"
+          },
+          "hold_released_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Released By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_held": {
+            "title": "Is Held",
+            "type": "boolean"
+          },
+          "matched_rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Rule Ids",
+            "type": "array"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "recommended_carrier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Carrier"
+          },
+          "recommended_service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Service"
+          },
+          "recommended_warehouse_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Warehouse Id"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "order_id",
+          "matched_rule_ids",
+          "recommended_warehouse_id",
+          "recommended_carrier",
+          "recommended_service",
+          "estimated_margin_pct",
+          "is_held",
+          "hold_reason",
+          "hold_released_by",
+          "hold_released_at",
+          "applied_tags",
+          "evaluated_at"
+        ],
+        "title": "OrderRoutingEvaluationRead",
+        "type": "object"
+      },
       "OverviewRead": {
         "properties": {
           "channels": {
@@ -16447,6 +16708,361 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "ReleaseHoldRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ReleaseHoldRequest",
+        "type": "object"
+      },
+      "RoutingActions": {
+        "description": "What a matched rule does to the order.",
+        "properties": {
+          "add_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Add Tags",
+            "type": "array"
+          },
+          "carrier_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carrier Code"
+          },
+          "hold_for_review": {
+            "default": false,
+            "title": "Hold For Review",
+            "type": "boolean"
+          },
+          "hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Reason"
+          },
+          "service_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Code"
+          },
+          "warehouse_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warehouse Id"
+          }
+        },
+        "title": "RoutingActions",
+        "type": "object"
+      },
+      "RoutingConditions-Input": {
+        "description": "Rule scope plus the anti-loss margin floor.\n\nScope keys (``destination_countries``/``channel_types``/``order_modes``/\n``min_total_amount``/``max_weight_kg``) decide whether the rule *matches*.\n``min_margin_pct`` is the anti-loss floor: a matched rule whose floor is above the\norder's estimated margin holds the order for review.",
+        "properties": {
+          "channel_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channel Types",
+            "type": "array"
+          },
+          "destination_countries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Destination Countries",
+            "type": "array"
+          },
+          "max_weight_kg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Weight Kg"
+          },
+          "min_margin_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Margin Pct"
+          },
+          "min_total_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Total Amount"
+          },
+          "order_modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Order Modes",
+            "type": "array"
+          }
+        },
+        "title": "RoutingConditions",
+        "type": "object"
+      },
+      "RoutingConditions-Output": {
+        "description": "Rule scope plus the anti-loss margin floor.\n\nScope keys (``destination_countries``/``channel_types``/``order_modes``/\n``min_total_amount``/``max_weight_kg``) decide whether the rule *matches*.\n``min_margin_pct`` is the anti-loss floor: a matched rule whose floor is above the\norder's estimated margin holds the order for review.",
+        "properties": {
+          "channel_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channel Types",
+            "type": "array"
+          },
+          "destination_countries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Destination Countries",
+            "type": "array"
+          },
+          "max_weight_kg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Weight Kg"
+          },
+          "min_margin_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Margin Pct"
+          },
+          "min_total_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Total Amount"
+          },
+          "order_modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Order Modes",
+            "type": "array"
+          }
+        },
+        "title": "RoutingConditions",
+        "type": "object"
+      },
+      "RoutingRuleCreate": {
+        "properties": {
+          "actions": {
+            "$ref": "#/components/schemas/RoutingActions"
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/RoutingConditions-Input"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "default": 100,
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RoutingRuleCreate",
+        "type": "object"
+      },
+      "RoutingRuleRead": {
+        "properties": {
+          "actions": {
+            "$ref": "#/components/schemas/RoutingActions"
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/RoutingConditions-Output"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "priority",
+          "is_enabled",
+          "conditions",
+          "actions",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RoutingRuleRead",
+        "type": "object"
+      },
+      "RoutingRuleUpdate": {
+        "properties": {
+          "actions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoutingActions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoutingConditions-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          }
+        },
+        "title": "RoutingRuleUpdate",
+        "type": "object"
+      },
       "SandboxRequest": {
         "properties": {
           "message": {
@@ -17451,6 +18067,92 @@
           "created_at"
         ],
         "title": "ShipmentRead",
+        "type": "object"
+      },
+      "ShippingLabelBookRequest": {
+        "description": "Book a carrier waybill for an order and persist its 4x6 thermal PDF.",
+        "properties": {
+          "carrier_code": {
+            "default": "sandbox_carrier",
+            "enum": [
+              "yunexpress",
+              "4px",
+              "dhl",
+              "ups",
+              "fedex",
+              "sandbox_carrier"
+            ],
+            "title": "Carrier Code",
+            "type": "string"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "maxLength": 3,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "declared_weight_kg": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Weight Kg"
+          },
+          "mode": {
+            "default": "sandbox",
+            "enum": [
+              "live",
+              "sandbox"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "override_hold": {
+            "default": false,
+            "title": "Override Hold",
+            "type": "boolean"
+          },
+          "override_reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override Reason"
+          },
+          "service_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Code"
+          }
+        },
+        "title": "ShippingLabelBookRequest",
         "type": "object"
       },
       "ShopeeConnectRequest": {
@@ -36730,6 +37432,235 @@
         ]
       }
     },
+    "/api/v1/orders/routing-rules": {
+      "get": {
+        "operationId": "list_routing_rules_api_v1_orders_routing_rules_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoutingRuleRead"
+                  },
+                  "title": "Response List Routing Rules Api V1 Orders Routing Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Routing Rules",
+        "tags": [
+          "order-routing"
+        ]
+      },
+      "post": {
+        "operationId": "create_routing_rule_api_v1_orders_routing_rules_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutingRuleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingRuleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Routing Rule",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
+    "/api/v1/orders/routing-rules/{rule_id}": {
+      "delete": {
+        "operationId": "delete_routing_rule_api_v1_orders_routing_rules__rule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Routing Rule",
+        "tags": [
+          "order-routing"
+        ]
+      },
+      "patch": {
+        "operationId": "update_routing_rule_api_v1_orders_routing_rules__rule_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutingRuleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingRuleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Routing Rule",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
     "/api/v1/orders/warehouses": {
       "get": {
         "description": "List warehouse IDs visible to this tenant without creating a fallback default.",
@@ -37042,6 +37973,65 @@
         ]
       }
     },
+    "/api/v1/orders/{order_id}/evaluate-routing": {
+      "post": {
+        "operationId": "evaluate_order_routing_api_v1_orders__order_id__evaluate_routing_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRoutingEvaluationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Order Routing",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
     "/api/v1/orders/{order_id}/push-fulfillment": {
       "post": {
         "description": "Retry or trigger outbound fulfillment tracking writeback for a shipped order.",
@@ -37099,6 +38089,141 @@
         "summary": "Push Order Fulfillment Endpoint",
         "tags": [
           "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/release-hold": {
+      "post": {
+        "operationId": "release_routing_hold_api_v1_orders__order_id__release_hold_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReleaseHoldRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRoutingEvaluationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Routing Hold",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/routing-evaluation": {
+      "get": {
+        "operationId": "get_routing_evaluation_api_v1_orders__order_id__routing_evaluation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRoutingEvaluationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Routing Evaluation",
+        "tags": [
+          "order-routing"
         ]
       }
     },
@@ -37470,6 +38595,200 @@
         "summary": "Refresh Shipment Status",
         "tags": [
           "logistics"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/shipping-label": {
+      "post": {
+        "operationId": "book_order_shipping_label_api_v1_orders__order_id__shipping_label_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingLabelBookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CarrierShippingLabelRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Book Order Shipping Label",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/shipping-labels": {
+      "get": {
+        "operationId": "list_shipping_labels_api_v1_orders__order_id__shipping_labels_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CarrierShippingLabelRead"
+                  },
+                  "title": "Response List Shipping Labels Api V1 Orders  Order Id  Shipping Labels Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Shipping Labels",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/shipping-labels/{label_id}/pdf": {
+      "get": {
+        "operationId": "download_shipping_label_pdf_api_v1_orders__order_id__shipping_labels__label_id__pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "label_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Label Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Shipping Label Pdf",
+        "tags": [
+          "order-routing"
         ]
       }
     },
