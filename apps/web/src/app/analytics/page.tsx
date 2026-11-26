@@ -12,6 +12,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+import { AdsSpendPanel } from "@/components/analytics/ads-spend-panel";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
@@ -386,6 +387,9 @@ export default function AnalyticsPage() {
             )}
           </section>
         </div>
+
+        {/* Track 9: read-only ad spend sync + ROAS / TACoS KPIs. */}
+        <AdsSpendPanel />
       </div>
     </AppShell>
   );
