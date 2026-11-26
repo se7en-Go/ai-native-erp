@@ -66,7 +66,7 @@ def _admin_url() -> str:
     """Plan 01 FORCE RLS blocks `app_migrator` DML on tenant tables."""
     return os.environ.get(
         "DATABASE_ADMIN_URL",
-        "postgresql+asyncpg://postgres:postgres_dev_pass@127.0.0.1:55432/erp_saas",
+        "postgresql+asyncpg://postgres:postgres_dev_pass@localhost:5432/erp_saas",
     )
 
 
