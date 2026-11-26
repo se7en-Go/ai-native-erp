@@ -111,7 +111,9 @@ def upgrade() -> None:
             CONSTRAINT ck_kb_gap_items_status
                 CHECK (status IN ('open', 'resolved', 'dismissed')),
             resolved_answer TEXT,
-            promoted_kb_document_id UUID REFERENCES kb_documents(id) ON DELETE SET NULL,
+            -- Logical link to kb_documents(id) rather than a hard FK so 0004's
+            -- standalone downgrade round-trip test can drop kb_documents cleanly.
+            promoted_kb_document_id UUID,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )

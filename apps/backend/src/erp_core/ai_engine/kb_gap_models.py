@@ -73,7 +73,7 @@ class KbGapItem(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="open")
     resolved_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     promoted_kb_document_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("kb_documents.id", ondelete="SET NULL"), nullable=True
+        PGUUID(as_uuid=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
