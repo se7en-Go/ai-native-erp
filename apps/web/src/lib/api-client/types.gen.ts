@@ -966,6 +966,49 @@ export type DisconnectChannelResponse = {
     status?: ChannelStatus;
 };
 
+/**
+ * One order compared side by side: estimated basis versus settled basis.
+ */
+export type DualBasisOrderRow = {
+    ad_delta_base: string;
+    commission_delta_base: string;
+    currency: string;
+    estimated_ad_spend_base: string;
+    estimated_cogs_base: string;
+    estimated_commission_base: string;
+    estimated_fulfillment_storage_base: string;
+    estimated_net_profit_base: string;
+    estimated_revenue_base: string;
+    fulfillment_storage_delta_base: string;
+    fx_variance_base: string;
+    order_id: string;
+    order_no: string;
+    profit_variance_base: string;
+    settled_ad_spend_base: string;
+    settled_cogs_base: string;
+    settled_commission_base: string;
+    settled_fulfillment_storage_base: string;
+    settled_net_profit_base: string;
+    settled_payout_base: string;
+    settled_revenue_base: string;
+};
+
+export type DualBasisProfitRead = {
+    ad_spend_base: string;
+    base_currency: string;
+    commission_delta_base: string;
+    estimated_net_margin_base: string;
+    estimated_revenue_base: string;
+    fulfillment_storage_delta_base: string;
+    fx_variance_base: string;
+    matched_orders_count: number;
+    rows: Array<DualBasisOrderRow>;
+    settled_net_profit_base: string;
+    settled_payout_base: string;
+    total_profit_variance_base: string;
+    unmatched_lines_count: number;
+};
+
 export type EbayConnectRequest = {
     app_id: string;
     cert_id: string;
@@ -2285,6 +2328,47 @@ export type PaymentVerifyResponse = {
     payment: PaymentRecordRead;
 };
 
+export type PayoutAutoMatchResultRead = {
+    items: Array<PayoutStatementRead>;
+    matched_count: number;
+    remaining_unmatched_count: number;
+    total_fx_variance_base: string;
+};
+
+export type PayoutImportResultRead = {
+    imported_count: number;
+    items: Array<PayoutStatementRead>;
+    matched_count: number;
+    skipped_count: number;
+};
+
+export type PayoutStatementListRead = {
+    items: Array<PayoutStatementRead>;
+    matched_count: number;
+    total_count: number;
+    total_fx_variance_base: string;
+    unmatched_count: number;
+};
+
+export type PayoutStatementRead = {
+    actual_fx_rate: string;
+    created_at: string;
+    expected_fx_rate: string;
+    external_tx_ref: string;
+    fx_variance_base: string;
+    id: string;
+    match_status: string;
+    matched_order_id: string | null;
+    matched_settlement_batch_id: string | null;
+    paid_at: string;
+    payout_amount: string;
+    payout_currency: string;
+    provider: string;
+    settled_base_amount: string;
+    settled_base_currency: string;
+    tenant_id: string;
+};
+
 export type PendingProposalGroup = {
     count: number;
     href: string;
@@ -2974,6 +3058,63 @@ export type SendRealCampaignResponse = {
     provider: string;
     sent_count: number;
     suppressed_count: number;
+};
+
+export type SettlementBatchListRead = {
+    base_currency: string;
+    items: Array<SettlementBatchRead>;
+    total_count: number;
+    total_net_payout_base: string;
+};
+
+export type SettlementBatchRead = {
+    ad_fee_ccy: string;
+    batch_ref: string;
+    channel_account_id: string | null;
+    channel_type: string;
+    commission_ccy: string;
+    created_at: string;
+    currency: string;
+    fulfillment_fee_ccy: string;
+    fx_rate_to_base: string;
+    gross_sales_ccy: string;
+    id: string;
+    line_count: number;
+    net_payout_base: string;
+    net_payout_ccy: string;
+    period_end: string;
+    period_start: string;
+    refund_ccy: string;
+    status: string;
+    storage_fee_ccy: string;
+    tenant_id: string;
+};
+
+export type SettlementLineListRead = {
+    batch_id: string;
+    currency: string;
+    items: Array<SettlementLineRead>;
+    matched_count: number;
+    total_count: number;
+};
+
+export type SettlementLineRead = {
+    ad_fee_ccy: string;
+    batch_id: string;
+    commission_ccy: string;
+    created_at: string;
+    external_order_id: string | null;
+    fulfillment_fee_ccy: string;
+    fx_rate_to_base: string;
+    gross_sales_ccy: string;
+    id: string;
+    net_settlement_base: string;
+    net_settlement_ccy: string;
+    order_id: string | null;
+    refund_ccy: string;
+    sku: string | null;
+    storage_fee_ccy: string;
+    tenant_id: string;
 };
 
 export type SheinConnectRequest = {
@@ -8379,6 +8520,34 @@ export type GetLiveFxRatesApiV1FinanceFxRatesLiveGetResponses = {
 
 export type GetLiveFxRatesApiV1FinanceFxRatesLiveGetResponse = GetLiveFxRatesApiV1FinanceFxRatesLiveGetResponses[keyof GetLiveFxRatesApiV1FinanceFxRatesLiveGetResponses];
 
+export type ExportJournalCsvApiV1FinanceJournalExportGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        format?: string;
+    };
+    url: '/api/v1/finance/journal-export';
+};
+
+export type ExportJournalCsvApiV1FinanceJournalExportGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportJournalCsvApiV1FinanceJournalExportGetError = ExportJournalCsvApiV1FinanceJournalExportGetErrors[keyof ExportJournalCsvApiV1FinanceJournalExportGetErrors];
+
+export type ExportJournalCsvApiV1FinanceJournalExportGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type GetOrderProfitApiV1FinanceOrdersOrderIdProfitGetData = {
     body?: never;
     headers?: {
@@ -8554,6 +8723,114 @@ export type VerifyPaymentRecordApiV1FinancePaymentsPaymentIdVerifyPostResponses 
 
 export type VerifyPaymentRecordApiV1FinancePaymentsPaymentIdVerifyPostResponse = VerifyPaymentRecordApiV1FinancePaymentsPaymentIdVerifyPostResponses[keyof VerifyPaymentRecordApiV1FinancePaymentsPaymentIdVerifyPostResponses];
 
+export type ListPayoutsApiV1FinancePayoutsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        provider?: string | null;
+        match_status?: string | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/finance/payouts';
+};
+
+export type ListPayoutsApiV1FinancePayoutsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPayoutsApiV1FinancePayoutsGetError = ListPayoutsApiV1FinancePayoutsGetErrors[keyof ListPayoutsApiV1FinancePayoutsGetErrors];
+
+export type ListPayoutsApiV1FinancePayoutsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayoutStatementListRead;
+};
+
+export type ListPayoutsApiV1FinancePayoutsGetResponse = ListPayoutsApiV1FinancePayoutsGetResponses[keyof ListPayoutsApiV1FinancePayoutsGetResponses];
+
+export type AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/finance/payouts/auto-match';
+};
+
+export type AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostError = AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostErrors[keyof AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostErrors];
+
+export type AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayoutAutoMatchResultRead;
+};
+
+export type AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostResponse = AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostResponses[keyof AutoMatchPayoutsApiV1FinancePayoutsAutoMatchPostResponses];
+
+export type ImportPayoutsApiV1FinancePayoutsImportPostData = {
+    /**
+     * Payout statement import: a provider label plus JSON rows or CSV text.
+     */
+    body: {
+        csv_text?: string | null;
+        provider: 'pingpong' | 'lianlian' | 'payoneer' | 'bank_tt' | 'stripe' | 'other';
+        rows?: Array<{
+            actual_fx_rate?: (number | string) | null;
+            expected_fx_rate?: (number | string) | null;
+            external_tx_ref: string;
+            paid_at?: string | null;
+            payout_amount: number | string;
+            payout_currency: string;
+            reference_hint?: string | null;
+            settled_base_amount: number | string;
+            settled_base_currency: string;
+        }>;
+    };
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        provider?: string | null;
+    };
+    url: '/api/v1/finance/payouts/import';
+};
+
+export type ImportPayoutsApiV1FinancePayoutsImportPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportPayoutsApiV1FinancePayoutsImportPostError = ImportPayoutsApiV1FinancePayoutsImportPostErrors[keyof ImportPayoutsApiV1FinancePayoutsImportPostErrors];
+
+export type ImportPayoutsApiV1FinancePayoutsImportPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayoutImportResultRead;
+};
+
+export type ImportPayoutsApiV1FinancePayoutsImportPostResponse = ImportPayoutsApiV1FinancePayoutsImportPostResponses[keyof ImportPayoutsApiV1FinancePayoutsImportPostResponses];
+
 export type GetProfitSummaryApiV1FinanceProfitSummaryGetData = {
     body?: never;
     headers?: {
@@ -8584,6 +8861,34 @@ export type GetProfitSummaryApiV1FinanceProfitSummaryGetResponses = {
 };
 
 export type GetProfitSummaryApiV1FinanceProfitSummaryGetResponse = GetProfitSummaryApiV1FinanceProfitSummaryGetResponses[keyof GetProfitSummaryApiV1FinanceProfitSummaryGetResponses];
+
+export type GetDualBasisProfitApiV1FinanceProfitDualBasisGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/finance/profit/dual-basis';
+};
+
+export type GetDualBasisProfitApiV1FinanceProfitDualBasisGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDualBasisProfitApiV1FinanceProfitDualBasisGetError = GetDualBasisProfitApiV1FinanceProfitDualBasisGetErrors[keyof GetDualBasisProfitApiV1FinanceProfitDualBasisGetErrors];
+
+export type GetDualBasisProfitApiV1FinanceProfitDualBasisGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DualBasisProfitRead;
+};
+
+export type GetDualBasisProfitApiV1FinanceProfitDualBasisGetResponse = GetDualBasisProfitApiV1FinanceProfitDualBasisGetResponses[keyof GetDualBasisProfitApiV1FinanceProfitDualBasisGetResponses];
 
 export type ListReceivablesApiV1FinanceReceivablesGetData = {
     body?: never;
@@ -8647,6 +8952,128 @@ export type SubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPostRespon
 };
 
 export type SubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPostResponse = SubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPostResponses[keyof SubmitReceivablePaymentApiV1FinanceReceivablesRpIdPaymentsPostResponses];
+
+export type ListSettlementsApiV1FinanceSettlementsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        channel_type?: string | null;
+        status?: string | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/finance/settlements';
+};
+
+export type ListSettlementsApiV1FinanceSettlementsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSettlementsApiV1FinanceSettlementsGetError = ListSettlementsApiV1FinanceSettlementsGetErrors[keyof ListSettlementsApiV1FinanceSettlementsGetErrors];
+
+export type ListSettlementsApiV1FinanceSettlementsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettlementBatchListRead;
+};
+
+export type ListSettlementsApiV1FinanceSettlementsGetResponse = ListSettlementsApiV1FinanceSettlementsGetResponses[keyof ListSettlementsApiV1FinanceSettlementsGetResponses];
+
+export type ImportSettlementsApiV1FinanceSettlementsImportPostData = {
+    /**
+     * Marketplace payout statement header plus its rows (JSON list or CSV text).
+     */
+    body: {
+        batch_ref: string;
+        channel_account_id?: string | null;
+        channel_type: string;
+        csv_text?: string | null;
+        currency: string;
+        fx_rate_to_base: number | string;
+        lines?: Array<{
+            ad_fee_ccy?: number | string;
+            commission_ccy?: number | string;
+            external_order_id?: string | null;
+            fulfillment_fee_ccy?: number | string;
+            gross_sales_ccy?: number | string;
+            net_settlement_ccy?: number | string | null;
+            refund_ccy?: number | string;
+            sku?: string | null;
+            storage_fee_ccy?: number | string;
+        }>;
+        period_end: string;
+        period_start: string;
+    };
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        channel_type?: string | null;
+        batch_ref?: string | null;
+        currency?: string | null;
+        period_start?: string | null;
+        period_end?: string | null;
+        fx_rate_to_base?: number | string | null;
+        channel_account_id?: string | null;
+    };
+    url: '/api/v1/finance/settlements/import';
+};
+
+export type ImportSettlementsApiV1FinanceSettlementsImportPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportSettlementsApiV1FinanceSettlementsImportPostError = ImportSettlementsApiV1FinanceSettlementsImportPostErrors[keyof ImportSettlementsApiV1FinanceSettlementsImportPostErrors];
+
+export type ImportSettlementsApiV1FinanceSettlementsImportPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettlementBatchRead;
+};
+
+export type ImportSettlementsApiV1FinanceSettlementsImportPostResponse = ImportSettlementsApiV1FinanceSettlementsImportPostResponses[keyof ImportSettlementsApiV1FinanceSettlementsImportPostResponses];
+
+export type ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/v1/finance/settlements/{batch_id}/lines';
+};
+
+export type ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetError = ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetErrors[keyof ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetErrors];
+
+export type ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettlementLineListRead;
+};
+
+export type ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetResponse = ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetResponses[keyof ListSettlementLinesApiV1FinanceSettlementsBatchIdLinesGetResponses];
 
 export type ListCampaignsApiV1GrowthCampaignsGetData = {
     body?: never;
