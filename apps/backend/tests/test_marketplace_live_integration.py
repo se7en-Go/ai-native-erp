@@ -883,6 +883,24 @@ async def test_live_push_to_shopify_persists_live_published_and_shopify_product_
         if request.url.path == "/admin/api/2026-01/graphql.json":
             assert request.headers["x-shopify-access-token"] == refreshed_token
             gql_body = json.loads(request.content)
+            gql_query = str(gql_body.get("query") or "")
+            if "publications(" in gql_query:
+                return httpx.Response(
+                    200,
+                    json={
+                        "data": {
+                            "publications": {
+                                "nodes": [
+                                    {"id": "gid://shopify/Publication/1", "name": "Online Store"}
+                                ]
+                            }
+                        }
+                    },
+                )
+            if "publishablePublish(" in gql_query:
+                return httpx.Response(
+                    200, json={"data": {"publishablePublish": {"userErrors": []}}}
+                )
             assert gql_body["variables"]["synchronous"] is True
             product_input = gql_body["variables"]["productSet"]
             assert product_input["status"] == "ACTIVE"
@@ -979,7 +997,11 @@ async def test_live_push_to_shopify_persists_live_published_and_shopify_product_
         )
         assert refreshed_creds["access_token"] == refreshed_token
 
-    graphql_calls = [req for req in calls if req.url.path.endswith("/graphql.json")]
+    graphql_calls = [
+        req
+        for req in calls
+        if req.url.path.endswith("/graphql.json") and "productSet(" in req.content.decode()
+    ]
     assert len(graphql_calls) == 1
     sent_product = json.loads(graphql_calls[0].content)["variables"]["productSet"]
     assert sent_product["variants"][0]["sku"] == external_sku
