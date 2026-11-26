@@ -482,6 +482,44 @@ async def test_external_cancel_releases_stock_and_late_update_cannot_regress(
         assert await _balance(session, workspace) == (3, 0, 3)
 
 
+async def test_external_full_refund_releases_reserved_stock_idempotently(
+    pg: _PgHarness,
+) -> None:
+    workspace = await pg.seed(on_hand=5)
+    async with tenant_session(pg.factory, workspace.tenant_id) as session:
+        orders = OrderService()
+        tenant_id = workspace.tenant_id
+
+        refundable = await orders.create_order_atomic(
+            session,
+            tenant_id=tenant_id,
+            actor_type="webhook",
+            actor_id="wave3-sync",
+            payload=_order_payload(workspace, quantity=2, external_order_id="W3C-EXT-REFUND"),
+        )
+        assert await _balance(session, workspace) == (5, 2, 3)
+
+        refunded = await orders.update_external_order_status(
+            session,
+            tenant_id=tenant_id,
+            order_id=refundable.id,
+            fulfillment_status=FulfillmentStatus.REFUNDED,
+            payment_status=PaymentStatus.REFUNDED,
+        )
+        assert refunded.fulfillment_status == FulfillmentStatus.REFUNDED
+        assert await _balance(session, workspace) == (5, 0, 5)
+
+        # Repeated refund webhook must remain an idempotent no-op (no double release).
+        await orders.update_external_order_status(
+            session,
+            tenant_id=tenant_id,
+            order_id=refundable.id,
+            fulfillment_status=FulfillmentStatus.REFUNDED,
+            payment_status=PaymentStatus.REFUNDED,
+        )
+        assert await _balance(session, workspace) == (5, 0, 5)
+
+
 async def test_first_import_of_cancelled_order_does_not_reserve_stock(pg: _PgHarness) -> None:
     workspace = await pg.seed(on_hand=5, channel_account=True)
     assert workspace.channel_account_id is not None
