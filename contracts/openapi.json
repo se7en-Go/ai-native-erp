@@ -2084,6 +2084,420 @@
         "title": "Body_upload_kb_document_api_v1_ai_kb_documents_post",
         "type": "object"
       },
+      "BomAssembleRead": {
+        "properties": {
+          "consumed": {
+            "items": {
+              "$ref": "#/components/schemas/BomAssemblyConsumptionRead"
+            },
+            "title": "Consumed",
+            "type": "array"
+          },
+          "parent_on_hand_qty": {
+            "title": "Parent On Hand Qty",
+            "type": "integer"
+          },
+          "parent_sku": {
+            "title": "Parent Sku",
+            "type": "string"
+          },
+          "parent_variant_id": {
+            "format": "uuid",
+            "title": "Parent Variant Id",
+            "type": "string"
+          },
+          "qty_kits": {
+            "title": "Qty Kits",
+            "type": "integer"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "format": "uuid",
+            "title": "Warehouse Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "warehouse_id",
+          "parent_variant_id",
+          "parent_sku",
+          "qty_kits",
+          "parent_on_hand_qty",
+          "consumed",
+          "replayed"
+        ],
+        "title": "BomAssembleRead",
+        "type": "object"
+      },
+      "BomAssembleRequest": {
+        "description": "Assemble `qty_kits` kits, deducting every component from one warehouse.",
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "qty_kits": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000.0,
+            "title": "Qty Kits",
+            "type": "integer"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warehouse_id": {
+            "format": "uuid",
+            "title": "Warehouse Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "warehouse_id",
+          "qty_kits",
+          "request_id"
+        ],
+        "title": "BomAssembleRequest",
+        "type": "object"
+      },
+      "BomAssemblyConsumptionRead": {
+        "properties": {
+          "component_sku": {
+            "title": "Component Sku",
+            "type": "string"
+          },
+          "component_variant_id": {
+            "format": "uuid",
+            "title": "Component Variant Id",
+            "type": "string"
+          },
+          "qty_consumed": {
+            "title": "Qty Consumed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "component_variant_id",
+          "component_sku",
+          "qty_consumed"
+        ],
+        "title": "BomAssemblyConsumptionRead",
+        "type": "object"
+      },
+      "BomComponentRead": {
+        "properties": {
+          "component_sku": {
+            "title": "Component Sku",
+            "type": "string"
+          },
+          "component_unit_cost_base": {
+            "title": "Component Unit Cost Base",
+            "type": "string"
+          },
+          "component_variant_id": {
+            "format": "uuid",
+            "title": "Component Variant Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "effective_qty_per_unit": {
+            "title": "Effective Qty Per Unit",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_unit_cost_base": {
+            "title": "Line Unit Cost Base",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "parent_sku": {
+            "title": "Parent Sku",
+            "type": "string"
+          },
+          "parent_variant_id": {
+            "format": "uuid",
+            "title": "Parent Variant Id",
+            "type": "string"
+          },
+          "qty_per_unit": {
+            "title": "Qty Per Unit",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "waste_rate_pct": {
+            "title": "Waste Rate Pct",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "parent_variant_id",
+          "parent_sku",
+          "component_variant_id",
+          "component_sku",
+          "qty_per_unit",
+          "waste_rate_pct",
+          "effective_qty_per_unit",
+          "component_unit_cost_base",
+          "line_unit_cost_base",
+          "notes",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "BomComponentRead",
+        "type": "object"
+      },
+      "BomComponentUpsert": {
+        "description": "Add or update one component line of a 1-level kit.",
+        "properties": {
+          "component_variant_id": {
+            "format": "uuid",
+            "title": "Component Variant Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "parent_variant_id": {
+            "format": "uuid",
+            "title": "Parent Variant Id",
+            "type": "string"
+          },
+          "qty_per_unit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Qty Per Unit"
+          },
+          "waste_rate_pct": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Waste Rate Pct"
+          }
+        },
+        "required": [
+          "parent_variant_id",
+          "component_variant_id",
+          "qty_per_unit"
+        ],
+        "title": "BomComponentUpsert",
+        "type": "object"
+      },
+      "BomCostRollupLineRead": {
+        "properties": {
+          "component_id": {
+            "format": "uuid",
+            "title": "Component Id",
+            "type": "string"
+          },
+          "component_sku": {
+            "title": "Component Sku",
+            "type": "string"
+          },
+          "component_unit_cost_base": {
+            "title": "Component Unit Cost Base",
+            "type": "string"
+          },
+          "component_variant_id": {
+            "format": "uuid",
+            "title": "Component Variant Id",
+            "type": "string"
+          },
+          "effective_qty_per_unit": {
+            "title": "Effective Qty Per Unit",
+            "type": "string"
+          },
+          "line_unit_cost_base": {
+            "title": "Line Unit Cost Base",
+            "type": "string"
+          },
+          "qty_per_unit": {
+            "title": "Qty Per Unit",
+            "type": "string"
+          },
+          "waste_rate_pct": {
+            "title": "Waste Rate Pct",
+            "type": "string"
+          }
+        },
+        "required": [
+          "component_id",
+          "component_variant_id",
+          "component_sku",
+          "qty_per_unit",
+          "waste_rate_pct",
+          "effective_qty_per_unit",
+          "component_unit_cost_base",
+          "line_unit_cost_base"
+        ],
+        "title": "BomCostRollupLineRead",
+        "type": "object"
+      },
+      "BomCostRollupRead": {
+        "properties": {
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "component_count": {
+            "title": "Component Count",
+            "type": "integer"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/BomCostRollupLineRead"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "parent_sku": {
+            "title": "Parent Sku",
+            "type": "string"
+          },
+          "parent_variant_id": {
+            "format": "uuid",
+            "title": "Parent Variant Id",
+            "type": "string"
+          },
+          "unit_cost_base": {
+            "title": "Unit Cost Base",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parent_variant_id",
+          "parent_sku",
+          "base_currency",
+          "component_count",
+          "unit_cost_base",
+          "lines"
+        ],
+        "title": "BomCostRollupRead",
+        "type": "object"
+      },
+      "BomKitRead": {
+        "description": "One parent SKU and every component that makes it.",
+        "properties": {
+          "component_count": {
+            "title": "Component Count",
+            "type": "integer"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/BomComponentRead"
+            },
+            "title": "Components",
+            "type": "array"
+          },
+          "parent_sku": {
+            "title": "Parent Sku",
+            "type": "string"
+          },
+          "parent_variant_id": {
+            "format": "uuid",
+            "title": "Parent Variant Id",
+            "type": "string"
+          },
+          "rolled_up_unit_cost": {
+            "title": "Rolled Up Unit Cost",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parent_variant_id",
+          "parent_sku",
+          "components",
+          "component_count",
+          "rolled_up_unit_cost"
+        ],
+        "title": "BomKitRead",
+        "type": "object"
+      },
+      "BomListRead": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BomKitRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "BomListRead",
+        "type": "object"
+      },
       "BuyerLocalTimeInfo": {
         "properties": {
           "formatted_time": {
@@ -5680,6 +6094,139 @@
           "channel_account_id"
         ],
         "title": "DisconnectChannelResponse",
+        "type": "object"
+      },
+      "DocReplenishmentRead": {
+        "properties": {
+          "critical_count": {
+            "title": "Critical Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DocReplenishmentRowRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "target_doc_days": {
+            "title": "Target Doc Days",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "warning_count": {
+            "title": "Warning Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target_doc_days",
+          "generated_at",
+          "items",
+          "total",
+          "critical_count",
+          "warning_count"
+        ],
+        "title": "DocReplenishmentRead",
+        "type": "object"
+      },
+      "DocReplenishmentRowRead": {
+        "properties": {
+          "doc_days": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Days"
+          },
+          "in_transit_qty": {
+            "title": "In Transit Qty",
+            "type": "integer"
+          },
+          "local_available_qty": {
+            "title": "Local Available Qty",
+            "type": "integer"
+          },
+          "overseas_available_qty": {
+            "title": "Overseas Available Qty",
+            "type": "integer"
+          },
+          "product_name": {
+            "title": "Product Name",
+            "type": "string"
+          },
+          "risk_level": {
+            "enum": [
+              "critical",
+              "warning",
+              "healthy"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "suggested_reorder_qty": {
+            "title": "Suggested Reorder Qty",
+            "type": "integer"
+          },
+          "total_available_qty": {
+            "title": "Total Available Qty",
+            "type": "integer"
+          },
+          "units_sold_30d": {
+            "title": "Units Sold 30D",
+            "type": "integer"
+          },
+          "units_sold_7d": {
+            "title": "Units Sold 7D",
+            "type": "integer"
+          },
+          "units_sold_90d": {
+            "title": "Units Sold 90D",
+            "type": "integer"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "weighted_daily_sales": {
+            "title": "Weighted Daily Sales",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "sku",
+          "product_name",
+          "local_available_qty",
+          "overseas_available_qty",
+          "in_transit_qty",
+          "total_available_qty",
+          "units_sold_7d",
+          "units_sold_30d",
+          "units_sold_90d",
+          "weighted_daily_sales",
+          "doc_days",
+          "suggested_reorder_qty",
+          "risk_level"
+        ],
+        "title": "DocReplenishmentRowRead",
         "type": "object"
       },
       "DualBasisOrderRow": {
@@ -9944,6 +10491,8 @@
               "inbound_po",
               "outbound_order",
               "transfer",
+              "transfer_out",
+              "transfer_in",
               "stocktake_adjust"
             ],
             "title": "Movement Type",
@@ -21006,6 +21555,361 @@
           "available_qty"
         ],
         "title": "StockRead",
+        "type": "object"
+      },
+      "StockTransferCreate": {
+        "properties": {
+          "destination_warehouse_id": {
+            "format": "uuid",
+            "title": "Destination Warehouse Id",
+            "type": "string"
+          },
+          "eta_days": {
+            "default": 25,
+            "maximum": 3650.0,
+            "minimum": 0.0,
+            "title": "Eta Days",
+            "type": "integer"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/StockTransferLineInput"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Lines",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "shipping_method": {
+            "default": "sea_freight",
+            "enum": [
+              "sea_freight",
+              "air_freight",
+              "express",
+              "rail",
+              "truck"
+            ],
+            "title": "Shipping Method",
+            "type": "string"
+          },
+          "source_warehouse_id": {
+            "format": "uuid",
+            "title": "Source Warehouse Id",
+            "type": "string"
+          },
+          "tracking_no": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking No"
+          },
+          "transfer_no": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transfer No"
+          }
+        },
+        "required": [
+          "source_warehouse_id",
+          "destination_warehouse_id",
+          "lines"
+        ],
+        "title": "StockTransferCreate",
+        "type": "object"
+      },
+      "StockTransferLineInput": {
+        "properties": {
+          "qty": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000.0,
+            "title": "Qty",
+            "type": "integer"
+          },
+          "unit_freight_cost_base": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Unit Freight Cost Base"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "qty"
+        ],
+        "title": "StockTransferLineInput",
+        "type": "object"
+      },
+      "StockTransferLineRead": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_freight_cost_base": {
+            "title": "Line Freight Cost Base",
+            "type": "string"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "integer"
+          },
+          "received_qty": {
+            "title": "Received Qty",
+            "type": "integer"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "unit_freight_cost_base": {
+            "title": "Unit Freight Cost Base",
+            "type": "string"
+          },
+          "variant_id": {
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "variant_id",
+          "sku",
+          "qty",
+          "received_qty",
+          "unit_freight_cost_base",
+          "line_freight_cost_base"
+        ],
+        "title": "StockTransferLineRead",
+        "type": "object"
+      },
+      "StockTransferListRead": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StockTransferRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "StockTransferListRead",
+        "type": "object"
+      },
+      "StockTransferRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "destination_warehouse_id": {
+            "format": "uuid",
+            "title": "Destination Warehouse Id",
+            "type": "string"
+          },
+          "destination_warehouse_name": {
+            "title": "Destination Warehouse Name",
+            "type": "string"
+          },
+          "dispatched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispatched At"
+          },
+          "eta_days": {
+            "title": "Eta Days",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/StockTransferLineRead"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "shipping_method": {
+            "enum": [
+              "sea_freight",
+              "air_freight",
+              "express",
+              "rail",
+              "truck"
+            ],
+            "title": "Shipping Method",
+            "type": "string"
+          },
+          "source_warehouse_id": {
+            "format": "uuid",
+            "title": "Source Warehouse Id",
+            "type": "string"
+          },
+          "source_warehouse_name": {
+            "title": "Source Warehouse Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "in_transit",
+              "received",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_freight_cost_base": {
+            "title": "Total Freight Cost Base",
+            "type": "string"
+          },
+          "total_qty": {
+            "title": "Total Qty",
+            "type": "integer"
+          },
+          "tracking_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking No"
+          },
+          "transfer_no": {
+            "title": "Transfer No",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "transfer_no",
+          "source_warehouse_id",
+          "source_warehouse_name",
+          "destination_warehouse_id",
+          "destination_warehouse_name",
+          "status",
+          "shipping_method",
+          "tracking_no",
+          "eta_days",
+          "dispatched_at",
+          "received_at",
+          "notes",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "total_qty",
+          "total_freight_cost_base",
+          "lines"
+        ],
+        "title": "StockTransferRead",
         "type": "object"
       },
       "StoreScopeAssignRequest": {
@@ -41743,6 +42647,377 @@
         ]
       }
     },
+    "/api/v1/supply-chain/bom": {
+      "get": {
+        "description": "Every 1-level kit (optionally just one parent) with its components and cost.",
+        "operationId": "list_bom_api_v1_supply_chain_bom_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "parent_variant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Variant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BomListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Bom",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/bom/components": {
+      "post": {
+        "description": "Add or update a component; rejects self-reference and any 2nd BOM level (422).",
+        "operationId": "upsert_bom_component_api_v1_supply_chain_bom_components_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BomComponentUpsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BomComponentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert Bom Component",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/bom/components/{component_id}": {
+      "delete": {
+        "operationId": "delete_bom_component_api_v1_supply_chain_bom_components__component_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "component_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Component Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Bom Component",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/bom/{parent_variant_id}/assemble": {
+      "post": {
+        "description": "Deduct every component and credit the kit, atomically and idempotently.",
+        "operationId": "assemble_bom_api_v1_supply_chain_bom__parent_variant_id__assemble_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "parent_variant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Parent Variant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BomAssembleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BomAssembleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assemble Bom",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/bom/{parent_variant_id}/cost-rollup": {
+      "get": {
+        "description": "Exact `Decimal` rolled-up unit cost from each component's cost price.",
+        "operationId": "read_bom_cost_rollup_api_v1_supply_chain_bom__parent_variant_id__cost_rollup_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "parent_variant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Parent Variant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BomCostRollupRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Bom Cost Rollup",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/doc-replenishment": {
+      "get": {
+        "description": "Per-SKU local / overseas / in-transit stock, blended daily sales and DOC.",
+        "operationId": "read_doc_replenishment_api_v1_supply_chain_doc_replenishment_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_doc_days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Target Doc Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocReplenishmentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Doc Replenishment",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
     "/api/v1/supply-chain/purchase-orders": {
       "get": {
         "operationId": "list_purchase_orders_api_v1_supply_chain_purchase_orders_get",
@@ -42461,6 +43736,293 @@
           }
         },
         "summary": "Update Supplier",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/transfers": {
+      "get": {
+        "description": "Tenant transfers with lines, SKUs and warehouse names.",
+        "operationId": "list_stock_transfers_api_v1_supply_chain_transfers_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockTransferListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Stock Transfers",
+        "tags": [
+          "supply-chain"
+        ]
+      },
+      "post": {
+        "operationId": "create_stock_transfer_api_v1_supply_chain_transfers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockTransferCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockTransferRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Stock Transfer",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/transfers/{transfer_id}/cancel": {
+      "post": {
+        "description": "Cancel a draft transfer; a dispatched or received load cannot be cancelled.",
+        "operationId": "cancel_stock_transfer_api_v1_supply_chain_transfers__transfer_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transfer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockTransferRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Stock Transfer",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/transfers/{transfer_id}/dispatch": {
+      "post": {
+        "description": "`draft -> in_transit`: deduct the source warehouse, stamp `dispatched_at`.",
+        "operationId": "dispatch_stock_transfer_api_v1_supply_chain_transfers__transfer_id__dispatch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transfer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockTransferRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dispatch Stock Transfer",
+        "tags": [
+          "supply-chain"
+        ]
+      }
+    },
+    "/api/v1/supply-chain/transfers/{transfer_id}/receive": {
+      "post": {
+        "description": "`in_transit -> received`: credit the destination warehouse.",
+        "operationId": "receive_stock_transfer_api_v1_supply_chain_transfers__transfer_id__receive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transfer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockTransferRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receive Stock Transfer",
         "tags": [
           "supply-chain"
         ]
