@@ -86,6 +86,11 @@ from erp_core.shared.db import (
     system_session,
 )
 from erp_core.shared.errors import register_exception_handlers
+from erp_core.shared.observability import (
+    ObservabilityMiddleware,
+    TelemetryConfig,
+    metrics_router,
+)
 from erp_core.shared.redis_client import create_redis_client
 from erp_core.shared.storage import ObjectStorageService
 from erp_core.social.attribution_router import router as social_attribution_router
@@ -96,6 +101,7 @@ from erp_core.supply_chain.router import supply_router, wms_router
 from erp_core.tenancy.audit import ensure_audit_child_rls
 from erp_core.tenancy.onboarding import onboarding_router
 from erp_core.tenancy.onboarding_dns import router as onboarding_dns_router
+from erp_core.tenancy.ops_router import router as ops_router
 from erp_core.tenancy.router import router as tenancy_router
 from erp_core.tenancy.store_scope_router import router as store_scope_router
 
@@ -199,6 +205,10 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    # Registered *after* the CORS layer, so the correlation/metrics middleware is
+    # the outermost user middleware: every response (including CORS preflights and
+    # errors) carries `X-Request-ID` and is counted. Pure ASGI, so SSE bodies such
+    # as `/api/v1/inbox/stream` are never buffered.
     app.add_middleware(
         ScopedCORSMiddleware,
         excluded_prefixes=("/api/v1/widget/",),
@@ -208,7 +218,13 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(
+        ObservabilityMiddleware,
+        telemetry=TelemetryConfig.from_settings(settings),
+    )
     register_exception_handlers(app)
+    app.include_router(metrics_router)
+    app.include_router(ops_router)
     app.include_router(tenancy_router)
     app.include_router(store_scope_router)
     app.include_router(onboarding_router)

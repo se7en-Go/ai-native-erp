@@ -36,6 +36,7 @@ import {
 } from "@/components/channels/connected-accounts-card";
 import { TeamMembersCard } from "@/components/channels/team-members-card";
 import { TeamGovernancePanel } from "@/components/settings/team-governance-panel";
+import { OpsHealthPanel } from "@/components/settings/ops-health-panel";
 import { PiTemplateCard } from "@/components/channels/pi-template-card";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import {
@@ -442,6 +443,8 @@ function ChannelsHub() {
 
         {tab === "compliance" && isAdmin && (
           <div className="w-full space-y-3">
+            <OpsHealthPanel isAdmin={isAdmin} />
+
             <Card>
               <CardHeader
                 title={bi("死信队列（DLQ）重放", "Dead-letter queue (DLQ) replay")}

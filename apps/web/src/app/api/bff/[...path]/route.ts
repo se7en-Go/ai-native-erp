@@ -91,6 +91,7 @@ const ALLOWED_BFF_V1_PREFIXES = new Set([
   "identity",
   "inbox",
   "onboarding",
+  "ops",
   "orders",
   "search",
   "social",

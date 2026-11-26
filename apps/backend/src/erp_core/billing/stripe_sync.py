@@ -4,8 +4,9 @@ import hashlib
 import hmac
 import re
 import time
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 import httpx
@@ -19,6 +20,29 @@ from erp_core.shared.config import get_settings
 
 _STRIPE_URL = "https://api.stripe.com/v1"
 _PAYMENT_ID = re.compile(r"pi_[a-zA-Z0-9_]{1,150}")
+_INVOICE_ID = re.compile(r"in_[a-zA-Z0-9_]{1,150}")
+_SUBSCRIPTION_ID = re.compile(r"sub_[a-zA-Z0-9_]{1,150}")
+_TOPUP_FLAG = "erp_credit_topup"
+
+#: Stripe event types that fund a wallet (idempotent topup).
+TOPUP_EVENT_TYPES: frozenset[str] = frozenset({"payment_intent.succeeded", "invoice.paid"})
+#: Stripe event types that downgrade the tenant plan / suspend overage.
+DOWNGRADE_EVENT_TYPES: frozenset[str] = frozenset(
+    {"invoice.payment_failed", "customer.subscription.deleted"}
+)
+
+StripeEventKind = Literal["topup", "downgrade"]
+
+
+@dataclass(frozen=True)
+class StripeBillingEvent:
+    """One normalized, tenant-scoped billing event from a signed Stripe webhook."""
+
+    kind: StripeEventKind
+    tenant_id: UUID
+    reference: str
+    credits: int = 0
+    reason: str = ""
 
 
 def verify_stripe_webhook_signature(raw_body: bytes, sig_header: str, secret: str) -> bool:
@@ -140,34 +164,102 @@ class HttpStripeMeterClient:
 
 
 def stripe_topup_details(event_payload: dict[str, Any]) -> tuple[UUID, str, int] | None:
-    if event_payload.get("type") != "payment_intent.succeeded":
+    """Backwards-compatible accessor for the funding fields of a topup event."""
+    event = interpret_stripe_event(event_payload)
+    if event is None or event.kind != "topup":
         return None
+    return event.tenant_id, event.reference, event.credits
+
+
+def _stripe_object(event_payload: dict[str, Any]) -> dict[str, Any] | None:
     data = event_payload.get("data")
     obj = data.get("object") if isinstance(data, dict) else None
-    metadata = obj.get("metadata") if isinstance(obj, dict) else None
-    if (
-        not isinstance(obj, dict)
-        or not isinstance(metadata, dict)
-        or metadata.get("erp_credit_topup") != "1"
-    ):
+    return obj if isinstance(obj, dict) else None
+
+
+def _tenant_id(metadata: dict[str, Any]) -> UUID | None:
+    """Resolve the tenant from webhook metadata; `None` when Stripe has no mapping."""
+    raw = metadata.get("tenant_id")
+    if not isinstance(raw, str) or not raw.strip():
         return None
-    payment_id = obj.get("id")
-    if not isinstance(payment_id, str) or not _PAYMENT_ID.fullmatch(payment_id):
-        raise ValueError("Invalid paid intent ID.")
+    try:
+        return UUID(raw.strip())
+    except ValueError:
+        raise ValueError("Invalid tenant id in Stripe metadata.") from None
+
+
+def _topup_event(
+    event_type: str, obj: dict[str, Any], metadata: dict[str, Any], identifier: re.Pattern[str]
+) -> StripeBillingEvent | None:
+    if metadata.get(_TOPUP_FLAG) != "1":
+        return None
+    reference = obj.get("id")
+    if not isinstance(reference, str) or not identifier.fullmatch(reference):
+        raise ValueError("Invalid paid object ID.")
     raw_credits = metadata.get("credits")
     if not isinstance(raw_credits, str) or not re.fullmatch(r"[0-9]{1,7}", raw_credits):
         raise ValueError("Invalid credit quantity.")
     credits = int(raw_credits)
-    amount = obj.get("amount_received")
+    amount = (
+        obj.get("amount_received")
+        if event_type == "payment_intent.succeeded"
+        else obj.get("amount_paid")
+    )
+    settled_status = obj.get("status")
+    expected_status = "succeeded" if event_type == "payment_intent.succeeded" else "paid"
     if (
         not 0 < credits <= 1_000_000
         or type(amount) is not int
         or amount != int(Decimal(credits) * OVERAGE_CENTS_PER_CREDIT)
-        or obj.get("status") != "succeeded"
+        or settled_status != expected_status
         or obj.get("currency") != "usd"
     ):
         raise ValueError("Paid amount or currency doesn't match the credit purchase.")
-    return UUID(str(metadata.get("tenant_id"))), payment_id, credits
+    tenant = _tenant_id(metadata)
+    if tenant is None:
+        return None
+    return StripeBillingEvent(
+        kind="topup", tenant_id=tenant, reference=reference, credits=credits
+    )
+
+
+def interpret_stripe_event(event_payload: dict[str, Any]) -> StripeBillingEvent | None:
+    """Normalize a Stripe event into the closed-loop actions this system performs.
+
+    Returns `None` for events that are not ours (no tenant metadata) so the
+    webhook answers `200` and Stripe stops retrying. Raises `ValueError` when an
+    event claims to be ours but its amounts do not add up (answered as `422`).
+    """
+    event_type = event_payload.get("type")
+    if not isinstance(event_type, str):
+        return None
+    if event_type not in TOPUP_EVENT_TYPES and event_type not in DOWNGRADE_EVENT_TYPES:
+        return None
+    obj = _stripe_object(event_payload)
+    metadata = obj.get("metadata") if isinstance(obj, dict) else None
+    if not isinstance(obj, dict) or not isinstance(metadata, dict):
+        return None
+
+    if event_type == "payment_intent.succeeded":
+        return _topup_event(event_type, obj, metadata, _PAYMENT_ID)
+    if event_type == "invoice.paid":
+        return _topup_event(event_type, obj, metadata, _INVOICE_ID)
+
+    reference = obj.get("id")
+    identifier = _INVOICE_ID if event_type == "invoice.payment_failed" else _SUBSCRIPTION_ID
+    reason = (
+        "invoice_payment_failed"
+        if event_type == "invoice.payment_failed"
+        else "subscription_deleted"
+    )
+    if not isinstance(reference, str) or not identifier.fullmatch(reference):
+        raise ValueError("Invalid billing object ID.")
+    tenant = _tenant_id(metadata)
+    if tenant is None:
+        return None
+    return StripeBillingEvent(
+        kind="downgrade", tenant_id=tenant, reference=reference, reason=reason
+    )
 
 
 class StripeMeterSyncService:
@@ -223,8 +315,17 @@ class StripeMeterSyncService:
         *,
         event_payload: dict[str, Any],
     ) -> dict[str, str]:
-        details = stripe_topup_details(event_payload)
-        if details is None:
+        """Apply one signed Stripe event exactly once (replays are no-ops)."""
+        event = interpret_stripe_event(event_payload)
+        if event is None:
             return {"status": "ignored"}
-        applied = await CreditWalletService().apply_stripe_topup(session, *details)
-        return {"status": "credited" if applied else "already_credited"}
+        wallets = CreditWalletService()
+        if event.kind == "topup":
+            applied = await wallets.apply_stripe_topup(
+                session, event.tenant_id, event.reference, event.credits
+            )
+            return {"status": "credited" if applied else "already_credited"}
+        downgraded = await wallets.apply_billing_downgrade(
+            session, event.tenant_id, event.reference, reason=event.reason
+        )
+        return {"status": "downgraded" if downgraded else "already_downgraded"}

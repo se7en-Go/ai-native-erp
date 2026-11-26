@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,11 @@ OVERAGE_CENTS_PER_CREDIT = Decimal("1")
 CREDIT_QUANTUM = Decimal("0.0001")
 _COST_QUANTUM = Decimal("0.000001")
 FUNDING_KEY_PREFIX = "funding:stripe:"
+#: Ledger-note prefix for non-monetary billing events (downgrades / payment failures).
+BILLING_EVENT_KEY_PREFIX = "billing:event:"
+DOWNGRADE_PLAN_TIER = "starter"
+DOWNGRADE_REASONS = frozenset({"invoice_payment_failed", "subscription_deleted"})
+_BILLING_REFERENCE = re.compile(r"[A-Za-z0-9_]{1,200}")
 _ALLOWED: tuple[bool, AutonomyLevel | None] = True, None
 _DENIED: tuple[bool, AutonomyLevel | None] = False, AutonomyLevel.L0_COPILOT
 
@@ -276,5 +282,74 @@ class CreditWalletService:
             "credit_wallet",
             tenant_id,
             after_state={"credits_added": credits},
+        )
+        return True
+
+    async def apply_billing_downgrade(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        reference: str,
+        *,
+        reason: str,
+    ) -> bool:
+        """Fail the tenant down to `starter` once per Stripe object.
+
+        Called for `invoice.payment_failed` / `customer.subscription.deleted`.
+        The `usage_ledger` marker row (`billing:event:<stripe id>`) is the
+        idempotency gate, so a Stripe replay storm can never double-apply the
+        downgrade or re-open overage spending.
+        """
+        if not isinstance(reference, str) or not _BILLING_REFERENCE.fullmatch(reference):
+            raise _error(
+                422, "ERR_INVALID_BILLING_REFERENCE", "Invalid Stripe billing object ID."
+            )
+        if reason not in DOWNGRADE_REASONS:
+            raise _error(422, "ERR_INVALID_BILLING_REASON", "Unknown billing downgrade reason.")
+        await self.ensure_wallet(session, tenant_id=tenant_id)
+        stmt = insert(UsageLedger).values(
+            tenant_id=tenant_id,
+            idempotency_key=f"{BILLING_EVENT_KEY_PREFIX}{reference}",
+            metric_type=UsageMetricType.AI_CREDIT.value,
+            units_consumed=Decimal(0),
+            raw_provider_cost_usd=Decimal(0),
+            model_or_provider="stripe_downgrade",
+            stripe_meter_synced=True,
+        )
+        marker = await session.scalar(
+            stmt.on_conflict_do_nothing(
+                index_elements=[UsageLedger.tenant_id, UsageLedger.idempotency_key],
+            ).returning(UsageLedger.id)
+        )
+        if marker is None:
+            return False
+        await session.execute(
+            update(CreditWallet)
+            .where(CreditWallet.tenant_id == tenant_id)
+            .values(
+                plan_tier=DOWNGRADE_PLAN_TIER,
+                included_credits_remaining=func.least(
+                    CreditWallet.included_credits_remaining,
+                    PLAN_INCLUDED_CREDITS[DOWNGRADE_PLAN_TIER],
+                ),
+                overage_spend_cap_cents=0,
+                auto_downgrade_to_l0=True,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await record_audit_event(
+            session,
+            tenant_id,
+            "webhook",
+            reference,
+            "billing.plan.downgraded",
+            "credit_wallet",
+            tenant_id,
+            after_state={
+                "plan_tier": DOWNGRADE_PLAN_TIER,
+                "overage_spend_cap_cents": 0,
+                "auto_downgrade_to_l0": True,
+                "reason": reason,
+            },
         )
         return True
