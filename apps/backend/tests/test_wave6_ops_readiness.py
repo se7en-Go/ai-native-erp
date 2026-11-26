@@ -30,6 +30,9 @@ WAVE3_0003_RLS_TABLES = ("products", "orders", "payment_records")
 #: 0013 (Wave 2 finance hardening) table created with append-only RLS.
 WAVE6_0013_RLS_TABLES = ("payable_payments",)
 
+#: Current head of the Alembic chain rendered by `upgrade head --sql`.
+HEAD_REVISION = "0020_notifications_automation"
+
 OFFLINE_SQL_TIMEOUT_SECONDS = 600
 
 
@@ -81,9 +84,9 @@ def test_alembic_offline_sql_reaches_head_without_error(offline_sql: str) -> Non
     )
     assert rendered[0] == "0001_tenancy_rls_and_audit"
     assert "0003" in rendered
-    assert rendered[-1] == "0019_analytics_im_sourcing"
+    assert rendered[-1] == HEAD_REVISION
     # Head is stamped only after the last migration body rendered successfully.
-    assert "UPDATE alembic_version SET version_num='0019_analytics_im_sourcing'" in offline_sql
+    assert f"UPDATE alembic_version SET version_num='{HEAD_REVISION}'" in offline_sql
     assert offline_sql.rstrip().endswith("COMMIT;")
 
 
