@@ -185,6 +185,49 @@
         "title": "AccountRead",
         "type": "object"
       },
+      "AdoptionTypeMetrics": {
+        "properties": {
+          "adoption_rate_pct": {
+            "title": "Adoption Rate Pct",
+            "type": "string"
+          },
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          },
+          "edited_and_approved": {
+            "title": "Edited And Approved",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "proposal_type": {
+            "title": "Proposal Type",
+            "type": "string"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "proposal_type",
+          "total",
+          "pending",
+          "approved",
+          "edited_and_approved",
+          "rejected",
+          "adoption_rate_pct"
+        ],
+        "title": "AdoptionTypeMetrics",
+        "type": "object"
+      },
       "AdvanceOnboardingRequest": {
         "properties": {
           "skip_catalog_for_b2b": {
@@ -205,6 +248,98 @@
           "target_stage"
         ],
         "title": "AdvanceOnboardingRequest",
+        "type": "object"
+      },
+      "AiAdoptionMetrics": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "integer"
+          },
+          "adoption_rate_pct": {
+            "title": "Adoption Rate Pct",
+            "type": "string"
+          },
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          },
+          "by_type": {
+            "items": {
+              "$ref": "#/components/schemas/AdoptionTypeMetrics"
+            },
+            "title": "By Type",
+            "type": "array"
+          },
+          "direct_adopt_rate_pct": {
+            "title": "Direct Adopt Rate Pct",
+            "type": "string"
+          },
+          "edit_adopt_rate_pct": {
+            "title": "Edit Adopt Rate Pct",
+            "type": "string"
+          },
+          "edited_and_approved": {
+            "title": "Edited And Approved",
+            "type": "integer"
+          },
+          "expired": {
+            "title": "Expired",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "rejection_rate_pct": {
+            "title": "Rejection Rate Pct",
+            "type": "string"
+          },
+          "review_base": {
+            "title": "Review Base",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "window_days",
+          "total",
+          "pending",
+          "approved",
+          "edited_and_approved",
+          "rejected",
+          "expired",
+          "failed",
+          "adopted",
+          "review_base",
+          "adoption_rate_pct",
+          "direct_adopt_rate_pct",
+          "edit_adopt_rate_pct",
+          "rejection_rate_pct",
+          "by_type"
+        ],
+        "title": "AiAdoptionMetrics",
         "type": "object"
       },
       "AiCapability": {
@@ -6852,6 +6987,103 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HandoverRequest": {
+        "description": "Offboarding handover: move every owned asset from one member to another.",
+        "properties": {
+          "deactivate_from_user": {
+            "default": false,
+            "title": "Deactivate From User",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "from_user_id": {
+            "format": "uuid",
+            "title": "From User Id",
+            "type": "string"
+          },
+          "to_user_id": {
+            "format": "uuid",
+            "title": "To User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_user_id",
+          "to_user_id"
+        ],
+        "title": "HandoverRequest",
+        "type": "object"
+      },
+      "HandoverResult": {
+        "properties": {
+          "channel_accounts_reassigned": {
+            "minimum": 0.0,
+            "title": "Channel Accounts Reassigned",
+            "type": "integer"
+          },
+          "conversations_reassigned": {
+            "minimum": 0.0,
+            "title": "Conversations Reassigned",
+            "type": "integer"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "from_user_deactivated": {
+            "title": "From User Deactivated",
+            "type": "boolean"
+          },
+          "from_user_id": {
+            "format": "uuid",
+            "title": "From User Id",
+            "type": "string"
+          },
+          "opportunities_reassigned": {
+            "minimum": 0.0,
+            "title": "Opportunities Reassigned",
+            "type": "integer"
+          },
+          "store_scopes_reassigned": {
+            "minimum": 0.0,
+            "title": "Store Scopes Reassigned",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "to_user_id": {
+            "format": "uuid",
+            "title": "To User Id",
+            "type": "string"
+          },
+          "total_reassigned": {
+            "minimum": 0.0,
+            "title": "Total Reassigned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "from_user_id",
+          "to_user_id",
+          "dry_run",
+          "opportunities_reassigned",
+          "conversations_reassigned",
+          "channel_accounts_reassigned",
+          "store_scopes_reassigned",
+          "total_reassigned",
+          "from_user_deactivated"
+        ],
+        "title": "HandoverResult",
+        "type": "object"
+      },
       "IdentityType": {
         "enum": [
           "email",
@@ -7465,6 +7697,170 @@
           "created_at"
         ],
         "title": "KbDocumentRead",
+        "type": "object"
+      },
+      "KbGapCreateRequest": {
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "customer_question": {
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Customer Question",
+            "type": "string"
+          },
+          "detected_language": {
+            "default": "en",
+            "maxLength": 16,
+            "minLength": 2,
+            "title": "Detected Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_question"
+        ],
+        "title": "KbGapCreateRequest",
+        "type": "object"
+      },
+      "KbGapPromoteRequest": {
+        "properties": {
+          "resolved_answer": {
+            "maxLength": 8000,
+            "minLength": 3,
+            "title": "Resolved Answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resolved_answer"
+        ],
+        "title": "KbGapPromoteRequest",
+        "type": "object"
+      },
+      "KbGapPromoteResult": {
+        "properties": {
+          "chunks_created": {
+            "title": "Chunks Created",
+            "type": "integer"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "gap": {
+            "$ref": "#/components/schemas/KbGapRead"
+          }
+        },
+        "required": [
+          "gap",
+          "document_id",
+          "chunks_created"
+        ],
+        "title": "KbGapPromoteResult",
+        "type": "object"
+      },
+      "KbGapRead": {
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_question": {
+            "title": "Customer Question",
+            "type": "string"
+          },
+          "detected_language": {
+            "title": "Detected Language",
+            "type": "string"
+          },
+          "frequency_count": {
+            "title": "Frequency Count",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "promoted_kb_document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promoted Kb Document Id"
+          },
+          "resolved_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Answer"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "resolved",
+              "dismissed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "customer_question",
+          "detected_language",
+          "frequency_count",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "KbGapRead",
         "type": "object"
       },
       "KbIngestResponse": {
@@ -11677,6 +12073,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[KbDocumentRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_KbGapRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KbGapRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[KbGapRead]",
         "type": "object"
       },
       "PaginatedResponse_LeadCollectionJobRead_": {
@@ -16613,6 +17045,205 @@
         "title": "ReceivePurchaseOrder",
         "type": "object"
       },
+      "RedlineCheckRequest": {
+        "properties": {
+          "content": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "RedlineCheckRequest",
+        "type": "object"
+      },
+      "RedlineCheckResult": {
+        "properties": {
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "blocks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "matched_rules": {
+            "items": {
+              "$ref": "#/components/schemas/RedlineMatchedRule"
+            },
+            "title": "Matched Rules",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocked",
+          "blocks",
+          "warnings",
+          "matched_rules"
+        ],
+        "title": "RedlineCheckResult",
+        "type": "object"
+      },
+      "RedlineMatchedRule": {
+        "properties": {
+          "action": {
+            "enum": [
+              "block",
+              "warn"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "match_type": {
+            "enum": [
+              "keyword",
+              "regex"
+            ],
+            "title": "Match Type",
+            "type": "string"
+          },
+          "matched_text": {
+            "title": "Matched Text",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "match_type",
+          "action",
+          "matched_text"
+        ],
+        "title": "RedlineMatchedRule",
+        "type": "object"
+      },
+      "RedlineRuleCreate": {
+        "description": "Rule authoring payload.\n\n`pattern` carries only a transport cap here; the service enforces the real\n200-character policy limit and returns `ERR_INVALID_REDLINE_PATTERN` /\n`ERR_REDLINE_PATTERN_TOO_LONG` so the operator sees why a rule was refused.",
+        "properties": {
+          "action": {
+            "default": "block",
+            "enum": [
+              "block",
+              "warn"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "match_type": {
+            "default": "keyword",
+            "enum": [
+              "keyword",
+              "regex"
+            ],
+            "title": "Match Type",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Pattern",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "pattern"
+        ],
+        "title": "RedlineRuleCreate",
+        "type": "object"
+      },
+      "RedlineRuleRead": {
+        "properties": {
+          "action": {
+            "enum": [
+              "block",
+              "warn"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "match_type": {
+            "enum": [
+              "keyword",
+              "regex"
+            ],
+            "title": "Match Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "pattern",
+          "match_type",
+          "action",
+          "is_enabled",
+          "created_at"
+        ],
+        "title": "RedlineRuleRead",
+        "type": "object"
+      },
       "RefreshRequest": {
         "properties": {
           "refresh_token": {
@@ -20153,6 +20784,129 @@
         "title": "StockRead",
         "type": "object"
       },
+      "StoreScopeAssignRequest": {
+        "description": "Grant (or re-level) one member's access to one connected store.",
+        "properties": {
+          "access_level": {
+            "default": "operate",
+            "enum": [
+              "read",
+              "operate",
+              "manage"
+            ],
+            "title": "Access Level",
+            "type": "string"
+          },
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "channel_account_id"
+        ],
+        "title": "StoreScopeAssignRequest",
+        "type": "object"
+      },
+      "StoreScopeRead": {
+        "properties": {
+          "access_level": {
+            "enum": [
+              "read",
+              "operate",
+              "manage"
+            ],
+            "title": "Access Level",
+            "type": "string"
+          },
+          "channel_account_id": {
+            "format": "uuid",
+            "title": "Channel Account Id",
+            "type": "string"
+          },
+          "channel_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Display Name"
+          },
+          "channel_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Type"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Email"
+          },
+          "user_full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Full Name"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "user_id",
+          "channel_account_id",
+          "access_level",
+          "created_at"
+        ],
+        "title": "StoreScopeRead",
+        "type": "object"
+      },
       "SupplierCreate": {
         "properties": {
           "code": {
@@ -22837,6 +23591,67 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/ai/adoption-metrics": {
+      "get": {
+        "operationId": "get_adoption_metrics_api_v1_ai_adoption_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAdoptionMetrics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Adoption Metrics",
+        "tags": [
+          "ai-kb-gaps"
+        ]
+      }
+    },
     "/api/v1/ai/assistant/chat": {
       "post": {
         "operationId": "assistant_chat_api_v1_ai_assistant_chat_post",
@@ -24029,6 +24844,279 @@
         "summary": "Inbox Assist",
         "tags": [
           "ai-workforce"
+        ]
+      }
+    },
+    "/api/v1/ai/kb-gaps": {
+      "get": {
+        "operationId": "list_kb_gaps_api_v1_ai_kb_gaps_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_KbGapRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Kb Gaps",
+        "tags": [
+          "ai-kb-gaps"
+        ]
+      },
+      "post": {
+        "operationId": "create_kb_gap_api_v1_ai_kb_gaps_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KbGapCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbGapRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Kb Gap",
+        "tags": [
+          "ai-kb-gaps"
+        ]
+      }
+    },
+    "/api/v1/ai/kb-gaps/{gap_id}/dismiss": {
+      "post": {
+        "operationId": "dismiss_kb_gap_api_v1_ai_kb_gaps__gap_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "gap_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Gap Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbGapRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dismiss Kb Gap",
+        "tags": [
+          "ai-kb-gaps"
+        ]
+      }
+    },
+    "/api/v1/ai/kb-gaps/{gap_id}/promote": {
+      "post": {
+        "operationId": "promote_kb_gap_api_v1_ai_kb_gaps__gap_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "gap_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Gap Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KbGapPromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbGapPromoteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Kb Gap",
+        "tags": [
+          "ai-kb-gaps"
         ]
       }
     },
@@ -25632,6 +26720,227 @@
         "summary": "Delete Quick Reply",
         "tags": [
           "ai-workforce"
+        ]
+      }
+    },
+    "/api/v1/ai/redline-rules": {
+      "get": {
+        "operationId": "list_redline_rules_api_v1_ai_redline_rules_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RedlineRuleRead"
+                  },
+                  "title": "Response List Redline Rules Api V1 Ai Redline Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Redline Rules",
+        "tags": [
+          "ai-kb-gaps"
+        ]
+      },
+      "post": {
+        "operationId": "create_redline_rule_api_v1_ai_redline_rules_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedlineRuleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedlineRuleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Redline Rule",
+        "tags": [
+          "ai-kb-gaps"
+        ]
+      }
+    },
+    "/api/v1/ai/redline-rules/check": {
+      "post": {
+        "operationId": "check_outbound_text_api_v1_ai_redline_rules_check_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedlineCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedlineCheckResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Outbound Text",
+        "tags": [
+          "ai-kb-gaps"
+        ]
+      }
+    },
+    "/api/v1/ai/redline-rules/{rule_id}": {
+      "delete": {
+        "operationId": "delete_redline_rule_api_v1_ai_redline_rules__rule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Redline Rule",
+        "tags": [
+          "ai-kb-gaps"
         ]
       }
     },
@@ -41203,6 +42512,65 @@
         ]
       }
     },
+    "/api/v1/tenants/handover": {
+      "post": {
+        "operationId": "handover_member_assets_api_v1_tenants_handover_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Handover Member Assets",
+        "tags": [
+          "tenancy-store-scopes"
+        ]
+      }
+    },
     "/api/v1/tenants/memberships": {
       "get": {
         "operationId": "list_memberships_api_v1_tenants_memberships_get",
@@ -41563,6 +42931,185 @@
         "summary": "Update Tenant Settings",
         "tags": [
           "tenancy"
+        ]
+      }
+    },
+    "/api/v1/tenants/store-scopes": {
+      "get": {
+        "operationId": "list_store_scopes_api_v1_tenants_store_scopes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StoreScopeRead"
+                  },
+                  "title": "Response List Store Scopes Api V1 Tenants Store Scopes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Store Scopes",
+        "tags": [
+          "tenancy-store-scopes"
+        ]
+      },
+      "post": {
+        "operationId": "assign_store_scope_api_v1_tenants_store_scopes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoreScopeAssignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreScopeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Store Scope",
+        "tags": [
+          "tenancy-store-scopes"
+        ]
+      }
+    },
+    "/api/v1/tenants/store-scopes/{scope_id}": {
+      "delete": {
+        "operationId": "revoke_store_scope_api_v1_tenants_store_scopes__scope_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Scope Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Store Scope",
+        "tags": [
+          "tenancy-store-scopes"
         ]
       }
     },

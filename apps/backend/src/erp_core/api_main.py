@@ -11,6 +11,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 # Composition root: import every domain model module so SQLAlchemy resolves the
 # cross-module string foreign keys when it configures the mappers.
+import erp_core.ai_engine.kb_gap_models  # noqa: F401
 import erp_core.ai_engine.mcp_models  # noqa: F401
 import erp_core.ai_engine.models  # noqa: F401
 import erp_core.ai_engine.notification_models  # noqa: F401
@@ -28,7 +29,9 @@ import erp_core.orders.routing_models  # noqa: F401
 import erp_core.social.models  # noqa: F401
 import erp_core.supply_chain.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
+import erp_core.tenancy.store_scope_models  # noqa: F401
 from erp_core.ai_engine.auto_reply_router import router as ai_auto_reply_router
+from erp_core.ai_engine.kb_gap_router import router as kb_gap_router
 from erp_core.ai_engine.kb_router import router as kb_router
 from erp_core.ai_engine.mcp_router import public_router as mcp_public_router
 from erp_core.ai_engine.mcp_router import router as ai_mcp_router
@@ -94,6 +97,7 @@ from erp_core.tenancy.audit import ensure_audit_child_rls
 from erp_core.tenancy.onboarding import onboarding_router
 from erp_core.tenancy.onboarding_dns import router as onboarding_dns_router
 from erp_core.tenancy.router import router as tenancy_router
+from erp_core.tenancy.store_scope_router import router as store_scope_router
 
 
 @asynccontextmanager
@@ -206,6 +210,7 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(tenancy_router)
+    app.include_router(store_scope_router)
     app.include_router(onboarding_router)
     app.include_router(onboarding_dns_router)
     app.include_router(sandbox_router)
@@ -243,6 +248,7 @@ def create_app() -> FastAPI:
     app.include_router(finance_ap_router)
     app.include_router(finance_settlement_router)
     app.include_router(kb_router)
+    app.include_router(kb_gap_router)
     app.include_router(growth_router, prefix="/api/v1")
     app.include_router(social_router, prefix="/api/v1")
     app.include_router(social_attribution_router)

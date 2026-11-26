@@ -35,6 +35,7 @@ import {
   type AccountsFilter,
 } from "@/components/channels/connected-accounts-card";
 import { TeamMembersCard } from "@/components/channels/team-members-card";
+import { TeamGovernancePanel } from "@/components/settings/team-governance-panel";
 import { PiTemplateCard } from "@/components/channels/pi-template-card";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import {
@@ -403,12 +404,17 @@ function ChannelsHub() {
         )}
 
         {tab === "team" && isAdmin && (
-          <div className="w-full">
+          <div className="w-full space-y-3">
             <TeamMembersCard
               members={members}
               accounts={accounts}
               isLoading={membersQuery.isLoading}
               onInvite={(payload) => inviteMutation.mutateAsync(payload)}
+            />
+            <TeamGovernancePanel
+              members={members}
+              accounts={accounts}
+              isAdmin={isAdmin}
             />
           </div>
         )}
