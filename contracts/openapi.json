@@ -1382,6 +1382,340 @@
         "title": "AutoReplySettingUpdate",
         "type": "object"
       },
+      "AutomationEvaluationReport": {
+        "properties": {
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationRuleEvaluationItem"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "seeded_defaults": {
+            "title": "Seeded Defaults",
+            "type": "boolean"
+          },
+          "total_matched": {
+            "title": "Total Matched",
+            "type": "integer"
+          },
+          "total_notifications_queued": {
+            "title": "Total Notifications Queued",
+            "type": "integer"
+          },
+          "total_proposals_created": {
+            "title": "Total Proposals Created",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "dry_run",
+          "seeded_defaults",
+          "total_matched",
+          "total_proposals_created",
+          "total_notifications_queued",
+          "rules"
+        ],
+        "title": "AutomationEvaluationReport",
+        "type": "object"
+      },
+      "AutomationEvaluationRequest": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          }
+        },
+        "title": "AutomationEvaluationRequest",
+        "type": "object"
+      },
+      "AutomationRuleEvaluationItem": {
+        "description": "Per-rule outcome. Counts are real; a dry run creates nothing in the database.",
+        "properties": {
+          "autonomy_level": {
+            "enum": [
+              "L0_copilot",
+              "L1_proposal",
+              "L2_auto"
+            ],
+            "title": "Autonomy Level",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "items_preview": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items Preview",
+            "type": "array"
+          },
+          "matched_count": {
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "notifications_queued": {
+            "title": "Notifications Queued",
+            "type": "integer"
+          },
+          "priority": {
+            "enum": [
+              "P0",
+              "P1",
+              "P2"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "proposals_created": {
+            "title": "Proposals Created",
+            "type": "integer"
+          },
+          "template_code": {
+            "enum": [
+              "low_doc_replenishment",
+              "negative_margin_hold",
+              "stalled_shipment_soothe",
+              "cold_b2b_quote_followup",
+              "daily_patrol_brief"
+            ],
+            "title": "Template Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_code",
+          "name",
+          "is_enabled",
+          "priority",
+          "autonomy_level",
+          "matched_count",
+          "proposals_created",
+          "notifications_queued"
+        ],
+        "title": "AutomationRuleEvaluationItem",
+        "type": "object"
+      },
+      "AutomationRuleRead": {
+        "properties": {
+          "autonomy_level": {
+            "enum": [
+              "L0_copilot",
+              "L1_proposal",
+              "L2_auto"
+            ],
+            "title": "Autonomy Level",
+            "type": "string"
+          },
+          "config_json": {
+            "additionalProperties": true,
+            "title": "Config Json",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "last_triggered_count": {
+            "title": "Last Triggered Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "enum": [
+              "P0",
+              "P1",
+              "P2"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "template_code": {
+            "enum": [
+              "low_doc_replenishment",
+              "negative_margin_hold",
+              "stalled_shipment_soothe",
+              "cold_b2b_quote_followup",
+              "daily_patrol_brief"
+            ],
+            "title": "Template Code",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "template_code",
+          "name",
+          "is_enabled",
+          "autonomy_level",
+          "priority",
+          "config_json",
+          "last_triggered_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AutomationRuleRead",
+        "type": "object"
+      },
+      "AutomationRuleUpdate": {
+        "properties": {
+          "autonomy_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "L0_copilot",
+                  "L1_proposal",
+                  "L2_auto"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autonomy Level"
+          },
+          "config_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Json"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "P0",
+                  "P1",
+                  "P2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          }
+        },
+        "title": "AutomationRuleUpdate",
+        "type": "object"
+      },
+      "AutomationSeedResult": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "existing": {
+            "title": "Existing",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationRuleRead"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "created",
+          "existing",
+          "rules"
+        ],
+        "title": "AutomationSeedResult",
+        "type": "object"
+      },
       "AutonomyLevel": {
         "enum": [
           "L0_copilot",
@@ -4974,6 +5308,34 @@
           "funnel"
         ],
         "title": "DashboardRead",
+        "type": "object"
+      },
+      "DeliveryRetrySweepResult": {
+        "properties": {
+          "attempted": {
+            "title": "Attempted",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "retrying": {
+            "title": "Retrying",
+            "type": "integer"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attempted",
+          "sent",
+          "retrying",
+          "failed"
+        ],
+        "title": "DeliveryRetrySweepResult",
         "type": "object"
       },
       "DeliveryStatus": {
@@ -8643,6 +9005,414 @@
         "title": "MovementRead",
         "type": "object"
       },
+      "NotificationChannelCreate": {
+        "properties": {
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "min_priority": {
+            "default": "P1",
+            "enum": [
+              "P0",
+              "P1",
+              "P2"
+            ],
+            "title": "Min Priority",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "feishu",
+              "dingtalk",
+              "wecom",
+              "generic_webhook"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "webhook_url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Webhook Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "provider",
+          "webhook_url"
+        ],
+        "title": "NotificationChannelCreate",
+        "type": "object"
+      },
+      "NotificationChannelRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "has_signing_secret": {
+            "title": "Has Signing Secret",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tested At"
+          },
+          "min_priority": {
+            "enum": [
+              "P0",
+              "P1",
+              "P2"
+            ],
+            "title": "Min Priority",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "feishu",
+              "dingtalk",
+              "wecom",
+              "generic_webhook"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "webhook_url_preview": {
+            "title": "Webhook Url Preview",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "provider",
+          "webhook_url_preview",
+          "has_signing_secret",
+          "min_priority",
+          "is_enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "NotificationChannelRead",
+        "type": "object"
+      },
+      "NotificationChannelUpdate": {
+        "properties": {
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "min_priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "P0",
+                  "P1",
+                  "P2"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Priority"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
+          }
+        },
+        "title": "NotificationChannelUpdate",
+        "type": "object"
+      },
+      "NotificationDeliveryRead": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_name": {
+            "title": "Channel Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "next_retry_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Retry At"
+          },
+          "priority": {
+            "enum": [
+              "P0",
+              "P1",
+              "P2"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "feishu",
+              "dingtalk",
+              "wecom",
+              "generic_webhook"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "sent",
+              "failed",
+              "retrying"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "channel_id",
+          "channel_name",
+          "provider",
+          "priority",
+          "event_type",
+          "title",
+          "body",
+          "status",
+          "attempts",
+          "created_at"
+        ],
+        "title": "NotificationDeliveryRead",
+        "type": "object"
+      },
+      "NotificationTestResult": {
+        "properties": {
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tested_at": {
+            "format": "date-time",
+            "title": "Tested At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_id",
+          "ok",
+          "tested_at"
+        ],
+        "title": "NotificationTestResult",
+        "type": "object"
+      },
       "OnboardingStage": {
         "enum": [
           "WorkspaceCreated",
@@ -10358,6 +11128,42 @@
           "has_more"
         ],
         "title": "PaginatedResponse[MovementRead]",
+        "type": "object"
+      },
+      "PaginatedResponse_NotificationDeliveryRead_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationDeliveryRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "PaginatedResponse[NotificationDeliveryRead]",
         "type": "object"
       },
       "PaginatedResponse_OpportunityRead_": {
@@ -19637,6 +20443,251 @@
         ]
       }
     },
+    "/api/v1/ai/automation-rules": {
+      "get": {
+        "description": "Current rule rows (empty until `seed-defaults` or the first non-dry evaluation).",
+        "operationId": "list_automation_rules_api_v1_ai_automation_rules_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AutomationRuleRead"
+                  },
+                  "title": "Response List Automation Rules Api V1 Ai Automation Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Automation Rules",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      }
+    },
+    "/api/v1/ai/automation-rules/evaluate": {
+      "post": {
+        "description": "Run all enabled rules; `dry_run=true` returns real matched counts and writes nothing.",
+        "operationId": "evaluate_automation_rules_api_v1_ai_automation_rules_evaluate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AutomationEvaluationRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationEvaluationReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Automation Rules",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      }
+    },
+    "/api/v1/ai/automation-rules/seed-defaults": {
+      "post": {
+        "description": "Idempotently create the five default templates for this tenant.",
+        "operationId": "seed_default_automation_rules_api_v1_ai_automation_rules_seed_defaults_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSeedResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Seed Default Automation Rules",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      }
+    },
+    "/api/v1/ai/automation-rules/{rule_id}": {
+      "patch": {
+        "description": "Toggle a rule, change its priority / autonomy level or edit thresholds.",
+        "operationId": "update_automation_rule_api_v1_ai_automation_rules__rule_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationRuleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationRuleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Automation Rule",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      }
+    },
     "/api/v1/ai/capabilities": {
       "get": {
         "operationId": "get_capabilities_api_v1_ai_capabilities_get",
@@ -20765,6 +21816,468 @@
         "summary": "Search Kb Hybrid",
         "tags": [
           "ai-kb"
+        ]
+      }
+    },
+    "/api/v1/ai/notifications/channels": {
+      "get": {
+        "description": "Tenant-scoped channels, secret-free (masked URL preview only).",
+        "operationId": "list_notification_channels_api_v1_ai_notifications_channels_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationChannelRead"
+                  },
+                  "title": "Response List Notification Channels Api V1 Ai Notifications Channels Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Notification Channels",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      },
+      "post": {
+        "description": "Create a Feishu / DingTalk / WeCom / generic webhook channel (SSRF-validated).",
+        "operationId": "create_notification_channel_api_v1_ai_notifications_channels_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationChannelCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationChannelRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Notification Channel",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      }
+    },
+    "/api/v1/ai/notifications/channels/{channel_id}": {
+      "delete": {
+        "description": "Delete a channel and (by FK cascade) its delivery ledger.",
+        "operationId": "delete_notification_channel_api_v1_ai_notifications_channels__channel_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Notification Channel",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      },
+      "patch": {
+        "description": "Update name / URL / secret / minimum priority / enabled flag.",
+        "operationId": "update_notification_channel_api_v1_ai_notifications_channels__channel_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationChannelUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationChannelRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Notification Channel",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      }
+    },
+    "/api/v1/ai/notifications/channels/{channel_id}/test": {
+      "post": {
+        "description": "Send one real test ping and record the provider's HTTP outcome.",
+        "operationId": "test_notification_channel_api_v1_ai_notifications_channels__channel_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationTestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Notification Channel",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      }
+    },
+    "/api/v1/ai/notifications/deliveries": {
+      "get": {
+        "description": "Newest-first delivery log with the honest status, attempts and HTTP code.",
+        "operationId": "list_notification_deliveries_api_v1_ai_notifications_deliveries_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "sent",
+                    "failed",
+                    "retrying"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_NotificationDeliveryRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Notification Deliveries",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
+        ]
+      }
+    },
+    "/api/v1/ai/notifications/deliveries/retry-due": {
+      "post": {
+        "description": "Dispatch every `retrying` delivery whose 10-minute backoff elapsed.",
+        "operationId": "retry_due_notification_deliveries_api_v1_ai_notifications_deliveries_retry_due_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryRetrySweepResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Due Notification Deliveries",
+        "tags": [
+          "ai-notifications",
+          "ai-automation"
         ]
       }
     },
