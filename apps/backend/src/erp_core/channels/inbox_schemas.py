@@ -26,8 +26,15 @@ InboxTabFilter = Literal["all", "unread", "pending_human", "sla_urgent"]
 # (JSONB), so the frozen Phase 1–2 schema needs no Alembic revision for it.
 CONVERSATION_PINNED_STATE_KEY = "is_pinned"
 CONVERSATION_TAGS_STATE_KEY = "tags"
+CONVERSATION_PRECHAT_STATE_KEY = "unverified_prechat"
 MAX_CONVERSATION_TAGS = 10
 MAX_CONVERSATION_TAG_LENGTH = 32
+
+
+class UnverifiedPrechatLead(BaseModel):
+    email: str | None = None
+    whatsapp_phone: str | None = None
+    marketing_opt_in: bool = False
 
 
 def normalize_conversation_tags(values: Iterable[str]) -> list[str]:
@@ -81,6 +88,7 @@ class ConversationRead(BaseModel):
     channel_owner_user_id: UUID | None = None
     is_pinned: bool = False
     tags: list[str] = Field(default_factory=list)
+    unverified_prechat: UnverifiedPrechatLead | None = None
 
 
 class MessageRead(BaseModel):

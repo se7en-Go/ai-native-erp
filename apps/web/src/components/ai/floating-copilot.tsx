@@ -674,6 +674,47 @@ function PatrolBriefPanel() {
   );
 }
 
+export function formatAbstentionBanner(
+  reason: string | null | undefined,
+  bi: (zh: string, en: string) => string,
+): string {
+  const normalized = (reason ?? "").trim();
+  if (
+    !normalized ||
+    normalized === "insufficient_evidence" ||
+    normalized === "no_static_evidence" ||
+    normalized === "below_threshold" ||
+    normalized === "strict_rag_abstain"
+  ) {
+    return "Abstained (Strict RAG < 0.62) — Escalated to Human";
+  }
+  if (normalized === "grounding_verification_failed") {
+    return bi(
+      "Abstained（SQL 数据一致性校验未通过）— 已转人工复核",
+      "Abstained (SQL grounding check failed) — Escalated to Human",
+    );
+  }
+  if (normalized === "live_tool_required") {
+    return bi(
+      "Abstained（请提供具体 SKU 或订单号以查询实时 ERP 数据）— 已转人工",
+      "Abstained (Specify a SKU or order number for live ERP lookup) — Escalated to Human",
+    );
+  }
+  if (normalized === "ERR_SKU_NOT_FOUND" || normalized === "sku_not_found") {
+    return bi(
+      "Abstained（ERP 商品库中未找到该 SKU）— 已转人工",
+      "Abstained (SKU not found in ERP catalog) — Escalated to Human",
+    );
+  }
+  if (normalized === "credits_depleted") {
+    return bi(
+      "Abstained（AI 额度已耗尽 — 已降级 L0 人工）",
+      "Abstained (AI credits depleted — L0 fallback)",
+    );
+  }
+  return `Abstained (${normalized}) — Escalated to Human`;
+}
+
 export function FloatingCopilot({ conversationId }: { conversationId?: string | null }) {
   const { t, bi } = useI18n();
   const { principal } = useAuthSession();
@@ -724,11 +765,7 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
       const message = override?.message ?? query;
       return assistantChat({
         capability:
-          effectiveMode === "analytics"
-            ? "biz_analytics"
-            : effectiveMode === "strict_rag"
-            ? "cs_support"
-            : "sales_quoting",
+          effectiveMode === "analytics" ? "biz_analytics" : "cs_support",
         conversation_id: conversationId ?? undefined,
         message,
         strict_rag: effectiveMode === "strict_rag",
@@ -1045,7 +1082,22 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                 ))}
               </div>
 
-              {lastResult && (
+              {askMutation.isError && (
+                <p
+                  role="alert"
+                  data-testid="copilot-ask-error"
+                  className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800"
+                >
+                  {askMutation.error.message}
+                </p>
+              )}
+
+              {lastResult && (() => {
+                const cleanedReply = (lastResult.reply_text ?? "")
+                  .replace(/\[[^\]]+#[^\]]+\]/g, "")
+                  .replace(/  +/g, " ")
+                  .trim();
+                return (
                 <div
                   data-testid="copilot-answer-box"
                   className={`rounded-xl border p-3 text-xs ${
@@ -1055,20 +1107,30 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                   }`}
                 >
                   {lastResult.should_abstain && (
-                    <div className="mb-1 flex items-center gap-1 font-semibold text-amber-800">
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      <span>Abstained (Strict RAG &lt; 0.62) — Escalated to Human</span>
+                    <div
+                      data-testid="copilot-abstain-banner"
+                      className="mb-1 flex items-center gap-1 font-semibold text-amber-800"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span>{formatAbstentionBanner(lastResult.reason, bi)}</span>
                     </div>
                   )}
                   {/* Citations are rendered once as verified chips below, so
                       strip the inline [doc#chunk] markers from the prose to
                       avoid rendering the same citation twice. */}
-                  <p className="whitespace-pre-wrap">
-                    {(lastResult.reply_text ?? "")
-                      .replace(/\[[^\]]+#[^\]]+\]/g, "")
-                      .replace(/  +/g, " ")
-                      .trim()}
-                  </p>
+                  {cleanedReply ? (
+                    <p className="whitespace-pre-wrap">{cleanedReply}</p>
+                  ) : lastResult.should_abstain ? (
+                    <p
+                      data-testid="copilot-abstain-fallback"
+                      className="text-[11px] text-amber-900/90"
+                    >
+                      {bi(
+                        "未返回可核验的自动回答，请核对关键词或由人工接管处理。",
+                        "No verified automated answer returned; refine the query or hand off to a human agent.",
+                      )}
+                    </p>
+                  ) : null}
                   {lastResult.citations.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {lastResult.citations.map((cit) => (
@@ -1088,7 +1150,8 @@ export function FloatingCopilot({ conversationId }: { conversationId?: string | 
                   )}
                   {analyticsView && <ChannelAnalyticsPanel view={analyticsView} />}
                 </div>
-              )}
+                );
+              })()}
             </div>
             </>
           ) : (

@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 # Composition root: import every domain model module so SQLAlchemy resolves the
 # cross-module string foreign keys when it configures the mappers.
@@ -136,6 +137,43 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await migrator_engine.dispose()
 
 
+class ScopedCORSMiddleware:
+    """Bypass global CORS rejections on routes that enforce per-account allowed_origins."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        excluded_prefixes: tuple[str, ...] = (),
+        allow_origins: list[str] | tuple[str, ...] = (),
+        allow_origin_regex: str | None = None,
+        allow_credentials: bool = False,
+        allow_methods: list[str] | tuple[str, ...] = ("GET",),
+        allow_headers: list[str] | tuple[str, ...] = (),
+    ) -> None:
+        self._app = app
+        self._excluded_prefixes = excluded_prefixes
+        self._cors = CORSMiddleware(
+            app,
+            allow_origins=allow_origins,
+            allow_origin_regex=allow_origin_regex,
+            allow_credentials=allow_credentials,
+            allow_methods=allow_methods,
+            allow_headers=allow_headers,
+        )
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            path = str(scope.get("path") or "")
+            if any(
+                path.startswith(prefix) or path == prefix.rstrip("/")
+                for prefix in self._excluded_prefixes
+            ):
+                await self._app(scope, receive, send)
+                return
+        await self._cors(scope, receive, send)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
@@ -144,7 +182,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(
-        CORSMiddleware,
+        ScopedCORSMiddleware,
+        excluded_prefixes=("/api/v1/widget/",),
         allow_origins=settings.CORS_ORIGINS,
         allow_origin_regex=r"^chrome-extension://[a-z]{32}$",
         allow_credentials=True,

@@ -3627,6 +3627,16 @@
             "title": "Unread Count",
             "type": "integer"
           },
+          "unverified_prechat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnverifiedPrechatLead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -18015,6 +18025,39 @@
           "credits_consumed"
         ],
         "title": "TranslateResponse",
+        "type": "object"
+      },
+      "UnverifiedPrechatLead": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "marketing_opt_in": {
+            "default": false,
+            "title": "Marketing Opt In",
+            "type": "boolean"
+          },
+          "whatsapp_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp Phone"
+          }
+        },
+        "title": "UnverifiedPrechatLead",
         "type": "object"
       },
       "UpdateChannelOwnershipRequest": {

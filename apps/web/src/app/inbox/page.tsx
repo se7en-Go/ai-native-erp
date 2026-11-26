@@ -733,6 +733,7 @@ export default function InboxPage() {
               <ContextDrawer
                 customerId={activeConversation.customer_id}
                 conversationId={activeConversation.id}
+                unverifiedPrechat={activeConversation.unverified_prechat ?? null}
                 onInsertReplyText={(text) =>
                   setReplyInsert((previous) => ({
                     text,

@@ -18,12 +18,14 @@ from erp_core.channels.adapters.base import OutboundMessageRequest
 from erp_core.channels.adapters.whatsapp import WhatsAppAdapter
 from erp_core.channels.inbox_schemas import (
     CONVERSATION_PINNED_STATE_KEY,
+    CONVERSATION_PRECHAT_STATE_KEY,
     CONVERSATION_TAGS_STATE_KEY,
     ConversationRead,
     InboxTabFilter,
     MessageRead,
     SendInboxMessageRequest,
     SendInboxMessageResponse,
+    UnverifiedPrechatLead,
     UpdateConversationRequest,
 )
 from erp_core.channels.models import ChannelAccount, Conversation, Message
@@ -137,6 +139,28 @@ def conversation_tags(policy_state: Any) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [tag for tag in raw if isinstance(tag, str) and tag]
+
+
+def conversation_unverified_prechat(policy_state: Any) -> UnverifiedPrechatLead | None:
+    """Read unverified pre-chat lead contact hints out of ``channel_policy_state``."""
+    if not isinstance(policy_state, dict):
+        return None
+    raw = policy_state.get(CONVERSATION_PRECHAT_STATE_KEY)
+    if not isinstance(raw, dict):
+        return None
+    email_raw = raw.get("email")
+    phone_raw = raw.get("whatsapp_phone")
+    email = email_raw.strip() if isinstance(email_raw, str) and email_raw.strip() else None
+    whatsapp_phone = (
+        phone_raw.strip() if isinstance(phone_raw, str) and phone_raw.strip() else None
+    )
+    if email is None and whatsapp_phone is None:
+        return None
+    return UnverifiedPrechatLead(
+        email=email,
+        whatsapp_phone=whatsapp_phone,
+        marketing_opt_in=raw.get("marketing_opt_in") is True,
+    )
 
 
 def merged_policy_state(
@@ -370,6 +394,7 @@ class InboxService:
                     channel_owner_user_id=owner_user_id,
                     is_pinned=conversation_is_pinned(c.channel_policy_state),
                     tags=conversation_tags(c.channel_policy_state),
+                    unverified_prechat=conversation_unverified_prechat(c.channel_policy_state),
                 )
             )
         return PaginatedResponse(
@@ -1013,4 +1038,5 @@ class InboxService:
             channel_owner_user_id=acct.owner_user_id,
             is_pinned=conversation_is_pinned(conv.channel_policy_state),
             tags=conversation_tags(conv.channel_policy_state),
+            unverified_prechat=conversation_unverified_prechat(conv.channel_policy_state),
         )
