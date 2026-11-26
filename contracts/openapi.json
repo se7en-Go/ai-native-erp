@@ -10707,6 +10707,230 @@
         "title": "OpportunityStageUpdate",
         "type": "object"
       },
+      "OpsHealthRead": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "max_backlog": {
+            "minimum": 0.0,
+            "title": "Max Backlog",
+            "type": "integer"
+          },
+          "postgres": {
+            "$ref": "#/components/schemas/OpsPostgresRead"
+          },
+          "queue_critical_depth": {
+            "minimum": 1.0,
+            "title": "Queue Critical Depth",
+            "type": "integer"
+          },
+          "queue_warn_depth": {
+            "minimum": 1.0,
+            "title": "Queue Warn Depth",
+            "type": "integer"
+          },
+          "redis": {
+            "$ref": "#/components/schemas/OpsRedisRead"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "critical"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "streams": {
+            "items": {
+              "$ref": "#/components/schemas/OpsStreamRead"
+            },
+            "title": "Streams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "checked_at",
+          "queue_warn_depth",
+          "queue_critical_depth",
+          "max_backlog",
+          "postgres",
+          "redis"
+        ],
+        "title": "OpsHealthRead",
+        "type": "object"
+      },
+      "OpsPostgresRead": {
+        "properties": {
+          "alembic_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alembic Version"
+          },
+          "dead_letter_events": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Dead Letter Events",
+            "type": "integer"
+          },
+          "inventory_sync_jobs_pending": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Inventory Sync Jobs Pending",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "notification_deliveries_pending": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Notification Deliveries Pending",
+            "type": "integer"
+          },
+          "raw_webhook_status_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Raw Webhook Status Counts",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "critical"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "latency_ms"
+        ],
+        "title": "OpsPostgresRead",
+        "type": "object"
+      },
+      "OpsRedisRead": {
+        "properties": {
+          "connected_clients": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected Clients"
+          },
+          "latency_ms": {
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "critical"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "used_memory_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Memory Bytes"
+          },
+          "used_memory_human": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Memory Human"
+          }
+        },
+        "required": [
+          "status",
+          "latency_ms"
+        ],
+        "title": "OpsRedisRead",
+        "type": "object"
+      },
+      "OpsStreamRead": {
+        "properties": {
+          "consumers": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumers"
+          },
+          "length": {
+            "minimum": 0.0,
+            "title": "Length",
+            "type": "integer"
+          },
+          "pending": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending"
+          },
+          "stream": {
+            "title": "Stream",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stream",
+          "length"
+        ],
+        "title": "OpsStreamRead",
+        "type": "object"
+      },
       "OrderCreateRequest": {
         "properties": {
           "currency": {
@@ -38086,6 +38310,56 @@
         ]
       }
     },
+    "/api/v1/ops/health": {
+      "get": {
+        "description": "Owner/admin-only production health snapshot for the operations console.",
+        "operationId": "ops_health_api_v1_ops_health_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsHealthRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ops Health",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/api/v1/orders": {
       "get": {
         "operationId": "list_orders_api_v1_orders_get",
@@ -44606,6 +44880,26 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "description": "Prometheus/OpenMetrics scrape target for the in-process registry.",
+        "operationId": "prometheus_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Prometheus Metrics",
+        "tags": [
+          "ops"
         ]
       }
     },

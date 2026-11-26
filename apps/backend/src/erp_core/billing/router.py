@@ -17,7 +17,7 @@ from erp_core.billing.schemas import (
 from erp_core.billing.stripe_sync import (
     HttpStripeMeterClient,
     StripeMeterSyncService,
-    stripe_topup_details,
+    interpret_stripe_event,
     verify_stripe_webhook_signature,
 )
 from erp_core.billing.wallet_service import FUNDING_KEY_PREFIX, CreditWalletService
@@ -107,17 +107,17 @@ async def stripe_billing_webhook(
         payload = json.loads(raw)
         if not isinstance(payload, dict):
             raise ValueError("Expected a Stripe event object.")
-        details = stripe_topup_details(payload)
+        event = interpret_stripe_event(payload)
     except (ValueError, UnicodeError):
         raise AppError(
             slug="invalid-stripe-event",
             title="Invalid Stripe Event",
             status_code=422,
             code="ERR_INVALID_STRIPE_EVENT",
-            detail="Invalid credit funding webhook.",
+            detail="Invalid billing webhook payload.",
         ) from None
-    if details is None:
+    if event is None:
         return {"status": "ignored"}
     factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
-    async with tenant_session(factory, details[0]) as session:
+    async with tenant_session(factory, event.tenant_id) as session:
         return await StripeMeterSyncService().handle_billing_event(session, event_payload=payload)

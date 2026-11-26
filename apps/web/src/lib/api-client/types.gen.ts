@@ -1939,6 +1939,45 @@ export type OpportunityStageUpdate = {
     stage: OpportunityStage;
 };
 
+export type OpsHealthRead = {
+    alerts?: Array<string>;
+    checked_at: string;
+    max_backlog: number;
+    postgres: OpsPostgresRead;
+    queue_critical_depth: number;
+    queue_warn_depth: number;
+    redis: OpsRedisRead;
+    status: 'ok' | 'warn' | 'critical';
+    streams?: Array<OpsStreamRead>;
+};
+
+export type OpsPostgresRead = {
+    alembic_version?: string | null;
+    dead_letter_events?: number;
+    inventory_sync_jobs_pending?: number;
+    latency_ms: number;
+    notification_deliveries_pending?: number;
+    raw_webhook_status_counts?: {
+        [key: string]: number;
+    };
+    status: 'ok' | 'critical';
+};
+
+export type OpsRedisRead = {
+    connected_clients?: number | null;
+    latency_ms: number;
+    status: 'ok' | 'critical';
+    used_memory_bytes?: number | null;
+    used_memory_human?: string | null;
+};
+
+export type OpsStreamRead = {
+    consumers?: number | null;
+    length: number;
+    pending?: number | null;
+    stream: string;
+};
+
 export type OrderCreateRequest = {
     currency?: string;
     customer_id: string;
@@ -10652,6 +10691,34 @@ export type GetOnboardingStateApiV1OnboardingStateGetResponses = {
 
 export type GetOnboardingStateApiV1OnboardingStateGetResponse = GetOnboardingStateApiV1OnboardingStateGetResponses[keyof GetOnboardingStateApiV1OnboardingStateGetResponses];
 
+export type OpsHealthApiV1OpsHealthGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ops/health';
+};
+
+export type OpsHealthApiV1OpsHealthGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OpsHealthApiV1OpsHealthGetError = OpsHealthApiV1OpsHealthGetErrors[keyof OpsHealthApiV1OpsHealthGetErrors];
+
+export type OpsHealthApiV1OpsHealthGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: OpsHealthRead;
+};
+
+export type OpsHealthApiV1OpsHealthGetResponse = OpsHealthApiV1OpsHealthGetResponses[keyof OpsHealthApiV1OpsHealthGetResponses];
+
 export type ListOrdersApiV1OrdersGetData = {
     body?: never;
     headers?: {
@@ -13593,6 +13660,20 @@ export type HealthzHealthzGetResponses = {
 };
 
 export type HealthzHealthzGetResponse = HealthzHealthzGetResponses[keyof HealthzHealthzGetResponses];
+
+export type PrometheusMetricsMetricsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/metrics';
+};
+
+export type PrometheusMetricsMetricsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ReadyzReadyzGetData = {
     body?: never;

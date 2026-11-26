@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = Field(default="", repr=False)
     STRIPE_SECRET_KEY: str = Field(default="", repr=False)
     STRIPE_WEBHOOK_SECRET: str = Field(default="", repr=False)
+
+    # Optional production telemetry (Track 8). Empty means "strictly disabled":
+    # `dispatch_error_event` / `dispatch_trace_span` then never touch the network.
+    SENTRY_DSN: str = Field(default="", repr=False)
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
+
+    # Admin ops health thresholds (`GET /api/v1/ops/health`).
+    OPS_QUEUE_WARN_DEPTH: int = Field(default=100, ge=1)
+    OPS_QUEUE_CRIT_DEPTH: int = Field(default=1000, ge=1)
+
     # Phase 3C compliant lead collection (BYOK; empty means the source is disabled).
     GOOGLE_PLACES_API_KEY: str = Field(default="", repr=False)
 
@@ -84,6 +94,15 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return [str(item) for item in value]
         return ["http://localhost:3000", "http://localhost:3001"]
+
+    @model_validator(mode="after")
+    def validate_ops_thresholds(self) -> Settings:
+        """The critical backlog ceiling must never sit below the warn ceiling."""
+        if self.OPS_QUEUE_CRIT_DEPTH < self.OPS_QUEUE_WARN_DEPTH:
+            raise ValueError(
+                "OPS_QUEUE_CRIT_DEPTH must be greater than or equal to OPS_QUEUE_WARN_DEPTH"
+            )
+        return self
 
     @model_validator(mode="after")
     def reject_development_secrets_in_production(self) -> Settings:
