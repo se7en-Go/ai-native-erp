@@ -104,9 +104,31 @@ class OrderProfitService:
         metadata = dict(order_row.channel_metadata or {})
         refunded_ccy = _metadata_decimal(metadata, "refunded_amount")
 
-        if order_row.fulfillment_status == "cancelled":
+        ship_row = (
+            await session.execute(
+                text(
+                    """
+                    SELECT COUNT(*) AS ship_count,
+                           SUM(actual_shipping_cost_base) AS ship_cost
+                    FROM shipments
+                    WHERE tenant_id = :tid AND order_id = :oid
+                    """
+                ),
+                {"tid": tenant_id, "oid": order_id},
+            )
+        ).one()
+        ship_count = int(ship_row.ship_count or 0)
+        ship_cost = ship_row.ship_cost
+        is_unshipped_terminal = order_row.fulfillment_status == "cancelled" or (
+            order_row.fulfillment_status == "refunded" and ship_count == 0
+        )
+
+        if is_unshipped_terminal:
             gross_revenue_base = Decimal("0.00")
             cogs_base = Decimal("0.00")
+            shipping_and_duty_base = (
+                _q2(Decimal(ship_cost)) if ship_cost is not None else Decimal("0.00")
+            )
         else:
             net_ccy = max(Decimal("0.00"), order_total - refunded_ccy)
             gross_revenue_base = _q2(net_ccy * locked_fx)
@@ -123,22 +145,11 @@ class OrderProfitService:
                 )
             ).scalar_one()
             cogs_base = _q2(Decimal(str(cogs_raw)))
-
-        ship_raw = (
-            await session.execute(
-                text(
-                    """
-                    SELECT SUM(actual_shipping_cost_base)
-                    FROM shipments
-                    WHERE tenant_id = :tid AND order_id = :oid
-                    """
-                ),
-                {"tid": tenant_id, "oid": order_id},
+            shipping_and_duty_base = _q2(
+                Decimal(ship_cost)
+                if ship_cost is not None
+                else order_row.shipping_charged * locked_fx
             )
-        ).scalar_one()
-        shipping_and_duty_base = _q2(
-            Decimal(ship_raw) if ship_raw is not None else order_row.shipping_charged * locked_fx
-        )
 
         payment_rows = (
             (

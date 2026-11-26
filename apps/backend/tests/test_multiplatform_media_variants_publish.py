@@ -260,6 +260,23 @@ async def test_multivariant_sourcing_to_shopify_staged_upload_and_variant_mappin
                     }
                 },
             )
+        if "publications(" in query:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "publications": {
+                            "nodes": [
+                                {"id": "gid://shopify/Publication/1", "name": "Online Store"}
+                            ]
+                        }
+                    }
+                },
+            )
+        if "publishablePublish(" in query:
+            return httpx.Response(
+                200, json={"data": {"publishablePublish": {"userErrors": []}}}
+            )
         ps_input = body["variables"]["productSet"]
         product_set_vars.append(ps_input)
         nodes = [
@@ -567,7 +584,26 @@ async def test_master_catalog_product_publish_endpoint(
     actor = str(workspace["owner_id"])
 
     def handler(request: httpx.Request) -> httpx.Response:
-        ps_input = json.loads(request.content)["variables"]["productSet"]
+        body = json.loads(request.content)
+        query = str(body.get("query") or "")
+        if "publications(" in query:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "publications": {
+                            "nodes": [
+                                {"id": "gid://shopify/Publication/1", "name": "Online Store"}
+                            ]
+                        }
+                    }
+                },
+            )
+        if "publishablePublish(" in query:
+            return httpx.Response(
+                200, json={"data": {"publishablePublish": {"userErrors": []}}}
+            )
+        ps_input = body["variables"]["productSet"]
         return httpx.Response(
             200,
             json={

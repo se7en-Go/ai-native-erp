@@ -64,6 +64,21 @@ const CHANNEL_LABEL: Record<string, { zh: string; en: string; dot: string }> = {
   instagram_dm: { zh: "Instagram 私信", en: "Instagram DM", dot: "bg-rose-500" },
   telegram: { zh: "Telegram", en: "Telegram", dot: "bg-cyan-500" },
   shopify: { zh: "Shopify 独立站", en: "Shopify storefront", dot: "bg-violet-500" },
+  woocommerce: { zh: "WooCommerce 独立站", en: "WooCommerce store", dot: "bg-purple-500" },
+  shopline: { zh: "SHOPLINE", en: "SHOPLINE", dot: "bg-teal-500" },
+  shoplazza: { zh: "Shoplazza 店匠", en: "Shoplazza", dot: "bg-amber-500" },
+  tiktok_shop: { zh: "TikTok Shop", en: "TikTok Shop", dot: "bg-pink-500" },
+  amazon_sp: { zh: "Amazon 亚马逊", en: "Amazon", dot: "bg-orange-500" },
+  ebay: { zh: "eBay", en: "eBay", dot: "bg-yellow-500" },
+  alibaba_email: { zh: "阿里巴巴国际站", en: "Alibaba.com", dot: "bg-amber-600" },
+  shopee: { zh: "Shopee 虾皮", en: "Shopee", dot: "bg-orange-600" },
+  lazada: { zh: "Lazada 来赞达", en: "Lazada", dot: "bg-blue-600" },
+  temu: { zh: "Temu", en: "Temu", dot: "bg-red-500" },
+  shein: { zh: "SHEIN", en: "SHEIN", dot: "bg-zinc-700" },
+  aliexpress: { zh: "AliExpress 速卖通", en: "AliExpress", dot: "bg-red-600" },
+  ozon: { zh: "Ozon", en: "Ozon", dot: "bg-sky-600" },
+  walmart: { zh: "Walmart 沃尔玛", en: "Walmart", dot: "bg-blue-700" },
+  mercado_libre: { zh: "Mercado Libre 美客多", en: "Mercado Libre", dot: "bg-lime-600" },
 };
 
 const QUICK_WORKBENCH_CHIPS = [
