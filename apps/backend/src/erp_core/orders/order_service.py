@@ -978,7 +978,7 @@ class OrderService:
         """
         if current not in _STOCK_RESERVED_FULFILLMENT_STATUSES:
             return
-        releases = target is FulfillmentStatus.CANCELLED
+        releases = target in {FulfillmentStatus.CANCELLED, FulfillmentStatus.REFUNDED}
         deducts = target in {FulfillmentStatus.SHIPPED, FulfillmentStatus.DELIVERED}
         if not (releases or deducts):
             return

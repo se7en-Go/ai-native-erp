@@ -36,8 +36,8 @@ services:
       WORDPRESS_DB_PASSWORD: woo_sandbox_pass
       WORDPRESS_DB_NAME: woocommerce
       WORDPRESS_CONFIG_EXTRA: |
-        if (str_starts_with($_SERVER['REQUEST_URI'] ?? '', '/wp-json/wc/')) {
-            $_SERVER['HTTPS'] = 'on';
+        if (str_starts_with($$_SERVER['REQUEST_URI'] ?? '', '/wp-json/wc/')) {
+            $$_SERVER['HTTPS'] = 'on';
         }
     ports:
       - "127.0.0.1:8088:80"
