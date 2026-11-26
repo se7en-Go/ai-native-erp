@@ -37,6 +37,8 @@ from erp_core.catalog.sourcing_service import (
     validate_source_url,
 )
 from erp_core.channels.ecommerce import marketplace_connect_router as marketplace
+from erp_core.channels.ecommerce.ebay import EbayConnectorAdapter
+from erp_core.channels.ecommerce.listing_dispatcher import build_marketplace_adapter
 from erp_core.shared.crypto import EnvelopeCryptoService
 from erp_core.shared.enums import UserRole
 from erp_core.shared.errors import AppError, register_exception_handlers
@@ -376,9 +378,11 @@ class _FakeSession:
     def __init__(self, account_id: UUID) -> None:
         self.account_id = account_id
         self.statements: list[str] = []
+        self.params: list[Any] = []
 
     async def execute(self, statement: Any, params: Any = None) -> _FakeResult:
         self.statements.append(str(statement))
+        self.params.append(params)
         return _FakeResult()
 
     async def scalar(self, statement: Any, params: Any = None) -> Any:
@@ -527,6 +531,51 @@ async def test_marketplace_connect_seals_credentials_and_never_echoes_secrets(
     assert amazon_body["channel_type"] == "amazon_sp"
     assert recorded["amazon_sp_api"]["payload"]["marketplace_id"] == "ATVPDKIKX0DER"
     assert recorded["ebay_api"]["payload"]["site_id"] == "EBAY_US"
+    assert recorded["ebay_api"]["payload"]["sandbox"] is False
+
+
+async def test_connect_ebay_sandbox_persists_flag_and_normalizes_site_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant_id = uuid4()
+    account_id = uuid4()
+    session = _FakeSession(account_id)
+    vault = _RecordingVault()
+    _install_fakes(monkeypatch, session, vault)
+    app = _build_app(UserRole.ADMIN, tenant_id)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/api/v1/channels/ebay/connect",
+            json={
+                "display_name": "eBay Sandbox US",
+                "seller_username": "testuser_qzled",
+                "site_id": "EBAY-US",
+                "app_id": "QzLed-SBX-App",
+                "cert_id": "SBX-cert-secret-001",
+                "refresh_token": "v^1.1#sbx-refresh-002",
+                "sandbox": True,
+            },
+        )
+
+    assert response.status_code == 201, response.text
+    assert len(vault.calls) == 1
+    ebay_secret = vault.calls[0]["payload"]
+    assert ebay_secret["sandbox"] is True
+    assert ebay_secret["site_id"] == "EBAY_US"
+
+    upsert_params = session.params[0]
+    assert isinstance(upsert_params, dict)
+    assert '"sandbox": true' in upsert_params["cfg"]
+    assert '"site_id": "EBAY_US"' in upsert_params["cfg"]
+
+    adapter = build_marketplace_adapter("ebay", ebay_secret)
+    assert isinstance(adapter, EbayConnectorAdapter)
+    assert adapter.sandbox is True
+    assert adapter.base_url == "https://api.sandbox.ebay.com"
+    assert adapter.site_id == "EBAY_US"
 
 
 async def test_marketplace_connect_rejects_non_admin_roles(

@@ -5022,6 +5022,11 @@
             "title": "Refresh Token",
             "type": "string"
           },
+          "sandbox": {
+            "default": false,
+            "title": "Sandbox",
+            "type": "boolean"
+          },
           "seller_username": {
             "maxLength": 128,
             "minLength": 1,

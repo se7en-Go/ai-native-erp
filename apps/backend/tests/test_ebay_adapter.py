@@ -10,13 +10,16 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
 
 import erp_core.channels.ecommerce.ebay as ebay_module
+from erp_core.channels.adapters.base import OutboundMessageRequest
+from erp_core.channels.adapters.marketplace_im import EbayImAdapter
 from erp_core.channels.ecommerce.ebay import EbayConnectorAdapter, EbayListingReceipt
-from erp_core.shared.enums import FulfillmentStatus, IdentityType, PaymentStatus
+from erp_core.shared.enums import ChannelType, FulfillmentStatus, IdentityType, PaymentStatus
 from erp_core.shared.errors import AppError
 
 APP_ID = "test-app-id"
@@ -859,3 +862,29 @@ def test_verify_webhook_accepts_hex_and_base64_signatures_only() -> None:
     assert not adapter.verify_webhook(raw, {}, secret)
     assert not adapter.verify_webhook(raw, {"X-EBAY-SIGNATURE": hex_signature}, "")
     assert not adapter.verify_webhook(b"", {"X-EBAY-SIGNATURE": hex_signature}, secret)
+
+
+def test_ebay_site_id_normalization_and_im_sandbox_url() -> None:
+    adapter = EbayConnectorAdapter(
+        seller_username="testuser_qzled",
+        site_id="ebay-us",
+        app_id=APP_ID,
+        cert_id=CERT_ID,
+        refresh_token=REFRESH_TOKEN,
+        sandbox=True,
+    )
+    assert adapter.site_id == "EBAY_US"
+    assert adapter.base_url == "https://api.sandbox.ebay.com"
+
+    req = OutboundMessageRequest(
+        tenant_id=uuid4(),
+        channel_account_id=uuid4(),
+        channel_type=ChannelType.EBAY,
+        external_account_id="testuser_qzled",
+        recipient_id="buyer_demo",
+        conversation_id=uuid4(),
+        message_id=uuid4(),
+        body_text="Order shipped",
+    )
+    call = EbayImAdapter()._prepare_send({"access_token": "tok-123", "sandbox": True}, req)
+    assert getattr(call, "url", None) == "https://api.sandbox.ebay.com/commerce/notification/v1/member_message"

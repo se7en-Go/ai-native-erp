@@ -285,7 +285,7 @@ const GUIDES: Record<ExtendedMarketplaceChannelKey, Array<{ zh: string; en: stri
     { zh: "一键加密直连，订单、库存与买家消息同步进主档", en: "Direct-connect to sync orders, stock and buyer messages" },
   ],
   ebay: [
-    { zh: "eBay 开发者计划创建生产应用，拿到 App ID / Cert ID", en: "Create a production app in the eBay developer program for the App/Cert IDs" },
+    { zh: "eBay 开发者计划创建生产或 Sandbox 应用，拿到 App ID / Cert ID", en: "Create a production or Sandbox app in the eBay developer program for the App/Cert IDs" },
     { zh: "用 OAuth 换取 Refresh Token，并确认卖家用户名与站点 ID", en: "Exchange an OAuth refresh token and confirm the seller username and site ID" },
     { zh: "一键加密直连，eBay 订单与刊登 SKU 双向同步", en: "Direct-connect for two-way order and listing SKU sync" },
   ],
@@ -610,6 +610,7 @@ function ChannelConnectForm({
   const [waMode, setWaMode] = useState<WhatsAppConnectMode>("direct");
   const [emailProvider, setEmailProvider] = useState<EmailProvider>("resend");
   const [isCoexistence, setIsCoexistence] = useState(true);
+  const [ebaySandbox, setEbaySandbox] = useState(false);
   const [scope, setScope] = useState<ChannelVisibilityScope>(isAdmin ? "shared" : "personal");
   const [ownerId, setOwnerId] = useState(isAdmin ? "" : currentUserId ?? "");
   const [guideOpen, setGuideOpen] = useState(false);
@@ -996,6 +997,7 @@ function ChannelConnectForm({
           app_id: trimmed(draft.app_id),
           cert_id: trimmed(draft.cert_id),
           refresh_token: trimmed(draft.refresh_token),
+          ...(ebaySandbox ? { sandbox: true } : {}),
         });
     }
   }
@@ -1803,6 +1805,25 @@ function ChannelConnectForm({
             placeholder="v^1.1#i^1#..."
             secret
           />
+          <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[11.5px] text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+            <input
+              type="checkbox"
+              data-testid="ebay-sandbox-toggle"
+              checked={ebaySandbox}
+              onChange={(event) => setEbaySandbox(event.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 dark:border-slate-600"
+            />
+            <span>
+              <strong className="font-semibold">
+                {bi("沙箱测试环境（Sandbox）", "Sandbox environment")}
+              </strong>
+              <span className="text-slate-500 dark:text-slate-400"> · </span>
+              {bi(
+                "连接 api.sandbox.ebay.com，适合开发者沙箱联调，不影响线上店铺",
+                "Uses api.sandbox.ebay.com for developer sandbox testing",
+              )}
+            </span>
+          </label>
           {displayNameField}
         </>
       )}
