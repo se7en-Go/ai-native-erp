@@ -22,6 +22,8 @@ AutomationTemplateCode = Literal[
     "stalled_shipment_soothe",
     "cold_b2b_quote_followup",
     "daily_patrol_brief",
+    "negative_review_ticket",
+    "high_adoption_faq_extract",
 ]
 AutomationAutonomyLevel = Literal["L0_copilot", "L1_proposal", "L2_auto"]
 

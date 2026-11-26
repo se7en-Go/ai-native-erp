@@ -84,6 +84,41 @@ class OrderRoutingEvaluation(Base):
     )
 
 
+class ScanDispatchEvent(Base):
+    """One warehouse barcode scan, including the scans that were refused.
+
+    A blocked scan is *evidence*, not an error log: the row is written before the
+    HTTP 409 is raised so an operator can always prove why a parcel was not released
+    (unpaid 70% B2B balance, or an active negative-margin routing hold).
+    """
+
+    __tablename__ = "scan_dispatch_events"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
+    carrier_shipping_label_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("carrier_shipping_labels.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    scanned_code: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    tracking_number: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    outcome: Mapped[str] = mapped_column(
+        sa.Text(), nullable=False, default="dispatched"
+    )
+    dispatched_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    dispatched_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+
+
 class CarrierShippingLabel(Base):
     """A booked carrier waybill plus the object-storage key of its 4x6 thermal PDF."""
 

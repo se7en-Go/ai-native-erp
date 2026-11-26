@@ -28,6 +28,8 @@ from erp_core.crm.portal_service import (
     PortalLinkRead,
     PortalReceiptRequest,
     PortalReceiptResponse,
+    PortalReorderRequest,
+    PortalReorderResponse,
     PortalService,
     ResolvedPortalToken,
 )
@@ -136,6 +138,29 @@ async def accept_quote(
             buyer_name=payload.buyer_name,
             ip_address=_client_ip(request),
             user_agent=request.headers.get("user-agent"),
+        )
+
+
+@portal_public_router.post(
+    "/reorder",
+    response_model=PortalReorderResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def reorder_from_portal(
+    request: Request,
+    token: str,
+    payload: PortalReorderRequest | None = None,
+) -> PortalReorderResponse:
+    """One-click reorder: re-price the same SKUs into a fresh **draft** quotation."""
+    body = payload or PortalReorderRequest()
+    factory, resolved = await _resolve(request, token)
+    async with tenant_session(factory, resolved.tenant_id) as session:
+        return await _service.reorder_from_portal(
+            session,
+            resolved,
+            notes=body.notes,
+            requested_quantities=body.requested_quantities,
+            ip_address=_client_ip(request),
         )
 
 

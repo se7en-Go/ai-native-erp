@@ -1947,7 +1947,9 @@
               "negative_margin_hold",
               "stalled_shipment_soothe",
               "cold_b2b_quote_followup",
-              "daily_patrol_brief"
+              "daily_patrol_brief",
+              "negative_review_ticket",
+              "high_adoption_faq_extract"
             ],
             "title": "Template Code",
             "type": "string"
@@ -2031,7 +2033,9 @@
               "negative_margin_hold",
               "stalled_shipment_soothe",
               "cold_b2b_quote_followup",
-              "daily_patrol_brief"
+              "daily_patrol_brief",
+              "negative_review_ticket",
+              "high_adoption_faq_extract"
             ],
             "title": "Template Code",
             "type": "string"
@@ -2187,6 +2191,231 @@
           "l0_copilot"
         ],
         "title": "AutonomySummary",
+        "type": "object"
+      },
+      "BatchLabelPdfRequest": {
+        "description": "Merge 4x6 label PDFs by label id and/or by order (latest label wins).",
+        "properties": {
+          "label_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Label Ids",
+            "type": "array"
+          },
+          "order_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Order Ids",
+            "type": "array"
+          }
+        },
+        "title": "BatchLabelPdfRequest",
+        "type": "object"
+      },
+      "BatchShippingLabelBookedItem": {
+        "properties": {
+          "carrier_code": {
+            "enum": [
+              "yunexpress",
+              "4px",
+              "dhl",
+              "ups",
+              "fedex",
+              "sandbox_carrier"
+            ],
+            "title": "Carrier Code",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "label_id": {
+            "format": "uuid",
+            "title": "Label Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "live",
+              "sandbox"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "service_code": {
+            "title": "Service Code",
+            "type": "string"
+          },
+          "shipping_cost_estimate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipping Cost Estimate"
+          },
+          "tracking_number": {
+            "title": "Tracking Number",
+            "type": "string"
+          },
+          "waybill_number": {
+            "title": "Waybill Number",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "order_no",
+          "label_id",
+          "tracking_number",
+          "waybill_number",
+          "carrier_code",
+          "service_code",
+          "mode",
+          "reused",
+          "shipping_cost_estimate",
+          "currency"
+        ],
+        "title": "BatchShippingLabelBookedItem",
+        "type": "object"
+      },
+      "BatchShippingLabelRequest": {
+        "description": "Book (or reuse) one waybill per order in a single warehouse print run.",
+        "properties": {
+          "carrier_code": {
+            "default": "sandbox_carrier",
+            "enum": [
+              "yunexpress",
+              "4px",
+              "dhl",
+              "ups",
+              "fedex",
+              "sandbox_carrier"
+            ],
+            "title": "Carrier Code",
+            "type": "string"
+          },
+          "mode": {
+            "default": "sandbox",
+            "enum": [
+              "live",
+              "sandbox"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "order_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Order Ids",
+            "type": "array"
+          },
+          "service_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Code"
+          }
+        },
+        "required": [
+          "order_ids"
+        ],
+        "title": "BatchShippingLabelRequest",
+        "type": "object"
+      },
+      "BatchShippingLabelResponse": {
+        "properties": {
+          "booked": {
+            "items": {
+              "$ref": "#/components/schemas/BatchShippingLabelBookedItem"
+            },
+            "title": "Booked",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/BatchShippingLabelSkippedItem"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "title": "BatchShippingLabelResponse",
+        "type": "object"
+      },
+      "BatchShippingLabelSkippedItem": {
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order No"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reason_code": {
+            "enum": [
+              "order_not_found",
+              "order_inactive",
+              "held_for_review",
+              "balance_unpaid",
+              "booking_failed"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "reason_code",
+          "reason"
+        ],
+        "title": "BatchShippingLabelSkippedItem",
         "type": "object"
       },
       "Body_post_conversation_attachment_api_v1_inbox_conversations__conversation_id__attachments_post": {
@@ -15580,6 +15809,79 @@
         "title": "PortalReceivableRead",
         "type": "object"
       },
+      "PortalReorderRequest": {
+        "description": "One-click reorder: re-price the same SKUs into a fresh draft quotation.",
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "requested_quantities": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Quantities"
+          }
+        },
+        "title": "PortalReorderRequest",
+        "type": "object"
+      },
+      "PortalReorderResponse": {
+        "description": "Buyer-facing reorder receipt. Cost and margin are never part of this payload.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "new_quote_id": {
+            "format": "uuid",
+            "title": "New Quote Id",
+            "type": "string"
+          },
+          "new_quote_no": {
+            "title": "New Quote No",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteStatus"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_quote_id",
+          "new_quote_no",
+          "total_amount",
+          "currency",
+          "status",
+          "created_at"
+        ],
+        "title": "PortalReorderResponse",
+        "type": "object"
+      },
       "PortalSellerRead": {
         "properties": {
           "address": {
@@ -18825,6 +19127,63 @@
           "passed"
         ],
         "title": "SandboxResult",
+        "type": "object"
+      },
+      "ScanDispatchRequest": {
+        "description": "A warehouse barcode: tracking number, shipment tracking number or order no.",
+        "properties": {
+          "code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ScanDispatchRequest",
+        "type": "object"
+      },
+      "ScanDispatchResponse": {
+        "properties": {
+          "dispatched_at": {
+            "format": "date-time",
+            "title": "Dispatched At",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tracking_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Number"
+          }
+        },
+        "required": [
+          "order_id",
+          "order_no",
+          "status",
+          "dispatched_at"
+        ],
+        "title": "ScanDispatchResponse",
         "type": "object"
       },
       "SearchHit": {
@@ -41224,6 +41583,179 @@
         ]
       }
     },
+    "/api/v1/orders/scan-dispatch": {
+      "post": {
+        "description": "Warehouse barcode scan: release the parcel, or 409 with audited evidence.",
+        "operationId": "scan_dispatch_order_api_v1_orders_scan_dispatch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanDispatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanDispatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scan Dispatch Order",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
+    "/api/v1/orders/shipping-labels/batch": {
+      "post": {
+        "description": "Book (or reuse) one waybill per order; refused orders are reported, not fatal.",
+        "operationId": "book_shipping_labels_in_batch_api_v1_orders_shipping_labels_batch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchShippingLabelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchShippingLabelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Book Shipping Labels In Batch",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
+    "/api/v1/orders/shipping-labels/batch-pdf": {
+      "post": {
+        "description": "Merge the selected 4x6 thermal labels into one sequential print-run PDF.",
+        "operationId": "download_batch_shipping_labels_pdf_api_v1_orders_shipping_labels_batch_pdf_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchLabelPdfRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Batch Shipping Labels Pdf",
+        "tags": [
+          "order-routing"
+        ]
+      }
+    },
     "/api/v1/orders/warehouses": {
       "get": {
         "description": "List warehouse IDs visible to this tenant without creating a fallback default.",
@@ -42619,6 +43151,66 @@
           }
         },
         "summary": "Submit Receipt",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/api/v1/portal/{token}/reorder": {
+      "post": {
+        "description": "One-click reorder: re-price the same SKUs into a fresh **draft** quotation.",
+        "operationId": "reorder_from_portal_api_v1_portal__token__reorder_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PortalReorderRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalReorderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder From Portal",
         "tags": [
           "portal"
         ]

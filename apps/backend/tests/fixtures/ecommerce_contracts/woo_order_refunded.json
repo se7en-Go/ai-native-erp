@@ -1,0 +1,17 @@
+{
+  "description": "WooCommerce order.refunded webhook for the same wholesale order after a full refund",
+  "recorded_from": "WooCommerce REST v3 webhook delivery, sanitized: store domain, address and payment ids replaced",
+  "signed_with_test_secret": "track10-woocommerce-webhook-secret",
+  "signature_scheme": "X-WC-Webhook-Signature = base64(HMAC-SHA256(raw_body, webhook_secret))",
+  "headers": {
+    "content-type": "application/json",
+    "x-wc-webhook-source": "https://qz-lighting-sandbox.example.com/",
+    "x-wc-webhook-topic": "order.refunded",
+    "x-wc-webhook-resource": "order",
+    "x-wc-webhook-event": "refunded",
+    "x-wc-webhook-id": "5588",
+    "x-wc-webhook-delivery-id": "b81d4c0fa79c3f6e",
+    "x-wc-webhook-signature": "yC2/JfH6teumsQW2CSahNW43NCgOXJV0vKBPyyAdxRI="
+  },
+  "body_raw": "{\"id\":9101,\"parent_id\":0,\"number\":\"9101\",\"order_key\":\"wc_order_A1b2C3d4E5f6G7\",\"status\":\"refunded\",\"currency\":\"USD\",\"date_created\":\"2026-11-17T22:41:09\",\"date_created_gmt\":\"2026-11-17T22:41:09\",\"date_modified\":\"2026-11-21T01:20:03\",\"date_modified_gmt\":\"2026-11-21T01:20:03\",\"date_paid\":\"2026-11-17T22:43:10\",\"date_paid_gmt\":\"2026-11-17T22:43:10\",\"date_completed\":\"2026-11-19T06:12:44\",\"date_completed_gmt\":\"2026-11-19T06:12:44\",\"discount_total\":\"0.00\",\"shipping_total\":\"18.00\",\"shipping_tax\":\"0.00\",\"cart_tax\":\"0.00\",\"total_tax\":\"0.00\",\"total\":\"768.00\",\"refunded_amount\":\"768.00\",\"transaction_id\":\"ch_3QqExampleShopifyStripe\",\"payment_method\":\"stripe\",\"payment_method_title\":\"Credit card (Stripe)\",\"billing\":{\"first_name\":\"Lukas\",\"last_name\":\"Weber\",\"company\":\"Nordlicht Lichttechnik GmbH\",\"address_1\":\"Friedrichstrasse 88\",\"city\":\"Berlin\",\"postcode\":\"10117\",\"country\":\"DE\",\"email\":\"einkauf@nordlicht-lichttechnik.example\",\"phone\":\"+49301234567\"},\"shipping\":{\"first_name\":\"Lukas\",\"last_name\":\"Weber\",\"company\":\"Nordlicht Lichttechnik GmbH\",\"address_1\":\"Friedrichstrasse 88\",\"city\":\"Berlin\",\"postcode\":\"10117\",\"country\":\"DE\"},\"line_items\":[{\"id\":5001,\"name\":\"5M IP65 Smart LED Strip 24V\",\"sku\":\"LED-STRIP-5M-IP65\",\"quantity\":2,\"price\":375.0,\"subtotal\":\"750.00\",\"total\":\"750.00\",\"total_tax\":\"0.00\"}],\"meta_data\":[{\"id\":90001,\"key\":\"_wholesale_po_number\",\"value\":\"PO-DE-2026-77\"},{\"id\":90002,\"key\":\"_tracking_number\",\"value\":\"DHL-DE-4455\"}],\"refunds\":[{\"id\":7001,\"reason\":\"Two strips arrived cracked; full refund\",\"total\":\"-768.00\"}]}"
+}

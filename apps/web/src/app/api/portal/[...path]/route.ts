@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
  *
  *   GET  /api/portal/<token>                     -> view + quote + order
  *   POST /api/portal/<token>/accept              -> accept the quote
+ *   POST /api/portal/<token>/reorder             -> one-click reorder (new draft quote)
  *   POST /api/portal/<token>/receipt             -> upload a T/T bank slip
  *   GET  /api/portal/<token>/documents/<pi|ci|pl> -> PDF bytes
  *
@@ -20,7 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 const BACKEND_BASE = (process.env.BFF_BACKEND_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 const PORTAL_TOKEN_PATTERN = /^erp_b2b_[A-Za-z0-9_-]+$/;
-const PORTAL_ACTIONS = new Set(["accept", "receipt"]);
+const PORTAL_ACTIONS = new Set(["accept", "reorder", "receipt"]);
 const PORTAL_DOCUMENT_TYPES = new Set(["pi", "ci", "pl"]);
 
 export type PortalPathPredicate = (segments: string[]) => string | null;

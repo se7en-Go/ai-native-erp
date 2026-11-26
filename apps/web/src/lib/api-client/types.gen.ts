@@ -385,7 +385,7 @@ export type AutomationRuleEvaluationItem = {
     notifications_queued: number;
     priority: 'P0' | 'P1' | 'P2';
     proposals_created: number;
-    template_code: 'low_doc_replenishment' | 'negative_margin_hold' | 'stalled_shipment_soothe' | 'cold_b2b_quote_followup' | 'daily_patrol_brief';
+    template_code: 'low_doc_replenishment' | 'negative_margin_hold' | 'stalled_shipment_soothe' | 'cold_b2b_quote_followup' | 'daily_patrol_brief' | 'negative_review_ticket' | 'high_adoption_faq_extract';
 };
 
 export type AutomationRuleRead = {
@@ -400,7 +400,7 @@ export type AutomationRuleRead = {
     last_triggered_count: number;
     name: string;
     priority: 'P0' | 'P1' | 'P2';
-    template_code: 'low_doc_replenishment' | 'negative_margin_hold' | 'stalled_shipment_soothe' | 'cold_b2b_quote_followup' | 'daily_patrol_brief';
+    template_code: 'low_doc_replenishment' | 'negative_margin_hold' | 'stalled_shipment_soothe' | 'cold_b2b_quote_followup' | 'daily_patrol_brief' | 'negative_review_ticket' | 'high_adoption_faq_extract';
     updated_at: string;
 };
 
@@ -426,6 +426,50 @@ export type AutonomySummary = {
     l0_copilot: number;
     l1_proposal: number;
     l2_auto: number;
+};
+
+/**
+ * Merge 4x6 label PDFs by label id and/or by order (latest label wins).
+ */
+export type BatchLabelPdfRequest = {
+    label_ids?: Array<string>;
+    order_ids?: Array<string>;
+};
+
+export type BatchShippingLabelBookedItem = {
+    carrier_code: 'yunexpress' | '4px' | 'dhl' | 'ups' | 'fedex' | 'sandbox_carrier';
+    currency: string;
+    label_id: string;
+    mode: 'live' | 'sandbox';
+    order_id: string;
+    order_no: string;
+    reused: boolean;
+    service_code: string;
+    shipping_cost_estimate: string | null;
+    tracking_number: string;
+    waybill_number: string;
+};
+
+/**
+ * Book (or reuse) one waybill per order in a single warehouse print run.
+ */
+export type BatchShippingLabelRequest = {
+    carrier_code?: 'yunexpress' | '4px' | 'dhl' | 'ups' | 'fedex' | 'sandbox_carrier';
+    mode?: 'live' | 'sandbox';
+    order_ids: Array<string>;
+    service_code?: string | null;
+};
+
+export type BatchShippingLabelResponse = {
+    booked?: Array<BatchShippingLabelBookedItem>;
+    skipped?: Array<BatchShippingLabelSkippedItem>;
+};
+
+export type BatchShippingLabelSkippedItem = {
+    order_id: string;
+    order_no?: string | null;
+    reason: string;
+    reason_code: 'order_not_found' | 'order_inactive' | 'held_for_review' | 'balance_unpaid' | 'booking_failed';
 };
 
 export type BodyPostConversationAttachmentApiV1InboxConversationsConversationIdAttachmentsPost = {
@@ -2924,6 +2968,28 @@ export type PortalReceivableRead = {
     status: string;
 };
 
+/**
+ * One-click reorder: re-price the same SKUs into a fresh draft quotation.
+ */
+export type PortalReorderRequest = {
+    notes?: string | null;
+    requested_quantities?: {
+        [key: string]: number;
+    } | null;
+};
+
+/**
+ * Buyer-facing reorder receipt. Cost and margin are never part of this payload.
+ */
+export type PortalReorderResponse = {
+    created_at: string;
+    currency: string;
+    new_quote_id: string;
+    new_quote_no: string;
+    status: QuoteStatus;
+    total_amount: string;
+};
+
 export type PortalSellerRead = {
     address: string;
     bank_account_no: string;
@@ -3509,6 +3575,21 @@ export type SandboxResult = {
     passed: boolean;
     reply_text?: string;
     source_tool_call_id?: string | null;
+};
+
+/**
+ * A warehouse barcode: tracking number, shipment tracking number or order no.
+ */
+export type ScanDispatchRequest = {
+    code: string;
+};
+
+export type ScanDispatchResponse = {
+    dispatched_at: string;
+    order_id: string;
+    order_no: string;
+    status: string;
+    tracking_number?: string | null;
 };
 
 export type SearchHit = {
@@ -11602,6 +11683,88 @@ export type UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchResponses = {
 
 export type UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchResponse = UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchResponses[keyof UpdateRoutingRuleApiV1OrdersRoutingRulesRuleIdPatchResponses];
 
+export type ScanDispatchOrderApiV1OrdersScanDispatchPostData = {
+    body: ScanDispatchRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/orders/scan-dispatch';
+};
+
+export type ScanDispatchOrderApiV1OrdersScanDispatchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ScanDispatchOrderApiV1OrdersScanDispatchPostError = ScanDispatchOrderApiV1OrdersScanDispatchPostErrors[keyof ScanDispatchOrderApiV1OrdersScanDispatchPostErrors];
+
+export type ScanDispatchOrderApiV1OrdersScanDispatchPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScanDispatchResponse;
+};
+
+export type ScanDispatchOrderApiV1OrdersScanDispatchPostResponse = ScanDispatchOrderApiV1OrdersScanDispatchPostResponses[keyof ScanDispatchOrderApiV1OrdersScanDispatchPostResponses];
+
+export type BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostData = {
+    body: BatchShippingLabelRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/orders/shipping-labels/batch';
+};
+
+export type BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostError = BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostErrors[keyof BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostErrors];
+
+export type BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: BatchShippingLabelResponse;
+};
+
+export type BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostResponse = BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostResponses[keyof BookShippingLabelsInBatchApiV1OrdersShippingLabelsBatchPostResponses];
+
+export type DownloadBatchShippingLabelsPdfApiV1OrdersShippingLabelsBatchPdfPostData = {
+    body: BatchLabelPdfRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/orders/shipping-labels/batch-pdf';
+};
+
+export type DownloadBatchShippingLabelsPdfApiV1OrdersShippingLabelsBatchPdfPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DownloadBatchShippingLabelsPdfApiV1OrdersShippingLabelsBatchPdfPostError = DownloadBatchShippingLabelsPdfApiV1OrdersShippingLabelsBatchPdfPostErrors[keyof DownloadBatchShippingLabelsPdfApiV1OrdersShippingLabelsBatchPdfPostErrors];
+
+export type DownloadBatchShippingLabelsPdfApiV1OrdersShippingLabelsBatchPdfPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type ListWarehousesApiV1OrdersWarehousesGetData = {
     body?: never;
     headers?: {
@@ -12225,6 +12388,33 @@ export type SubmitReceiptApiV1PortalTokenReceiptPostResponses = {
 };
 
 export type SubmitReceiptApiV1PortalTokenReceiptPostResponse = SubmitReceiptApiV1PortalTokenReceiptPostResponses[keyof SubmitReceiptApiV1PortalTokenReceiptPostResponses];
+
+export type ReorderFromPortalApiV1PortalTokenReorderPostData = {
+    body?: PortalReorderRequest | null;
+    path: {
+        token: string;
+    };
+    query?: never;
+    url: '/api/v1/portal/{token}/reorder';
+};
+
+export type ReorderFromPortalApiV1PortalTokenReorderPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReorderFromPortalApiV1PortalTokenReorderPostError = ReorderFromPortalApiV1PortalTokenReorderPostErrors[keyof ReorderFromPortalApiV1PortalTokenReorderPostErrors];
+
+export type ReorderFromPortalApiV1PortalTokenReorderPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: PortalReorderResponse;
+};
+
+export type ReorderFromPortalApiV1PortalTokenReorderPostResponse = ReorderFromPortalApiV1PortalTokenReorderPostResponses[keyof ReorderFromPortalApiV1PortalTokenReorderPostResponses];
 
 export type GlobalSearchApiV1SearchGetData = {
     body?: never;

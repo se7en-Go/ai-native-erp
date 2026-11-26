@@ -1008,12 +1008,17 @@ async def test_automation_execute_seeds_rules_creates_l1_proposals_and_notificat
         assert by_code["cold_b2b_quote_followup"].proposals_created == 1
         assert by_code["negative_margin_hold"].proposals_created == 0
         assert by_code["daily_patrol_brief"].proposals_created == 0
-        # One aggregated notification per rule, all admitted by the P2 channel.
+        # One aggregated notification per *matching* rule, all admitted by the P2 channel.
+        # The two Track 10 templates (negative_review_ticket / high_adoption_faq_extract)
+        # match nothing in this fixture, so they queue zero deliveries.
         assert first.total_notifications_queued == 5
-        assert all(item.notifications_queued == 1 for item in first.rules)
+        assert all(
+            item.notifications_queued == (1 if item.matched_count else 0)
+            for item in first.rules
+        )
 
         rules = await automation.list_rules(session, workspace.tenant_a)
-        assert len(rules) == 5
+        assert len(rules) == 7
         assert all(rule.last_run_at is not None for rule in rules)
         assert all(rule.last_triggered_count >= 0 for rule in rules)
 
@@ -1080,10 +1085,10 @@ async def test_automation_disabled_rule_is_skipped_and_thresholds_are_editable(
     automation = AutomationService()
     async with tenant_session(workspace.factory, workspace.tenant_a) as session:
         seeded = await automation.seed_default_rules(session, workspace.tenant_a)
-        assert seeded.created == 5
+        assert seeded.created == 7
         again = await automation.seed_default_rules(session, workspace.tenant_a)
         assert again.created == 0
-        assert again.existing == 5
+        assert again.existing == 7
 
         low_doc = next(
             rule for rule in seeded.rules if rule.template_code == "low_doc_replenishment"
@@ -1132,7 +1137,7 @@ async def test_router_automation_endpoints_drive_a_full_cycle(workspace: Workspa
 
         seeded = await client.post(f"{BASE}/automation-rules/seed-defaults")
         assert seeded.status_code == 201, seeded.text
-        assert seeded.json()["created"] == 5
+        assert seeded.json()["created"] == 7
         rule_id = seeded.json()["rules"][0]["id"]
 
         channel = await client.post(

@@ -23,25 +23,37 @@ import hashlib
 import json
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from io import BytesIO
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 import httpx
+from pypdf import PdfReader, PdfWriter
 from reportlab.graphics.barcode import code128  # type: ignore[import-untyped]
 from reportlab.lib import colors  # type: ignore[import-untyped]
 from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from erp_core.orders.models import Order, Shipment
+from erp_core.orders.order_service import OrderService
 from erp_core.orders.routing_models import CarrierShippingLabel
-from erp_core.orders.routing_schemas import CarrierShippingLabelRead, ShippingLabelBookRequest
+from erp_core.orders.routing_schemas import (
+    BatchShippingLabelBookedItem,
+    BatchShippingLabelRequest,
+    BatchShippingLabelResponse,
+    BatchShippingLabelSkippedItem,
+    CarrierShippingLabelRead,
+    ScanDispatchResponse,
+    ShippingLabelBookRequest,
+)
 from erp_core.orders.routing_service import RoutingService
 from erp_core.orders.tracking_adapter import Tracking17TrackAdapter
+from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import (
     FulfillmentStatus,
     OrderMode,
@@ -1069,3 +1081,518 @@ def label_storage_key(tenant_id: UUID, order_id: UUID, label_id: UUID) -> str:
     """Canonical object-storage key for a booked label PDF."""
     return f"tenants/{tenant_id}/shipping-labels/{order_id}/{label_id}.pdf"
 
+
+# ---------------------------------------------------------------------------
+# Batch booking + merged 4x6 print run
+# ---------------------------------------------------------------------------
+
+#: AppError codes that turn into a per-order `skipped` entry instead of a hard 4xx.
+_BATCH_SKIP_CODES: dict[str, str] = {
+    "ERR_ORDER_NOT_FOUND": "order_not_found",
+    "ERR_ORDER_INACTIVE": "order_inactive",
+    "ERR_ORDER_HELD_FOR_REVIEW": "held_for_review",
+    "ERR_BALANCE_PAYMENT_REQUIRED": "balance_unpaid",
+}
+
+
+async def _reusable_label(
+    session: AsyncSession,
+    tenant_id: UUID,
+    order_id: UUID,
+    carrier_code: str,
+    service_code: str | None,
+) -> CarrierShippingLabel | None:
+    """Newest already-booked waybill that satisfies the same carrier/service request."""
+    statement = (
+        select(CarrierShippingLabel)
+        .where(
+            CarrierShippingLabel.tenant_id == tenant_id,
+            CarrierShippingLabel.order_id == order_id,
+            CarrierShippingLabel.carrier_code == carrier_code,
+        )
+        .order_by(CarrierShippingLabel.created_at.desc(), CarrierShippingLabel.id.desc())
+        .limit(1)
+    )
+    if service_code:
+        statement = statement.where(CarrierShippingLabel.service_code == service_code)
+    label: CarrierShippingLabel | None = await session.scalar(statement)
+    return label
+
+
+async def book_shipping_labels_batch(
+    session: AsyncSession,
+    storage: ObjectStorageService | None,
+    tenant_id: UUID,
+    principal: CurrentPrincipal,
+    req: BatchShippingLabelRequest,
+    *,
+    http_client: httpx.AsyncClient | None = None,
+    tracking_adapter: Tracking17TrackAdapter | None = None,
+    credentials: Mapping[str, str] | None = None,
+) -> BatchShippingLabelResponse:
+    """Book one waybill per order, reusing an equivalent label when one already exists.
+
+    Per-order refusals (routing hold, unpaid 70% B2B balance, missing/inactive order)
+    never abort the print run: the order is reported in `skipped` with a stable
+    `reason_code` so the warehouse can print everything that *is* shippable.
+    """
+    booked: list[BatchShippingLabelBookedItem] = []
+    skipped: list[BatchShippingLabelSkippedItem] = []
+    for order_id in req.order_ids:
+        order_no = await session.scalar(
+            select(Order.order_no).where(Order.tenant_id == tenant_id, Order.id == order_id)
+        )
+        try:
+            existing = await _reusable_label(
+                session, tenant_id, order_id, req.carrier_code, req.service_code
+            )
+            if existing is not None:
+                booked.append(
+                    BatchShippingLabelBookedItem(
+                        order_id=order_id,
+                        order_no=str(order_no or ""),
+                        label_id=existing.id,
+                        tracking_number=existing.tracking_number,
+                        waybill_number=existing.waybill_number,
+                        carrier_code=existing.carrier_code,
+                        service_code=existing.service_code,
+                        mode=existing.mode,
+                        reused=True,
+                        shipping_cost_estimate=existing.shipping_cost_estimate,
+                        currency=existing.currency,
+                    )
+                )
+                continue
+            label, _pdf_bytes = await book_shipping_label(
+                session,
+                storage,
+                tenant_id,
+                principal,
+                order_id,
+                ShippingLabelBookRequest(
+                    carrier_code=req.carrier_code,
+                    service_code=req.service_code,
+                    mode=req.mode,
+                ),
+                http_client=http_client,
+                tracking_adapter=tracking_adapter,
+                credentials=credentials,
+            )
+        except AppError as exc:
+            skipped.append(
+                BatchShippingLabelSkippedItem(
+                    order_id=order_id,
+                    order_no=str(order_no) if order_no else None,
+                    reason_code=_BATCH_SKIP_CODES.get(exc.code, "booking_failed"),
+                    reason=exc.detail,
+                )
+            )
+            continue
+        booked.append(
+            BatchShippingLabelBookedItem(
+                order_id=label.order_id,
+                order_no=str(order_no or ""),
+                label_id=label.id,
+                tracking_number=label.tracking_number,
+                waybill_number=label.waybill_number,
+                carrier_code=label.carrier_code,
+                service_code=label.service_code,
+                mode=label.mode,
+                reused=False,
+                shipping_cost_estimate=label.shipping_cost_estimate,
+                currency=label.currency,
+            )
+        )
+    return BatchShippingLabelResponse(booked=booked, skipped=skipped)
+
+
+async def _resolve_label_rows(
+    session: AsyncSession,
+    tenant_id: UUID,
+    label_ids: Sequence[UUID],
+    order_ids: Sequence[UUID],
+) -> list[CarrierShippingLabel]:
+    """Load labels in request order: explicit ids first, then each order's newest label."""
+    rows: list[CarrierShippingLabel] = []
+    seen: set[UUID] = set()
+    if label_ids:
+        by_id = {
+            label.id: label
+            for label in (
+                await session.scalars(
+                    select(CarrierShippingLabel).where(
+                        CarrierShippingLabel.tenant_id == tenant_id,
+                        CarrierShippingLabel.id.in_(list(label_ids)),
+                    )
+                )
+            ).all()
+        }
+        for label_id in label_ids:
+            label = by_id.get(label_id)
+            if label is None or label.id in seen:
+                continue
+            seen.add(label.id)
+            rows.append(label)
+    for order_id in order_ids:
+        label = await session.scalar(
+            select(CarrierShippingLabel)
+            .where(
+                CarrierShippingLabel.tenant_id == tenant_id,
+                CarrierShippingLabel.order_id == order_id,
+            )
+            .order_by(CarrierShippingLabel.created_at.desc(), CarrierShippingLabel.id.desc())
+            .limit(1)
+        )
+        if label is None or label.id in seen:
+            continue
+        seen.add(label.id)
+        rows.append(label)
+    return rows
+
+
+def merge_label_pdfs(pdf_streams: Sequence[bytes]) -> bytes:
+    """Concatenate 4x6 label pages into one print-run PDF (page order preserved)."""
+    writer = PdfWriter()
+    for stream in pdf_streams:
+        for page in PdfReader(BytesIO(stream)).pages:
+            writer.add_page(page)
+    buffer = BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+async def get_labels_merged_pdf_bytes(
+    session: AsyncSession,
+    storage: ObjectStorageService | None,
+    tenant_id: UUID,
+    *,
+    label_ids: Sequence[UUID] = (),
+    order_ids: Sequence[UUID] = (),
+) -> bytes:
+    """Rebuild every selected 4x6 label PDF (stored or re-rendered) and merge them."""
+    labels = await _resolve_label_rows(session, tenant_id, label_ids, order_ids)
+    if not labels:
+        raise AppError(
+            slug="shipping-labels-not-found",
+            status_code=404,
+            code="ERR_SHIPPING_LABELS_NOT_FOUND",
+            title="Shipping Labels Not Found",
+            detail="None of the requested orders/labels has a booked waybill yet.",
+        )
+    streams = [
+        await get_label_pdf_bytes(session, storage, tenant_id, label.order_id, label.id)
+        for label in labels
+    ]
+    return merge_label_pdfs(streams)
+
+
+
+# ---------------------------------------------------------------------------
+# Scan-to-ship
+# ---------------------------------------------------------------------------
+
+#: Statuses a barcode scan may legitimately push forward into `shipped`.
+_SCANNABLE_FULFILLMENT_STATUSES = frozenset(
+    {
+        FulfillmentStatus.PENDING_PAYMENT,
+        FulfillmentStatus.CONFIRMED_RESERVED,
+        FulfillmentStatus.IN_PRODUCTION,
+        FulfillmentStatus.PARTIALLY_SHIPPED,
+        FulfillmentStatus.EXCEPTION,
+    }
+)
+
+
+@dataclass(frozen=True)
+class ScannedShipmentMatch:
+    """What a warehouse barcode resolved to."""
+
+    order_id: UUID
+    order_no: str
+    label_id: UUID | None
+    tracking_number: str | None
+
+
+async def resolve_scanned_code(
+    session: AsyncSession, tenant_id: UUID, code: str
+) -> ScannedShipmentMatch | None:
+    """Resolve a barcode against labels, then shipments, then the order number."""
+    label_row = (
+        await session.execute(
+            text(
+                "SELECT l.order_id, l.id, l.tracking_number, o.order_no "
+                "FROM carrier_shipping_labels l "
+                "JOIN orders o ON o.id = l.order_id AND o.tenant_id = l.tenant_id "
+                "WHERE l.tenant_id = :tid AND l.tracking_number = :code "
+                "ORDER BY l.created_at DESC, l.id DESC LIMIT 1"
+            ),
+            {"tid": tenant_id, "code": code},
+        )
+    ).first()
+    if label_row is not None:
+        return ScannedShipmentMatch(
+            order_id=UUID(str(label_row[0])),
+            order_no=str(label_row[3]),
+            label_id=UUID(str(label_row[1])),
+            tracking_number=str(label_row[2]),
+        )
+    shipment_row = (
+        await session.execute(
+            text(
+                "SELECT s.order_id, s.tracking_number, o.order_no, l.id "
+                "FROM shipments s "
+                "JOIN orders o ON o.id = s.order_id AND o.tenant_id = s.tenant_id "
+                "LEFT JOIN carrier_shipping_labels l "
+                "  ON l.shipment_id = s.id AND l.tenant_id = s.tenant_id "
+                "WHERE s.tenant_id = :tid AND s.tracking_number = :code "
+                "ORDER BY s.created_at DESC, s.id DESC LIMIT 1"
+            ),
+            {"tid": tenant_id, "code": code},
+        )
+    ).first()
+    if shipment_row is not None:
+        return ScannedShipmentMatch(
+            order_id=UUID(str(shipment_row[0])),
+            order_no=str(shipment_row[2]),
+            label_id=UUID(str(shipment_row[3])) if shipment_row[3] else None,
+            tracking_number=str(shipment_row[1]),
+        )
+    order_row = (
+        await session.execute(
+            text(
+                "SELECT id, order_no FROM orders "
+                "WHERE tenant_id = :tid AND order_no = :code LIMIT 1"
+            ),
+            {"tid": tenant_id, "code": code},
+        )
+    ).first()
+    if order_row is None:
+        return None
+    return ScannedShipmentMatch(
+        order_id=UUID(str(order_row[0])),
+        order_no=str(order_row[1]),
+        label_id=None,
+        tracking_number=None,
+    )
+
+
+async def _record_scan_event(
+    session: AsyncSession,
+    tenant_id: UUID,
+    *,
+    order_id: UUID,
+    label_id: UUID | None,
+    scanned_code: str,
+    tracking_number: str | None,
+    outcome: str,
+    actor_id: UUID | None,
+) -> tuple[UUID, datetime]:
+    """Persist one scan row; returns ``(event_id, dispatched_at)``."""
+    row = (
+        await session.execute(
+            text(
+                """
+                INSERT INTO scan_dispatch_events (
+                    tenant_id, order_id, carrier_shipping_label_id, scanned_code,
+                    tracking_number, outcome, dispatched_by
+                ) VALUES (
+                    :tid, :oid, :lid, :code, :tracking, :outcome, :actor
+                )
+                RETURNING id, dispatched_at
+                """
+            ),
+            {
+                "tid": tenant_id,
+                "oid": order_id,
+                "lid": label_id,
+                "code": scanned_code,
+                "tracking": tracking_number,
+                "outcome": outcome,
+                "actor": actor_id,
+            },
+        )
+    ).one()
+    return UUID(str(row[0])), row[1]
+
+
+async def _unpaid_b2b_balance(session: AsyncSession, tenant_id: UUID, order: Order) -> bool:
+    """Whether a wholesale order still owes money on the 70% balance milestone."""
+    if order.order_mode != OrderMode.B2B_WHOLESALE:
+        return False
+    unsettled = int(
+        (
+            await session.execute(
+                text(
+                    "SELECT COUNT(*) FROM receivables_payables "
+                    "WHERE tenant_id = :tid AND order_id = :oid "
+                    "  AND direction = 'receivable' "
+                    "  AND status IN ('open', 'partial', 'overdue')"
+                ),
+                {"tid": tenant_id, "oid": order.id},
+            )
+        ).scalar_one()
+    )
+    return order.payment_status != PaymentStatus.PAID or unsettled > 0
+
+
+async def scan_and_dispatch(
+    session_factory: async_sessionmaker[AsyncSession],
+    tenant_id: UUID,
+    principal: CurrentPrincipal,
+    code: str,
+) -> ScanDispatchResponse:
+    """Scan a barcode and release the parcel — or refuse with audited evidence.
+
+    A refused scan must *outlive* the 409, so the blocked `scan_dispatch_events` row is
+    written in its own short transaction after the decision transaction closes; raising
+    inside `tenant_session` would roll the evidence back with the rest of the request.
+
+    A successful scan moves `pending_payment` / `confirmed_reserved` / `in_production` /
+    `partially_shipped` / `exception` forward to `shipped` through
+    `OrderService.update_external_order_status`, which keeps the fulfillment ladder
+    forward-only and the stock deduct idempotent (`order-external-shipped:{order_id}`).
+    An already `shipped` or `delivered` order is re-scanned as evidence only, never
+    downgraded.
+    """
+    async with tenant_session(session_factory, tenant_id) as session:
+        scanned = await resolve_scanned_code(session, tenant_id, code)
+    if scanned is None:
+        raise AppError(
+            slug="scan-code-not-found",
+            status_code=404,
+            code="ERR_SCAN_CODE_NOT_FOUND",
+            title="Scanned Code Not Found",
+            detail=(
+                f"'{code}' is not a booked waybill, a shipment tracking number or an "
+                "order number in this workspace."
+            ),
+        )
+
+    blocked: AppError | None = None
+    response: ScanDispatchResponse | None = None
+    async with tenant_session(session_factory, tenant_id) as session:
+        order = (
+            await session.execute(
+                select(Order)
+                .where(Order.tenant_id == tenant_id, Order.id == scanned.order_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if order is None:  # pragma: no cover - FK guarantees the order row exists
+            raise AppError(
+                slug="order-not-found",
+                status_code=404,
+                code="ERR_ORDER_NOT_FOUND",
+                title="Order Not Found",
+                detail=f"Order '{scanned.order_id}' not found.",
+            )
+        if order.fulfillment_status in {
+            FulfillmentStatus.CANCELLED,
+            FulfillmentStatus.REFUNDED,
+        }:
+            raise AppError(
+                slug="order-inactive",
+                status_code=409,
+                code="ERR_ORDER_INACTIVE",
+                title="Order Inactive",
+                detail=(
+                    f"Order '{order.order_no}' is '{order.fulfillment_status.value}' and "
+                    "can never be dispatched."
+                ),
+            )
+
+        current_status = order.fulfillment_status
+        evaluation = await RoutingService().latest_evaluation(session, tenant_id, order.id)
+        if await _unpaid_b2b_balance(session, tenant_id, order):
+            blocked = AppError(
+                slug="balance-payment-required",
+                status_code=409,
+                code="ERR_BALANCE_PAYMENT_REQUIRED",
+                title="Balance Payment Required",
+                detail=(
+                    f"Order '{order.order_no}' still owes the 70% B2B balance; the parcel "
+                    "cannot be released until Finance settles the receivable."
+                ),
+            )
+        elif evaluation is not None and evaluation.is_held:
+            blocked = AppError(
+                slug="order-held-for-review",
+                status_code=409,
+                code="ERR_ORDER_HELD_FOR_REVIEW",
+                title="Order Held For Review",
+                detail=(
+                    f"Order '{order.order_no}' is held by the anti-loss routing guard: "
+                    f"{evaluation.hold_reason or 'margin hold'}. Release the hold before "
+                    "dispatching."
+                ),
+            )
+        else:
+            if current_status in _SCANNABLE_FULFILLMENT_STATUSES:
+                await OrderService().update_external_order_status(
+                    session,
+                    tenant_id,
+                    order.id,
+                    fulfillment_status=FulfillmentStatus.SHIPPED,
+                )
+            event_id, dispatched_at = await _record_scan_event(
+                session,
+                tenant_id,
+                order_id=order.id,
+                label_id=scanned.label_id,
+                scanned_code=code,
+                tracking_number=scanned.tracking_number,
+                outcome="dispatched",
+                actor_id=principal.user_id,
+            )
+            final_status = await session.scalar(
+                text(
+                    "SELECT fulfillment_status FROM orders "
+                    "WHERE tenant_id = :tid AND id = :oid"
+                ),
+                {"tid": tenant_id, "oid": order.id},
+            )
+            await record_audit_event(
+                session,
+                tenant_id=tenant_id,
+                actor_type="human_user",
+                actor_id=str(principal.user_id),
+                action="order.scan_dispatched",
+                resource_type="order",
+                resource_id=order.id,
+                before_state={"fulfillment_status": current_status.value},
+                after_state={
+                    "fulfillment_status": str(final_status),
+                    "scanned_code": code,
+                    "tracking_number": scanned.tracking_number,
+                    "label_id": str(scanned.label_id) if scanned.label_id else None,
+                    "scan_event_id": str(event_id),
+                    "dispatched_at": dispatched_at.isoformat(),
+                },
+            )
+            response = ScanDispatchResponse(
+                order_id=order.id,
+                order_no=order.order_no,
+                tracking_number=scanned.tracking_number,
+                status=str(final_status),
+                dispatched_at=dispatched_at,
+            )
+
+    if blocked is not None:
+        outcome = "blocked_balance" if blocked.code == "ERR_BALANCE_PAYMENT_REQUIRED" else (
+            "blocked_margin_hold"
+        )
+        async with tenant_session(session_factory, tenant_id) as evidence_session:
+            await _record_scan_event(
+                evidence_session,
+                tenant_id,
+                order_id=scanned.order_id,
+                label_id=scanned.label_id,
+                scanned_code=code,
+                tracking_number=scanned.tracking_number,
+                outcome=outcome,
+                actor_id=principal.user_id,
+            )
+        raise blocked
+
+    assert response is not None  # noqa: S101 - every non-blocked branch builds one
+    return response

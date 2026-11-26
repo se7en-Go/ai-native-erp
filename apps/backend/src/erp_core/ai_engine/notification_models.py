@@ -127,7 +127,7 @@ class NotificationDelivery(Base):
 
 
 class AutomationRule(Base):
-    """One of the five event-driven automation templates, per tenant."""
+    """One of the seven event-driven automation templates, per tenant."""
 
     __tablename__ = "automation_rules"
 
@@ -161,7 +161,8 @@ class AutomationRule(Base):
     __table_args__ = (
         CheckConstraint(
             "template_code IN ('low_doc_replenishment', 'negative_margin_hold', "
-            "'stalled_shipment_soothe', 'cold_b2b_quote_followup', 'daily_patrol_brief')",
+            "'stalled_shipment_soothe', 'cold_b2b_quote_followup', 'daily_patrol_brief', "
+            "'negative_review_ticket', 'high_adoption_faq_extract')",
             name="ck_automation_rules_template_code",
         ),
         CheckConstraint(

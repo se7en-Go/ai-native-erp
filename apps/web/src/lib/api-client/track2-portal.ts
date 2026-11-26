@@ -154,6 +154,20 @@ export interface PortalReceiptRequest {
   currency: string;
 }
 
+export interface PortalReorderRequest {
+  notes?: string | null;
+  requested_quantities?: Record<string, number> | null;
+}
+
+export interface PortalReorderResponse {
+  new_quote_id: string;
+  new_quote_no: string;
+  total_amount: string;
+  currency: string;
+  status: string;
+  created_at: string;
+}
+
 export interface PortalReceiptResponse {
   payment_id: string;
   rp_id: string;
@@ -256,6 +270,33 @@ export function acceptBuyerPortalQuote(
   return portalFetch<PortalAcceptResponse>(`/${encodeURIComponent(token)}/accept`, {
     method: "POST",
     body: JSON.stringify({ buyer_name: buyerName }),
+  });
+}
+
+/**
+ * One-click reorder: re-prices the same SKUs into a brand new **draft** quotation.
+ *
+ * The backend answers with a buyer-safe projection only (`new_quote_no`, total, status) —
+ * never a cost or margin field — so the return type carries exactly that.
+ */
+export function reorderBuyerPortalQuote(
+  token: string,
+  payload: PortalReorderRequest = {}
+): Promise<PortalReorderResponse> {
+  if (shouldUseMockApi()) {
+    const view = mockBuyerPortalView();
+    return Promise.resolve({
+      new_quote_id: "mock-quote-reorder-1",
+      new_quote_no: "PI-REO-202611-MOCK01",
+      total_amount: view.quote.total_amount,
+      currency: view.quote.quote_currency,
+      status: "draft",
+      created_at: MOCK_NOW,
+    });
+  }
+  return portalFetch<PortalReorderResponse>(`/${encodeURIComponent(token)}/reorder`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

@@ -9,6 +9,7 @@ import {
   FileText,
   Loader2,
   PackageCheck,
+  RefreshCw,
   ShieldCheck,
   Truck,
   Upload,
@@ -18,8 +19,10 @@ import {
   acceptBuyerPortalQuote,
   buyerDocumentDownloadUrl,
   fetchBuyerPortal,
+  reorderBuyerPortalQuote,
   submitBuyerPortalReceipt,
   type BuyerPortalView,
+  type PortalReorderResponse,
   type PortalLanguage,
   type PortalReceivable,
 } from "@/lib/api-client/track2-portal";
@@ -70,6 +73,16 @@ const COPY = {
     downloadCi: "Download CI (PDF)",
     downloadPl: "Download PL (PDF)",
     documentsPending: "Commercial Invoice and Packing List are issued once your order is confirmed.",
+    reorderTitle: "Request reorder",
+    reorderHint:
+      "Re-price the same items into a fresh draft quotation. The seller confirms it before production.",
+    reorderButton: "Request Reorder",
+    reordering: "Requesting…",
+    reorderSuccess: "Reorder draft created",
+    reorderQuoteNo: "New quote",
+    reorderTotal: "Draft total",
+    reorderNote: "Draft only — no payment or production starts until the seller confirms.",
+    reorderFailed: "Could not create the reorder draft",
     acceptTitle: "Accept this quotation",
     acceptHint: "Type your full name as the authorised buyer contact.",
     buyerName: "Your name",
@@ -142,6 +155,15 @@ const COPY = {
     downloadCi: "下载商业发票 CI（PDF）",
     downloadPl: "下载装箱单 PL（PDF）",
     documentsPending: "订单确认后即可下载商业发票与装箱单。",
+    reorderTitle: "一键复购",
+    reorderHint: "按原清单重新报价，生成一张全新的草稿报价单，由卖方确认后再生效。",
+    reorderButton: "一键复购 / Request Reorder",
+    reordering: "正在生成…",
+    reorderSuccess: "已生成复购草稿",
+    reorderQuoteNo: "新报价单号",
+    reorderTotal: "草稿金额",
+    reorderNote: "仅为草稿，卖方确认前不会收款也不会安排生产。",
+    reorderFailed: "复购草稿创建失败",
     acceptTitle: "确认本报价单",
     acceptHint: "请填写买方授权联系人姓名。",
     buyerName: "您的姓名",
@@ -230,6 +252,9 @@ export function BuyerPortalPageView({ token }: BuyerPortalViewProps) {
   const [amountReceived, setAmountReceived] = useState("");
   const [txRef, setTxRef] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const [reorderError, setReorderError] = useState<string | null>(null);
+  const [reorderResult, setReorderResult] = useState<PortalReorderResponse | null>(null);
 
   const copy = COPY[lang];
 
@@ -299,6 +324,20 @@ export function BuyerPortalPageView({ token }: BuyerPortalViewProps) {
       setAccepting(false);
     }
   }, [buyerName, lang, token]);
+
+  const onReorder = useCallback(async () => {
+    setReordering(true);
+    setReorderError(null);
+    setReorderResult(null);
+    try {
+      const result = await reorderBuyerPortalQuote(token, {});
+      setReorderResult(result);
+    } catch (error) {
+      setReorderError(`${copy.reorderFailed}: ${errorDetail(error)}`);
+    } finally {
+      setReordering(false);
+    }
+  }, [copy.reorderFailed, token]);
 
   const onSubmitReceipt = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
@@ -604,6 +643,66 @@ export function BuyerPortalPageView({ token }: BuyerPortalViewProps) {
                     {view.seller.terms_notes}
                   </p>
                 </div>
+              )}
+            </section>
+
+            {/* One-click reorder */}
+            <section
+              data-testid="portal-reorder-section"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
+                    <RefreshCw className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                    {copy.reorderTitle}
+                  </h2>
+                  <p className="mt-0.5 text-[12px] text-slate-500">{copy.reorderHint}</p>
+                </div>
+                <button
+                  type="button"
+                  data-testid="portal-reorder-button"
+                  onClick={() => void onReorder()}
+                  disabled={reordering}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-[12.5px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-60"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                  {reordering ? copy.reordering : copy.reorderButton}
+                </button>
+              </div>
+              {reorderResult && (
+                <div
+                  data-testid="portal-reorder-banner"
+                  className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3"
+                >
+                  <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-emerald-800">
+                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                    {copy.reorderSuccess}
+                  </p>
+                  <dl className="mt-1.5 grid gap-x-4 gap-y-1 text-[12px] sm:grid-cols-2">
+                    <div className="flex items-center justify-between gap-3 sm:block">
+                      <dt className="text-emerald-700/80">{copy.reorderQuoteNo}</dt>
+                      <dd className="font-medium tabular-nums text-emerald-900">
+                        {reorderResult.new_quote_no}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 sm:block">
+                      <dt className="text-emerald-700/80">{copy.reorderTotal}</dt>
+                      <dd
+                        data-testid="portal-reorder-total"
+                        className="font-semibold tabular-nums text-emerald-900"
+                      >
+                        {formatMoney(reorderResult.total_amount, reorderResult.currency)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className="mt-1.5 text-[11.5px] text-emerald-700/90">{copy.reorderNote}</p>
+                </div>
+              )}
+              {reorderError && (
+                <p data-testid="portal-reorder-error" className="mt-2 text-[12px] text-rose-600">
+                  {reorderError}
+                </p>
               )}
             </section>
 
