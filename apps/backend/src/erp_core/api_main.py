@@ -17,9 +17,11 @@ import erp_core.ai_engine.models  # noqa: F401
 import erp_core.ai_engine.notification_models  # noqa: F401
 import erp_core.billing.models  # noqa: F401
 import erp_core.catalog.models  # noqa: F401
+import erp_core.catalog.visual_models  # noqa: F401
 import erp_core.channels.models  # noqa: F401
 import erp_core.crm.models  # noqa: F401
 import erp_core.crm.portal_models  # noqa: F401
+import erp_core.finance.ads_models  # noqa: F401
 import erp_core.finance.models  # noqa: F401
 import erp_core.finance.settlement_models  # noqa: F401
 import erp_core.growth.models  # noqa: F401
@@ -48,6 +50,7 @@ from erp_core.ai_engine.workforce_router import workforce_router
 from erp_core.billing.router import router as billing_router
 from erp_core.catalog.router import router as catalog_router
 from erp_core.catalog.sourcing_router import router as catalog_sourcing_router
+from erp_core.catalog.visual_router import router as catalog_visual_router
 from erp_core.channels.adapters.instagram_dm import instagram_router
 from erp_core.channels.adapters.messenger import messenger_router
 from erp_core.channels.adapters.telegram import telegram_router
@@ -70,6 +73,7 @@ from erp_core.crm.portal_router import (
 )
 from erp_core.crm.router import router as b2b_router
 from erp_core.crm.workbench import router as crm_workbench_router
+from erp_core.finance.ads_router import router as finance_ads_router
 from erp_core.finance.ap_router import router as finance_ap_router
 from erp_core.finance.router import router as finance_router
 from erp_core.finance.settlement_router import router as finance_settlement_router
@@ -248,6 +252,9 @@ def create_app() -> FastAPI:
     app.include_router(customer_router)
     app.include_router(catalog_router, prefix="/api/v1")
     app.include_router(catalog_sourcing_router)
+    # Sourcing visual-AI jobs (去白底 / 换场景 / 图片文字翻译): sandbox renders offline,
+    # external providers fail closed with a recorded, non-secret reason.
+    app.include_router(catalog_visual_router)
     app.include_router(b2b_router, prefix="/api/v1")
     # Buyer self-service portal: the operator router mints/revokes magic links, the
     # public router is authenticated solely by the opaque `{token}` path segment.
@@ -267,6 +274,9 @@ def create_app() -> FastAPI:
     app.include_router(orders_router, prefix="/api/v1")
     app.include_router(finance_router, prefix="/api/v1")
     app.include_router(finance_ap_router)
+    # Read-only ad spend sync (Meta / Amazon / sandbox): GET-only adapters, tokens
+    # sealed in AES-256-GCM envelopes and never echoed back.
+    app.include_router(finance_ads_router)
     app.include_router(finance_settlement_router)
     app.include_router(kb_router)
     app.include_router(kb_gap_router)

@@ -185,6 +185,210 @@
         "title": "AccountRead",
         "type": "object"
       },
+      "AdAccountConnect": {
+        "description": "Connect one read-only ad account. `access_token` is encrypted at rest.",
+        "properties": {
+          "access_token": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "account_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Account Name",
+            "type": "string"
+          },
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "external_account_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "External Account Id",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "meta_ads",
+              "amazon_ads",
+              "sandbox_ads"
+            ],
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "account_name",
+          "external_account_id",
+          "access_token"
+        ],
+        "title": "AdAccountConnect",
+        "type": "object"
+      },
+      "AdAccountRead": {
+        "description": "Public account projection. Never carries the token or the ciphertext.",
+        "properties": {
+          "account_name": {
+            "title": "Account Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "external_account_id": {
+            "title": "External Account Id",
+            "type": "string"
+          },
+          "has_credentials": {
+            "default": true,
+            "title": "Has Credentials",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "platform": {
+            "enum": [
+              "meta_ads",
+              "amazon_ads",
+              "sandbox_ads"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "token_preview": {
+            "title": "Token Preview",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "platform",
+          "account_name",
+          "external_account_id",
+          "currency",
+          "status",
+          "created_at",
+          "token_preview"
+        ],
+        "title": "AdAccountRead",
+        "type": "object"
+      },
+      "AdSpendRowRead": {
+        "description": "One `(spend_date, campaign_name)` fact row, money as decimal strings.",
+        "properties": {
+          "ad_account_id": {
+            "format": "uuid",
+            "title": "Ad Account Id",
+            "type": "string"
+          },
+          "ad_spend": {
+            "title": "Ad Spend",
+            "type": "string"
+          },
+          "attributed_sales": {
+            "title": "Attributed Sales",
+            "type": "string"
+          },
+          "campaign_name": {
+            "title": "Campaign Name",
+            "type": "string"
+          },
+          "clicks": {
+            "title": "Clicks",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "impressions": {
+            "title": "Impressions",
+            "type": "integer"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "spend_date": {
+            "format": "date",
+            "title": "Spend Date",
+            "type": "string"
+          },
+          "total_store_sales": {
+            "title": "Total Store Sales",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ad_account_id",
+          "spend_date",
+          "campaign_name",
+          "impressions",
+          "clicks",
+          "ad_spend",
+          "attributed_sales",
+          "total_store_sales",
+          "currency"
+        ],
+        "title": "AdSpendRowRead",
+        "type": "object"
+      },
       "AdoptionTypeMetrics": {
         "properties": {
           "adoption_rate_pct": {
@@ -226,6 +430,108 @@
           "adoption_rate_pct"
         ],
         "title": "AdoptionTypeMetrics",
+        "type": "object"
+      },
+      "AdsSpendSummaryRead": {
+        "description": "Windowed totals plus the exact ratios derived from them.\n\n* `roas` = attributed_sales / ad_spend, quantized `0.01`\n* `tacos_pct` = (ad_spend / total_store_sales) * 100, quantized `0.01`\n* `ctr_pct` = (clicks / impressions) * 100, quantized `0.01`",
+        "properties": {
+          "ctr_pct": {
+            "title": "Ctr Pct",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "roas": {
+            "title": "Roas",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AdSpendRowRead"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "tacos_pct": {
+            "title": "Tacos Pct",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_ad_spend": {
+            "title": "Total Ad Spend",
+            "type": "string"
+          },
+          "total_attributed_sales": {
+            "title": "Total Attributed Sales",
+            "type": "string"
+          },
+          "total_clicks": {
+            "title": "Total Clicks",
+            "type": "integer"
+          },
+          "total_impressions": {
+            "title": "Total Impressions",
+            "type": "integer"
+          },
+          "total_store_sales": {
+            "title": "Total Store Sales",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "days",
+          "currency",
+          "total_ad_spend",
+          "total_attributed_sales",
+          "total_store_sales",
+          "total_impressions",
+          "total_clicks",
+          "roas",
+          "tacos_pct",
+          "ctr_pct",
+          "rows"
+        ],
+        "title": "AdsSpendSummaryRead",
+        "type": "object"
+      },
+      "AdsSyncResultRead": {
+        "description": "Outcome of one read-only pull.",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AdAccountRead"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "rows_upserted": {
+            "title": "Rows Upserted",
+            "type": "integer"
+          },
+          "synced_at": {
+            "format": "date-time",
+            "title": "Synced At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account",
+          "rows_upserted",
+          "days",
+          "synced_at"
+        ],
+        "title": "AdsSyncResultRead",
         "type": "object"
       },
       "AdvanceOnboardingRequest": {
@@ -23976,6 +24282,243 @@
         "title": "VerifyEmailDnsRequest",
         "type": "object"
       },
+      "VisualJobCreate": {
+        "description": "Create one visual job. `source_image_url` accepts https, `data:image/*` or `/media/*`.",
+        "properties": {
+          "operation": {
+            "enum": [
+              "remove_bg",
+              "scene_replace",
+              "translate_overlay"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "provider": {
+            "default": "sandbox",
+            "enum": [
+              "sandbox",
+              "remove_bg",
+              "openai_image"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "source_image_url": {
+            "maxLength": 2000000,
+            "minLength": 1,
+            "title": "Source Image Url",
+            "type": "string"
+          },
+          "target_locale": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Locale"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          }
+        },
+        "required": [
+          "operation",
+          "source_image_url"
+        ],
+        "title": "VisualJobCreate",
+        "type": "object"
+      },
+      "VisualJobRead": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "remove_bg",
+              "scene_replace",
+              "translate_overlay"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "output_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Image Url"
+          },
+          "output_mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Mime Type"
+          },
+          "output_r2_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output R2 Key"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "provider": {
+            "enum": [
+              "sandbox",
+              "remove_bg",
+              "openai_image"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "source_image_url": {
+            "title": "Source Image Url",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "processing",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Locale"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "provider",
+          "operation",
+          "source_image_url",
+          "status",
+          "created_at"
+        ],
+        "title": "VisualJobRead",
+        "type": "object"
+      },
       "WalmartConnectRequest": {
         "additionalProperties": false,
         "properties": {
@@ -32431,6 +32974,240 @@
         ]
       }
     },
+    "/api/v1/catalog/visual-jobs": {
+      "get": {
+        "description": "Latest visual jobs for the caller's tenant, newest first (capped at 50).",
+        "operationId": "list_visual_jobs_api_v1_catalog_visual_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VisualJobRead"
+                  },
+                  "title": "Response List Visual Jobs Api V1 Catalog Visual Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Visual Jobs",
+        "tags": [
+          "catalog-visual"
+        ]
+      },
+      "post": {
+        "description": "Validate the source image, run the provider and persist the terminal state.",
+        "operationId": "create_visual_job_api_v1_catalog_visual_jobs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualJobCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualJobRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Visual Job",
+        "tags": [
+          "catalog-visual"
+        ]
+      }
+    },
+    "/api/v1/catalog/visual-jobs/{job_id}": {
+      "delete": {
+        "description": "Delete the job row and best-effort drop its stored object.",
+        "operationId": "delete_visual_job_api_v1_catalog_visual_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Visual Job",
+        "tags": [
+          "catalog-visual"
+        ]
+      },
+      "get": {
+        "operationId": "get_visual_job_api_v1_catalog_visual_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualJobRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Visual Job",
+        "tags": [
+          "catalog-visual"
+        ]
+      }
+    },
     "/api/v1/channels/accounts": {
       "get": {
         "operationId": "list_channel_accounts_api_v1_channels_accounts_get",
@@ -35120,6 +35897,305 @@
         "summary": "Update Customer",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/api/v1/finance/ads/accounts": {
+      "get": {
+        "description": "Connected ad accounts. Tokens are never echoed - only a masked fingerprint.",
+        "operationId": "list_ad_accounts_api_v1_finance_ads_accounts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdAccountRead"
+                  },
+                  "title": "Response List Ad Accounts Api V1 Finance Ads Accounts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ad Accounts",
+        "tags": [
+          "finance-ads"
+        ]
+      },
+      "post": {
+        "description": "Connect a `sandbox_ads` / `meta_ads` / `amazon_ads` account read-only.",
+        "operationId": "connect_ad_account_api_v1_finance_ads_accounts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdAccountConnect"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdAccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Ad Account",
+        "tags": [
+          "finance-ads"
+        ]
+      }
+    },
+    "/api/v1/finance/ads/accounts/{account_id}": {
+      "delete": {
+        "description": "Disconnect the account; its daily snapshots cascade away with it.",
+        "operationId": "delete_ad_account_api_v1_finance_ads_accounts__account_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Ad Account",
+        "tags": [
+          "finance-ads"
+        ]
+      }
+    },
+    "/api/v1/finance/ads/accounts/{account_id}/sync": {
+      "post": {
+        "description": "Pull the last `days` of daily campaign spend (read-only HTTPS GET) and upsert.",
+        "operationId": "sync_ad_account_api_v1_finance_ads_accounts__account_id__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdsSyncResultRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Ad Account",
+        "tags": [
+          "finance-ads"
+        ]
+      }
+    },
+    "/api/v1/finance/ads/spend-summary": {
+      "get": {
+        "description": "Totals plus exact ROAS / TACoS / CTR as decimal strings.",
+        "operationId": "get_ads_spend_summary_api_v1_finance_ads_spend_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdsSpendSummaryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ads Spend Summary",
+        "tags": [
+          "finance-ads"
         ]
       }
     },

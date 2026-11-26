@@ -9,6 +9,7 @@ import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { useI18n } from "@/lib/i18n";
 import { CreativeStudioPanel } from "@/components/ai-workforce/creative-studio-panel";
+import { VisualStudioPanel } from "@/components/catalog/visual-studio-panel";
 import type { CreativeAsset, SkuOption } from "@/components/ai-workforce/types";
 import { fetchCatalogVariants, fetchPendingProposalsCount } from "@/lib/data-source";
 import {
@@ -196,6 +197,9 @@ export default function AiStudioPage() {
             </ul>
           )}
         </section>
+
+        {/* Track 9: sourcing visual-AI processing (去白底 / 换场景 / 图片文字翻译). */}
+        <VisualStudioPanel />
       </div>
     </AppShell>
   );
