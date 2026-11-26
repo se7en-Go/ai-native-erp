@@ -8372,6 +8372,34 @@ export type GetVisualJobApiV1CatalogVisualJobsJobIdGetResponses = {
 
 export type GetVisualJobApiV1CatalogVisualJobsJobIdGetResponse = GetVisualJobApiV1CatalogVisualJobsJobIdGetResponses[keyof GetVisualJobApiV1CatalogVisualJobsJobIdGetResponses];
 
+export type GetVisualJobOutputApiV1CatalogVisualJobsJobIdOutputGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/visual-jobs/{job_id}/output';
+};
+
+export type GetVisualJobOutputApiV1CatalogVisualJobsJobIdOutputGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetVisualJobOutputApiV1CatalogVisualJobsJobIdOutputGetError = GetVisualJobOutputApiV1CatalogVisualJobsJobIdOutputGetErrors[keyof GetVisualJobOutputApiV1CatalogVisualJobsJobIdOutputGetErrors];
+
+export type GetVisualJobOutputApiV1CatalogVisualJobsJobIdOutputGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type ListChannelAccountsApiV1ChannelsAccountsGetData = {
     body?: never;
     headers?: {
