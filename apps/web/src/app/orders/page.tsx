@@ -13,9 +13,12 @@ import {
   PackageCheck,
   RefreshCw,
   Truck,
+  Waypoints,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { RoutingRulesPanel } from "@/components/orders/routing-rules-panel";
 import { ShipmentTimelineDrawer } from "@/components/orders/shipment-timeline-drawer";
+import { ShippingLabelModal } from "@/components/orders/shipping-label-modal";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Badge, EmptyState, Page, PageHeader, TableWrap } from "@/components/ui/page";
 import { pushOrderFulfillment, shipOrder } from "@/lib/api-client/live-client";
@@ -101,6 +104,7 @@ export default function OrdersPage() {
   const { bi } = useI18n();
   const [modeFilter, setModeFilter] = useState<"" | OrderMode>("");
   const [drawerOrderId, setDrawerOrderId] = useState<string | null>(null);
+  const [routingOrder, setRoutingOrder] = useState<{ id: string; orderNo: string } | null>(null);
   const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
   const [carrierInputs, setCarrierInputs] = useState<Record<string, string>>({});
   const [providerInputs, setProviderInputs] = useState<Record<string, "manual" | "17track">>({});
@@ -236,6 +240,8 @@ export default function OrdersPage() {
             {shipMutation.error?.message ?? pushFulfillmentMutation.error?.message}
           </p>
         )}
+
+        <RoutingRulesPanel />
 
         {orders.length === 0 ? (
           <EmptyState>
@@ -465,6 +471,18 @@ export default function OrdersPage() {
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <button
                             type="button"
+                            data-testid={`open-routing-modal-${ord.id}`}
+                            onClick={() =>
+                              setRoutingOrder({ id: ord.id, orderNo: ord.order_no })
+                            }
+                            className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
+                          >
+                            <Waypoints className="h-3 w-3" />
+                            <span>{bi("审单路由 & 打面单", "Routing & label")}</span>
+                          </button>
+
+                          <button
+                            type="button"
                             data-testid={`open-shipment-drawer-${ord.id}`}
                             onClick={() => setDrawerOrderId(ord.id)}
                             className="erp-btn erp-btn-secondary rounded-xl py-1 text-[12px]"
@@ -561,6 +579,14 @@ export default function OrdersPage() {
 
       {drawerOrderId && (
         <ShipmentTimelineDrawer orderId={drawerOrderId} onClose={() => setDrawerOrderId(null)} />
+      )}
+
+      {routingOrder && (
+        <ShippingLabelModal
+          orderId={routingOrder.id}
+          orderNo={routingOrder.orderNo}
+          onClose={() => setRoutingOrder(null)}
+        />
       )}
     </AppShell>
   );
