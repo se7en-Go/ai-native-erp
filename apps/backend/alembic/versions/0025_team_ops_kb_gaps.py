@@ -16,7 +16,7 @@ Three tenant-scoped tables, each forced through PG17 row level security so the
    `kb_documents` row.
 
 Revision ID: 0025_team_ops_kb_gaps
-Revises: 0019_analytics_im_sourcing
+Revises: 0024_order_routing_labels
 Create Date: 2026-11-25
 """
 
@@ -27,7 +27,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "0025_team_ops_kb_gaps"
-down_revision: str | None = "0019_analytics_im_sourcing"
+down_revision: str | None = "0024_order_routing_labels"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
