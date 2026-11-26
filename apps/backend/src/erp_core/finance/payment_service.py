@@ -390,6 +390,43 @@ class PaymentService:
         await session.flush()
         return ReceivableRead.model_validate(rp)
 
+    async def void_order_receivables(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        order_id: UUID,
+        *,
+        reason: str = "external_refund_or_cancel",
+    ) -> int:
+        """Void open/settled receivables when an external order is refunded or cancelled."""
+        result = await session.execute(
+            text(
+                """
+                UPDATE receivables_payables
+                SET status = 'void', paid_amount = 0.00
+                WHERE tenant_id = :tid
+                  AND order_id = :oid
+                  AND direction = 'receivable'
+                  AND status <> 'void'
+                """
+            ),
+            {"tid": tenant_id, "oid": order_id},
+        )
+        await session.flush()
+        voided_count = int(getattr(result, "rowcount", 0) or 0)
+        if voided_count > 0:
+            await record_audit_event(
+                session,
+                tenant_id=tenant_id,
+                actor_type="system_cron",
+                actor_id="finance.payment_service",
+                action="finance.receivables.voided",
+                resource_type="order",
+                resource_id=order_id,
+                after_state={"voided_count": voided_count, "reason": reason},
+            )
+        return voided_count
+
     async def list_receivables(
         self,
         session: AsyncSession,

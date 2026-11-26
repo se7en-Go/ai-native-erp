@@ -250,7 +250,7 @@ class ChannelAnalyticsService:
 
             if row.snap_cogs_base is not None:
                 cogs_base = Decimal(str(row.snap_cogs_base))
-            elif str(row.fulfillment_status) == "cancelled":
+            elif str(row.fulfillment_status) in {"cancelled", "refunded"}:
                 cogs_base = Decimal("0.00")
             else:
                 cogs_base = _q2(Decimal(str(row.fallback_cogs_base)))
@@ -275,7 +275,7 @@ class ChannelAnalyticsService:
             )
             if row.snap_net_margin_base is not None:
                 net_margin = Decimal(str(row.snap_net_margin_base))
-            elif str(row.fulfillment_status) == "cancelled":
+            elif str(row.fulfillment_status) in {"cancelled", "refunded"}:
                 net_margin = _q2(-comm_base - order_ad_base)
             else:
                 net_rev = max(Decimal("0.00"), gmv_base - refund_base)

@@ -38,6 +38,8 @@ from erp_core.channels.ecommerce.base import (
     NormalizedOrder,
     NormalizedProduct,
 )
+from erp_core.finance.payment_service import PaymentService
+from erp_core.finance.profit_service import OrderProfitService
 from erp_core.orders.inventory_service import InventoryLedgerService
 from erp_core.orders.order_service import (
     OrderService,
@@ -518,6 +520,65 @@ async def test_external_full_refund_releases_reserved_stock_idempotently(
             payment_status=PaymentStatus.REFUNDED,
         )
         assert await _balance(session, workspace) == (5, 0, 5)
+
+
+async def test_external_full_refund_zeroes_cogs_and_voids_receivable_idempotently(
+    pg: _PgHarness,
+) -> None:
+    workspace = await pg.seed(on_hand=5, channel_account=True)
+    assert workspace.channel_account_id is not None
+    async with tenant_session(pg.factory, workspace.tenant_id) as session:
+        sync = EcommerceOrderSyncService()
+        payments = PaymentService()
+        profits = OrderProfitService()
+        tenant_id = workspace.tenant_id
+
+        dto = _normalized_order(external_order_id="W3C-REFUND-CVP", quantity=2)
+        oid, created = await sync.ingest_normalized_order(
+            session,
+            tenant_id=tenant_id,
+            channel_account_id=workspace.channel_account_id,
+            default_warehouse_id=workspace.warehouse_id,
+            order_dto=dto,
+        )
+        assert created is True
+        before_cvp = await profits.recalculate_order_profit(session, tenant_id, oid)
+        assert before_cvp.cogs_base == Decimal("60.00")
+
+        # External full refund must release stock, void receivable, and zero COGS.
+        refunded_dto = dto.model_copy(
+            update={
+                "fulfillment_status": FulfillmentStatus.REFUNDED,
+                "payment_status": PaymentStatus.REFUNDED,
+                "channel_metadata": {"refunded_amount": str(dto.total_amount)},
+            }
+        )
+        await sync.ingest_normalized_order(
+            session,
+            tenant_id=tenant_id,
+            channel_account_id=workspace.channel_account_id,
+            default_warehouse_id=workspace.warehouse_id,
+            order_dto=refunded_dto,
+        )
+        assert await _balance(session, workspace) == (5, 0, 5)
+        after_cvp = await profits.recalculate_order_profit(session, tenant_id, oid)
+        assert after_cvp.gross_revenue_base == Decimal("0.00")
+        assert after_cvp.cogs_base == Decimal("0.00")
+        assert after_cvp.net_contribution_margin_base == Decimal("0.00")
+
+        rp_row = (
+            await session.execute(
+                text(
+                    "SELECT status, paid_amount FROM receivables_payables "
+                    "WHERE tenant_id = :tid AND order_id = :oid"
+                ),
+                {"tid": tenant_id, "oid": oid},
+            )
+        ).one()
+        assert rp_row.status == "void"
+        assert Decimal(str(rp_row.paid_amount)) == Decimal("0.00")
+        # Calling void again is an idempotent no-op.
+        assert await payments.void_order_receivables(session, tenant_id, oid) == 0
 
 
 async def test_first_import_of_cancelled_order_does_not_reserve_stock(pg: _PgHarness) -> None:

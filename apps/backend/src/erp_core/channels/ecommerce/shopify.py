@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 import httpx
+import structlog
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -43,6 +44,8 @@ from erp_core.shared.errors import AppError
 from erp_core.shared.storage import ObjectStorageService
 from erp_core.tenancy.audit import record_audit_event
 from erp_core.tenancy.gdpr_service import GdprService
+
+logger = structlog.get_logger(__name__)
 
 SHOPIFY_DOMAIN_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$")
 SHOPIFY_API_VERSION = "2026-01"
@@ -162,6 +165,28 @@ mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
         value
       }
     }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+"""
+
+PUBLICATIONS_QUERY = """
+query OnlinePublications {
+  publications(first: 10) {
+    nodes {
+      id
+      name
+    }
+  }
+}
+"""
+
+PUBLISHABLE_PUBLISH_MUTATION = """
+mutation PublishablePublish($id: ID!, $input: [PublicationInput!]!) {
+  publishablePublish(id: $id, input: $input) {
     userErrors {
       field
       message
@@ -1020,6 +1045,37 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         ]
         return product_options, built_variants
 
+    async def _publish_to_online_store(self, product_id: str) -> bool:
+        """Best-effort publish to the Online Store channel when publications scope exists."""
+        try:
+            pub_data = await self._graphql(PUBLICATIONS_QUERY, {})
+            nodes = ((pub_data.get("publications") or {}).get("nodes")) or []
+            online_pub = next(
+                (
+                    node
+                    for node in nodes
+                    if isinstance(node, Mapping)
+                    and str(node.get("name") or "").strip().lower() == "online store"
+                ),
+                nodes[0] if nodes and isinstance(nodes[0], Mapping) else None,
+            )
+            pub_id = str((online_pub or {}).get("id") or "").strip()
+            if not pub_id:
+                return False
+            res = await self._graphql(
+                PUBLISHABLE_PUBLISH_MUTATION,
+                {"id": product_id, "input": [{"publicationId": pub_id}]},
+            )
+            errors = ((res.get("publishablePublish") or {}).get("userErrors")) or []
+            return len(errors) == 0
+        except (AppError, httpx.HTTPError) as exc:
+            logger.info(
+                "shopify_online_store_publish_skipped",
+                product_id=product_id,
+                reason=str(exc)[:200],
+            )
+            return False
+
     async def publish_listing(
         self,
         *,
@@ -1130,8 +1186,10 @@ class ShopifyGraphqlAdapter(CommercePlatformAdapter):
         confirmed_sku = (
             str(variant_nodes[0].get("sku") or "").strip() if variant_nodes else ""
         ) or clean_sku
+        published_online = await self._publish_to_online_store(product_id)
         raw_payload = dict(product_set)
         raw_payload["requested_quantity"] = quantity
+        raw_payload["published_to_online_store"] = published_online
         return ShopifyListingReceipt(
             external_product_id=product_id,
             external_sku=confirmed_sku,

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from erp_core.channels.ecommerce.base import resolve_routing_tenant
 from erp_core.channels.ecommerce.connectors_router import (
+    WooAuthCallbackPayload,
     _normalize_route_candidates,
 )
 from erp_core.channels.ecommerce.connectors_router import (
@@ -650,4 +651,14 @@ async def test_woocommerce_publish_listing_uploads_image_blobs_to_wp_media() -> 
         )
     assert receipt.external_product_id == "501"
     assert [c[1] for c in calls] == ["/wp-json/wp/v2/media", "/wp-json/wc/v3/products"]
+
+    payload = WooAuthCallbackPayload(
+        store_url="https://shop.example.com",
+        consumer_key="ck_1",
+        consumer_secret="cs_1",
+        wp_username="woo_admin",
+        wp_app_password="app-pass-value",
+    )
+    assert payload.wp_username == "woo_admin"
+    assert payload.wp_app_password == "app-pass-value"
 

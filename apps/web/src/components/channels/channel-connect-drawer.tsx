@@ -108,6 +108,8 @@ type Draft = {
   consumer_key: string;
   consumer_secret: string;
   webhook_secret: string;
+  wp_username: string;
+  wp_app_password: string;
   store_domain: string;
   app_secret: string;
   shop_id: string;
@@ -167,6 +169,8 @@ const EMPTY_DRAFT: Draft = {
   consumer_key: "",
   consumer_secret: "",
   webhook_secret: "",
+  wp_username: "",
+  wp_app_password: "",
   store_domain: "",
   app_secret: "",
   shop_id: "",
@@ -917,6 +921,12 @@ function ChannelConnectForm({
           ...(trimmed(draft.webhook_secret)
             ? { webhook_secret: trimmed(draft.webhook_secret) }
             : {}),
+          ...(trimmed(draft.wp_username)
+            ? { wp_username: trimmed(draft.wp_username) }
+            : {}),
+          ...(trimmed(draft.wp_app_password)
+            ? { wp_app_password: trimmed(draft.wp_app_password) }
+            : {}),
         };
         return { channel: "woocommerce", body };
       }
@@ -1522,6 +1532,26 @@ function ChannelConnectForm({
             label={bi("Webhook Secret（可选）", "Webhook secret (optional)")}
             value={draft.webhook_secret}
             onChange={(value) => update("webhook_secret", value)}
+            secret
+          />
+          <Field
+            testId="woocommerce-wp-username-input"
+            label={bi(
+              "WordPress 用户名（传图可选）",
+              "WordPress username (optional, for image upload)",
+            )}
+            value={draft.wp_username}
+            onChange={(value) => update("wp_username", value)}
+            placeholder="woo_admin"
+          />
+          <Field
+            testId="woocommerce-wp-app-password-input"
+            label={bi(
+              "WordPress 应用密码（传图可选）",
+              "WordPress application password (optional)",
+            )}
+            value={draft.wp_app_password}
+            onChange={(value) => update("wp_app_password", value)}
             secret
           />
         </>

@@ -407,6 +407,17 @@ class EcommerceOrderSyncService:
             payment_status=order_dto.payment_status,
             channel_metadata_patch=order_dto.channel_metadata,
         )
+        if (
+            order_dto.fulfillment_status
+            in {FulfillmentStatus.CANCELLED, FulfillmentStatus.REFUNDED}
+            or order_dto.payment_status == PaymentStatus.REFUNDED
+        ):
+            await self.payments.void_order_receivables(
+                session,
+                tenant_id,
+                order_id,
+                reason=f"external_{order_dto.fulfillment_status.value}",
+            )
         await self.profits.recalculate_order_profit(
             session,
             tenant_id=tenant_id,
@@ -644,6 +655,11 @@ class EcommerceOrderSyncService:
                 ),
             )
 
+        is_void = (
+            order_dto.fulfillment_status
+            in {FulfillmentStatus.CANCELLED, FulfillmentStatus.REFUNDED}
+            or order_dto.payment_status == PaymentStatus.REFUNDED
+        )
         is_paid = order_dto.payment_status == PaymentStatus.PAID
         await self.payments.create_single_receivable(
             session,
@@ -652,8 +668,12 @@ class EcommerceOrderSyncService:
             milestone_label="full_prepaid",
             due_amount=created_order.total_amount,
             currency=created_order.currency,
-            status="settled" if is_paid else "open",
-            paid_amount=created_order.total_amount if is_paid else Decimal("0.00"),
+            status="void" if is_void else ("settled" if is_paid else "open"),
+            paid_amount=(
+                Decimal("0.00")
+                if is_void
+                else (created_order.total_amount if is_paid else Decimal("0.00"))
+            ),
         )
         await self.profits.recalculate_order_profit(
             session,

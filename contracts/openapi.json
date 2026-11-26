@@ -19391,6 +19391,30 @@
               }
             ],
             "title": "Webhook Secret"
+          },
+          "wp_app_password": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wp App Password"
+          },
+          "wp_username": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wp Username"
           }
         },
         "required": [

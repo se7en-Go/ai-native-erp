@@ -3536,6 +3536,8 @@ export type WooAuthCallbackPayload = {
     store_url: string;
     warehouse_id?: string | null;
     webhook_secret?: string | null;
+    wp_app_password?: string | null;
+    wp_username?: string | null;
 };
 
 export type WooAuthUrlRequest = {

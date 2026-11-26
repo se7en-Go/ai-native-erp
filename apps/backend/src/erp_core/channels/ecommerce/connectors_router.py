@@ -444,6 +444,8 @@ class WooAuthCallbackPayload(BaseModel):
     consumer_key: str = Field(min_length=1, max_length=255)
     consumer_secret: str = Field(min_length=1, max_length=255)
     webhook_secret: str | None = Field(default=None, max_length=255)
+    wp_username: str | None = Field(default=None, max_length=255)
+    wp_app_password: str | None = Field(default=None, max_length=255)
     warehouse_id: UUID | None = None
 
 
@@ -498,6 +500,8 @@ async def woocommerce_auth_callback(
                 "consumer_key": payload.consumer_key,
                 "consumer_secret": payload.consumer_secret,
                 "webhook_secret": payload.webhook_secret or "",
+                "wp_username": (payload.wp_username or "").strip(),
+                "wp_app_password": (payload.wp_app_password or "").strip(),
             },
         )
     return ConnectResponse(channel_account_id=account_id, external_account_id=domain)

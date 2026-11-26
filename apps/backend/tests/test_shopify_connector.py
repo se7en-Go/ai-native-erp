@@ -1010,3 +1010,97 @@ async def test_shopify_fulfillment_writeback_resolves_fulfillment_order_and_pers
             assert meta2["external_fulfillment"]["status"] == "failed"
     finally:
         await _cleanup_test_tenant(tenant_id)
+
+
+async def test_shopify_publish_listing_publishes_to_online_store_with_graceful_fallback() -> None:
+    calls: list[dict[str, object]] = []
+    deny_publications = {"value": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        query = str(payload.get("query") or "")
+        variables = payload.get("variables") or {}
+        calls.append({"query": query, "variables": variables})
+        if "productSet(" in query:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "productSet": {
+                            "product": {
+                                "id": "gid://shopify/Product/9001",
+                                "title": "100W UFO",
+                                "handle": "100w-ufo",
+                                "status": "ACTIVE",
+                                "variants": {
+                                    "nodes": [
+                                        {
+                                            "id": "gid://shopify/ProductVariant/9002",
+                                            "sku": "UFO-100W",
+                                            "price": "16.90",
+                                            "inventoryItem": {
+                                                "id": "gid://shopify/InventoryItem/9003"
+                                            },
+                                        }
+                                    ]
+                                },
+                            },
+                            "userErrors": [],
+                        }
+                    }
+                },
+            )
+        if "publications(" in query:
+            if deny_publications["value"]:
+                return httpx.Response(
+                    200,
+                    json={
+                        "errors": [
+                            {"message": "Access denied for publications field."}
+                        ]
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "publications": {
+                            "nodes": [
+                                {"id": "gid://shopify/Publication/1", "name": "Point of Sale"},
+                                {"id": "gid://shopify/Publication/2", "name": "Online Store"},
+                            ]
+                        }
+                    }
+                },
+            )
+        if "publishablePublish(" in query:
+            assert variables["id"] == "gid://shopify/Product/9001"
+            assert variables["input"] == [{"publicationId": "gid://shopify/Publication/2"}]
+            return httpx.Response(200, json={"data": {"publishablePublish": {"userErrors": []}}})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        adapter = ShopifyGraphqlAdapter(
+            "demo.myshopify.com", access_token="shpat_tok", http_client=client
+        )
+        ok_receipt = await adapter.publish_listing(
+            sku="UFO-100W",
+            title="100W UFO",
+            description="Industrial fixture",
+            bullet_points=["IP65"],
+            price_usd=Decimal("16.90"),
+            quantity=10,
+        )
+        assert ok_receipt.raw_response["published_to_online_store"] is True
+
+        deny_publications["value"] = True
+        fallback_receipt = await adapter.publish_listing(
+            sku="UFO-100W",
+            title="100W UFO",
+            description="Industrial fixture",
+            bullet_points=["IP65"],
+            price_usd=Decimal("16.90"),
+            quantity=10,
+        )
+        assert fallback_receipt.external_product_id == "gid://shopify/Product/9001"
+        assert fallback_receipt.raw_response["published_to_online_store"] is False

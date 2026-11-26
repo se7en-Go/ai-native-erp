@@ -1678,6 +1678,8 @@ export type WooCommerceConnectPayload = {
   consumer_key: string;
   consumer_secret: string;
   webhook_secret?: string | null;
+  wp_username?: string | null;
+  wp_app_password?: string | null;
 };
 
 export type ShoplineConnectPayload = {
