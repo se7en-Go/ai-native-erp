@@ -737,6 +737,69 @@ async def test_object_storage_path_writes_a_presigned_url(workspace: dict[str, A
     assert job.output_image_url == f"https://r2.example.com/{key}?sig=abc"
 
 
+async def test_internal_minio_presigned_url_rewrites_and_streams_output(
+    workspace: dict[str, Any],
+) -> None:
+    from erp_core.shared.storage import ObjectStorageService
+
+    class _DockerMinioStorage(ObjectStorageService):
+        def __init__(self) -> None:  # noqa: D401 - avoid boto3 init
+            self._bucket = "erp-assets"
+            self.objects: dict[str, bytes] = {}
+
+        async def upload_bytes(
+            self, key: str, data: bytes, content_type: str = "application/octet-stream"
+        ) -> str:
+            self.objects[key] = data
+            return key
+
+        async def download_bytes(self, key: str) -> bytes:
+            return self.objects[key]
+
+        async def generate_presigned_get_url(self, key: str, expires_in: int = 604800) -> str:
+            return f"http://minio:9000/erp-assets/{key}?X-Amz-Signature=deadbeef"
+
+    storage = _DockerMinioStorage()
+
+    def _app_for(principal: CurrentPrincipal) -> FastAPI:
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.state.session_factory = workspace["factory"]
+        app.state.crypto_service = EnvelopeCryptoService(get_settings())
+        app.state.storage = storage
+        app.dependency_overrides[get_current_principal] = lambda: principal
+        app.include_router(visual_router)
+        return app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app_for(workspace["owner"])),
+        base_url="http://testserver",
+    ) as owner_client:
+        created = await owner_client.post(
+            VISUAL_BASE,
+            json={
+                "provider": "sandbox",
+                "operation": "remove_bg",
+                "source_image_url": "https://cdn.example.com/item.png",
+            },
+        )
+        assert created.status_code == 201, created.text
+        job = created.json()
+        assert job["output_image_url"] == f"/api/bff/v1/catalog/visual-jobs/{job['id']}/output"
+
+        output_res = await owner_client.get(f"{VISUAL_BASE}/{job['id']}/output")
+        assert output_res.status_code == 200
+        assert output_res.headers["content-type"].startswith("image/png")
+        assert sniff_image_mime(output_res.content) == "image/png"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app_for(workspace["outsider"])),
+        base_url="http://testserver",
+    ) as outsider_client:
+        other_res = await outsider_client.get(f"{VISUAL_BASE}/{job['id']}/output")
+        assert other_res.status_code == 404
+
+
 async def test_storage_failure_falls_back_to_inline_png(workspace: dict[str, Any]) -> None:
     class _BrokenStorage:
         async def upload_bytes(self, *_: Any, **__: Any) -> str:

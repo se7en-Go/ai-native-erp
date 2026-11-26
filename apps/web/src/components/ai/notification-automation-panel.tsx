@@ -616,8 +616,8 @@ export function NotificationAutomationPanel({ canManage = true }: { canManage?: 
           icon={Sparkles}
           title={bi("事件自动化规则", "Event automation rules")}
           description={bi(
-            "五条规则全部读取租户真实数据，命中即生成 L1 待审提案并按优先级推送。Dry-Run 只读不写。",
-            "All five rules read real tenant rows and draft L1 proposals plus priority-pushed alerts. Dry-run writes nothing."
+            "七条规则全部读取租户真实数据，命中即生成 L1 待审提案并按优先级推送。Dry-Run 只读不写。",
+            "All seven rules read real tenant rows and draft L1 proposals plus priority-pushed alerts. Dry-run writes nothing."
           )}
           actions={
             canManage ? (
@@ -702,8 +702,8 @@ export function NotificationAutomationPanel({ canManage = true }: { canManage?: 
         {rules.length === 0 ? (
           <EmptyState testId="rule-empty">
             {bi(
-              "还没有自动化规则。点击「初始化默认规则」创建五条默认模板。",
-              "No automation rule yet. Use “Seed defaults” to create the five templates."
+              "还没有自动化规则。点击「初始化默认规则」创建七条默认模板。",
+              "No automation rule yet. Use “Seed defaults” to create the seven templates."
             )}
           </EmptyState>
         ) : (

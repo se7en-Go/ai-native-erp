@@ -584,6 +584,43 @@ class VisualJobService:
         job = await self._load(session, tenant_id, job_id)
         return VisualJobRead.model_validate(job)
 
+    async def get_job_output_bytes(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        job_id: UUID,
+        *,
+        storage: ObjectStorageService | None = None,
+    ) -> tuple[bytes, str]:
+        """Return rendered image bytes and MIME type for a completed job."""
+        job = await self._load(session, tenant_id, job_id)
+        mime_type = job.output_mime_type or "image/png"
+        if storage is not None and job.output_r2_key:
+            try:
+                data = await storage.download_bytes(job.output_r2_key)
+                return data, mime_type
+            except Exception as exc:  # noqa: BLE001 - map missing/unreachable object cleanly
+                raise AppError(
+                    slug="visual-output-unavailable",
+                    title="Visual Output Unavailable",
+                    status_code=404,
+                    detail="Rendered image could not be loaded from object storage.",
+                    code="ERR_VISUAL_OUTPUT_UNAVAILABLE",
+                ) from exc
+        if job.output_image_url and job.output_image_url.startswith("data:"):
+            match = _DATA_URL_RE.match(job.output_image_url)
+            if match is not None:
+                parsed_mime = match.group("mime").lower()
+                if parsed_mime in _ALLOWED_DATA_IMAGE_MIME:
+                    return base64.b64decode(match.group("payload"), validate=True), parsed_mime
+        raise AppError(
+            slug="visual-output-unavailable",
+            title="Visual Output Unavailable",
+            status_code=404,
+            detail="Visual job has no rendered image output.",
+            code="ERR_VISUAL_OUTPUT_UNAVAILABLE",
+        )
+
     async def _load(self, session: AsyncSession, tenant_id: UUID, job_id: UUID) -> SourcingImageJob:
         job = (
             await session.execute(
@@ -690,20 +727,39 @@ class VisualJobService:
 
     # -- helpers -----------------------------------------------------------------
     @staticmethod
+    def _is_browser_routable_url(url: str) -> bool:
+        """Return True when a presigned S3/R2 URL is directly reachable by browsers."""
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").strip().lower()
+        if parsed.scheme != "https" or not host or "." not in host:
+            return False
+        return host not in {"127.0.0.1", "0.0.0.0", "localhost"} and not host.endswith(
+            (".local", ".internal")
+        )
+
+    @classmethod
     async def _persist_output(
+        cls,
         storage: ObjectStorageService | None,
         tenant_id: UUID,
         job_id: UUID,
         result: VisualResult,
     ) -> tuple[str, str | None]:
-        """Store in R2/MinIO when attached, otherwise return an inline PNG preview."""
+        """Store in R2/MinIO when attached, otherwise return an inline PNG preview.
+
+        When the configured object-storage endpoint uses an internal Docker/LAN
+        hostname (for example `http://minio:9000`), browsers on the host cannot
+        resolve it directly; emit the authenticated BFF stream path instead.
+        """
         extension = _MIME_EXT.get(result.mime_type, "png")
         r2_key = f"visual-jobs/{tenant_id}/{job_id}.{extension}"
         if storage is not None:
             try:
                 await storage.upload_bytes(r2_key, result.data, content_type=result.mime_type)
                 presigned = await storage.generate_presigned_get_url(r2_key)
-                return presigned, r2_key
+                if cls._is_browser_routable_url(presigned):
+                    return presigned, r2_key
+                return f"/api/bff/v1/catalog/visual-jobs/{job_id}/output", r2_key
             except Exception:  # noqa: BLE001 - offline dev / MinIO down must still render
                 return image_data_url(result.data, result.mime_type), None
         return image_data_url(result.data, result.mime_type), None

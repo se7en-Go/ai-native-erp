@@ -33567,6 +33567,59 @@
         ]
       }
     },
+    "/api/v1/catalog/visual-jobs/{job_id}/output": {
+      "get": {
+        "description": "Stream processed image bytes so Docker-internal MinIO URLs work in browsers.",
+        "operationId": "get_visual_job_output_api_v1_catalog_visual_jobs__job_id__output_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Visual Job Output",
+        "tags": [
+          "catalog-visual"
+        ]
+      }
+    },
     "/api/v1/channels/accounts": {
       "get": {
         "operationId": "list_channel_accounts_api_v1_channels_accounts_get",

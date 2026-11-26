@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.catalog.visual_schemas import VisualJobCreate, VisualJobRead
@@ -102,6 +102,27 @@ async def get_visual_job(
     session: TenantDB,
 ) -> VisualJobRead:
     return await _service(request).get_job(session, principal.tenant_id, job_id)
+
+
+@router.get("/{job_id}/output", response_class=Response)
+async def get_visual_job_output(
+    request: Request,
+    job_id: UUID,
+    principal: VisualReader,
+    session: TenantDB,
+) -> Response:
+    """Stream processed image bytes so Docker-internal MinIO URLs work in browsers."""
+    data, mime_type = await _service(request).get_job_output_bytes(
+        session,
+        principal.tenant_id,
+        job_id,
+        storage=_storage(request),
+    )
+    return Response(
+        content=data,
+        media_type=mime_type,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 @router.delete("/{job_id}", status_code=204)
