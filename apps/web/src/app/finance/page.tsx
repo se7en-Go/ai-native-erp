@@ -17,6 +17,7 @@ import { AppShell } from "@/components/app-shell";
 import { ChannelAnalyticsCard } from "@/components/finance/channel-analytics-card";
 import { useAuthSession } from "@/components/providers";
 import { PaymentMilestoneTable } from "@/components/finance/payment-milestone-table";
+import { SettlementReconciliationPanel } from "@/components/finance/settlement-reconciliation-panel";
 import { BentoStatCard } from "@/components/ui/bento-stat-card";
 import { Badge, Card, CardHeader, EmptyState, Page, PageHeader } from "@/components/ui/page";
 import { canVerifyFinanceSettlement } from "@/lib/auth-cookie";
@@ -622,6 +623,8 @@ export default function FinancePage() {
         />
 
         <ApCashflowBoard role={principal?.role} />
+
+        <SettlementReconciliationPanel role={principal?.role} />
       </Page>
     </AppShell>
   );

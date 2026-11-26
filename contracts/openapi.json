@@ -5426,6 +5426,197 @@
         "title": "DisconnectChannelResponse",
         "type": "object"
       },
+      "DualBasisOrderRow": {
+        "description": "One order compared side by side: estimated basis versus settled basis.",
+        "properties": {
+          "ad_delta_base": {
+            "title": "Ad Delta Base",
+            "type": "string"
+          },
+          "commission_delta_base": {
+            "title": "Commission Delta Base",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "estimated_ad_spend_base": {
+            "title": "Estimated Ad Spend Base",
+            "type": "string"
+          },
+          "estimated_cogs_base": {
+            "title": "Estimated Cogs Base",
+            "type": "string"
+          },
+          "estimated_commission_base": {
+            "title": "Estimated Commission Base",
+            "type": "string"
+          },
+          "estimated_fulfillment_storage_base": {
+            "title": "Estimated Fulfillment Storage Base",
+            "type": "string"
+          },
+          "estimated_net_profit_base": {
+            "title": "Estimated Net Profit Base",
+            "type": "string"
+          },
+          "estimated_revenue_base": {
+            "title": "Estimated Revenue Base",
+            "type": "string"
+          },
+          "fulfillment_storage_delta_base": {
+            "title": "Fulfillment Storage Delta Base",
+            "type": "string"
+          },
+          "fx_variance_base": {
+            "title": "Fx Variance Base",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_no": {
+            "title": "Order No",
+            "type": "string"
+          },
+          "profit_variance_base": {
+            "title": "Profit Variance Base",
+            "type": "string"
+          },
+          "settled_ad_spend_base": {
+            "title": "Settled Ad Spend Base",
+            "type": "string"
+          },
+          "settled_cogs_base": {
+            "title": "Settled Cogs Base",
+            "type": "string"
+          },
+          "settled_commission_base": {
+            "title": "Settled Commission Base",
+            "type": "string"
+          },
+          "settled_fulfillment_storage_base": {
+            "title": "Settled Fulfillment Storage Base",
+            "type": "string"
+          },
+          "settled_net_profit_base": {
+            "title": "Settled Net Profit Base",
+            "type": "string"
+          },
+          "settled_payout_base": {
+            "title": "Settled Payout Base",
+            "type": "string"
+          },
+          "settled_revenue_base": {
+            "title": "Settled Revenue Base",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "order_no",
+          "currency",
+          "estimated_revenue_base",
+          "estimated_commission_base",
+          "estimated_fulfillment_storage_base",
+          "estimated_ad_spend_base",
+          "estimated_cogs_base",
+          "estimated_net_profit_base",
+          "settled_revenue_base",
+          "settled_commission_base",
+          "settled_fulfillment_storage_base",
+          "settled_ad_spend_base",
+          "settled_cogs_base",
+          "settled_payout_base",
+          "fx_variance_base",
+          "settled_net_profit_base",
+          "commission_delta_base",
+          "fulfillment_storage_delta_base",
+          "ad_delta_base",
+          "profit_variance_base"
+        ],
+        "title": "DualBasisOrderRow",
+        "type": "object"
+      },
+      "DualBasisProfitRead": {
+        "properties": {
+          "ad_spend_base": {
+            "title": "Ad Spend Base",
+            "type": "string"
+          },
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "commission_delta_base": {
+            "title": "Commission Delta Base",
+            "type": "string"
+          },
+          "estimated_net_margin_base": {
+            "title": "Estimated Net Margin Base",
+            "type": "string"
+          },
+          "estimated_revenue_base": {
+            "title": "Estimated Revenue Base",
+            "type": "string"
+          },
+          "fulfillment_storage_delta_base": {
+            "title": "Fulfillment Storage Delta Base",
+            "type": "string"
+          },
+          "fx_variance_base": {
+            "title": "Fx Variance Base",
+            "type": "string"
+          },
+          "matched_orders_count": {
+            "title": "Matched Orders Count",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DualBasisOrderRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "settled_net_profit_base": {
+            "title": "Settled Net Profit Base",
+            "type": "string"
+          },
+          "settled_payout_base": {
+            "title": "Settled Payout Base",
+            "type": "string"
+          },
+          "total_profit_variance_base": {
+            "title": "Total Profit Variance Base",
+            "type": "string"
+          },
+          "unmatched_lines_count": {
+            "title": "Unmatched Lines Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "base_currency",
+          "estimated_revenue_base",
+          "estimated_net_margin_base",
+          "settled_payout_base",
+          "settled_net_profit_base",
+          "commission_delta_base",
+          "fulfillment_storage_delta_base",
+          "ad_spend_base",
+          "fx_variance_base",
+          "total_profit_variance_base",
+          "matched_orders_count",
+          "unmatched_lines_count",
+          "rows"
+        ],
+        "title": "DualBasisProfitRead",
+        "type": "object"
+      },
       "EbayConnectRequest": {
         "additionalProperties": false,
         "properties": {
@@ -12402,6 +12593,212 @@
         "title": "PaymentVerifyResponse",
         "type": "object"
       },
+      "PayoutAutoMatchResultRead": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PayoutStatementRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "matched_count": {
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "remaining_unmatched_count": {
+            "title": "Remaining Unmatched Count",
+            "type": "integer"
+          },
+          "total_fx_variance_base": {
+            "title": "Total Fx Variance Base",
+            "type": "string"
+          }
+        },
+        "required": [
+          "matched_count",
+          "remaining_unmatched_count",
+          "total_fx_variance_base",
+          "items"
+        ],
+        "title": "PayoutAutoMatchResultRead",
+        "type": "object"
+      },
+      "PayoutImportResultRead": {
+        "properties": {
+          "imported_count": {
+            "title": "Imported Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PayoutStatementRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "matched_count": {
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "skipped_count": {
+            "title": "Skipped Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "imported_count",
+          "skipped_count",
+          "matched_count",
+          "items"
+        ],
+        "title": "PayoutImportResultRead",
+        "type": "object"
+      },
+      "PayoutStatementListRead": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PayoutStatementRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "matched_count": {
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          },
+          "total_fx_variance_base": {
+            "title": "Total Fx Variance Base",
+            "type": "string"
+          },
+          "unmatched_count": {
+            "title": "Unmatched Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_count",
+          "matched_count",
+          "unmatched_count",
+          "total_fx_variance_base"
+        ],
+        "title": "PayoutStatementListRead",
+        "type": "object"
+      },
+      "PayoutStatementRead": {
+        "properties": {
+          "actual_fx_rate": {
+            "title": "Actual Fx Rate",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expected_fx_rate": {
+            "title": "Expected Fx Rate",
+            "type": "string"
+          },
+          "external_tx_ref": {
+            "title": "External Tx Ref",
+            "type": "string"
+          },
+          "fx_variance_base": {
+            "title": "Fx Variance Base",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "match_status": {
+            "title": "Match Status",
+            "type": "string"
+          },
+          "matched_order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Order Id"
+          },
+          "matched_settlement_batch_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Settlement Batch Id"
+          },
+          "paid_at": {
+            "format": "date-time",
+            "title": "Paid At",
+            "type": "string"
+          },
+          "payout_amount": {
+            "title": "Payout Amount",
+            "type": "string"
+          },
+          "payout_currency": {
+            "title": "Payout Currency",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "settled_base_amount": {
+            "title": "Settled Base Amount",
+            "type": "string"
+          },
+          "settled_base_currency": {
+            "title": "Settled Base Currency",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "provider",
+          "external_tx_ref",
+          "payout_currency",
+          "payout_amount",
+          "settled_base_currency",
+          "settled_base_amount",
+          "actual_fx_rate",
+          "expected_fx_rate",
+          "fx_variance_base",
+          "matched_settlement_batch_id",
+          "matched_order_id",
+          "match_status",
+          "paid_at",
+          "created_at"
+        ],
+        "title": "PayoutStatementRead",
+        "type": "object"
+      },
       "PendingProposalGroup": {
         "properties": {
           "count": {
@@ -16229,6 +16626,309 @@
           "dry_run"
         ],
         "title": "SendRealCampaignResponse",
+        "type": "object"
+      },
+      "SettlementBatchListRead": {
+        "properties": {
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementBatchRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          },
+          "total_net_payout_base": {
+            "title": "Total Net Payout Base",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "total_count",
+          "total_net_payout_base",
+          "base_currency"
+        ],
+        "title": "SettlementBatchListRead",
+        "type": "object"
+      },
+      "SettlementBatchRead": {
+        "properties": {
+          "ad_fee_ccy": {
+            "title": "Ad Fee Ccy",
+            "type": "string"
+          },
+          "batch_ref": {
+            "title": "Batch Ref",
+            "type": "string"
+          },
+          "channel_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Account Id"
+          },
+          "channel_type": {
+            "title": "Channel Type",
+            "type": "string"
+          },
+          "commission_ccy": {
+            "title": "Commission Ccy",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "fulfillment_fee_ccy": {
+            "title": "Fulfillment Fee Ccy",
+            "type": "string"
+          },
+          "fx_rate_to_base": {
+            "title": "Fx Rate To Base",
+            "type": "string"
+          },
+          "gross_sales_ccy": {
+            "title": "Gross Sales Ccy",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_count": {
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "net_payout_base": {
+            "title": "Net Payout Base",
+            "type": "string"
+          },
+          "net_payout_ccy": {
+            "title": "Net Payout Ccy",
+            "type": "string"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "refund_ccy": {
+            "title": "Refund Ccy",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "storage_fee_ccy": {
+            "title": "Storage Fee Ccy",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "channel_type",
+          "channel_account_id",
+          "batch_ref",
+          "currency",
+          "period_start",
+          "period_end",
+          "gross_sales_ccy",
+          "commission_ccy",
+          "fulfillment_fee_ccy",
+          "storage_fee_ccy",
+          "ad_fee_ccy",
+          "refund_ccy",
+          "net_payout_ccy",
+          "fx_rate_to_base",
+          "net_payout_base",
+          "status",
+          "line_count",
+          "created_at"
+        ],
+        "title": "SettlementBatchRead",
+        "type": "object"
+      },
+      "SettlementLineListRead": {
+        "properties": {
+          "batch_id": {
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementLineRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "matched_count": {
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_count",
+          "matched_count",
+          "batch_id",
+          "currency"
+        ],
+        "title": "SettlementLineListRead",
+        "type": "object"
+      },
+      "SettlementLineRead": {
+        "properties": {
+          "ad_fee_ccy": {
+            "title": "Ad Fee Ccy",
+            "type": "string"
+          },
+          "batch_id": {
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "commission_ccy": {
+            "title": "Commission Ccy",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "external_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Order Id"
+          },
+          "fulfillment_fee_ccy": {
+            "title": "Fulfillment Fee Ccy",
+            "type": "string"
+          },
+          "fx_rate_to_base": {
+            "title": "Fx Rate To Base",
+            "type": "string"
+          },
+          "gross_sales_ccy": {
+            "title": "Gross Sales Ccy",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "net_settlement_base": {
+            "title": "Net Settlement Base",
+            "type": "string"
+          },
+          "net_settlement_ccy": {
+            "title": "Net Settlement Ccy",
+            "type": "string"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "refund_ccy": {
+            "title": "Refund Ccy",
+            "type": "string"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "storage_fee_ccy": {
+            "title": "Storage Fee Ccy",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "batch_id",
+          "external_order_id",
+          "order_id",
+          "sku",
+          "gross_sales_ccy",
+          "commission_ccy",
+          "fulfillment_fee_ccy",
+          "storage_fee_ccy",
+          "ad_fee_ccy",
+          "refund_ccy",
+          "net_settlement_ccy",
+          "fx_rate_to_base",
+          "net_settlement_base",
+          "created_at"
+        ],
+        "title": "SettlementLineRead",
         "type": "object"
       },
       "SheinConnectRequest": {
@@ -31172,6 +31872,64 @@
         ]
       }
     },
+    "/api/v1/finance/journal-export": {
+      "get": {
+        "description": "Balanced Debit/Credit voucher CSV in `standard`, `quickbooks`, `xero` or `kingdee`.",
+        "operationId": "export_journal_csv_api_v1_finance_journal_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "standard",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Journal Csv",
+        "tags": [
+          "finance-settlement"
+        ]
+      }
+    },
     "/api/v1/finance/orders/{order_id}/profit": {
       "get": {
         "operationId": "get_order_profit_api_v1_finance_orders__order_id__profit_get",
@@ -31534,6 +32292,395 @@
         ]
       }
     },
+    "/api/v1/finance/payouts": {
+      "get": {
+        "description": "Cross-border collection statements with their realised FX gain/loss.",
+        "operationId": "list_payouts_api_v1_finance_payouts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "in": "query",
+            "name": "match_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Match Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutStatementListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Payouts",
+        "tags": [
+          "finance-settlement"
+        ]
+      }
+    },
+    "/api/v1/finance/payouts/auto-match": {
+      "post": {
+        "description": "Match unmatched payouts to open settlement batches or paid B2B orders.",
+        "operationId": "auto_match_payouts_api_v1_finance_payouts_auto_match_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutAutoMatchResultRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Auto Match Payouts",
+        "tags": [
+          "finance-settlement"
+        ]
+      }
+    },
+    "/api/v1/finance/payouts/import": {
+      "post": {
+        "description": "Import PingPong / LianLian / Payoneer / bank T/T / Stripe statements.",
+        "operationId": "import_payouts_api_v1_finance_payouts_import_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Payout statement import: a provider label plus JSON rows or CSV text.",
+                "properties": {
+                  "csv_text": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Csv Text"
+                  },
+                  "provider": {
+                    "enum": [
+                      "pingpong",
+                      "lianlian",
+                      "payoneer",
+                      "bank_tt",
+                      "stripe",
+                      "other"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "rows": {
+                    "items": {
+                      "description": "One cross-border collection statement row.",
+                      "properties": {
+                        "actual_fx_rate": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ],
+                              "decimal_places": 6,
+                              "gt": "0",
+                              "max_digits": 12
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Actual Fx Rate"
+                        },
+                        "expected_fx_rate": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ],
+                              "decimal_places": 6,
+                              "gt": "0",
+                              "max_digits": 12
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Expected Fx Rate"
+                        },
+                        "external_tx_ref": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "title": "External Tx Ref",
+                          "type": "string"
+                        },
+                        "paid_at": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Paid At"
+                        },
+                        "payout_amount": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0.0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "title": "Payout Amount"
+                        },
+                        "payout_currency": {
+                          "pattern": "^[A-Za-z]{3}$",
+                          "title": "Payout Currency",
+                          "type": "string"
+                        },
+                        "reference_hint": {
+                          "anyOf": [
+                            {
+                              "maxLength": 128,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Reference Hint"
+                        },
+                        "settled_base_amount": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "title": "Settled Base Amount"
+                        },
+                        "settled_base_currency": {
+                          "pattern": "^[A-Za-z]{3}$",
+                          "title": "Settled Base Currency",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "external_tx_ref",
+                        "payout_currency",
+                        "payout_amount",
+                        "settled_base_currency",
+                        "settled_base_amount"
+                      ],
+                      "title": "PayoutStatementInput",
+                      "type": "object"
+                    },
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "provider"
+                ],
+                "title": "PayoutImportRequest",
+                "type": "object"
+              }
+            },
+            "text/csv": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutImportResultRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Payouts",
+        "tags": [
+          "finance-settlement"
+        ]
+      }
+    },
     "/api/v1/finance/profit-summary": {
       "get": {
         "operationId": "get_profit_summary_api_v1_finance_profit_summary_get",
@@ -31613,6 +32760,56 @@
         "summary": "Get Profit Summary",
         "tags": [
           "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/profit/dual-basis": {
+      "get": {
+        "description": "Estimated CVP basis versus settled marketplace basis, order by order.",
+        "operationId": "get_dual_basis_profit_api_v1_finance_profit_dual_basis_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DualBasisProfitRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dual Basis Profit",
+        "tags": [
+          "finance-settlement"
         ]
       }
     },
@@ -31787,6 +32984,552 @@
         "summary": "Submit Receivable Payment",
         "tags": [
           "finance"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements": {
+      "get": {
+        "description": "Imported marketplace payout statements with their base-currency net payout.",
+        "operationId": "list_settlements_api_v1_finance_settlements_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "channel_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementBatchListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Settlements",
+        "tags": [
+          "finance-settlement"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements/import": {
+      "post": {
+        "description": "Import one statement from a JSON body or a raw CSV body.\n\nRaw CSV requires the batch header (`channel_type`, `batch_ref`, `currency`,\n`period_start`, `period_end`, `fx_rate_to_base`) as query parameters; the\nbody then carries only the per-order rows.",
+        "operationId": "import_settlements_api_v1_finance_settlements_import_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "channel_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "batch_ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Batch Ref"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 3,
+                  "minLength": 3,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Currency"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period_start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Period Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period_end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Period End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fx_rate_to_base",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fx Rate To Base"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel_account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel Account Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Marketplace payout statement header plus its rows (JSON list or CSV text).",
+                "properties": {
+                  "batch_ref": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "title": "Batch Ref",
+                    "type": "string"
+                  },
+                  "channel_account_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Channel Account Id"
+                  },
+                  "channel_type": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Channel Type",
+                    "type": "string"
+                  },
+                  "csv_text": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Csv Text"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Za-z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "fx_rate_to_base": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Fx Rate To Base"
+                  },
+                  "lines": {
+                    "items": {
+                      "description": "One marketplace settlement row, either from JSON or parsed from CSV.",
+                      "properties": {
+                        "ad_fee_ccy": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "default": "0.00",
+                          "title": "Ad Fee Ccy"
+                        },
+                        "commission_ccy": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "default": "0.00",
+                          "title": "Commission Ccy"
+                        },
+                        "external_order_id": {
+                          "anyOf": [
+                            {
+                              "maxLength": 128,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "External Order Id"
+                        },
+                        "fulfillment_fee_ccy": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "default": "0.00",
+                          "title": "Fulfillment Fee Ccy"
+                        },
+                        "gross_sales_ccy": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "default": "0.00",
+                          "title": "Gross Sales Ccy"
+                        },
+                        "net_settlement_ccy": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Net Settlement Ccy"
+                        },
+                        "refund_ccy": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "default": "0.00",
+                          "title": "Refund Ccy"
+                        },
+                        "sku": {
+                          "anyOf": [
+                            {
+                              "maxLength": 128,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Sku"
+                        },
+                        "storage_fee_ccy": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "default": "0.00",
+                          "title": "Storage Fee Ccy"
+                        }
+                      },
+                      "title": "SettlementLineInput",
+                      "type": "object"
+                    },
+                    "title": "Lines",
+                    "type": "array"
+                  },
+                  "period_end": {
+                    "format": "date",
+                    "title": "Period End",
+                    "type": "string"
+                  },
+                  "period_start": {
+                    "format": "date",
+                    "title": "Period Start",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "channel_type",
+                  "batch_ref",
+                  "currency",
+                  "period_start",
+                  "period_end",
+                  "fx_rate_to_base"
+                ],
+                "title": "SettlementImportRequest",
+                "type": "object"
+              }
+            },
+            "text/csv": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementBatchRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Settlements",
+        "tags": [
+          "finance-settlement"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements/{batch_id}/lines": {
+      "get": {
+        "description": "Per-order settlement rows of one batch, with their order auto-link state.",
+        "operationId": "list_settlement_lines_api_v1_finance_settlements__batch_id__lines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementLineListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Settlement Lines",
+        "tags": [
+          "finance-settlement"
         ]
       }
     },
