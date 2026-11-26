@@ -8353,6 +8353,260 @@
         "title": "MarketplaceOrderSyncResult",
         "type": "object"
       },
+      "McpBlockedTool": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "reason"
+        ],
+        "title": "McpBlockedTool",
+        "type": "object"
+      },
+      "McpExposedTool": {
+        "properties": {
+          "autonomy_level": {
+            "title": "Autonomy Level",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "required_scope": {
+            "title": "Required Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "required_scope",
+          "autonomy_level",
+          "description",
+          "input_schema"
+        ],
+        "title": "McpExposedTool",
+        "type": "object"
+      },
+      "McpTokenCreateRequest": {
+        "properties": {
+          "allowed_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Tools"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "McpTokenCreateRequest",
+        "type": "object"
+      },
+      "McpTokenCreateResponse": {
+        "properties": {
+          "plain_token": {
+            "title": "Plain Token",
+            "type": "string"
+          },
+          "token": {
+            "$ref": "#/components/schemas/McpTokenRead"
+          }
+        },
+        "required": [
+          "token",
+          "plain_token"
+        ],
+        "title": "McpTokenCreateResponse",
+        "type": "object"
+      },
+      "McpTokenRead": {
+        "properties": {
+          "allowed_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Tools"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "token_prefix": {
+            "title": "Token Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "token_prefix",
+          "scopes",
+          "created_at"
+        ],
+        "title": "McpTokenRead",
+        "type": "object"
+      },
+      "McpToolCatalogResponse": {
+        "properties": {
+          "blocked_tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpBlockedTool"
+            },
+            "title": "Blocked Tools",
+            "type": "array"
+          },
+          "config_snippet": {
+            "additionalProperties": true,
+            "title": "Config Snippet",
+            "type": "object"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "server": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Server",
+            "type": "object"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpExposedTool"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "server",
+          "tools",
+          "blocked_tools",
+          "config_snippet"
+        ],
+        "title": "McpToolCatalogResponse",
+        "type": "object"
+      },
       "MediaAssetRead": {
         "properties": {
           "alt_text": {
@@ -23316,6 +23570,224 @@
         ]
       }
     },
+    "/api/v1/ai/mcp/tokens": {
+      "get": {
+        "operationId": "list_mcp_tokens_api_v1_ai_mcp_tokens_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/McpTokenRead"
+                  },
+                  "title": "Response List Mcp Tokens Api V1 Ai Mcp Tokens Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mcp Tokens",
+        "tags": [
+          "ai-mcp"
+        ]
+      },
+      "post": {
+        "operationId": "create_mcp_token_api_v1_ai_mcp_tokens_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpTokenCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpTokenCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Mcp Token",
+        "tags": [
+          "ai-mcp"
+        ]
+      }
+    },
+    "/api/v1/ai/mcp/tokens/{token_id}": {
+      "delete": {
+        "operationId": "revoke_mcp_token_api_v1_ai_mcp_tokens__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpTokenRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Mcp Token",
+        "tags": [
+          "ai-mcp"
+        ]
+      }
+    },
+    "/api/v1/ai/mcp/tools": {
+      "get": {
+        "operationId": "get_mcp_tool_catalog_api_v1_ai_mcp_tools_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpToolCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Mcp Tool Catalog",
+        "tags": [
+          "ai-mcp"
+        ]
+      }
+    },
     "/api/v1/ai/notifications/channels": {
       "get": {
         "description": "Tenant-scoped channels, secret-free (masked URL preview only).",
@@ -35276,6 +35748,44 @@
         "summary": "Stream Inbox Events",
         "tags": [
           "inbox"
+        ]
+      }
+    },
+    "/api/v1/mcp": {
+      "get": {
+        "description": "Answer GET probes with an explicit 405 instead of crashing the client.",
+        "operationId": "mcp_probe_api_v1_mcp_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mcp Probe",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "post": {
+        "description": "MCP Streamable HTTP: one JSON-RPC request or a batch, tenant-scoped by token.",
+        "operationId": "mcp_endpoint_api_v1_mcp_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mcp Endpoint",
+        "tags": [
+          "mcp"
         ]
       }
     },
