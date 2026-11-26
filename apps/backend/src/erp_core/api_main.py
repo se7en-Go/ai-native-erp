@@ -24,6 +24,7 @@ import erp_core.finance.settlement_models  # noqa: F401
 import erp_core.growth.models  # noqa: F401
 import erp_core.identity.models  # noqa: F401
 import erp_core.orders.models  # noqa: F401
+import erp_core.orders.routing_models  # noqa: F401
 import erp_core.social.models  # noqa: F401
 import erp_core.supply_chain.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
@@ -71,6 +72,7 @@ from erp_core.finance.settlement_router import router as finance_settlement_rout
 from erp_core.growth.router import router as growth_router
 from erp_core.identity.router import customer_router
 from erp_core.orders.router import router as orders_router
+from erp_core.orders.routing_router import router as order_routing_router
 from erp_core.orders.tracking_router import router as tracking_router
 from erp_core.shared.config import get_settings
 from erp_core.shared.crypto import EnvelopeCryptoService
@@ -233,6 +235,9 @@ def create_app() -> FastAPI:
     app.include_router(wms_router, prefix="/api/v1")
     app.include_router(executive_router, prefix="/api/v1")
     app.include_router(inventory_sync_router)
+    # `order_routing_router` owns the static `/orders/routing-rules` path, so it must be
+    # registered before the dynamic `/orders/{order_id}` routes of `orders_router`.
+    app.include_router(order_routing_router)
     app.include_router(orders_router, prefix="/api/v1")
     app.include_router(finance_router, prefix="/api/v1")
     app.include_router(finance_ap_router)
