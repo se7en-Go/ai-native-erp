@@ -7,6 +7,7 @@ import { Filter, Inbox as InboxIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { ProposalReviewCard } from "@/components/ai/proposal-review-card";
+import { KbGapAndGuardPanel } from "@/components/ai/kb-gap-and-guard-panel";
 import { Badge, EmptyState, Page, PageHeader } from "@/components/ui/page";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { approveProposal, editApproveProposal, rejectProposal } from "@/lib/api-client/live-client";
@@ -158,6 +159,8 @@ export default function AiProposalsPage() {
             })}
           </div>
         )}
+
+        <KbGapAndGuardPanel />
       </Page>
     </AppShell>
   );

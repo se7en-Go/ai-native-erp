@@ -32,12 +32,41 @@ export type AccountRead = {
     updated_at: string;
 };
 
+export type AdoptionTypeMetrics = {
+    adoption_rate_pct: string;
+    approved: number;
+    edited_and_approved: number;
+    pending: number;
+    proposal_type: string;
+    rejected: number;
+    total: number;
+};
+
 export type AdvanceOnboardingRequest = {
     skip_catalog_for_b2b?: boolean;
     step_metadata?: {
         [key: string]: unknown;
     };
     target_stage: OnboardingStage;
+};
+
+export type AiAdoptionMetrics = {
+    adopted: number;
+    adoption_rate_pct: string;
+    approved: number;
+    by_type: Array<AdoptionTypeMetrics>;
+    direct_adopt_rate_pct: string;
+    edit_adopt_rate_pct: string;
+    edited_and_approved: number;
+    expired: number;
+    failed: number;
+    pending: number;
+    rejected: number;
+    rejection_rate_pct: string;
+    review_base: number;
+    tenant_id: string;
+    total: number;
+    window_days: number;
 };
 
 export type AiCapability = 'cs_support' | 'sales_quoting' | 'order_logistics' | 'content_studio' | 'biz_analytics' | 'finance_recon';
@@ -1223,6 +1252,29 @@ export type HttpValidationError = {
     detail?: Array<ValidationError>;
 };
 
+/**
+ * Offboarding handover: move every owned asset from one member to another.
+ */
+export type HandoverRequest = {
+    deactivate_from_user?: boolean;
+    dry_run?: boolean;
+    from_user_id: string;
+    to_user_id: string;
+};
+
+export type HandoverResult = {
+    channel_accounts_reassigned: number;
+    conversations_reassigned: number;
+    dry_run: boolean;
+    from_user_deactivated: boolean;
+    from_user_id: string;
+    opportunities_reassigned: number;
+    store_scopes_reassigned: number;
+    tenant_id: string;
+    to_user_id: string;
+    total_reassigned: number;
+};
+
 export type IdentityType = 'email' | 'phone_e164' | 'whatsapp_waid' | 'whatsapp_bsuid' | 'ig_psid' | 'fb_psid' | 'shopify_customer_id' | 'tiktok_buyer_id' | 'amazon_buyer_email' | 'web_visitor_id' | 'marketplace_buyer_id';
 
 export type InboxAssistAction = 'polish' | 'summarize' | 'suggest_reply' | 'daily_brief';
@@ -1345,6 +1397,36 @@ export type KbDocumentRead = {
     source_uri?: string | null;
     status?: string;
     title: string;
+};
+
+export type KbGapCreateRequest = {
+    conversation_id?: string | null;
+    customer_question: string;
+    detected_language?: string;
+};
+
+export type KbGapPromoteRequest = {
+    resolved_answer: string;
+};
+
+export type KbGapPromoteResult = {
+    chunks_created: number;
+    document_id: string;
+    gap: KbGapRead;
+};
+
+export type KbGapRead = {
+    conversation_id?: string | null;
+    created_at: string;
+    customer_question: string;
+    detected_language: string;
+    frequency_count: number;
+    id: string;
+    promoted_kb_document_id?: string | null;
+    resolved_answer?: string | null;
+    status: 'open' | 'resolved' | 'dismissed';
+    tenant_id: string;
+    updated_at: string;
 };
 
 export type KbIngestResponse = {
@@ -2109,6 +2191,14 @@ export type PaginatedResponseInventorySyncJobRead = {
 export type PaginatedResponseKbDocumentRead = {
     has_more: boolean;
     items: Array<KbDocumentRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseKbGapRead = {
+    has_more: boolean;
+    items: Array<KbGapRead>;
     limit: number;
     offset: number;
     total: number;
@@ -3037,6 +3127,51 @@ export type ReceivePurchaseOrder = {
     receipt_id: string;
 };
 
+export type RedlineCheckRequest = {
+    content: string;
+};
+
+export type RedlineCheckResult = {
+    blocked: boolean;
+    blocks: Array<string>;
+    matched_rules: Array<RedlineMatchedRule>;
+    warnings: Array<string>;
+};
+
+export type RedlineMatchedRule = {
+    action: 'block' | 'warn';
+    id: string;
+    match_type: 'keyword' | 'regex';
+    matched_text: string;
+    name: string;
+};
+
+/**
+ * Rule authoring payload.
+ *
+ * `pattern` carries only a transport cap here; the service enforces the real
+ * 200-character policy limit and returns `ERR_INVALID_REDLINE_PATTERN` /
+ * `ERR_REDLINE_PATTERN_TOO_LONG` so the operator sees why a rule was refused.
+ */
+export type RedlineRuleCreate = {
+    action?: 'block' | 'warn';
+    is_enabled?: boolean;
+    match_type?: 'keyword' | 'regex';
+    name: string;
+    pattern: string;
+};
+
+export type RedlineRuleRead = {
+    action: 'block' | 'warn';
+    created_at: string;
+    id: string;
+    is_enabled: boolean;
+    match_type: 'keyword' | 'regex';
+    name: string;
+    pattern: string;
+    tenant_id: string;
+};
+
 export type RefreshRequest = {
     refresh_token: string;
 };
@@ -3727,6 +3862,28 @@ export type StockRead = {
     warehouse_id: string;
 };
 
+/**
+ * Grant (or re-level) one member's access to one connected store.
+ */
+export type StoreScopeAssignRequest = {
+    access_level?: 'read' | 'operate' | 'manage';
+    channel_account_id: string;
+    user_id: string;
+};
+
+export type StoreScopeRead = {
+    access_level: 'read' | 'operate' | 'manage';
+    channel_account_id: string;
+    channel_display_name?: string | null;
+    channel_type?: string | null;
+    created_at: string;
+    id: string;
+    tenant_id: string;
+    user_email?: string | null;
+    user_full_name?: string | null;
+    user_id: string;
+};
+
 export type SupplierCreate = {
     code: string;
     contact_email?: string | null;
@@ -4169,6 +4326,36 @@ export type WorkforceMatrixResponse = {
     l1_pending: Array<PendingProposalGroup>;
     l2_auto: Array<AutoExecutedCapability>;
 };
+
+export type GetAdoptionMetricsApiV1AiAdoptionMetricsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        days?: number;
+    };
+    url: '/api/v1/ai/adoption-metrics';
+};
+
+export type GetAdoptionMetricsApiV1AiAdoptionMetricsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAdoptionMetricsApiV1AiAdoptionMetricsGetError = GetAdoptionMetricsApiV1AiAdoptionMetricsGetErrors[keyof GetAdoptionMetricsApiV1AiAdoptionMetricsGetErrors];
+
+export type GetAdoptionMetricsApiV1AiAdoptionMetricsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiAdoptionMetrics;
+};
+
+export type GetAdoptionMetricsApiV1AiAdoptionMetricsGetResponse = GetAdoptionMetricsApiV1AiAdoptionMetricsGetResponses[keyof GetAdoptionMetricsApiV1AiAdoptionMetricsGetResponses];
 
 export type AssistantChatApiV1AiAssistantChatPostData = {
     body: AssistantChatRequest;
@@ -4722,6 +4909,126 @@ export type InboxAssistApiV1AiInboxAssistPostResponses = {
 };
 
 export type InboxAssistApiV1AiInboxAssistPostResponse = InboxAssistApiV1AiInboxAssistPostResponses[keyof InboxAssistApiV1AiInboxAssistPostResponses];
+
+export type ListKbGapsApiV1AiKbGapsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        status?: string | null;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/v1/ai/kb-gaps';
+};
+
+export type ListKbGapsApiV1AiKbGapsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListKbGapsApiV1AiKbGapsGetError = ListKbGapsApiV1AiKbGapsGetErrors[keyof ListKbGapsApiV1AiKbGapsGetErrors];
+
+export type ListKbGapsApiV1AiKbGapsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseKbGapRead;
+};
+
+export type ListKbGapsApiV1AiKbGapsGetResponse = ListKbGapsApiV1AiKbGapsGetResponses[keyof ListKbGapsApiV1AiKbGapsGetResponses];
+
+export type CreateKbGapApiV1AiKbGapsPostData = {
+    body: KbGapCreateRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/kb-gaps';
+};
+
+export type CreateKbGapApiV1AiKbGapsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateKbGapApiV1AiKbGapsPostError = CreateKbGapApiV1AiKbGapsPostErrors[keyof CreateKbGapApiV1AiKbGapsPostErrors];
+
+export type CreateKbGapApiV1AiKbGapsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: KbGapRead;
+};
+
+export type CreateKbGapApiV1AiKbGapsPostResponse = CreateKbGapApiV1AiKbGapsPostResponses[keyof CreateKbGapApiV1AiKbGapsPostResponses];
+
+export type DismissKbGapApiV1AiKbGapsGapIdDismissPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        gap_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/kb-gaps/{gap_id}/dismiss';
+};
+
+export type DismissKbGapApiV1AiKbGapsGapIdDismissPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DismissKbGapApiV1AiKbGapsGapIdDismissPostError = DismissKbGapApiV1AiKbGapsGapIdDismissPostErrors[keyof DismissKbGapApiV1AiKbGapsGapIdDismissPostErrors];
+
+export type DismissKbGapApiV1AiKbGapsGapIdDismissPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: KbGapRead;
+};
+
+export type DismissKbGapApiV1AiKbGapsGapIdDismissPostResponse = DismissKbGapApiV1AiKbGapsGapIdDismissPostResponses[keyof DismissKbGapApiV1AiKbGapsGapIdDismissPostResponses];
+
+export type PromoteKbGapApiV1AiKbGapsGapIdPromotePostData = {
+    body: KbGapPromoteRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        gap_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/kb-gaps/{gap_id}/promote';
+};
+
+export type PromoteKbGapApiV1AiKbGapsGapIdPromotePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PromoteKbGapApiV1AiKbGapsGapIdPromotePostError = PromoteKbGapApiV1AiKbGapsGapIdPromotePostErrors[keyof PromoteKbGapApiV1AiKbGapsGapIdPromotePostErrors];
+
+export type PromoteKbGapApiV1AiKbGapsGapIdPromotePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: KbGapPromoteResult;
+};
+
+export type PromoteKbGapApiV1AiKbGapsGapIdPromotePostResponse = PromoteKbGapApiV1AiKbGapsGapIdPromotePostResponses[keyof PromoteKbGapApiV1AiKbGapsGapIdPromotePostResponses];
 
 export type ListKbDocumentsApiV1AiKbDocumentsGetData = {
     body?: never;
@@ -5462,6 +5769,120 @@ export type DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteResponses = {
 };
 
 export type DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteResponse = DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteResponses[keyof DeleteQuickReplyApiV1AiQuickRepliesTemplateIdDeleteResponses];
+
+export type ListRedlineRulesApiV1AiRedlineRulesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/redline-rules';
+};
+
+export type ListRedlineRulesApiV1AiRedlineRulesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRedlineRulesApiV1AiRedlineRulesGetError = ListRedlineRulesApiV1AiRedlineRulesGetErrors[keyof ListRedlineRulesApiV1AiRedlineRulesGetErrors];
+
+export type ListRedlineRulesApiV1AiRedlineRulesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<RedlineRuleRead>;
+};
+
+export type ListRedlineRulesApiV1AiRedlineRulesGetResponse = ListRedlineRulesApiV1AiRedlineRulesGetResponses[keyof ListRedlineRulesApiV1AiRedlineRulesGetResponses];
+
+export type CreateRedlineRuleApiV1AiRedlineRulesPostData = {
+    body: RedlineRuleCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/redline-rules';
+};
+
+export type CreateRedlineRuleApiV1AiRedlineRulesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRedlineRuleApiV1AiRedlineRulesPostError = CreateRedlineRuleApiV1AiRedlineRulesPostErrors[keyof CreateRedlineRuleApiV1AiRedlineRulesPostErrors];
+
+export type CreateRedlineRuleApiV1AiRedlineRulesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RedlineRuleRead;
+};
+
+export type CreateRedlineRuleApiV1AiRedlineRulesPostResponse = CreateRedlineRuleApiV1AiRedlineRulesPostResponses[keyof CreateRedlineRuleApiV1AiRedlineRulesPostResponses];
+
+export type CheckOutboundTextApiV1AiRedlineRulesCheckPostData = {
+    body: RedlineCheckRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/redline-rules/check';
+};
+
+export type CheckOutboundTextApiV1AiRedlineRulesCheckPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckOutboundTextApiV1AiRedlineRulesCheckPostError = CheckOutboundTextApiV1AiRedlineRulesCheckPostErrors[keyof CheckOutboundTextApiV1AiRedlineRulesCheckPostErrors];
+
+export type CheckOutboundTextApiV1AiRedlineRulesCheckPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RedlineCheckResult;
+};
+
+export type CheckOutboundTextApiV1AiRedlineRulesCheckPostResponse = CheckOutboundTextApiV1AiRedlineRulesCheckPostResponses[keyof CheckOutboundTextApiV1AiRedlineRulesCheckPostResponses];
+
+export type DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        rule_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/redline-rules/{rule_id}';
+};
+
+export type DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteError = DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteErrors[keyof DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteErrors];
+
+export type DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteResponse = DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteResponses[keyof DeleteRedlineRuleApiV1AiRedlineRulesRuleIdDeleteResponses];
 
 export type ListAssetsApiV1AiStudioAssetsGetData = {
     body?: never;
@@ -12148,6 +12569,34 @@ export type GetCostVisibilitySampleApiV1TenantsCostVisibilitySampleGetResponses 
 
 export type GetCostVisibilitySampleApiV1TenantsCostVisibilitySampleGetResponse = GetCostVisibilitySampleApiV1TenantsCostVisibilitySampleGetResponses[keyof GetCostVisibilitySampleApiV1TenantsCostVisibilitySampleGetResponses];
 
+export type HandoverMemberAssetsApiV1TenantsHandoverPostData = {
+    body: HandoverRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/handover';
+};
+
+export type HandoverMemberAssetsApiV1TenantsHandoverPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HandoverMemberAssetsApiV1TenantsHandoverPostError = HandoverMemberAssetsApiV1TenantsHandoverPostErrors[keyof HandoverMemberAssetsApiV1TenantsHandoverPostErrors];
+
+export type HandoverMemberAssetsApiV1TenantsHandoverPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HandoverResult;
+};
+
+export type HandoverMemberAssetsApiV1TenantsHandoverPostResponse = HandoverMemberAssetsApiV1TenantsHandoverPostResponses[keyof HandoverMemberAssetsApiV1TenantsHandoverPostResponses];
+
 export type ListMembershipsApiV1TenantsMembershipsGetData = {
     body?: never;
     headers?: {
@@ -12320,6 +12769,94 @@ export type UpdateTenantSettingsApiV1TenantsSettingsPatchResponses = {
 };
 
 export type UpdateTenantSettingsApiV1TenantsSettingsPatchResponse = UpdateTenantSettingsApiV1TenantsSettingsPatchResponses[keyof UpdateTenantSettingsApiV1TenantsSettingsPatchResponses];
+
+export type ListStoreScopesApiV1TenantsStoreScopesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        user_id?: string | null;
+    };
+    url: '/api/v1/tenants/store-scopes';
+};
+
+export type ListStoreScopesApiV1TenantsStoreScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListStoreScopesApiV1TenantsStoreScopesGetError = ListStoreScopesApiV1TenantsStoreScopesGetErrors[keyof ListStoreScopesApiV1TenantsStoreScopesGetErrors];
+
+export type ListStoreScopesApiV1TenantsStoreScopesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<StoreScopeRead>;
+};
+
+export type ListStoreScopesApiV1TenantsStoreScopesGetResponse = ListStoreScopesApiV1TenantsStoreScopesGetResponses[keyof ListStoreScopesApiV1TenantsStoreScopesGetResponses];
+
+export type AssignStoreScopeApiV1TenantsStoreScopesPostData = {
+    body: StoreScopeAssignRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/store-scopes';
+};
+
+export type AssignStoreScopeApiV1TenantsStoreScopesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssignStoreScopeApiV1TenantsStoreScopesPostError = AssignStoreScopeApiV1TenantsStoreScopesPostErrors[keyof AssignStoreScopeApiV1TenantsStoreScopesPostErrors];
+
+export type AssignStoreScopeApiV1TenantsStoreScopesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: StoreScopeRead;
+};
+
+export type AssignStoreScopeApiV1TenantsStoreScopesPostResponse = AssignStoreScopeApiV1TenantsStoreScopesPostResponses[keyof AssignStoreScopeApiV1TenantsStoreScopesPostResponses];
+
+export type RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        scope_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tenants/store-scopes/{scope_id}';
+};
+
+export type RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteError = RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteErrors[keyof RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteErrors];
+
+export type RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteResponse = RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteResponses[keyof RevokeStoreScopeApiV1TenantsStoreScopesScopeIdDeleteResponses];
 
 export type Receive17TrackWebhookApiV1Webhooks17TrackPostData = {
     body?: never;
