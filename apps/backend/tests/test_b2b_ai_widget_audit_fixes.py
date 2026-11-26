@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from erp_core.ai_engine import runtime as runtime_mod
 from erp_core.ai_engine.compliance_filter import ComplianceCheckResult
 from erp_core.ai_engine.numeric_guard import ToolGroundedNumericGuard
+from erp_core.ai_engine.router_llm import LlmProviderResponse, TieredModelRouter
 from erp_core.ai_engine.runtime import (
     PolicyRuntime,
     _sku_pricing_claims,
@@ -122,6 +123,7 @@ async def test_policy_runtime_live_sku_tier_query_succeeds_without_abstaining(
     class StubWallet:
         ensure_wallet = AsyncMock(return_value=None)
         lock_budget = AsyncMock(return_value=True)
+        try_reserve_and_record_spend = AsyncMock(return_value=(True, None))
 
     class StubCompliance:
         async def load_conversation(self, *_args: Any) -> None:
@@ -154,7 +156,10 @@ async def test_policy_runtime_live_sku_tier_query_succeeds_without_abstaining(
         dummy_session,
         uuid4(),
         AiCapability.CS_SUPPORT,
-        {"message": "查一下 LED-COB-24V-5M 当前可售库存和阶梯价"},
+        {
+            "message": "查一下 LED-COB-24V-5M 当前可售库存和阶梯价",
+            "staff_copilot_lookup": True,
+        },
         strict_rag=True,
     )
     assert res.should_abstain is False
@@ -164,6 +169,44 @@ async def test_policy_runtime_live_sku_tier_query_succeeds_without_abstaining(
     assert "14.20" in res.reply_text
     assert res.tool_calls[0]["tool_name"] == "get_live_sku_pricing_and_stock"
     assert res.tool_calls[0]["data"]["available_qty"] == 4300
+
+    class AdversarialLlm:
+        async def complete(
+            self,
+            *,
+            model_id: str,
+            provider: str,
+            messages: list[dict[str, Any]],
+            max_tokens: int,
+            temperature: float,
+        ) -> LlmProviderResponse:
+            del messages, max_tokens, temperature
+            return LlmProviderResponse(
+                text="The price for LED-COB-24V-5M is $12.99 with 9999 units in stock.",
+                model_id=model_id,
+                provider=provider,
+                prompt_tokens=16,
+                completion_tokens=16,
+            )
+
+    buyer_policy = PolicyRuntime(
+        tool_registry=cast(Any, StubTools()),
+        wallet_service=cast(Any, StubWallet()),
+        compliance_filter=cast(Any, StubCompliance()),
+        llm_router=TieredModelRouter(provider_client=AdversarialLlm()),
+    )
+    blocked_res = await buyer_policy.run_capability(
+        dummy_session,
+        uuid4(),
+        AiCapability.CS_SUPPORT,
+        {"message": "What is the price and stock of LED-COB-24V-5M?"},
+        strict_rag=False,
+    )
+    assert blocked_res.should_abstain is True
+    assert blocked_res.numeric_guard_passed is False
+    assert blocked_res.auto_executed is False
+    assert blocked_res.reply_text == ""
+    assert blocked_res.reason == "grounding_verification_failed"
 
     class MissingSkuTools:
         async def get_live_sku_pricing_and_stock(

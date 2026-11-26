@@ -783,10 +783,29 @@ class PolicyRuntime:
                 self._trace(result, tool)
                 if not tool.ok:
                     return await abstain(tool.error_code or "sku_not_found")
-                verified = self.numeric_guard.verify("", [tool], _sku_pricing_claims(tool))
-                result.numeric_guard_passed = verified.passed
-                reply = _sku_pricing_reply(query, tool)
-                result.tool_calls[-1]["data"] = tool.data
+                if input_payload.get("staff_copilot_lookup") is True:
+                    verified = self.numeric_guard.verify("", [tool], _sku_pricing_claims(tool))
+                    result.numeric_guard_passed = verified.passed
+                    reply = _sku_pricing_reply(query, tool)
+                    result.tool_calls[-1]["data"] = tool.data
+                else:
+                    d = tool.data
+                    context = (
+                        f"For {d['qty_requested']} units of {d['sku']} ({d['incoterm']}), "
+                        f"the live unit price is ${d['applied_unit_price_usd']} and "
+                        f"we currently have {d['available_qty']} units in stock."
+                    )
+                    generation = await self._generate(
+                        session, tenant_id, capability, query, context, "pricing_stock", result
+                    )
+                    if generation is None:
+                        return await abstain(result.reason or "model_unavailable")
+                    reply = generation.text.strip()
+                    result.numeric_guard_passed = self.numeric_guard.verify(
+                        reply, [tool]
+                    ).allow_l2_auto_send
+                    result.model_used = generation.model_id
+                    result.credits_consumed = generation.credits_consumed
             else:
                 rag = await self.rag_service.search(
                     session, tenant_id, query, strict_mode=strict_rag
