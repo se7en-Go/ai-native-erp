@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Plus, Radar, ShieldCheck, Sparkles } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { NotificationAutomationPanel } from "@/components/ai/notification-automation-panel";
 import { useAuthSession } from "@/components/providers";
 import { EmployeeCardGrid } from "@/components/ai-workforce/employee-card-grid";
 import { AutonomyDivisionBoard } from "@/components/ai-workforce/autonomy-division-board";
@@ -352,6 +353,8 @@ export default function AiEmployeesPage() {
             {bi("正在加载分工矩阵…", "Loading division matrix…")}
           </p>
         )}
+
+        <NotificationAutomationPanel canManage={canManage} />
       </div>
 
       {createOpen && (

@@ -250,6 +250,70 @@ export type AutoReplySettingUpdate = {
     enabled: boolean;
 };
 
+export type AutomationEvaluationReport = {
+    dry_run: boolean;
+    generated_at: string;
+    rules: Array<AutomationRuleEvaluationItem>;
+    seeded_defaults: boolean;
+    total_matched: number;
+    total_notifications_queued: number;
+    total_proposals_created: number;
+};
+
+export type AutomationEvaluationRequest = {
+    dry_run?: boolean;
+};
+
+/**
+ * Per-rule outcome. Counts are real; a dry run creates nothing in the database.
+ */
+export type AutomationRuleEvaluationItem = {
+    autonomy_level: 'L0_copilot' | 'L1_proposal' | 'L2_auto';
+    is_enabled: boolean;
+    items_preview?: Array<{
+        [key: string]: unknown;
+    }>;
+    matched_count: number;
+    name: string;
+    note?: string | null;
+    notifications_queued: number;
+    priority: 'P0' | 'P1' | 'P2';
+    proposals_created: number;
+    template_code: 'low_doc_replenishment' | 'negative_margin_hold' | 'stalled_shipment_soothe' | 'cold_b2b_quote_followup' | 'daily_patrol_brief';
+};
+
+export type AutomationRuleRead = {
+    autonomy_level: 'L0_copilot' | 'L1_proposal' | 'L2_auto';
+    config_json: {
+        [key: string]: unknown;
+    };
+    created_at: string;
+    id: string;
+    is_enabled: boolean;
+    last_run_at?: string | null;
+    last_triggered_count: number;
+    name: string;
+    priority: 'P0' | 'P1' | 'P2';
+    template_code: 'low_doc_replenishment' | 'negative_margin_hold' | 'stalled_shipment_soothe' | 'cold_b2b_quote_followup' | 'daily_patrol_brief';
+    updated_at: string;
+};
+
+export type AutomationRuleUpdate = {
+    autonomy_level?: ('L0_copilot' | 'L1_proposal' | 'L2_auto') | null;
+    config_json?: {
+        [key: string]: unknown;
+    } | null;
+    is_enabled?: boolean | null;
+    name?: string | null;
+    priority?: ('P0' | 'P1' | 'P2') | null;
+};
+
+export type AutomationSeedResult = {
+    created: number;
+    existing: number;
+    rules: Array<AutomationRuleRead>;
+};
+
 export type AutonomyLevel = 'L0_copilot' | 'L1_proposal' | 'L2_auto';
 
 export type AutonomySummary = {
@@ -876,6 +940,13 @@ export type DashboardRead = {
     pending_proposals: number;
     pipeline_value: Array<CurrencyValue>;
     upcoming_tasks: Array<TaskRead>;
+};
+
+export type DeliveryRetrySweepResult = {
+    attempted: number;
+    failed: number;
+    retrying: number;
+    sent: number;
 };
 
 export type DeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
@@ -1558,6 +1629,64 @@ export type MovementRead = {
     warehouse_id: string;
 };
 
+export type NotificationChannelCreate = {
+    is_enabled?: boolean;
+    min_priority?: 'P0' | 'P1' | 'P2';
+    name: string;
+    provider: 'feishu' | 'dingtalk' | 'wecom' | 'generic_webhook';
+    secret?: string | null;
+    webhook_url: string;
+};
+
+export type NotificationChannelRead = {
+    created_at: string;
+    has_signing_secret: boolean;
+    id: string;
+    is_enabled: boolean;
+    last_error?: string | null;
+    last_tested_at?: string | null;
+    min_priority: 'P0' | 'P1' | 'P2';
+    name: string;
+    provider: 'feishu' | 'dingtalk' | 'wecom' | 'generic_webhook';
+    updated_at: string;
+    webhook_url_preview: string;
+};
+
+export type NotificationChannelUpdate = {
+    is_enabled?: boolean | null;
+    min_priority?: ('P0' | 'P1' | 'P2') | null;
+    name?: string | null;
+    secret?: string | null;
+    webhook_url?: string | null;
+};
+
+export type NotificationDeliveryRead = {
+    attempts: number;
+    body: string;
+    channel_id: string;
+    channel_name: string;
+    created_at: string;
+    deep_link?: string | null;
+    error_message?: string | null;
+    event_type: string;
+    http_status?: number | null;
+    id: string;
+    next_retry_at?: string | null;
+    priority: 'P0' | 'P1' | 'P2';
+    provider: 'feishu' | 'dingtalk' | 'wecom' | 'generic_webhook';
+    sent_at?: string | null;
+    status: 'pending' | 'sent' | 'failed' | 'retrying';
+    title: string;
+};
+
+export type NotificationTestResult = {
+    channel_id: string;
+    error_message?: string | null;
+    http_status?: number | null;
+    ok: boolean;
+    tested_at: string;
+};
+
 export type OnboardingStage = 'WorkspaceCreated' | 'ChannelConnecting' | 'ChannelVerified' | 'CatalogSyncing' | 'AISandboxReady' | 'LiveProduction';
 
 export type OnboardingStateRead = {
@@ -1888,6 +2017,14 @@ export type PaginatedResponseMessageRead = {
 export type PaginatedResponseMovementRead = {
     has_more: boolean;
     items: Array<MovementRead>;
+    limit: number;
+    offset: number;
+    total: number;
+};
+
+export type PaginatedResponseNotificationDeliveryRead = {
+    has_more: boolean;
+    items: Array<NotificationDeliveryRead>;
     limit: number;
     offset: number;
     total: number;
@@ -3597,6 +3734,120 @@ export type AssistantChatApiV1AiAssistantChatPostResponses = {
 
 export type AssistantChatApiV1AiAssistantChatPostResponse = AssistantChatApiV1AiAssistantChatPostResponses[keyof AssistantChatApiV1AiAssistantChatPostResponses];
 
+export type ListAutomationRulesApiV1AiAutomationRulesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/automation-rules';
+};
+
+export type ListAutomationRulesApiV1AiAutomationRulesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAutomationRulesApiV1AiAutomationRulesGetError = ListAutomationRulesApiV1AiAutomationRulesGetErrors[keyof ListAutomationRulesApiV1AiAutomationRulesGetErrors];
+
+export type ListAutomationRulesApiV1AiAutomationRulesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<AutomationRuleRead>;
+};
+
+export type ListAutomationRulesApiV1AiAutomationRulesGetResponse = ListAutomationRulesApiV1AiAutomationRulesGetResponses[keyof ListAutomationRulesApiV1AiAutomationRulesGetResponses];
+
+export type EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostData = {
+    body?: AutomationEvaluationRequest | null;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/automation-rules/evaluate';
+};
+
+export type EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostError = EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostErrors[keyof EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostErrors];
+
+export type EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutomationEvaluationReport;
+};
+
+export type EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostResponse = EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostResponses[keyof EvaluateAutomationRulesApiV1AiAutomationRulesEvaluatePostResponses];
+
+export type SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/automation-rules/seed-defaults';
+};
+
+export type SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostError = SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostErrors[keyof SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostErrors];
+
+export type SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AutomationSeedResult;
+};
+
+export type SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostResponse = SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostResponses[keyof SeedDefaultAutomationRulesApiV1AiAutomationRulesSeedDefaultsPostResponses];
+
+export type UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchData = {
+    body: AutomationRuleUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        rule_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/automation-rules/{rule_id}';
+};
+
+export type UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchError = UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchErrors[keyof UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchErrors];
+
+export type UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutomationRuleRead;
+};
+
+export type UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchResponse = UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchResponses[keyof UpdateAutomationRuleApiV1AiAutomationRulesRuleIdPatchResponses];
+
 export type GetCapabilitiesApiV1AiCapabilitiesGetData = {
     body?: never;
     headers?: {
@@ -4124,6 +4375,213 @@ export type SearchKbHybridApiV1AiKbSearchPostResponses = {
 };
 
 export type SearchKbHybridApiV1AiKbSearchPostResponse = SearchKbHybridApiV1AiKbSearchPostResponses[keyof SearchKbHybridApiV1AiKbSearchPostResponses];
+
+export type ListNotificationChannelsApiV1AiNotificationsChannelsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/notifications/channels';
+};
+
+export type ListNotificationChannelsApiV1AiNotificationsChannelsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListNotificationChannelsApiV1AiNotificationsChannelsGetError = ListNotificationChannelsApiV1AiNotificationsChannelsGetErrors[keyof ListNotificationChannelsApiV1AiNotificationsChannelsGetErrors];
+
+export type ListNotificationChannelsApiV1AiNotificationsChannelsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<NotificationChannelRead>;
+};
+
+export type ListNotificationChannelsApiV1AiNotificationsChannelsGetResponse = ListNotificationChannelsApiV1AiNotificationsChannelsGetResponses[keyof ListNotificationChannelsApiV1AiNotificationsChannelsGetResponses];
+
+export type CreateNotificationChannelApiV1AiNotificationsChannelsPostData = {
+    body: NotificationChannelCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/notifications/channels';
+};
+
+export type CreateNotificationChannelApiV1AiNotificationsChannelsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateNotificationChannelApiV1AiNotificationsChannelsPostError = CreateNotificationChannelApiV1AiNotificationsChannelsPostErrors[keyof CreateNotificationChannelApiV1AiNotificationsChannelsPostErrors];
+
+export type CreateNotificationChannelApiV1AiNotificationsChannelsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: NotificationChannelRead;
+};
+
+export type CreateNotificationChannelApiV1AiNotificationsChannelsPostResponse = CreateNotificationChannelApiV1AiNotificationsChannelsPostResponses[keyof CreateNotificationChannelApiV1AiNotificationsChannelsPostResponses];
+
+export type DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        channel_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/notifications/channels/{channel_id}';
+};
+
+export type DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteError = DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteErrors[keyof DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteErrors];
+
+export type DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteResponse = DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteResponses[keyof DeleteNotificationChannelApiV1AiNotificationsChannelsChannelIdDeleteResponses];
+
+export type UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchData = {
+    body: NotificationChannelUpdate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        channel_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/notifications/channels/{channel_id}';
+};
+
+export type UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchError = UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchErrors[keyof UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchErrors];
+
+export type UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: NotificationChannelRead;
+};
+
+export type UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchResponse = UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchResponses[keyof UpdateNotificationChannelApiV1AiNotificationsChannelsChannelIdPatchResponses];
+
+export type TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        channel_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/notifications/channels/{channel_id}/test';
+};
+
+export type TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostError = TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostErrors[keyof TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostErrors];
+
+export type TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: NotificationTestResult;
+};
+
+export type TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostResponse = TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostResponses[keyof TestNotificationChannelApiV1AiNotificationsChannelsChannelIdTestPostResponses];
+
+export type ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        status?: ('pending' | 'sent' | 'failed' | 'retrying') | null;
+        channel_id?: string | null;
+    };
+    url: '/api/v1/ai/notifications/deliveries';
+};
+
+export type ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetError = ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetErrors[keyof ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetErrors];
+
+export type ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaginatedResponseNotificationDeliveryRead;
+};
+
+export type ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetResponse = ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetResponses[keyof ListNotificationDeliveriesApiV1AiNotificationsDeliveriesGetResponses];
+
+export type RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/notifications/deliveries/retry-due';
+};
+
+export type RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostError = RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostErrors[keyof RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostErrors];
+
+export type RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeliveryRetrySweepResult;
+};
+
+export type RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostResponse = RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostResponses[keyof RetryDueNotificationDeliveriesApiV1AiNotificationsDeliveriesRetryDuePostResponses];
 
 export type DailyPatrolBriefApiV1AiPatrolDailyBriefGetData = {
     body?: never;
