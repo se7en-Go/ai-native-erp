@@ -230,9 +230,9 @@ NEXT_PUBLIC_USE_MOCK_API=true pnpm --filter web dev
 
 ---
 
-## 数据库迁移演进（0001 → 0019）
+## 数据库迁移演进（0001 → 0023）
 
-| 迁移版本（共 21 个脚本） | 覆盖能力 |
+| 迁移版本（共 22 个脚本） | 覆盖能力 |
 | :--- | :--- |
 | `0001` | 多租户基座、RBAC 成员、`FORCE RLS` 策略、不可变审计日志分区与认证辅助函数 |
 | `0002` – `0003c` | 全渠道账号与加密凭据、聚合收件箱、Webhook 原始事件表、17TRACK 与渠道路由解析、双模 ERP 与 CVP |
@@ -244,6 +244,7 @@ NEXT_PUBLIC_USE_MOCK_API=true pnpm --filter web dev
 | `0017` | **Phase 4**：`collector_api_tokens` 作用域采集授权码表与 `resolve_collector_token` 窄哈希查找函数 |
 | `0018_marketplace_channels` | **全球电商扩容**：把 SHEIN / AliExpress / Ozon 纳入 `channel_routing_directory`、`channel_accounts`、`conversations`、`messages` 与 `raw_webhook_events` 的渠道白名单，并重建 `resolve_tenant_by_channel_external_id` / `accept_raw_webhook_event` / `register_channel_routing` 三个 `SECURITY DEFINER` 函数的编译期白名单（`17track` 物流伪通道保持放行） |
 | `0019_analytics_im_sourcing` | **AI 改写 / 经营分析 / 买家 IM**：`ck_customer_identities_type` 接纳第 11 种身份 `marketplace_buyer_id`；`sourcing_drafts` 新增 `localized_copies`（分语种刊登文案册）与 `marketplace_category_attrs`（分平台类目属性）；新建 `security_invoker` 视图 `vw_tenant_channel_sales_analytics`，把电商 / 社媒 / 邮件与 `channel_account_id IS NULL` 的直销 B2B 订单统一到「日 × 渠道」粒度的 GMV / 退款 / COGS / 佣金 / 广告费 / 净贡献毛利 / ROAS（视图自身不绕过 `app_runtime` 的 `FORCE RLS`） |
+| `0023_tenant_mcp_tokens` | **MCP 服务器**：`mcp_api_tokens` 只存 SHA-256 `token_hash` 与 `erp_mcp_` 前缀展示串（`FORCE RLS` + 窄哈希 `app_migrator` 策略），配套 `SECURITY DEFINER` 函数 `resolve_mcp_token` 供 `/api/v1/mcp` 在建租户上下文前解析令牌 |
 
 ---
 
