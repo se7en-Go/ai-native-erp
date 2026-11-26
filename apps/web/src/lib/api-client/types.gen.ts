@@ -32,6 +32,51 @@ export type AccountRead = {
     updated_at: string;
 };
 
+/**
+ * Connect one read-only ad account. `access_token` is encrypted at rest.
+ */
+export type AdAccountConnect = {
+    access_token: string;
+    account_name: string;
+    currency?: string;
+    external_account_id: string;
+    platform: 'meta_ads' | 'amazon_ads' | 'sandbox_ads';
+};
+
+/**
+ * Public account projection. Never carries the token or the ciphertext.
+ */
+export type AdAccountRead = {
+    account_name: string;
+    created_at: string;
+    currency: string;
+    external_account_id: string;
+    has_credentials?: boolean;
+    id: string;
+    last_synced_at?: string | null;
+    platform: 'meta_ads' | 'amazon_ads' | 'sandbox_ads';
+    status: 'active' | 'paused' | 'error';
+    tenant_id: string;
+    token_preview: string;
+};
+
+/**
+ * One `(spend_date, campaign_name)` fact row, money as decimal strings.
+ */
+export type AdSpendRowRead = {
+    ad_account_id: string;
+    ad_spend: string;
+    attributed_sales: string;
+    campaign_name: string;
+    clicks: number;
+    currency: string;
+    id: string;
+    impressions: number;
+    sku?: string | null;
+    spend_date: string;
+    total_store_sales: string;
+};
+
 export type AdoptionTypeMetrics = {
     adoption_rate_pct: string;
     approved: number;
@@ -40,6 +85,38 @@ export type AdoptionTypeMetrics = {
     proposal_type: string;
     rejected: number;
     total: number;
+};
+
+/**
+ * Windowed totals plus the exact ratios derived from them.
+ *
+ * * `roas` = attributed_sales / ad_spend, quantized `0.01`
+ * * `tacos_pct` = (ad_spend / total_store_sales) * 100, quantized `0.01`
+ * * `ctr_pct` = (clicks / impressions) * 100, quantized `0.01`
+ */
+export type AdsSpendSummaryRead = {
+    ctr_pct: string;
+    currency: string;
+    days: number;
+    roas: string;
+    rows: Array<AdSpendRowRead>;
+    tacos_pct: string;
+    tenant_id: string;
+    total_ad_spend: string;
+    total_attributed_sales: string;
+    total_clicks: number;
+    total_impressions: number;
+    total_store_sales: string;
+};
+
+/**
+ * Outcome of one read-only pull.
+ */
+export type AdsSyncResultRead = {
+    account: AdAccountRead;
+    days: number;
+    rows_upserted: number;
+    synced_at: string;
 };
 
 export type AdvanceOnboardingRequest = {
@@ -4404,6 +4481,37 @@ export type VerifyEmailDnsRequest = {
     domain: string;
 };
 
+/**
+ * Create one visual job. `source_image_url` accepts https, `data:image*` or `/media*`.
+ */
+export type VisualJobCreate = {
+    operation: 'remove_bg' | 'scene_replace' | 'translate_overlay';
+    prompt?: string | null;
+    provider?: 'sandbox' | 'remove_bg' | 'openai_image';
+    source_image_url: string;
+    target_locale?: string | null;
+    variant_id?: string | null;
+};
+
+export type VisualJobRead = {
+    completed_at?: string | null;
+    created_at: string;
+    created_by?: string | null;
+    error_message?: string | null;
+    id: string;
+    operation: 'remove_bg' | 'scene_replace' | 'translate_overlay';
+    output_image_url?: string | null;
+    output_mime_type?: string | null;
+    output_r2_key?: string | null;
+    prompt?: string | null;
+    provider: 'sandbox' | 'remove_bg' | 'openai_image';
+    source_image_url: string;
+    status: 'queued' | 'processing' | 'completed' | 'failed';
+    target_locale?: string | null;
+    tenant_id: string;
+    variant_id?: string | null;
+};
+
 export type WalmartConnectRequest = {
     access_token?: string | null;
     client_id: string;
@@ -8065,6 +8173,124 @@ export type ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses
 
 export type ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponse = ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses[keyof ListVariantMappingsApiV1CatalogVariantsVariantIdMappingsGetResponses];
 
+export type ListVisualJobsApiV1CatalogVisualJobsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        limit?: number;
+    };
+    url: '/api/v1/catalog/visual-jobs';
+};
+
+export type ListVisualJobsApiV1CatalogVisualJobsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListVisualJobsApiV1CatalogVisualJobsGetError = ListVisualJobsApiV1CatalogVisualJobsGetErrors[keyof ListVisualJobsApiV1CatalogVisualJobsGetErrors];
+
+export type ListVisualJobsApiV1CatalogVisualJobsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<VisualJobRead>;
+};
+
+export type ListVisualJobsApiV1CatalogVisualJobsGetResponse = ListVisualJobsApiV1CatalogVisualJobsGetResponses[keyof ListVisualJobsApiV1CatalogVisualJobsGetResponses];
+
+export type CreateVisualJobApiV1CatalogVisualJobsPostData = {
+    body: VisualJobCreate;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/catalog/visual-jobs';
+};
+
+export type CreateVisualJobApiV1CatalogVisualJobsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateVisualJobApiV1CatalogVisualJobsPostError = CreateVisualJobApiV1CatalogVisualJobsPostErrors[keyof CreateVisualJobApiV1CatalogVisualJobsPostErrors];
+
+export type CreateVisualJobApiV1CatalogVisualJobsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: VisualJobRead;
+};
+
+export type CreateVisualJobApiV1CatalogVisualJobsPostResponse = CreateVisualJobApiV1CatalogVisualJobsPostResponses[keyof CreateVisualJobApiV1CatalogVisualJobsPostResponses];
+
+export type DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/visual-jobs/{job_id}';
+};
+
+export type DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteError = DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteErrors[keyof DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteErrors];
+
+export type DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteResponse = DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteResponses[keyof DeleteVisualJobApiV1CatalogVisualJobsJobIdDeleteResponses];
+
+export type GetVisualJobApiV1CatalogVisualJobsJobIdGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/catalog/visual-jobs/{job_id}';
+};
+
+export type GetVisualJobApiV1CatalogVisualJobsJobIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetVisualJobApiV1CatalogVisualJobsJobIdGetError = GetVisualJobApiV1CatalogVisualJobsJobIdGetErrors[keyof GetVisualJobApiV1CatalogVisualJobsJobIdGetErrors];
+
+export type GetVisualJobApiV1CatalogVisualJobsJobIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: VisualJobRead;
+};
+
+export type GetVisualJobApiV1CatalogVisualJobsJobIdGetResponse = GetVisualJobApiV1CatalogVisualJobsJobIdGetResponses[keyof GetVisualJobApiV1CatalogVisualJobsJobIdGetResponses];
+
 export type ListChannelAccountsApiV1ChannelsAccountsGetData = {
     body?: never;
     headers?: {
@@ -9267,6 +9493,154 @@ export type UpdateCustomerApiV1CustomersCustomerIdPatchResponses = {
 };
 
 export type UpdateCustomerApiV1CustomersCustomerIdPatchResponse = UpdateCustomerApiV1CustomersCustomerIdPatchResponses[keyof UpdateCustomerApiV1CustomersCustomerIdPatchResponses];
+
+export type ListAdAccountsApiV1FinanceAdsAccountsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/finance/ads/accounts';
+};
+
+export type ListAdAccountsApiV1FinanceAdsAccountsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAdAccountsApiV1FinanceAdsAccountsGetError = ListAdAccountsApiV1FinanceAdsAccountsGetErrors[keyof ListAdAccountsApiV1FinanceAdsAccountsGetErrors];
+
+export type ListAdAccountsApiV1FinanceAdsAccountsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<AdAccountRead>;
+};
+
+export type ListAdAccountsApiV1FinanceAdsAccountsGetResponse = ListAdAccountsApiV1FinanceAdsAccountsGetResponses[keyof ListAdAccountsApiV1FinanceAdsAccountsGetResponses];
+
+export type ConnectAdAccountApiV1FinanceAdsAccountsPostData = {
+    body: AdAccountConnect;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/finance/ads/accounts';
+};
+
+export type ConnectAdAccountApiV1FinanceAdsAccountsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConnectAdAccountApiV1FinanceAdsAccountsPostError = ConnectAdAccountApiV1FinanceAdsAccountsPostErrors[keyof ConnectAdAccountApiV1FinanceAdsAccountsPostErrors];
+
+export type ConnectAdAccountApiV1FinanceAdsAccountsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AdAccountRead;
+};
+
+export type ConnectAdAccountApiV1FinanceAdsAccountsPostResponse = ConnectAdAccountApiV1FinanceAdsAccountsPostResponses[keyof ConnectAdAccountApiV1FinanceAdsAccountsPostResponses];
+
+export type DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        account_id: string;
+    };
+    query?: never;
+    url: '/api/v1/finance/ads/accounts/{account_id}';
+};
+
+export type DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteError = DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteErrors[keyof DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteErrors];
+
+export type DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteResponse = DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteResponses[keyof DeleteAdAccountApiV1FinanceAdsAccountsAccountIdDeleteResponses];
+
+export type SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        account_id: string;
+    };
+    query?: {
+        days?: number;
+    };
+    url: '/api/v1/finance/ads/accounts/{account_id}/sync';
+};
+
+export type SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostError = SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostErrors[keyof SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostErrors];
+
+export type SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdsSyncResultRead;
+};
+
+export type SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostResponse = SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostResponses[keyof SyncAdAccountApiV1FinanceAdsAccountsAccountIdSyncPostResponses];
+
+export type GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        days?: number;
+    };
+    url: '/api/v1/finance/ads/spend-summary';
+};
+
+export type GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetError = GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetErrors[keyof GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetErrors];
+
+export type GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdsSpendSummaryRead;
+};
+
+export type GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetResponse = GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetResponses[keyof GetAdsSpendSummaryApiV1FinanceAdsSpendSummaryGetResponses];
 
 export type GetCashflowSummaryApiV1FinanceCashflowSummaryGetData = {
     body?: never;

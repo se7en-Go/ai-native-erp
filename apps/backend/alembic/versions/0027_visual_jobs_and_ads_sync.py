@@ -20,7 +20,7 @@ direct-sourced table, so `0004` keeps its standalone downgrade round-trip.
 Safe FK targets only: `tenants(id)`, `users(id)`, `product_variants(id)`.
 
 Revision ID: 0027_visual_jobs_and_ads_sync
-Revises: 0025_team_ops_kb_gaps
+Revises: 0026_bom_and_in_transit_doc
 Create Date: 2026-11-27
 """
 
@@ -31,7 +31,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "0027_visual_jobs_and_ads_sync"
-down_revision: str | None = "0025_team_ops_kb_gaps"
+down_revision: str | None = "0026_bom_and_in_transit_doc"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
