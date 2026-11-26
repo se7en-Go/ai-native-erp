@@ -594,6 +594,71 @@ describe("3 new foreign-trade channels in the marketplace & inbox rail", () => {
       refresh_token: "v^1.1#i^1#demo",
     });
   });
+
+  it("sends sandbox: true when eBay Sandbox toggle is checked", async () => {
+    const captured = stubFetch(() =>
+      jsonResponse(
+        {
+          channel_account_id: "acc-ebay-sbx",
+          channel_type: "ebay",
+          credential_type: "ebay_api",
+          display_name: "eBay Sandbox",
+          external_account_id: "testuser_qzled",
+          status: "active",
+          visibility_scope: "shared",
+        },
+        201,
+      ),
+    );
+
+    renderWithProviders(
+      <ChannelConnectDrawer
+        channelKey="ebay"
+        accounts={[]}
+        isAdmin
+        currentUserId="user-owner-1"
+        members={[]}
+        tenantSlug="qz-led-factory"
+        onSubmit={vi.fn()}
+        onClose={vi.fn()}
+        onViewAccounts={vi.fn()}
+      />,
+      "owner",
+      "en",
+    );
+
+    fireEvent.change(screen.getByTestId("ebay-seller-username-input"), {
+      target: { value: "testuser_qzled" },
+    });
+    fireEvent.change(screen.getByTestId("ebay-site-id-input"), {
+      target: { value: "EBAY-US" },
+    });
+    fireEvent.change(screen.getByTestId("ebay-app-id-input"), {
+      target: { value: "QzLed-SBX-App" },
+    });
+    fireEvent.change(screen.getByTestId("ebay-cert-id-input"), {
+      target: { value: "sbx-cert-id" },
+    });
+    fireEvent.change(screen.getByTestId("ebay-refresh-token"), {
+      target: { value: "v^1.1#i^1#sbx" },
+    });
+    fireEvent.click(screen.getByTestId("ebay-sandbox-toggle"));
+    fireEvent.click(screen.getByTestId("connect-ebay-btn"));
+
+    await waitFor(() => {
+      expect(captured.some((call) => call.url === `${BFF}/v1/channels/ebay/connect`)).toBe(true);
+    });
+    const call = captured.find((item) => item.url === `${BFF}/v1/channels/ebay/connect`);
+    expect(JSON.parse(call?.bodyText ?? "{}")).toEqual({
+      display_name: "eBay",
+      seller_username: "testuser_qzled",
+      site_id: "EBAY-US",
+      app_id: "QzLed-SBX-App",
+      cert_id: "sbx-cert-id",
+      refresh_token: "v^1.1#i^1#sbx",
+      sandbox: true,
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

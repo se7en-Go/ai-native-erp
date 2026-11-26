@@ -106,7 +106,7 @@ class EbayConnectorAdapter(CommercePlatformAdapter):
         timeout: float = 15.0,
     ) -> None:
         self.seller_username = seller_username
-        self.site_id = site_id
+        self.site_id = site_id.strip().upper().replace("-", "_")
         self.sandbox = sandbox
         self.base_url = (
             api_base_url

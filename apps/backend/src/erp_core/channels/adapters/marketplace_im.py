@@ -57,7 +57,7 @@ from erp_core.channels.ecommerce.aliexpress import (
     verify_aliexpress_webhook,
 )
 from erp_core.channels.ecommerce.amazon_sp import AmazonSpApiAdapter
-from erp_core.channels.ecommerce.ebay import EbayConnectorAdapter
+from erp_core.channels.ecommerce.ebay import EBAY_SANDBOX_BASE_URL, EbayConnectorAdapter
 from erp_core.channels.ecommerce.lazada import sign_lazada_request, verify_lazada_webhook
 from erp_core.channels.ecommerce.mercado_libre import verify_mercado_libre_webhook
 from erp_core.channels.ecommerce.ozon import verify_ozon_webhook
@@ -1644,9 +1644,16 @@ class EbayImAdapter(_BaseMarketplaceImAdapter):
         thread = _thread(request)
         if thread:
             payload["referenceId"] = thread
+        raw_sandbox = credentials.get("sandbox")
+        use_sandbox = (
+            raw_sandbox.strip().lower() in {"1", "true", "yes", "on"}
+            if isinstance(raw_sandbox, str)
+            else bool(raw_sandbox)
+        )
+        default_base_url = EBAY_SANDBOX_BASE_URL if use_sandbox else self.api_base
         return _SendCall(
             method="POST",
-            url=_base_url(credentials, self.api_base) + self.api_path,
+            url=_base_url(credentials, default_base_url) + self.api_path,
             headers={
                 "content-type": "application/json",
                 "authorization": f"Bearer {access_token}",

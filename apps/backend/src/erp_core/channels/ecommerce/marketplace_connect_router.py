@@ -152,6 +152,7 @@ class EbayConnectRequest(BaseModel):
     app_id: str = Field(min_length=1, max_length=256)
     cert_id: str = Field(min_length=8, max_length=512)
     refresh_token: str = Field(min_length=8, max_length=4096)
+    sandbox: bool = False
 
 
 class ShopeeConnectRequest(BaseModel):
@@ -556,7 +557,7 @@ async def connect_ebay(
     principal: AdminPrincipal,
 ) -> MarketplaceConnectionRead:
     seller_username = payload.seller_username.strip()
-    site_id = payload.site_id.strip().upper()
+    site_id = payload.site_id.strip().upper().replace("-", "_")
     async with tenant_session(_session_factory(request), principal.tenant_id) as session:
         return await provision_marketplace_account(
             session,
@@ -570,8 +571,13 @@ async def connect_ebay(
                 "app_id": payload.app_id,
                 "cert_id": payload.cert_id,
                 "refresh_token": payload.refresh_token,
+                "sandbox": payload.sandbox,
             },
-            config={"seller_username": seller_username, "site_id": site_id},
+            config={
+                "seller_username": seller_username,
+                "site_id": site_id,
+                "sandbox": payload.sandbox,
+            },
             actor_id=str(principal.user_id),
         )
 

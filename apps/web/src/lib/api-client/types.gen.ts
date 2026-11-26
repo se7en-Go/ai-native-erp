@@ -889,6 +889,7 @@ export type EbayConnectRequest = {
     cert_id: string;
     display_name: string;
     refresh_token: string;
+    sandbox?: boolean;
     seller_username: string;
     site_id?: string;
 };
