@@ -9,10 +9,12 @@ import hmac
 import html
 import ipaddress
 import os
+import re
 import socket
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
@@ -230,6 +232,8 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         http_client: httpx.AsyncClient | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         webhook_secret: str = "",
+        wp_username: str = "",
+        wp_app_password: str = "",
     ) -> None:
         self._allow_local = allow_local_store_hosts()
         # A real deployment gets a DNS re-check before every outbound request; a mock
@@ -240,8 +244,48 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         self.consumer_secret = consumer_secret
         self.meta_field_map = dict(meta_field_map or {})
         self.webhook_secret = webhook_secret
+        self.wp_username = wp_username.strip()
+        self.wp_app_password = wp_app_password.strip()
         self._http_client = http_client
         self._transport = transport
+
+    async def _upload_wp_media(self, blob: Mapping[str, Any]) -> dict[str, Any] | None:
+        """Upload one raw image blob to WordPress REST v2 media when WP App Password is set."""
+        if not (self.wp_username and self.wp_app_password):
+            return None
+        raw_bytes = blob.get("data")
+        if not isinstance(raw_bytes, (bytes, bytearray)) or not raw_bytes:
+            return None
+        if self._resolve_dns:
+            await validate_store_url(self.store_url, allow_local=self._allow_local)
+        raw_name = Path(str(blob.get("filename") or "product-image.png")).name
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name).strip("._") or "product-image.png"
+        mime = str(blob.get("mime_type") or "image/png").split(";", 1)[0].strip() or "image/png"
+        url = f"{self.store_url}/wp-json/wp/v2/media"
+        headers = {
+            "Content-Type": mime,
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+        }
+        auth = (self.wp_username, self.wp_app_password)
+        if self._http_client is not None:
+            response = await self._http_client.request(
+                "POST", url, content=bytes(raw_bytes), headers=headers, auth=auth
+            )
+        else:
+            async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+                response = await client.request(
+                    "POST", url, content=bytes(raw_bytes), headers=headers, auth=auth
+                )
+        response.raise_for_status()
+        payload = response.json() if response.content else {}
+        media_id = (payload if isinstance(payload, Mapping) else {}).get("id")
+        if media_id is None:
+            return None
+        entry: dict[str, Any] = {"id": int(media_id)}
+        alt = str(blob.get("alt_text") or "").strip()
+        if alt:
+            entry["alt"] = alt
+        return entry
 
     async def _request(
         self,
@@ -555,7 +599,7 @@ class WooCommerceAdapter(CommercePlatformAdapter):
         image_blobs: Sequence[Mapping[str, Any]] | None = None,
     ) -> WooListingReceipt:
         """Create one ``simple`` or ``variable`` product (plus batch variations) via REST v3."""
-        del category, hs_code, moq_tiers, image_blobs
+        del category, hs_code, moq_tiers
         clean_sku = sku.strip()
         clean_title = title.strip()
         if not clean_sku or not clean_title:
@@ -579,11 +623,19 @@ class WooCommerceAdapter(CommercePlatformAdapter):
             if items:
                 desc_parts.append(f"<ul>{items}</ul>")
         html_desc = "".join(desc_parts) or f"<p>{html.escape(clean_title)}</p>"
-        image_list = [
+        uploaded_media: list[dict[str, Any]] = []
+        for blob in list(image_blobs or ())[:10]:
+            if isinstance(blob, Mapping):
+                uploaded = await self._upload_wp_media(blob)
+                if uploaded is not None:
+                    uploaded_media.append(uploaded)
+        allowed_schemes = ("https://", "http://") if self._allow_local else ("https://",)
+        url_images = [
             {"src": url.strip()}
             for url in (images or ())
-            if url and url.strip().startswith("https://")
+            if url and url.strip().startswith(allowed_schemes)
         ]
+        image_list = (uploaded_media + url_images)[:10]
 
         variant_list = list(variants or ())
         if not variant_list:
