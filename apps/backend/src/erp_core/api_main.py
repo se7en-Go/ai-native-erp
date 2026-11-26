@@ -11,6 +11,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 # Composition root: import every domain model module so SQLAlchemy resolves the
 # cross-module string foreign keys when it configures the mappers.
+import erp_core.ai_engine.mcp_models  # noqa: F401
 import erp_core.ai_engine.models  # noqa: F401
 import erp_core.ai_engine.notification_models  # noqa: F401
 import erp_core.billing.models  # noqa: F401
@@ -28,6 +29,8 @@ import erp_core.supply_chain.models  # noqa: F401
 import erp_core.tenancy.models  # noqa: F401
 from erp_core.ai_engine.auto_reply_router import router as ai_auto_reply_router
 from erp_core.ai_engine.kb_router import router as kb_router
+from erp_core.ai_engine.mcp_router import public_router as mcp_public_router
+from erp_core.ai_engine.mcp_router import router as ai_mcp_router
 from erp_core.ai_engine.notification_router import router as ai_notification_router
 from erp_core.ai_engine.router import router as ai_router
 from erp_core.ai_engine.router_llm import TieredModelRouter
@@ -239,6 +242,8 @@ def create_app() -> FastAPI:
     app.include_router(social_router, prefix="/api/v1")
     app.include_router(social_attribution_router)
     app.include_router(ai_router)
+    app.include_router(ai_mcp_router)
+    app.include_router(mcp_public_router)
     app.include_router(ai_auto_reply_router)
     app.include_router(workforce_router)
     app.include_router(ai_notification_router)

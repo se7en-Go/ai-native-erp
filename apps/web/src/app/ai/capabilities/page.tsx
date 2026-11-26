@@ -13,6 +13,7 @@ import {
   Upload,
   Wallet,
 } from "lucide-react";
+import { McpServerPanel } from "@/components/ai/mcp-server-panel";
 import { AppShell } from "@/components/app-shell";
 import { useAuthSession } from "@/components/providers";
 import { Badge, Card, CardHeader, EmptyState, Page, PageHeader } from "@/components/ui/page";
@@ -334,6 +335,8 @@ export default function AiCapabilitiesPage() {
             );
           })}
         </div>
+
+        <McpServerPanel />
 
         <Card>
           <CardHeader

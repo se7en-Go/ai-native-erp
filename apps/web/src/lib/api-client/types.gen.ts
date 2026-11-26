@@ -1532,6 +1532,58 @@ export type MarketplaceOrderSyncResult = {
     updated: number;
 };
 
+export type McpBlockedTool = {
+    description: string;
+    name: string;
+    reason: string;
+};
+
+export type McpExposedTool = {
+    autonomy_level: string;
+    description: string;
+    input_schema: {
+        [key: string]: unknown;
+    };
+    name: string;
+    required_scope: string;
+};
+
+export type McpTokenCreateRequest = {
+    allowed_tools?: Array<string> | null;
+    expires_in_days?: number | null;
+    name: string;
+    scopes?: Array<string>;
+};
+
+export type McpTokenCreateResponse = {
+    plain_token: string;
+    token: McpTokenRead;
+};
+
+export type McpTokenRead = {
+    allowed_tools?: Array<string> | null;
+    created_at: string;
+    expires_at?: string | null;
+    id: string;
+    last_used_at?: string | null;
+    name: string;
+    revoked_at?: string | null;
+    scopes: Array<string>;
+    token_prefix: string;
+};
+
+export type McpToolCatalogResponse = {
+    blocked_tools: Array<McpBlockedTool>;
+    config_snippet: {
+        [key: string]: unknown;
+    };
+    protocol_version: string;
+    server: {
+        [key: string]: string;
+    };
+    tools: Array<McpExposedTool>;
+};
+
 export type MediaAssetRead = {
     alt_text?: string;
     byte_size: number;
@@ -4662,6 +4714,120 @@ export type SearchKbHybridApiV1AiKbSearchPostResponses = {
 };
 
 export type SearchKbHybridApiV1AiKbSearchPostResponse = SearchKbHybridApiV1AiKbSearchPostResponses[keyof SearchKbHybridApiV1AiKbSearchPostResponses];
+
+export type ListMcpTokensApiV1AiMcpTokensGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/mcp/tokens';
+};
+
+export type ListMcpTokensApiV1AiMcpTokensGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMcpTokensApiV1AiMcpTokensGetError = ListMcpTokensApiV1AiMcpTokensGetErrors[keyof ListMcpTokensApiV1AiMcpTokensGetErrors];
+
+export type ListMcpTokensApiV1AiMcpTokensGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Array<McpTokenRead>;
+};
+
+export type ListMcpTokensApiV1AiMcpTokensGetResponse = ListMcpTokensApiV1AiMcpTokensGetResponses[keyof ListMcpTokensApiV1AiMcpTokensGetResponses];
+
+export type CreateMcpTokenApiV1AiMcpTokensPostData = {
+    body: McpTokenCreateRequest;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/mcp/tokens';
+};
+
+export type CreateMcpTokenApiV1AiMcpTokensPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateMcpTokenApiV1AiMcpTokensPostError = CreateMcpTokenApiV1AiMcpTokensPostErrors[keyof CreateMcpTokenApiV1AiMcpTokensPostErrors];
+
+export type CreateMcpTokenApiV1AiMcpTokensPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: McpTokenCreateResponse;
+};
+
+export type CreateMcpTokenApiV1AiMcpTokensPostResponse = CreateMcpTokenApiV1AiMcpTokensPostResponses[keyof CreateMcpTokenApiV1AiMcpTokensPostResponses];
+
+export type RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path: {
+        token_id: string;
+    };
+    query?: never;
+    url: '/api/v1/ai/mcp/tokens/{token_id}';
+};
+
+export type RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteError = RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteErrors[keyof RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteErrors];
+
+export type RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: McpTokenRead;
+};
+
+export type RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteResponse = RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteResponses[keyof RevokeMcpTokenApiV1AiMcpTokensTokenIdDeleteResponses];
+
+export type GetMcpToolCatalogApiV1AiMcpToolsGetData = {
+    body?: never;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/ai/mcp/tools';
+};
+
+export type GetMcpToolCatalogApiV1AiMcpToolsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetMcpToolCatalogApiV1AiMcpToolsGetError = GetMcpToolCatalogApiV1AiMcpToolsGetErrors[keyof GetMcpToolCatalogApiV1AiMcpToolsGetErrors];
+
+export type GetMcpToolCatalogApiV1AiMcpToolsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: McpToolCatalogResponse;
+};
+
+export type GetMcpToolCatalogApiV1AiMcpToolsGetResponse = GetMcpToolCatalogApiV1AiMcpToolsGetResponses[keyof GetMcpToolCatalogApiV1AiMcpToolsGetResponses];
 
 export type ListNotificationChannelsApiV1AiNotificationsChannelsGetData = {
     body?: never;
@@ -9766,6 +9932,34 @@ export type StreamInboxEventsApiV1InboxStreamGetErrors = {
 export type StreamInboxEventsApiV1InboxStreamGetError = StreamInboxEventsApiV1InboxStreamGetErrors[keyof StreamInboxEventsApiV1InboxStreamGetErrors];
 
 export type StreamInboxEventsApiV1InboxStreamGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type McpProbeApiV1McpGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mcp';
+};
+
+export type McpProbeApiV1McpGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type McpEndpointApiV1McpPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mcp';
+};
+
+export type McpEndpointApiV1McpPostResponses = {
     /**
      * Successful Response
      */
