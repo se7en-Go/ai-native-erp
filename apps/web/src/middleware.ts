@@ -16,7 +16,13 @@ import { ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME } from "@/lib/auth-cookie";
 
 const PUBLIC_PATHS = new Set(["/login", "/favicon.ico"]);
 
-const PUBLIC_PREFIXES = ["/api/", "/_next/"];
+const PUBLIC_PREFIXES = [
+  "/api/",
+  "/_next/",
+  // B2B buyer self-service portal: the opaque magic-link token in the path is the
+  // only credential, so these pages must render for buyers who hold no session.
+  "/portal/",
+];
 
 const STATIC_FILE_EXTENSIONS = [
   ".png",
