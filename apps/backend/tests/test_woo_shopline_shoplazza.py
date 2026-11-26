@@ -601,3 +601,53 @@ async def test_woocommerce_real_world_fallback_modified_after_local_scheme_and_p
         )
         assert bad_json.status_code == 401
 
+
+async def test_woocommerce_publish_listing_uploads_image_blobs_to_wp_media() -> None:
+    calls: list[tuple[str, str, dict[str, str], dict[str, object] | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if request.method == "POST" and request.url.path == "/wp-json/wp/v2/media":
+            calls.append((request.method, request.url.path, headers, None))
+            assert headers["authorization"] == (
+                "Basic " + base64.b64encode(b"woo_admin:app-pass").decode()
+            )
+            assert 'filename="led_high_bay.png"' in headers["content-disposition"]
+            assert headers["content-type"] == "image/png"
+            assert request.content == b"\x89PNG\r\n\x1a\nfake-png"
+            return httpx.Response(201, json={"id": 901, "source_url": "https://woo.example.com/led.png"})
+        if request.method == "POST" and request.url.path == "/wp-json/wc/v3/products":
+            body = json.loads(request.content)
+            calls.append((request.method, request.url.path, headers, body))
+            assert body["images"] == [{"id": 901, "alt": "100W LED"}]
+            return httpx.Response(201, json={"id": 501, "status": "publish", **body})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        woo = WooCommerceAdapter(
+            "https://woo.example.com",
+            "ck_test",
+            "cs_test",
+            wp_username="woo_admin",
+            wp_app_password="app-pass",
+            http_client=client,
+        )
+        receipt = await woo.publish_listing(
+            sku="WOO-IMG-100W",
+            title="100W Industrial LED High Bay",
+            description="Die-cast aluminum UFO fixture.",
+            bullet_points=["IP65"],
+            price_usd=Decimal("16.90"),
+            quantity=10,
+            image_blobs=[
+                {
+                    "filename": "../led high bay.png",
+                    "mime_type": "image/png",
+                    "data": b"\x89PNG\r\n\x1a\nfake-png",
+                    "alt_text": "100W LED",
+                }
+            ],
+        )
+    assert receipt.external_product_id == "501"
+    assert [c[1] for c in calls] == ["/wp-json/wp/v2/media", "/wp-json/wc/v3/products"]
+

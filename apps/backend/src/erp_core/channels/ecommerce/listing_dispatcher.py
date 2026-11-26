@@ -289,6 +289,8 @@ def build_marketplace_adapter(
             consumer_key=_text(credentials, "consumer_key"),
             consumer_secret=_text(credentials, "consumer_secret"),
             webhook_secret=_text(credentials, "webhook_secret"),
+            wp_username=_text(credentials, "wp_username"),
+            wp_app_password=_text(credentials, "wp_app_password"),
             transport=transport,
         )
     if normalized == SHOPLINE_CHANNEL_TYPE:
