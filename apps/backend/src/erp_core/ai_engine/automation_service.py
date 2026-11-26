@@ -1,6 +1,6 @@
 """Event-driven automation rules over live ERP rows.
 
-Five deterministic templates, each backed by real tenant-scoped SQL:
+Seven deterministic templates, each backed by real tenant-scoped SQL:
 
 * `low_doc_replenishment` - SKUs under safety stock or under the Days-Of-Cover floor,
   from `inventory_balances` + `product_variants` + 30-day `order_items` velocity.
@@ -11,6 +11,12 @@ Five deterministic templates, each backed by real tenant-scoped SQL:
 * `cold_b2b_quote_followup` - `sent` quotes older than the configured hours that were
   never converted into an order.
 * `daily_patrol_brief` - the real `WorkforceService` patrol summary, queued as a P2 brief.
+* `negative_review_ticket` - recent inbound customer messages that read like a 1-star
+  review / complaint / defect report, turned into one L1 service-ticket proposal per
+  message (`category="service_ticket"`).
+* `high_adoption_faq_extract` - approved (or edited-and-approved) high-confidence AI
+  reply drafts that were never promoted into the knowledge base, turned into one
+  structured FAQ Q&A extraction proposal per source proposal.
 
 Every number is `decimal.Decimal` (`ROUND_HALF_UP`) or an integer count read from the
 database. A `dry_run` executes the same SQL and returns the same matched counts while
@@ -50,6 +56,27 @@ _VELOCITY_QUANTUM = Decimal("0.0001")
 _DAYS_IN_VELOCITY_WINDOW = Decimal("30")
 _DEFAULT_SAFETY_STOCK = 50
 _RULE_PAYLOAD_KEY = "rule"
+#: Hard cap on rows scanned per review/FAQ pass, so one evaluation stays bounded.
+_REVIEW_SCAN_LIMIT = 200
+
+#: Default complaint vocabulary for `negative_review_ticket`. Operators may extend or
+#: narrow it per tenant through `automation_rules.config_json.keywords`.
+DEFAULT_NEGATIVE_REVIEW_KEYWORDS: tuple[str, ...] = (
+    "1 star",
+    "one star",
+    "broken",
+    "defective",
+    "refund",
+    "差评",
+    "破损",
+    "投诉",
+    "bad quality",
+)
+
+#: A hit on any of these escalates the digest notification to P0.
+_SEVERE_REVIEW_KEYWORDS: frozenset[str] = frozenset(
+    {"1 star", "one star", "差评", "投诉", "defective"}
+)
 
 #: Default thresholds, one JSONB config per template (`Decimal` values stay strings).
 DEFAULT_RULE_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -88,7 +115,24 @@ DEFAULT_RULE_TEMPLATES: dict[str, dict[str, Any]] = {
         "autonomy_level": "L0_copilot",
         "config": {"brief_hour_utc": 1},
     },
+    "negative_review_ticket": {
+        "name": "差评 / 投诉工单",
+        "name_en": "Negative review service ticket",
+        "priority": "P1",
+        "autonomy_level": "L1_proposal",
+        "config": {"lookback_hours": 72, "keywords": list(DEFAULT_NEGATIVE_REVIEW_KEYWORDS)},
+    },
+    "high_adoption_faq_extract": {
+        "name": "高采纳回复转 FAQ",
+        "name_en": "High-adoption reply to FAQ extraction",
+        "priority": "P2",
+        "autonomy_level": "L1_proposal",
+        "config": {"min_confidence": "0.900", "lookback_days": 30},
+    },
 }
+
+#: `kb_documents.source_uri` namespace used to mark an already-promoted AI reply.
+FAQ_PROMOTION_URI_PREFIX = "proposal:"
 
 # One availability row per variant: aggregate balance, per-SKU safety stock, 30-day units sold.
 _LOW_DOC_SQL = """
@@ -180,6 +224,66 @@ SELECT q.id AS quote_id,
  ORDER BY q.created_at, q.quote_no
 """
 
+#: Recent inbound customer messages, newest first. Keyword matching happens in Python so
+#: the operator-editable vocabulary never becomes an interpolated SQL regex.
+_NEGATIVE_REVIEW_MESSAGES_SQL = """
+SELECT m.id,
+       m.conversation_id,
+       m.customer_id,
+       m.channel_type,
+       m.body_text,
+       m.source_timestamp,
+       c.display_name,
+       c.primary_email
+  FROM messages m
+  LEFT JOIN customers c
+    ON c.id = m.customer_id AND c.tenant_id = m.tenant_id
+ WHERE m.tenant_id = :tid
+   AND m.direction = 'inbound'
+   AND m.sender_type = 'customer'
+   AND m.body_text IS NOT NULL
+   AND m.source_timestamp >= now() - make_interval(hours => :lookback_hours)
+ ORDER BY m.source_timestamp DESC, m.id DESC
+ LIMIT :row_limit
+"""
+
+#: Approved high-confidence reply drafts that were never promoted into `kb_documents`.
+#: The promotion marker lives in `kb_documents.source_uri` (`proposal:<id>`), a logical
+#: link rather than a hard FK to a table owned by revision `0004`.
+_HIGH_ADOPTION_REPLIES_SQL = """
+SELECT p.id,
+       p.conversation_id,
+       p.status,
+       p.confidence_score,
+       p.proposed_payload,
+       p.edited_payload,
+       p.reviewed_at,
+       (
+           SELECT m.body_text
+             FROM messages m
+            WHERE m.tenant_id = p.tenant_id
+              AND m.conversation_id = p.conversation_id
+              AND m.direction = 'inbound'
+              AND m.body_text IS NOT NULL
+            ORDER BY m.source_timestamp DESC, m.id DESC
+            LIMIT 1
+       ) AS question
+  FROM ai_proposals p
+ WHERE p.tenant_id = :tid
+   AND p.proposal_type = 'reply_draft'
+   AND p.status IN ('approved', 'edited_and_approved')
+   AND p.confidence_score >= :min_confidence
+   AND COALESCE(p.reviewed_at, p.created_at) >= now() - make_interval(days => :lookback_days)
+   AND NOT EXISTS (
+       SELECT 1
+         FROM kb_documents d
+        WHERE d.tenant_id = p.tenant_id
+          AND d.source_uri = :promotion_prefix || p.id::text
+   )
+ ORDER BY p.confidence_score DESC, p.id
+ LIMIT :row_limit
+"""
+
 _PENDING_PROPOSAL_TARGETS_SQL = """
 SELECT target_entity_id
   FROM ai_proposals
@@ -246,6 +350,18 @@ def _config_decimal(config: dict[str, Any], key: str, default: Decimal) -> Decim
 
 def _decimal_text(value: Decimal) -> str:
     return str(value.quantize(_CENT, rounding=ROUND_HALF_UP))
+
+
+def _match_review_keywords(body_text: str, keywords: tuple[str, ...]) -> list[str]:
+    """Return the configured keywords actually present in an inbound message body."""
+    lowered = body_text.lower()
+    return [keyword for keyword in keywords if keyword in lowered]
+
+
+def _review_excerpt(body_text: str, limit: int = 280) -> str:
+    """One-line excerpt safe for a proposal payload / notification body."""
+    collapsed = " ".join(body_text.split())
+    return collapsed if len(collapsed) <= limit else collapsed[: limit - 1] + "…"
 
 
 @dataclass(frozen=True, slots=True)
@@ -438,7 +554,10 @@ class AutomationService:
             _config_int(merged, "stalled_hours", 72)
             _config_int(merged, "cold_hours", 72)
             _config_int(merged, "brief_hour_utc", 1)
+            _config_int(merged, "lookback_hours", 72)
+            _config_int(merged, "lookback_days", 30)
             _config_decimal(merged, "min_margin_pct", Decimal("0.00"))
+            _config_decimal(merged, "min_confidence", Decimal("0.900"))
             rule.config_json = merged
         rule.updated_at = datetime.now(UTC)
         await session.flush()
@@ -534,6 +653,8 @@ class AutomationService:
             "stalled_shipment_soothe": self._evaluate_stalled_shipments,
             "cold_b2b_quote_followup": self._evaluate_cold_quotes,
             "daily_patrol_brief": self._evaluate_patrol_brief,
+            "negative_review_ticket": self._evaluate_negative_reviews,
+            "high_adoption_faq_extract": self._evaluate_high_adoption_faqs,
         }.get(spec.template_code)
         if handler is None:  # pragma: no cover - the DB CHECK constraint pins the vocabulary
             raise _error(
@@ -941,8 +1062,248 @@ class AutomationService:
         )
         return outcome
 
-    # -- writes -------------------------------------------------------------
+    async def _evaluate_negative_reviews(
+        self, session: AsyncSession, tenant_id: UUID, spec: RuleSpec
+    ) -> RuleOutcome:
+        """Turn 1-star / complaint / defect inbound messages into L1 service tickets."""
+        lookback_hours = _config_int(spec.config_json, "lookback_hours", 72)
+        keywords = self._review_keywords(spec.config_json)
+        rows = (
+            await session.execute(
+                text(_NEGATIVE_REVIEW_MESSAGES_SQL),
+                {
+                    "tid": tenant_id,
+                    "lookback_hours": lookback_hours,
+                    "row_limit": _REVIEW_SCAN_LIMIT,
+                },
+            )
+        ).all()
+        pending = await self._pending_targets(session, tenant_id, spec.template_code)
+        outcome = RuleOutcome(spec=spec, matched_count=0)
+        severe_hit = False
+        for row in rows:
+            message_id = row[0]
+            conversation_id = row[1]
+            customer_id = row[2]
+            channel_type = str(row[3])
+            body_text = str(row[4])
+            source_timestamp = row[5]
+            customer_name = str(row[6]) if row[6] else None
+            customer_email = str(row[7]) if row[7] else None
+            matched = _match_review_keywords(body_text, keywords)
+            if not matched:
+                continue
+            outcome.matched_count += 1
+            severity = (
+                "P0" if _SEVERE_REVIEW_KEYWORDS.intersection(matched) else "P1"
+            )
+            severe_hit = severe_hit or severity == "P0"
+            if len(outcome.items_preview) < 5:
+                outcome.items_preview.append(
+                    {
+                        "message_id": str(message_id),
+                        "conversation_id": str(conversation_id),
+                        "channel_type": channel_type,
+                        "customer_name": customer_name,
+                        "matched_keywords": matched,
+                        "severity": severity,
+                        "excerpt": _review_excerpt(body_text),
+                        "received_at": source_timestamp.isoformat(),
+                    }
+                )
+            if message_id in pending:
+                continue
+            excerpt = _review_excerpt(body_text)
+            idempotency_key = f"{tenant_id}:{spec.template_code}:{message_id}"
+            outcome.proposals.append(
+                ProposalDraft(
+                    capability="cs_support",
+                    # The only service-shaped token allowed by the `ai_proposals` CHECK
+                    # constraint is `follow_up_suggestion`; the service-ticket semantics
+                    # travel in `proposed_payload.category`.
+                    proposal_type="follow_up_suggestion",
+                    target_entity_type="message",
+                    target_entity_id=message_id,
+                    proposed_payload={
+                        "rule": spec.template_code,
+                        "category": "service_ticket",
+                        "idempotency_key": idempotency_key,
+                        "message_id": str(message_id),
+                        "conversation_id": str(conversation_id),
+                        "customer_id": str(customer_id) if customer_id else None,
+                        "customer_name": customer_name,
+                        "customer_email": customer_email,
+                        "channel_type": channel_type,
+                        "matched_keywords": matched,
+                        "severity": severity,
+                        "excerpt": excerpt,
+                        "received_at": source_timestamp.isoformat(),
+                        "recommended_action": "open_service_ticket_and_reply",
+                        "summary_zh": f"客户 {customer_name or '客户'} 在 {channel_type} "
+                        f"收到负面反馈（命中：{'、'.join(matched)}），建议立即开工单并安抚回复。",
+                        "summary_en": f"Negative feedback from {customer_name or 'the buyer'} "
+                        f"on {channel_type} (matched: {', '.join(matched)}); open a service "
+                        "ticket and reply with a remedy.",
+                        "grounding": {
+                            "source": "sql",
+                            "tables": ["messages", "customers"],
+                        },
+                    },
+                    citations=(
+                        {
+                            "kind": "sql_row",
+                            "table": "messages",
+                            "message_id": str(message_id),
+                        },
+                    ),
+                    confidence_score=Decimal("0.840"),
+                )
+            )
+        if outcome.matched_count:
+            sample = "、".join(
+                f"{item['customer_name'] or item['channel_type']}({item['severity']})"
+                for item in outcome.items_preview
+            )
+            outcome.notifications.append(
+                NotificationDraft(
+                    event_type="automation.negative_review_ticket",
+                    title=f"差评/投诉：{outcome.matched_count} 条负面反馈待处理 / "
+                    f"{outcome.matched_count} negative review(s)",
+                    body=(
+                        f"近 {lookback_hours} 小时命中负面关键词的客户消息：{sample}。"
+                        f"\nInbound messages from the last {lookback_hours}h that read like "
+                        f"a complaint: {sample}."
+                    ),
+                    priority="P0" if severe_hit else spec.priority,
+                    deep_link="/inbox",
+                )
+            )
+        return outcome
 
+    @staticmethod
+    def _review_keywords(config: dict[str, Any]) -> tuple[str, ...]:
+        raw = config.get("keywords")
+        if not isinstance(raw, list) or not raw:
+            return DEFAULT_NEGATIVE_REVIEW_KEYWORDS
+        cleaned = tuple(
+            str(item).strip().lower()
+            for item in raw
+            if isinstance(item, str) and str(item).strip()
+        )
+        return cleaned or DEFAULT_NEGATIVE_REVIEW_KEYWORDS
+
+    async def _evaluate_high_adoption_faqs(
+        self, session: AsyncSession, tenant_id: UUID, spec: RuleSpec
+    ) -> RuleOutcome:
+        """Turn approved high-confidence replies into structured FAQ extraction proposals."""
+        # Confidence is a 3-decimal NUMERIC(4, 3); quantize here so the SQL comparison
+        # and the notification copy agree with the seeded `0.900` default.
+        min_confidence = _config_decimal(
+            spec.config_json, "min_confidence", Decimal("0.900")
+        ).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+        lookback_days = _config_int(spec.config_json, "lookback_days", 30)
+        rows = (
+            await session.execute(
+                text(_HIGH_ADOPTION_REPLIES_SQL),
+                {
+                    "tid": tenant_id,
+                    "min_confidence": min_confidence,
+                    "lookback_days": lookback_days,
+                    "promotion_prefix": FAQ_PROMOTION_URI_PREFIX,
+                    "row_limit": _REVIEW_SCAN_LIMIT,
+                },
+            )
+        ).all()
+        pending = await self._pending_targets(session, tenant_id, spec.template_code)
+        outcome = RuleOutcome(spec=spec, matched_count=0)
+        for row in rows:
+            proposal_id = row[0]
+            conversation_id = row[1]
+            status = str(row[2])
+            confidence = Decimal(str(row[3]))
+            proposed_payload = row[4] if isinstance(row[4], dict) else {}
+            edited_payload = row[5] if isinstance(row[5], dict) else None
+            question = str(row[7]).strip() if row[7] else ""
+            answer_payload = edited_payload or proposed_payload
+            answer = str(answer_payload.get("body_text") or "").strip()
+            if not question or not answer:
+                # Nothing to extract without both halves of the Q&A pair.
+                continue
+            outcome.matched_count += 1
+            if len(outcome.items_preview) < 5:
+                outcome.items_preview.append(
+                    {
+                        "proposal_id": str(proposal_id),
+                        "conversation_id": str(conversation_id),
+                        "status": status,
+                        "confidence_score": format(confidence, "f"),
+                        "question": _review_excerpt(question),
+                        "answer": _review_excerpt(answer),
+                    }
+                )
+            if proposal_id in pending:
+                continue
+            idempotency_key = f"{tenant_id}:{spec.template_code}:{proposal_id}"
+            outcome.proposals.append(
+                ProposalDraft(
+                    capability="cs_support",
+                    proposal_type="crm_entity_extract",
+                    target_entity_type="ai_proposal",
+                    target_entity_id=proposal_id,
+                    proposed_payload={
+                        "rule": spec.template_code,
+                        "category": "faq_extract",
+                        "idempotency_key": idempotency_key,
+                        "source_proposal_id": str(proposal_id),
+                        "source_proposal_status": status,
+                        "conversation_id": str(conversation_id),
+                        "confidence_score": format(confidence, "f"),
+                        "question": question,
+                        "answer": answer,
+                        "promotion_marker": f"{FAQ_PROMOTION_URI_PREFIX}{proposal_id}",
+                        "recommended_action": "promote_to_kb_faq",
+                        "summary_zh": f"将已采纳的 AI 回复（置信度 "
+                        f"{format(confidence, 'f')}）转为知识库 FAQ：{_review_excerpt(question)}",
+                        "summary_en": f"Promote the approved AI reply (confidence "
+                        f"{format(confidence, 'f')}) into a knowledge-base FAQ: "
+                        f"{_review_excerpt(question)}",
+                        "grounding": {
+                            "source": "sql",
+                            "tables": ["ai_proposals", "messages", "kb_documents"],
+                        },
+                    },
+                    citations=(
+                        {
+                            "kind": "sql_row",
+                            "table": "ai_proposals",
+                            "proposal_id": str(proposal_id),
+                        },
+                    ),
+                    confidence_score=confidence.quantize(
+                        Decimal("0.001"), rounding=ROUND_HALF_UP
+                    ),
+                )
+            )
+        if outcome.matched_count:
+            outcome.notifications.append(
+                NotificationDraft(
+                    event_type="automation.high_adoption_faq_extract",
+                    title=f"知识库沉淀：{outcome.matched_count} 条已采纳回复可转 FAQ / "
+                    f"{outcome.matched_count} reply(ies) ready as FAQ",
+                    body=(
+                        f"置信度 ≥ {format(min_confidence, 'f')} 且尚未入库的已采纳回复："
+                        f"{outcome.matched_count} 条，建议确认后写入知识库。"
+                        f"\nApproved replies at or above confidence "
+                        f"{format(min_confidence, 'f')} that are not in the KB yet: "
+                        f"{outcome.matched_count}."
+                    ),
+                    priority=spec.priority,
+                    deep_link="/ai/employees",
+                )
+            )
+        return outcome
+
+    # -- writes -------------------------------------------------------------
     async def _apply(
         self,
         session: AsyncSession,

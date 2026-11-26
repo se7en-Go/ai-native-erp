@@ -32,6 +32,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from erp_core.catalog.service import CatalogService
 from erp_core.crm.models import Quote, QuoteItem
 from erp_core.crm.quote_service import QuoteService
 from erp_core.shared.db import system_session, tenant_session
@@ -278,6 +279,25 @@ class PortalReceiptResponse(BaseModel):
     status: Literal["pending_verification"] = "pending_verification"
 
 
+class PortalReorderRequest(BaseModel):
+    """One-click reorder: re-price the same SKUs into a fresh draft quotation."""
+
+    notes: str | None = Field(default=None, max_length=500)
+    #: Optional quantity override, keyed by `quote_items.variant_id` (UUID string) or SKU.
+    requested_quantities: dict[str, int] | None = None
+
+
+class PortalReorderResponse(BaseModel):
+    """Buyer-facing reorder receipt. Cost and margin are never part of this payload."""
+
+    new_quote_id: UUID
+    new_quote_no: str
+    total_amount: Decimal
+    currency: str
+    status: QuoteStatus
+    created_at: datetime
+
+
 # ---------------------------------------------------------------------------
 # Ports
 # ---------------------------------------------------------------------------
@@ -287,6 +307,56 @@ class ReceiptStoragePort(Protocol):
     async def upload_bytes(
         self, key: str, data: bytes, content_type: str = "application/octet-stream"
     ) -> str: ...
+
+
+class PortalFxPort(Protocol):
+    """Live FX lookup used when the source quote's locked rate has already expired.
+
+    Returns the number of `base_currency` units one `quote_currency` unit buys, or
+    `None` when this deployment cannot price that pair.
+    """
+
+    async def resolve_rate(
+        self, *, base_currency: str, quote_currency: str
+    ) -> Decimal | None: ...
+
+
+class _RuntimePortalFxAdapter:
+    """Bridges the finance live-FX service without a module-level finance import."""
+
+    async def resolve_rate(
+        self, *, base_currency: str, quote_currency: str
+    ) -> Decimal | None:
+        from erp_core.finance.fx_service import LiveFxRateService
+
+        base = base_currency.strip().upper()
+        quote = quote_currency.strip().upper()
+        if base == quote:
+            return Decimal("1.000000")
+        rates = await LiveFxRateService().get_live_rates(redis=None, base="USD")
+        # `usd_cny` is CNY per USD; every cross pair below is expressed as CNY per unit
+        # so a base/quote rate is simply their quotient.
+        cny_per_unit: dict[str, Decimal] = {
+            "USD": Decimal(str(rates.usd_cny)),
+            "CNY": Decimal("1"),
+        }
+        for item in rates.rates:
+            if item.quote.strip().upper() == "CNY" and item.rate > Decimal("0"):
+                cny_per_unit[item.base.strip().upper()] = Decimal(str(item.rate))
+            elif (
+                item.base.strip().upper() == "USD"
+                and item.rate > Decimal("0")
+                and item.quote.strip().upper() not in cny_per_unit
+            ):
+                units_per_usd = Decimal(str(item.rate))
+                cny_per_unit[item.quote.strip().upper()] = (
+                    Decimal(str(rates.usd_cny)) / units_per_usd
+                ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+        base_cny = cny_per_unit.get(base)
+        quote_cny = cny_per_unit.get(quote)
+        if base_cny is None or quote_cny is None or quote_cny <= Decimal("0"):
+            return None
+        return (base_cny / quote_cny).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
 
 class PortalPaymentPort(Protocol):
@@ -463,9 +533,11 @@ class PortalService:
         self,
         quote_service: QuoteService | None = None,
         payment_port: PortalPaymentPort | None = None,
+        fx_port: PortalFxPort | None = None,
     ) -> None:
         self._quotes = quote_service or QuoteService()
         self._payments: PortalPaymentPort = payment_port or _RuntimePortalPaymentAdapter()
+        self._fx: PortalFxPort = fx_port or _RuntimePortalFxAdapter()
 
     # -- operator ----------------------------------------------------------
 
@@ -1162,6 +1234,245 @@ class PortalService:
             payment_currency=payment_currency,
             base_currency=base,
             actual_fx_rate=actual_fx_rate,
+        )
+
+    # -- buyer: one-click reorder -------------------------------------------
+
+    async def reorder_from_portal(
+        self,
+        session: AsyncSession,
+        resolved: ResolvedPortalToken,
+        *,
+        notes: str | None,
+        requested_quantities: dict[str, int] | None,
+        ip_address: str | None,
+    ) -> PortalReorderResponse:
+        """Re-price the source quote's SKUs into a brand new **draft** quotation.
+
+        Only the opaque magic-link token authenticates this call, so the response is a
+        buyer-facing projection: no `unit_cost_base_snapshot`, no margin, no internal
+        note ever leaves the server. Unit prices are recomputed live from
+        `product_variants` (`retail_price_usd` + `b2b_moq_tiers`) instead of copying the
+        accepted quote's historical snapshot, so a reorder reflects today's price list.
+
+        When the source quote's FX lock has expired, the rate is refreshed from the
+        finance live-FX service (falling back to the source snapshot for the same
+        currency pair rather than inventing a rate).
+        """
+        quote = await self._load_quote(session, resolved)
+        source_items = (
+            (
+                await session.execute(
+                    select(QuoteItem)
+                    .where(
+                        QuoteItem.tenant_id == resolved.tenant_id,
+                        QuoteItem.quote_id == quote.id,
+                    )
+                    .order_by(QuoteItem.sku_snapshot)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not source_items:
+            raise AppError(
+                slug="portal-reorder-empty-quote",
+                status_code=409,
+                code="ERR_PORTAL_REORDER_EMPTY_QUOTE",
+                title="Nothing To Reorder",
+                detail="This quotation has no line items to reorder.",
+            )
+
+        overrides = dict(requested_quantities or {})
+        for key, raw_qty in overrides.items():
+            if not isinstance(raw_qty, int) or isinstance(raw_qty, bool):
+                raise AppError(
+                    slug="portal-reorder-invalid-quantity",
+                    status_code=422,
+                    code="ERR_VALIDATION",
+                    title="Invalid Quantity",
+                    detail=f"Requested quantity for '{key}' must be an integer.",
+                )
+            if raw_qty < 1 or raw_qty > 1_000_000:
+                raise AppError(
+                    slug="portal-reorder-invalid-quantity",
+                    status_code=422,
+                    code="ERR_VALIDATION",
+                    title="Invalid Quantity",
+                    detail=(
+                        f"Requested quantity for '{key}' must be between 1 and 1000000."
+                    ),
+                )
+        allowed_keys = {str(item.variant_id) for item in source_items} | {
+            item.sku_snapshot for item in source_items
+        }
+        unknown_keys = set(overrides) - allowed_keys
+        if unknown_keys:
+            raise AppError(
+                slug="portal-reorder-unknown-line",
+                status_code=422,
+                code="ERR_PORTAL_REORDER_UNKNOWN_LINE",
+                title="Unknown Reorder Line",
+                detail=(
+                    "requested_quantities may only reference line items of this "
+                    f"quotation; unknown: {', '.join(sorted(unknown_keys))}."
+                ),
+            )
+
+        base_currency = str(quote.base_currency).strip().upper()
+        quote_currency = str(quote.quote_currency).strip().upper()
+        fx_rate = await self._resolve_reorder_fx_rate(
+            quote, base_currency=base_currency, quote_currency=quote_currency
+        )
+
+        catalog = CatalogService()
+        built_items: list[QuoteItem] = []
+        subtotal = Decimal("0.00")
+        margin_floor_breaches: list[str] = []
+        for item in source_items:
+            qty = int(
+                overrides.get(str(item.variant_id))
+                or overrides.get(item.sku_snapshot)
+                or item.quantity
+            )
+            pricing = await catalog.get_variant_pricing_internal(
+                session, resolved.tenant_id, item.variant_id
+            )
+            unit_price, moq_tier = await catalog.resolve_moq_unit_price(
+                pricing.retail_price_usd, pricing.b2b_moq_tiers, qty
+            )
+            unit_price_base = (unit_price * fx_rate).quantize(
+                Decimal("0.0001"), rounding=ROUND_HALF_UP
+            )
+            if unit_price_base <= Decimal("0"):
+                margin_pct = Decimal("-100.00")
+            else:
+                margin_pct = (
+                    (unit_price_base - pricing.cost_price_base)
+                    / unit_price_base
+                    * Decimal("100")
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if margin_pct < pricing.min_margin_floor_pct:
+                margin_floor_breaches.append(pricing.sku)
+            line_total = (Decimal(qty) * unit_price).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            subtotal += line_total
+            built_items.append(
+                QuoteItem(
+                    tenant_id=resolved.tenant_id,
+                    variant_id=pricing.id,
+                    sku_snapshot=pricing.sku,
+                    description_i18n=item.description_i18n,
+                    quantity=qty,
+                    moq_tier_applied=moq_tier,
+                    unit_price_quote_ccy=unit_price,
+                    unit_cost_base_snapshot=pricing.cost_price_base,
+                    line_total_quote_ccy=line_total,
+                )
+            )
+
+        freight = _cent(Decimal(str(quote.freight_fee)))
+        insurance = _cent(Decimal(str(quote.insurance_fee)))
+        duty = _cent(Decimal(str(quote.customs_duty_estimate)))
+        total_amount = _cent(subtotal + freight + insurance + duty)
+        now = datetime.now(UTC)
+        new_quote = Quote(
+            tenant_id=resolved.tenant_id,
+            opportunity_id=quote.opportunity_id,
+            quote_no=f"PI-REO-{now:%Y%m}-{uuid4().hex[:6].upper()}",
+            version=1,
+            is_proforma_invoice=quote.is_proforma_invoice,
+            incoterm=quote.incoterm,
+            port_of_loading=quote.port_of_loading,
+            port_of_destination=quote.port_of_destination,
+            payment_terms=quote.payment_terms,
+            base_currency=base_currency,
+            quote_currency=quote_currency,
+            fx_rate_snapshot=fx_rate,
+            fx_locked_until=now + timedelta(days=7),
+            freight_fee=freight,
+            insurance_fee=insurance,
+            customs_duty_estimate=duty,
+            total_amount=total_amount,
+            status=QuoteStatus.DRAFT,
+        )
+        session.add(new_quote)
+        await session.flush()
+        for built in built_items:
+            built.quote_id = new_quote.id
+            session.add(built)
+        await session.flush()
+        await session.refresh(new_quote)
+
+        clean_notes = (notes or "").strip() or None
+        await record_audit_event(
+            session,
+            tenant_id=resolved.tenant_id,
+            actor_type="webhook",
+            actor_id=f"portal:{resolved.token_id}",
+            action="b2b.portal.reorder",
+            resource_type="quote",
+            resource_id=new_quote.id,
+            after_state={
+                "new_quote_no": new_quote.quote_no,
+                "source_quote_id": str(quote.id),
+                "source_quote_no": quote.quote_no,
+                "quote_currency": quote_currency,
+                "total_amount": str(total_amount),
+                "fx_rate_snapshot": str(fx_rate),
+                "portal_token_id": str(resolved.token_id),
+                "notes": clean_notes,
+                # Internal-only: the buyer never learns which SKU breached the floor; the
+                # draft simply lands in the seller's review queue flagged here.
+                "margin_floor_breaches": margin_floor_breaches,
+            },
+            ip_address=ip_address,
+        )
+        return PortalReorderResponse(
+            new_quote_id=new_quote.id,
+            new_quote_no=new_quote.quote_no,
+            total_amount=total_amount,
+            currency=quote_currency,
+            status=new_quote.status,
+            created_at=new_quote.created_at,
+        )
+
+    async def _resolve_reorder_fx_rate(
+        self, quote: Quote, *, base_currency: str, quote_currency: str
+    ) -> Decimal:
+        """Lock the reorder FX rate: still-valid source lock, else a live refresh."""
+        same_pair = (
+            str(quote.base_currency).strip().upper() == base_currency
+            and str(quote.quote_currency).strip().upper() == quote_currency
+        )
+        if base_currency == quote_currency:
+            return Decimal("1.000000")
+        source_rate = Decimal(str(quote.fx_rate_snapshot)).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
+        locked_until = quote.fx_locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=UTC)
+        if same_pair and locked_until > datetime.now(UTC):
+            return source_rate
+        live_rate = await self._fx.resolve_rate(
+            base_currency=base_currency, quote_currency=quote_currency
+        )
+        if live_rate is not None and live_rate > Decimal("0"):
+            return live_rate
+        if same_pair:
+            # Never invent a rate: reuse the audited snapshot for the identical pair.
+            return source_rate
+        raise AppError(
+            slug="portal-reorder-fx-unavailable",
+            status_code=422,
+            code="ERR_PORTAL_REORDER_FX_UNAVAILABLE",
+            title="Exchange Rate Unavailable",
+            detail=(
+                f"No exchange rate is available for {base_currency}/{quote_currency}; "
+                "the seller must confirm this reorder manually."
+            ),
         )
 
     # -- buyer: documents ---------------------------------------------------

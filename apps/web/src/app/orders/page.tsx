@@ -16,6 +16,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { BatchDispatchBar } from "@/components/orders/batch-dispatch-bar";
 import { RoutingRulesPanel } from "@/components/orders/routing-rules-panel";
 import { ShipmentTimelineDrawer } from "@/components/orders/shipment-timeline-drawer";
 import { ShippingLabelModal } from "@/components/orders/shipping-label-modal";
@@ -111,6 +112,8 @@ export default function OrdersPage() {
   // Export documents are rendered server-side from the locked contract, so the
   // language pill only swaps the `?language=` query of the same PDF route.
   const [pdfLanguage, setPdfLanguage] = useState<ExportDocumentLanguage>("en");
+  // Batch print-run selection: the checkbox column and `BatchDispatchBar` share it.
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   const pendingProposalsQuery = useQuery({
     queryKey: ["ai", "proposals", "pending-count"],
@@ -154,6 +157,15 @@ export default function OrdersPage() {
   });
 
   const orders = ordersQuery.data?.items ?? [];
+
+  const toggleOrderSelection = (orderId: string) =>
+    setSelectedOrderIds((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+    );
+
+  const allSelected = orders.length > 0 && selectedOrderIds.length === orders.length;
+  const toggleSelectAll = () =>
+    setSelectedOrderIds(allSelected ? [] : orders.map((order) => order.id));
 
   const summary = useMemo(() => {
     const blocked = orders.filter(
@@ -243,6 +255,25 @@ export default function OrdersPage() {
 
         <RoutingRulesPanel />
 
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[12px] font-medium text-gray-600 dark:text-gray-400">
+            <input
+              type="checkbox"
+              data-testid="order-select-all"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              aria-label={bi("全选订单", "Select all orders")}
+              className="h-3.5 w-3.5 rounded border-gray-300"
+            />
+            <span>{bi("全选当前列表", "Select every order in this list")}</span>
+          </div>
+          <BatchDispatchBar
+            orders={orders.map((order) => ({ id: order.id, order_no: order.order_no }))}
+            selectedOrderIds={selectedOrderIds}
+            onSelectionCleared={() => setSelectedOrderIds([])}
+          />
+        </div>
+
         {orders.length === 0 ? (
           <EmptyState>
             {ordersQuery.isLoading
@@ -254,6 +285,9 @@ export default function OrdersPage() {
             <table className="erp-table">
               <thead>
                 <tr>
+                  <th className="w-8">
+                    <span className="sr-only">{bi("选择", "Select")}</span>
+                  </th>
                   <th>{bi("订单号", "Order no.")}</th>
                   <th>{bi("模式与买家", "Mode & buyer")}</th>
                   <th>{bi("履约状态", "Fulfillment")}</th>
@@ -317,8 +351,19 @@ export default function OrdersPage() {
                   const extSync = ord.external_fulfillment;
                   const carrierCode = carrierInputs[ord.id] ?? "DHL";
                   const trackingProvider = providerInputs[ord.id] ?? "manual";
+                  const isSelected = selectedOrderIds.includes(ord.id);
                   return (
-                    <tr key={ord.id}>
+                    <tr key={ord.id} data-selected={isSelected || undefined}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          data-testid={`order-select-${ord.id}`}
+                          checked={isSelected}
+                          onChange={() => toggleOrderSelection(ord.id)}
+                          aria-label={bi(`选择订单 ${ord.order_no}`, `Select order ${ord.order_no}`)}
+                          className="h-3.5 w-3.5 rounded border-gray-300"
+                        />
+                      </td>
                       <td>
                         <div className="font-mono text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
                           {ord.order_no}

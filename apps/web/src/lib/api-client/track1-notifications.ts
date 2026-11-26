@@ -110,6 +110,18 @@ export const RULE_THRESHOLD_FIELD: Record<
     en: "Brief hour (UTC)",
     kind: "int",
   },
+  negative_review_ticket: {
+    key: "lookback_hours",
+    zh: "回溯小时",
+    en: "Lookback hours",
+    kind: "int",
+  },
+  high_adoption_faq_extract: {
+    key: "min_confidence",
+    zh: "最低置信度",
+    en: "Min confidence",
+    kind: "decimal",
+  },
 };
 
 /** Per-rule copy; the wording mirrors the backend template names. */
@@ -155,6 +167,24 @@ export const RULE_COPY: Record<
     description_zh: "把真实巡检健康分与告警汇总成一条 P2 简报推送。",
     description_en:
       "Pushes the real patrol health score and alerts as one P2 briefing message.",
+    href: "/ai/employees",
+  },
+  negative_review_ticket: {
+    zh: "差评 / 投诉工单",
+    en: "Negative review ticket",
+    description_zh:
+      "扫描近期客户来信中的 1 星/破损/退款/投诉等关键词，每条消息生成一张 L1 服务工单建议。",
+    description_en:
+      "Scans recent inbound messages for 1-star / broken / refund / complaint wording and drafts one L1 service ticket per message.",
+    href: "/inbox",
+  },
+  high_adoption_faq_extract: {
+    zh: "高采纳回复转 FAQ",
+    en: "High-adoption FAQ extract",
+    description_zh:
+      "把已采纳且置信度高的 AI 回复提炼成结构化 FAQ，审核后可直接沉淀进知识库。",
+    description_en:
+      "Turns approved high-confidence AI replies into structured FAQ Q&A pairs ready to promote into the knowledge base.",
     href: "/ai/employees",
   },
 };
@@ -477,6 +507,14 @@ const mockRules: AutomationRule[] = [
   mockRule("rrrrrrrr-5555-4555-8555-rrrrrrrrrrrr", "daily_patrol_brief", "P2", {
     brief_hour_utc: 1,
   }),
+  mockRule("rrrrrrrr-6666-4666-8666-rrrrrrrrrrrr", "negative_review_ticket", "P1", {
+    lookback_hours: 72,
+    keywords: ["1 star", "broken", "refund", "差评", "破损", "投诉"],
+  }),
+  mockRule("rrrrrrrr-7777-4777-8777-rrrrrrrrrrrr", "high_adoption_faq_extract", "P2", {
+    min_confidence: "0.900",
+    lookback_days: 30,
+  }),
 ];
 
 /** Deterministic mock matched counts, keyed by template. */
@@ -486,6 +524,8 @@ const MOCK_MATCHED: Record<AutomationTemplateCode, number> = {
   stalled_shipment_soothe: 2,
   cold_b2b_quote_followup: 2,
   daily_patrol_brief: 4,
+  negative_review_ticket: 2,
+  high_adoption_faq_extract: 1,
 };
 
 function mockUpdateRule(ruleId: string, patch: AutomationRulePatch): AutomationRule {

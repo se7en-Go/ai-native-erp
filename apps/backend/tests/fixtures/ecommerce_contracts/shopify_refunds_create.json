@@ -1,0 +1,17 @@
+{
+  "description": "Shopify refunds/create webhook plus the same order node after the refund settled",
+  "recorded_from": "Shopify Admin API 2024-10, sanitized: real shop domain, customer and SKU numbers replaced",
+  "signed_with_test_secret": "track10-shopify-webhook-secret",
+  "signature_scheme": "X-Shopify-Hmac-Sha256 = base64(HMAC-SHA256(raw_body, client_secret))",
+  "headers": {
+    "content-type": "application/json",
+    "x-shopify-topic": "refunds/create",
+    "x-shopify-shop-domain": "qz-led-factory-sandbox.myshopify.com",
+    "x-shopify-webhook-id": "8a7b6c5d-4e3f-2a1b-9c8d-7e6f5a4b3c2d",
+    "x-shopify-api-version": "2024-10",
+    "x-shopify-triggered-at": "2026-11-20T08:02:14Z",
+    "x-shopify-hmac-sha256": "zEXnnoYGueT4iF1KQAqDVRuQLS4o5HEaFfARNmjA+JI="
+  },
+  "body_raw": "{\"id\":1001234567890,\"order_id\":5501234567890,\"admin_graphql_api_id\":\"gid://shopify/Refund/1001234567890\",\"created_at\":\"2026-11-20T03:02:11-05:00\",\"note\":\"Two strips arrived damaged in transit; full refund issued.\",\"restock\":true,\"restock_type\":\"return\",\"refund_line_items\":[{\"id\":2021234567890,\"quantity\":2,\"line_item_id\":14331234567890,\"restock_type\":\"return\",\"subtotal\":\"1249.50\",\"subtotal_set\":{\"shop_money\":{\"amount\":\"1249.50\",\"currency_code\":\"EUR\"},\"presentment_money\":{\"amount\":\"1249.50\",\"currency_code\":\"EUR\"}},\"total_tax\":\"0.00\"}],\"transactions\":[{\"id\":3031234567890,\"kind\":\"refund\",\"status\":\"success\",\"amount\":\"1338.50\",\"currency\":\"EUR\",\"gateway\":\"shopify_payments\"}]}",
+  "graphql_order_node_raw": "{\"id\":\"gid://shopify/Order/5501234567890\",\"name\":\"#1024\",\"currencyCode\":\"EUR\",\"displayFinancialStatus\":\"REFUNDED\",\"displayFulfillmentStatus\":\"UNFULFILLED\",\"cancelledAt\":null,\"poNumber\":\"PO-DE-2026-77\",\"updatedAt\":\"2026-11-20T08:02:11Z\",\"currentSubtotalPriceSet\":{\"shopMoney\":{\"amount\":\"1249.50\",\"currencyCode\":\"EUR\"}},\"totalShippingPriceSet\":{\"shopMoney\":{\"amount\":\"89.00\",\"currencyCode\":\"EUR\"}},\"totalTaxSet\":{\"shopMoney\":{\"amount\":\"0.00\",\"currencyCode\":\"EUR\"}},\"currentTotalPriceSet\":{\"shopMoney\":{\"amount\":\"1338.50\",\"currencyCode\":\"EUR\"}},\"totalRefundedSet\":{\"shopMoney\":{\"amount\":\"1338.50\",\"currencyCode\":\"EUR\"}},\"customer\":{\"id\":\"gid://shopify/Customer/7123456789012\",\"email\":\"einkauf@nordlicht-lichttechnik.example\",\"firstName\":\"Lukas\",\"lastName\":\"Weber\",\"phone\":\"+49301234567\"},\"shippingAddress\":{\"countryCodeV2\":\"DE\",\"city\":\"Berlin\"},\"purchasingEntity\":{\"__typename\":\"PurchasingCompany\",\"company\":{\"id\":\"gid://shopify/Company/998877\",\"name\":\"Nordlicht Lichttechnik GmbH\"},\"location\":{\"id\":\"gid://shopify/CompanyLocation/556677\",\"shippingAddress\":{\"countryCode\":\"DE\"}}},\"lineItems\":{\"nodes\":[{\"sku\":\"LED-STRIP-5M-IP65\",\"title\":\"5M IP65 Smart LED Strip 24V\",\"quantity\":2,\"originalTotalSet\":{\"shopMoney\":{\"amount\":\"1249.50\",\"currencyCode\":\"EUR\"}}}]}}"
+}

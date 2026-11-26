@@ -251,3 +251,110 @@ class CarrierShippingLabelRead(BaseModel):
     currency: str
     status: str
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Batch waybills (up to 50 orders) + merged 4x6 thermal PDF
+# ---------------------------------------------------------------------------
+
+#: Upper bound on one batch call. A warehouse picks a print run, never the whole table.
+BATCH_LABEL_LIMIT = 50
+
+BatchSkipCode = Literal[
+    "order_not_found",
+    "order_inactive",
+    "held_for_review",
+    "balance_unpaid",
+    "booking_failed",
+]
+
+
+class BatchShippingLabelRequest(BaseModel):
+    """Book (or reuse) one waybill per order in a single warehouse print run."""
+
+    order_ids: list[UUID] = Field(min_length=1, max_length=BATCH_LABEL_LIMIT)
+    carrier_code: CarrierCode = "sandbox_carrier"
+    mode: LabelMode = "sandbox"
+    service_code: str | None = Field(default=None, max_length=64)
+
+    @field_validator("order_ids")
+    @classmethod
+    def _dedupe_order_ids(cls, value: list[UUID]) -> list[UUID]:
+        seen: dict[UUID, None] = {}
+        for order_id in value:
+            seen.setdefault(order_id, None)
+        return list(seen)
+
+    @field_validator("service_code")
+    @classmethod
+    def _strip_service_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
+class BatchShippingLabelBookedItem(BaseModel):
+    order_id: UUID
+    order_no: str
+    label_id: UUID
+    tracking_number: str
+    waybill_number: str
+    carrier_code: CarrierCode
+    service_code: str
+    mode: LabelMode
+    #: ``True`` when an already-booked waybill was reused instead of buying a new one.
+    reused: bool
+    shipping_cost_estimate: Decimal | None
+    currency: str
+
+
+class BatchShippingLabelSkippedItem(BaseModel):
+    order_id: UUID
+    order_no: str | None = None
+    reason_code: BatchSkipCode
+    reason: str
+
+
+class BatchShippingLabelResponse(BaseModel):
+    booked: list[BatchShippingLabelBookedItem] = Field(default_factory=list)
+    skipped: list[BatchShippingLabelSkippedItem] = Field(default_factory=list)
+
+
+class BatchLabelPdfRequest(BaseModel):
+    """Merge 4x6 label PDFs by label id and/or by order (latest label wins)."""
+
+    label_ids: list[UUID] = Field(default_factory=list, max_length=BATCH_LABEL_LIMIT)
+    order_ids: list[UUID] = Field(default_factory=list, max_length=BATCH_LABEL_LIMIT)
+
+    @model_validator(mode="after")
+    def _require_a_selection(self) -> Self:
+        if not self.label_ids and not self.order_ids:
+            raise ValueError("Send label_ids, order_ids, or both.")
+        if len(self.label_ids) + len(self.order_ids) > BATCH_LABEL_LIMIT:
+            raise ValueError(
+                f"At most {BATCH_LABEL_LIMIT} labels may be merged in one call."
+            )
+        return self
+
+
+class ScanDispatchRequest(BaseModel):
+    """A warehouse barcode: tracking number, shipment tracking number or order no."""
+
+    code: str = Field(min_length=1, max_length=128)
+
+    @field_validator("code")
+    @classmethod
+    def _strip_code(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("A scanned code is required.")
+        return stripped
+
+
+class ScanDispatchResponse(BaseModel):
+    order_id: UUID
+    order_no: str
+    tracking_number: str | None = None
+    status: str
+    dispatched_at: datetime

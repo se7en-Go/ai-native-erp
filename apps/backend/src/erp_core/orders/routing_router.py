@@ -17,16 +17,24 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from erp_core.orders.carrier_label_service import (
     book_shipping_label,
+    book_shipping_labels_batch,
     get_label_pdf_bytes,
+    get_labels_merged_pdf_bytes,
+    scan_and_dispatch,
 )
 from erp_core.orders.routing_models import CarrierShippingLabel
 from erp_core.orders.routing_schemas import (
+    BatchLabelPdfRequest,
+    BatchShippingLabelRequest,
+    BatchShippingLabelResponse,
     CarrierShippingLabelRead,
     OrderRoutingEvaluationRead,
     ReleaseHoldRequest,
     RoutingRuleCreate,
     RoutingRuleRead,
     RoutingRuleUpdate,
+    ScanDispatchRequest,
+    ScanDispatchResponse,
     ShippingLabelBookRequest,
 )
 from erp_core.orders.routing_service import RoutingService
@@ -141,6 +149,69 @@ async def delete_routing_rule(
     async with tenant_session(_session_factory(request), principal.tenant_id) as session:
         await _routing.delete_rule(session, principal.tenant_id, principal, rule_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Batch waybills, merged 4x6 print run and scan-to-ship
+#
+# These three static paths are declared before the `/{order_id}/...` routes below so
+# FastAPI never tries to parse "shipping-labels"/"scan-dispatch" as a UUID.
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/shipping-labels/batch",
+    response_model=BatchShippingLabelResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def book_shipping_labels_in_batch(
+    request: Request,
+    principal: Shipper,
+    payload: BatchShippingLabelRequest,
+) -> BatchShippingLabelResponse:
+    """Book (or reuse) one waybill per order; refused orders are reported, not fatal."""
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        return await book_shipping_labels_batch(
+            session,
+            _storage(request),
+            principal.tenant_id,
+            principal,
+            payload,
+            tracking_adapter=_tracking_adapter(request),
+        )
+
+
+@router.post("/shipping-labels/batch-pdf", response_class=Response)
+async def download_batch_shipping_labels_pdf(
+    request: Request, principal: Reader, payload: BatchLabelPdfRequest
+) -> Response:
+    """Merge the selected 4x6 thermal labels into one sequential print-run PDF."""
+    async with tenant_session(_session_factory(request), principal.tenant_id) as session:
+        pdf_bytes = await get_labels_merged_pdf_bytes(
+            session,
+            _storage(request),
+            principal.tenant_id,
+            label_ids=tuple(payload.label_ids),
+            order_ids=tuple(payload.order_ids),
+        )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="shipping-labels-batch.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post("/scan-dispatch", response_model=ScanDispatchResponse)
+async def scan_dispatch_order(
+    request: Request, principal: Shipper, payload: ScanDispatchRequest
+) -> ScanDispatchResponse:
+    """Warehouse barcode scan: release the parcel, or 409 with audited evidence."""
+    return await scan_and_dispatch(
+        _session_factory(request), principal.tenant_id, principal, payload.code
+    )
 
 
 # ---------------------------------------------------------------------------

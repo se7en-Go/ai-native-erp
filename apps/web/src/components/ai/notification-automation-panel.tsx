@@ -58,6 +58,8 @@ const TEMPLATE_ORDER: readonly AutomationTemplateCode[] = [
   "stalled_shipment_soothe",
   "cold_b2b_quote_followup",
   "daily_patrol_brief",
+  "negative_review_ticket",
+  "high_adoption_faq_extract",
 ];
 
 const EMPTY_FORM: NotificationChannelInput = {
