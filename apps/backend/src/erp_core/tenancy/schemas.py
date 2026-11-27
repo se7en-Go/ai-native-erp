@@ -31,6 +31,14 @@ class RefreshRequest(BaseModel):
     refresh_token: str = Field(min_length=10)
 
 
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = Field(default=None, min_length=10)
+
+
+class LogoutResponse(BaseModel):
+    ok: bool = True
+
+
 class PrincipalResponse(BaseModel):
     user_id: UUID
     tenant_id: UUID

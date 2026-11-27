@@ -1810,6 +1810,14 @@ export type LoginRequest = {
     tenant_slug?: string | null;
 };
 
+export type LogoutRequest = {
+    refresh_token?: string | null;
+};
+
+export type LogoutResponse = {
+    ok?: boolean;
+};
+
 /**
  * One-click replenishment: convert a low-stock SKU into a real purchase order.
  */
@@ -6482,6 +6490,34 @@ export type LoginApiV1AuthLoginPostResponses = {
 };
 
 export type LoginApiV1AuthLoginPostResponse = LoginApiV1AuthLoginPostResponses[keyof LoginApiV1AuthLoginPostResponses];
+
+export type LogoutApiV1AuthLogoutPostData = {
+    body?: LogoutRequest | null;
+    headers?: {
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/logout';
+};
+
+export type LogoutApiV1AuthLogoutPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LogoutApiV1AuthLogoutPostError = LogoutApiV1AuthLogoutPostErrors[keyof LogoutApiV1AuthLogoutPostErrors];
+
+export type LogoutApiV1AuthLogoutPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LogoutResponse;
+};
+
+export type LogoutApiV1AuthLogoutPostResponse = LogoutApiV1AuthLogoutPostResponses[keyof LogoutApiV1AuthLogoutPostResponses];
 
 export type GetMeApiV1AuthMeGetData = {
     body?: never;

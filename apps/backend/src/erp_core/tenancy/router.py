@@ -16,6 +16,7 @@ from erp_core.tenancy.audit import list_audit_events
 from erp_core.tenancy.cost_visibility import apply_cost_visibility
 from erp_core.tenancy.dependencies import (
     CurrentPrincipal,
+    _extract_bearer_token,
     get_current_principal,
     get_tenant_db,
     require_roles,
@@ -29,6 +30,8 @@ from erp_core.tenancy.schemas import (
     GdprTenantRedactResult,
     InviteMemberRequest,
     LoginRequest,
+    LogoutRequest,
+    LogoutResponse,
     MembershipItem,
     PiTemplateSettings,
     PrincipalResponse,
@@ -78,7 +81,31 @@ async def refresh_token(
     service: Annotated[TenancyAuthService, Depends(_get_auth_service)],
 ) -> TokenResponse:
     session_factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
-    return await service.refresh_tokens(session_factory, payload.refresh_token)
+    return await service.refresh_tokens(
+        session_factory,
+        payload.refresh_token,
+        redis=getattr(request.app.state, "redis", None),
+    )
+
+
+@router.post("/auth/logout", response_model=LogoutResponse)
+async def logout(
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
+    session: Annotated[AsyncSession, Depends(get_tenant_db)],
+    service: Annotated[TenancyAuthService, Depends(_get_auth_service)],
+    payload: LogoutRequest | None = None,
+) -> LogoutResponse:
+    access_token = _extract_bearer_token(request.headers.get("authorization"))
+    return await service.logout(
+        session,
+        principal,
+        access_token=access_token,
+        refresh_token=payload.refresh_token if payload else None,
+        redis=getattr(request.app.state, "redis", None),
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
 
 
 @router.get("/auth/me", response_model=PrincipalResponse)

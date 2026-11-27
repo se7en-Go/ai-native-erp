@@ -177,3 +177,79 @@ async def test_five_roles_rbac_boundaries_and_agent_cost_masking(
     assert agent_body["net_profit_base"] is None
     assert agent_body["net_margin_pct"] is None
     assert agent_body["unit_sale_price"] == "34.90"
+
+
+async def test_logout_revokes_access_and_refresh_tokens_and_records_audit(
+    async_client: AsyncClient,
+) -> None:
+    suffix = uuid4().hex[:8]
+    email = f"logout-{suffix}@factory.example.com"
+    password = "StrongPassword2026!"
+    reg_resp = await async_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": "Logout Tester",
+            "tenant_name": f"Factory {suffix}",
+            "tenant_slug": f"factory-{suffix}",
+            "base_currency": "USD",
+            "timezone": "Asia/Shanghai",
+        },
+    )
+    assert reg_resp.status_code == 201, reg_resp.text
+    reg_data = reg_resp.json()
+    access_tok = reg_data["access_token"]
+    refresh_tok = reg_data["refresh_token"]
+
+    logout_resp = await async_client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {access_tok}"},
+        json={"refresh_token": refresh_tok},
+    )
+    assert logout_resp.status_code == 200, logout_resp.text
+    assert logout_resp.json() == {"ok": True}
+
+    me_after = await async_client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {access_tok}"},
+    )
+    assert me_after.status_code == 401
+    assert me_after.json()["code"] == "ERR_INVALID_TOKEN"
+
+    refresh_after = await async_client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_tok},
+    )
+    assert refresh_after.status_code == 401
+    assert refresh_after.json()["code"] == "ERR_INVALID_TOKEN"
+
+    login_again = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert login_again.status_code == 200, login_again.text
+    fresh_access = login_again.json()["access_token"]
+
+    audit_resp = await async_client.get(
+        "/api/v1/tenancy/audit-events?action=auth.logout",
+        headers={"Authorization": f"Bearer {fresh_access}"},
+    )
+    assert audit_resp.status_code == 200, audit_resp.text
+    items = audit_resp.json()["items"]
+    assert len(items) >= 1
+    assert items[0]["after_state"]["revoked_access_token"] is True
+    assert items[0]["after_state"]["revoked_refresh_token"] is True
+
+    # Logout without a JSON body also succeeds cleanly and revokes the access token.
+    logout_empty = await async_client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {fresh_access}"},
+    )
+    assert logout_empty.status_code == 200, logout_empty.text
+    assert logout_empty.json() == {"ok": True}
+    me_after_empty = await async_client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {fresh_access}"},
+    )
+    assert me_after_empty.status_code == 401

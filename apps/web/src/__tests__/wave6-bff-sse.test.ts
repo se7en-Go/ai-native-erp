@@ -13,7 +13,7 @@ import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NextRequest, NextResponse } from "next/server";
 
-import { GET } from "@/app/api/bff/[...path]/route";
+import { GET, POST } from "@/app/api/bff/[...path]/route";
 import { useRealtimeInbox } from "@/hooks/use-realtime-inbox";
 import { middleware } from "@/middleware";
 
@@ -221,6 +221,88 @@ describe("BFF SSE 401 refresh (W6-A)", () => {
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(response.headers.get("x-accel-buffering")).toBe("no");
   });
+
+  it("aborts the upstream SSE fetch immediately when client signal aborts or stream cancels", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK_API", "false");
+
+    const capturedSignals: AbortSignal[] = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.signal) {
+        capturedSignals.push(init.signal);
+      }
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("event: connected\ndata: {}\n\n"));
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    }) as unknown as FetchMock;
+    vi.stubGlobal("fetch", fetchMock);
+
+    // 1. Aborting incoming NextRequest.signal aborts the upstream fetch signal.
+    const ac = new AbortController();
+    const abortReq = makeRequest("v1/inbox/stream", {
+      headers: { cookie: "erp_access_token=at-live" },
+    });
+    Object.defineProperty(abortReq, "signal", { value: ac.signal, configurable: true });
+    const res1 = await GET(abortReq, contextFor("v1/inbox/stream"));
+    expect(res1.status).toBe(200);
+    expect(capturedSignals[0]).toBeDefined();
+    expect(capturedSignals[0]?.aborted).toBe(false);
+    ac.abort();
+    expect(capturedSignals[0]?.aborted).toBe(true);
+    await res1.body?.cancel();
+
+    // 2. Cancelling the downstream SSE reader aborts the second upstream fetch signal.
+    const res2 = await GET(
+      makeRequest("v1/inbox/stream", {
+        headers: { cookie: "erp_access_token=at-live" },
+      }),
+      contextFor("v1/inbox/stream")
+    );
+    expect(res2.status).toBe(200);
+    expect(capturedSignals[1]).toBeDefined();
+    expect(capturedSignals[1]?.aborted).toBe(false);
+    await res2.body?.getReader().cancel();
+    expect(capturedSignals[1]?.aborted).toBe(true);
+  });
+
+  it("forwards refresh_token on POST /v1/auth/logout and clears auth cookies", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK_API", "false");
+
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 })
+    ) as unknown as FetchMock;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      makeRequest("v1/auth/logout", {
+        method: "POST",
+        headers: { cookie: "erp_access_token=at-live; erp_refresh_token=rt-live" },
+      }),
+      contextFor("v1/auth/logout")
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [targetUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(targetUrl).toContain("/api/v1/auth/logout");
+    const sentHeaders = new Headers(init.headers);
+    expect(sentHeaders.get("authorization")).toBe("Bearer at-live");
+    expect(JSON.parse(String(init.body))).toEqual({ refresh_token: "rt-live" });
+
+    const cookies = new Map(
+      (response as NextResponse).cookies.getAll().map((c) => [c.name, c.value])
+    );
+    expect(cookies.get("erp_access_token")).toBe("");
+    expect(cookies.get("erp_refresh_token")).toBe("");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -301,6 +383,27 @@ describe("useRealtimeInbox (W6-A)", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["inbox", "conversations"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["inbox", "messages"] });
     unmount();
+  });
+
+  it("closes EventSource immediately on pagehide/beforeunload and detaches listeners on unmount", () => {
+    const first = renderInboxHook();
+    window.dispatchEvent(new Event("pagehide"));
+    expect(first.source.close).toHaveBeenCalledTimes(1);
+    // Idempotent even if unmount runs right after pagehide.
+    first.unmount();
+    expect(first.source.close).toHaveBeenCalledTimes(1);
+
+    const second = renderInboxHook();
+    window.dispatchEvent(new Event("beforeunload"));
+    expect(second.source.close).toHaveBeenCalledTimes(1);
+    second.unmount();
+
+    const third = renderInboxHook();
+    third.unmount();
+    expect(third.source.close).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event("pagehide"));
+    window.dispatchEvent(new Event("beforeunload"));
+    expect(third.source.close).toHaveBeenCalledTimes(1);
   });
 });
 

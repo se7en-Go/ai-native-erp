@@ -594,10 +594,20 @@ async function handleProxy(
 
   if (upstreamPath === "/api/v1/auth/logout" && request.method === "POST") {
     const accessToken = request.cookies.get(ACCESS_COOKIE_NAME)?.value;
+    const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
     if (accessToken) {
+      const logoutHeaders = new Headers({
+        Authorization: `Bearer ${accessToken}`,
+      });
+      let logoutBody: string | undefined;
+      if (refreshToken) {
+        logoutHeaders.set("Content-Type", "application/json");
+        logoutBody = JSON.stringify({ refresh_token: refreshToken });
+      }
       await fetch(targetUrl, {
         method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: logoutHeaders,
+        ...(logoutBody ? { body: logoutBody } : {}),
       }).catch(() => {});
     }
     const response = NextResponse.json({ ok: true }, { status: 200 });
@@ -625,34 +635,98 @@ async function handleProxy(
   const hasBody = !["GET", "HEAD"].includes(request.method);
   const rawBody = hasBody ? await request.arrayBuffer() : undefined;
 
-  let upstreamRes = await fetch(targetUrl, {
-    method: request.method,
-    headers: forwardHeaders,
-    body: rawBody,
-  });
+  const isSse = isSseRequest(request, upstreamPath);
+  const upstreamAbort = new AbortController();
+  const onClientAbort = () => upstreamAbort.abort();
+  if (request.signal?.aborted) {
+    upstreamAbort.abort();
+  } else {
+    request.signal?.addEventListener("abort", onClientAbort, { once: true });
+  }
+  const cleanupAbortListener = () => {
+    request.signal?.removeEventListener("abort", onClientAbort);
+  };
 
+  let upstreamRes: Response;
   let refreshedTokens: {
     access_token: string;
     refresh_token?: string;
     expires_in?: number;
   } | null = null;
 
-  // Refresh applies to SSE too: a long-lived EventSource that hits an expired
-  // access token must recover in place instead of reconnect-looping on 401.
-  if (upstreamRes.status === 401 && refreshToken) {
-    refreshedTokens = await tryRefreshToken(refreshToken);
-    if (refreshedTokens) {
-      forwardHeaders.set("authorization", `Bearer ${refreshedTokens.access_token}`);
-      upstreamRes = await fetch(targetUrl, {
-        method: request.method,
-        headers: forwardHeaders,
-        body: rawBody,
-      });
+  try {
+    upstreamRes = await fetch(targetUrl, {
+      method: request.method,
+      headers: forwardHeaders,
+      body: rawBody,
+      signal: upstreamAbort.signal,
+    });
+
+    // Refresh applies to SSE too: a long-lived EventSource that hits an expired
+    // access token must recover in place instead of reconnect-looping on 401.
+    if (upstreamRes.status === 401 && refreshToken) {
+      refreshedTokens = await tryRefreshToken(refreshToken);
+      if (refreshedTokens) {
+        forwardHeaders.set("authorization", `Bearer ${refreshedTokens.access_token}`);
+        upstreamRes = await fetch(targetUrl, {
+          method: request.method,
+          headers: forwardHeaders,
+          body: rawBody,
+          signal: upstreamAbort.signal,
+        });
+      }
     }
+  } catch (err) {
+    cleanupAbortListener();
+    if (
+      upstreamAbort.signal.aborted ||
+      (err instanceof Error && err.name === "AbortError")
+    ) {
+      return new Response(null, { status: 499 });
+    }
+    throw err;
   }
 
-  if (isSseRequest(request, upstreamPath)) {
-    const sseResponse = new NextResponse(upstreamRes.body, {
+  if (isSse) {
+    let sseBody: ReadableStream<Uint8Array> | null = null;
+    if (upstreamRes.body) {
+      const reader = upstreamRes.body.getReader();
+      sseBody = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              cleanupAbortListener();
+              controller.close();
+              return;
+            }
+            if (value) {
+              controller.enqueue(value);
+            }
+          } catch (err) {
+            cleanupAbortListener();
+            if (upstreamAbort.signal.aborted) {
+              try {
+                controller.close();
+              } catch {
+                // Ignore if already closed.
+              }
+              return;
+            }
+            controller.error(err);
+          }
+        },
+        async cancel() {
+          cleanupAbortListener();
+          upstreamAbort.abort();
+          await reader.cancel().catch(() => {});
+        },
+      });
+    } else {
+      cleanupAbortListener();
+    }
+
+    const sseResponse = new NextResponse(sseBody, {
       status: upstreamRes.status,
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
@@ -664,6 +738,8 @@ async function handleProxy(
     applyRefreshedCookies(sseResponse, refreshedTokens);
     return sseResponse;
   }
+
+  cleanupAbortListener();
 
   const respHeaders = new Headers();
   const upstreamCt = upstreamRes.headers.get("content-type");
