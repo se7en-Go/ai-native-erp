@@ -121,8 +121,20 @@ export function useRealtimeInbox(enabled: boolean = true) {
     source.addEventListener("open", onOpen as EventListener);
     source.addEventListener("error", onError as EventListener);
 
-    return () => {
+    let closed = false;
+    const closeSource = () => {
+      if (closed) return;
+      closed = true;
       source.close();
+    };
+
+    window.addEventListener("pagehide", closeSource);
+    window.addEventListener("beforeunload", closeSource);
+
+    return () => {
+      window.removeEventListener("pagehide", closeSource);
+      window.removeEventListener("beforeunload", closeSource);
+      closeSource();
     };
   }, [enabled, queryClient]);
 }

@@ -13,7 +13,7 @@ from erp_core.shared.config import Settings
 from erp_core.shared.db import tenant_session
 from erp_core.shared.enums import UserRole
 from erp_core.shared.errors import AppError
-from erp_core.tenancy.security import decode_token
+from erp_core.tenancy.security import decode_token, is_token_jti_revoked
 
 
 class CurrentPrincipal(BaseModel):
@@ -52,6 +52,14 @@ async def get_current_principal(
     session_factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
     token = _extract_bearer_token(authorization)
     payload = decode_token(token, settings, expected_type="access")
+    if await is_token_jti_revoked(getattr(request.app.state, "redis", None), payload.jti):
+        raise AppError(
+            slug="token-revoked",
+            title="Token Revoked",
+            status_code=401,
+            detail="Authentication token has been revoked",
+            code="ERR_INVALID_TOKEN",
+        )
 
     async with tenant_session(session_factory, payload.tid) as session:
         row = (

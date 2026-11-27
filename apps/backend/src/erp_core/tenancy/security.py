@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import jwt
@@ -13,7 +14,9 @@ from erp_core.shared.config import Settings
 from erp_core.shared.enums import UserRole
 from erp_core.shared.errors import AppError
 
+_logger = logging.getLogger(__name__)
 _password_hasher = PasswordHasher()
+REVOKED_JTI_KEY_PREFIX = "auth:revoked:jti:"
 
 
 class TokenPayload(BaseModel):
@@ -23,6 +26,7 @@ class TokenPayload(BaseModel):
     email: str
     type: Literal["access", "refresh"]
     jti: str
+    exp: int | None = None
 
 
 def hash_password(plain_password: str) -> str:
@@ -119,6 +123,7 @@ def decode_token(
             email=str(raw["email"]),
             type=expected_type,
             jti=str(raw.get("jti", "")),
+            exp=int(raw["exp"]),
         )
     except (ValueError, KeyError) as exc:
         raise AppError(
@@ -128,3 +133,30 @@ def decode_token(
             detail="Token claims failed validation",
             code="ERR_INVALID_TOKEN",
         ) from exc
+
+
+async def revoke_token_jti(redis: Any | None, jti: str, exp: int | None) -> bool:
+    """Record a JWT's JTI in Redis until its expiration timestamp."""
+    if redis is None or not jti:
+        return False
+    ttl = max(1, (exp - int(datetime.now(UTC).timestamp())) if exp is not None else 900)
+    try:
+        await redis.set(f"{REVOKED_JTI_KEY_PREFIX}{jti}", "1", ex=ttl)
+        return True
+    except Exception:
+        _logger.warning("Failed to persist revoked token jti in Redis", exc_info=True)
+        return False
+
+
+async def is_token_jti_revoked(redis: Any | None, jti: str) -> bool:
+    """Check whether a JWT's JTI has been explicitly revoked in Redis."""
+    if redis is None or not jti:
+        return False
+    key = f"{REVOKED_JTI_KEY_PREFIX}{jti}"
+    try:
+        if hasattr(redis, "exists"):
+            return bool(await redis.exists(key))
+        return (await redis.get(key)) is not None
+    except Exception:
+        _logger.warning("Failed to query revoked token jti from Redis", exc_info=True)
+        return False

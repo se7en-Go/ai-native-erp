@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
@@ -20,6 +21,7 @@ from erp_core.tenancy.dependencies import CurrentPrincipal
 from erp_core.tenancy.schemas import (
     InviteMemberRequest,
     LoginRequest,
+    LogoutResponse,
     MembershipItem,
     PiTemplateSettings,
     PrincipalResponse,
@@ -36,6 +38,8 @@ from erp_core.tenancy.security import (
     create_refresh_token,
     decode_token,
     hash_password,
+    is_token_jti_revoked,
+    revoke_token_jti,
     verify_password,
 )
 
@@ -248,8 +252,18 @@ class TenancyAuthService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         refresh_token: str,
+        *,
+        redis: Any | None = None,
     ) -> TokenResponse:
         payload = decode_token(refresh_token, self._settings, expected_type="refresh")
+        if await is_token_jti_revoked(redis, payload.jti):
+            raise AppError(
+                slug="refresh-denied",
+                title="Refresh Token Revoked",
+                status_code=401,
+                detail="Refresh token has been revoked",
+                code="ERR_INVALID_TOKEN",
+            )
         async with tenant_session(session_factory, payload.tid) as session:
             row = (
                 await session.execute(
@@ -649,3 +663,58 @@ class TenancyAuthService:
             after_state=payload.model_dump(),
         )
         return payload
+
+    async def logout(
+        self,
+        session: AsyncSession,
+        principal: CurrentPrincipal,
+        *,
+        access_token: str,
+        refresh_token: str | None = None,
+        redis: Any | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> LogoutResponse:
+        access_payload = decode_token(access_token, self._settings, expected_type="access")
+        revoked_access = await revoke_token_jti(
+            redis,
+            access_payload.jti,
+            access_payload.exp,
+        )
+        revoked_refresh = False
+        if refresh_token:
+            try:
+                refresh_payload = decode_token(
+                    refresh_token,
+                    self._settings,
+                    expected_type="refresh",
+                )
+            except AppError:
+                refresh_payload = None
+            if (
+                refresh_payload is not None
+                and refresh_payload.sub == principal.user_id
+                and refresh_payload.tid == principal.tenant_id
+            ):
+                revoked_refresh = await revoke_token_jti(
+                    redis,
+                    refresh_payload.jti,
+                    refresh_payload.exp,
+                )
+
+        await record_audit_event(
+            session,
+            principal.tenant_id,
+            "human_user",
+            str(principal.user_id),
+            "auth.logout",
+            "user",
+            principal.user_id,
+            after_state={
+                "revoked_access_token": revoked_access,
+                "revoked_refresh_token": revoked_refresh,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return LogoutResponse(ok=True)

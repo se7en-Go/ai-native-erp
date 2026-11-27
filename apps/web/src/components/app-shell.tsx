@@ -191,6 +191,7 @@ export function AppShell({
         <div className="border-b border-gray-200 px-3 py-3.5 dark:border-gray-800">
           <Link
             href="/dashboard"
+            prefetch={false}
             className={`flex items-center rounded-lg p-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${
               collapsed ? "justify-center" : "gap-3"
             }`}
@@ -303,6 +304,7 @@ export function AppShell({
                         <Link
                           key={item.href}
                           href={item.href}
+                          prefetch={false}
                           onClick={persistSidebarScroll}
                           aria-current={active ? "page" : undefined}
                           title={collapsed ? t(item.labelKey) : undefined}
